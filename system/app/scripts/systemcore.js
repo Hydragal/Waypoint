@@ -197,48 +197,125 @@ function cleanNum(v, dflt) { v = Number(v); return fin(v) ? v : dflt; }
 // own, the sheet also shows the figure in metric while the viewer's Measurement system is Metric: "7 yd (6.4 m)", "32 lbs (14.5 kg)". The
 // measures are yd, ft, in, lb and mi, and lbs and yds as the website writes them. A text field may carry the unit height and is read as a
 // height: the website's pair "6'7\" / 2.00 m" by the half of the viewer's setting. DISPLAY ONLY: a field holds its figure in the book's unit,
-// and nothing here reaches a formula, a roll, a stored value or a file. A field with no such unit is drawn exactly as before. Both views alike
-var FIELD_MEASURE = Object.freeze(Object.assign(Object.create(null), { yd: 'yd', yds: 'yd', ft: 'ft', 'in': 'in', lb: 'lb', lbs: 'lb', mi: 'mi' }));
+// and nothing here reaches a formula, a roll, a stored value or a file. A field with no such unit is drawn exactly as before. Both views alike.
+// The gaps the review of that fold found, closed as options of the builder (the owner, 2026-10-17: "match shadowbase"): a speed, yd/s, which
+// is Move's yards a second and metres a second in metric; a text field's unit weight, read as the website's showWeightText reads one; how a
+// measure reads under Metric (unitShow: beside its figure as before, swap for the metric figure in its place, bare for the book's figure with
+// no word under Imperial, as the website shows a Move); a field's decimals and thousands (decMin, decMax, group: Basic Lift 32.0 lbs, a total
+// 1,234.57 lbs); a caption's {formula|unit}; and a list stat's or column's unit, converted as a field's is
+var FIELD_MEASURE = Object.freeze(Object.assign(Object.create(null), { yd: 'yd', yds: 'yd', ft: 'ft', 'in': 'in', lb: 'lb', lbs: 'lb', mi: 'mi', 'yd/s': 'yd/s' }));
 // A measure in metric: what one of it is, and the metric word (the exact international definitions, as the website's display-units.ts)
-var MEASURES = Object.freeze(Object.assign(Object.create(null), { yd: Object.freeze({ per: 0.9144, word: 'm' }), ft: Object.freeze({ per: 0.3048, word: 'm' }), 'in': Object.freeze({ per: 2.54, word: 'cm' }), lb: Object.freeze({ per: 0.45359237, word: 'kg' }), mi: Object.freeze({ per: 1.609344, word: 'km' }) }));
+var MEASURES = Object.freeze(Object.assign(Object.create(null), { yd: Object.freeze({ per: 0.9144, word: 'm' }), ft: Object.freeze({ per: 0.3048, word: 'm' }), 'in': Object.freeze({ per: 2.54, word: 'cm' }), lb: Object.freeze({ per: 0.45359237, word: 'kg' }), mi: Object.freeze({ per: 1.609344, word: 'km' }), 'yd/s': Object.freeze({ per: 0.9144, word: 'm/s' }) }));
 var MEASURE_KINDS = Object.freeze(Object.assign(Object.create(null), { number: 1, formula: 1, skill: 1, resource: 1 }));
-// A field's display unit, by its unit's words and its kind: yd, ft, in, lb or mi for a number, a formula, a skill or a pool; height for a text
-// field; '' for anything else (a unit such as pts is shown as it is, in both settings)
+// A field's display unit, by its unit's words and its kind: yd, ft, in, lb, mi or yd/s for a number, a formula, a skill or a pool; height or
+// weight for a text field; '' for anything else (a unit such as pts is shown as it is, in both settings)
 function cleanFieldUnit(v, kind) {
     if (typeof v !== 'string' || typeof kind !== 'string') return '';
-    if (kind === 'text') return v === 'height' ? 'height' : '';
+    if (kind === 'text') return v === 'height' || v === 'weight' ? v : '';
     return MEASURE_KINDS[kind] === 1 && Object.prototype.hasOwnProperty.call(FIELD_MEASURE, v) ? FIELD_MEASURE[v] : '';
 }
-// The decimals a figure shows: as the sheet wrote it (its own text, trailing zeros taken off), else as the number is written; four at most
-function placesShown(shown, value) {
-    var s = typeof shown === 'string' && shown.length <= 40 ? shown.trim() : '', m = /^[-+\u2212]?\d+(?:\.(\d+))?$/.exec(s);
-    if (m) return m[1] ? Math.min(4, m[1].replace(/0+$/, '').length) : 0;
-    var t = Math.abs(value).toFixed(4).replace(/\.?0+$/, ''), dot = t.indexOf('.');
-    return dot < 0 ? 0 : t.length - dot - 1;
+// The sheet's text of a figure with its thousands grouped by commas read as the figure it is ("1,234.57"); any other text as it is
+var GROUPED = /^([-+\u2212]?)(\d{1,3}(?:,\d{3})+)(\.\d+)?$/;
+function shownPlain(shown) { var s = typeof shown === 'string' && shown.length <= 40 ? shown.trim() : '', g = GROUPED.exec(s); return g ? g[1] + g[2].replace(/,/g, '') + (g[3] || '') : s; }
+// The decimals a number is written to (the website's decimalsShown): trailing zeros taken off, four at most, or max (a list's own most)
+function decShown(n, max) { var t = Math.abs(n).toFixed(typeof max === 'number' ? max : 4).replace(/\.?0+$/, ''), dot = t.indexOf('.'); return dot < 0 ? 0 : t.length - dot - 1; }
+// The decimals a figure shows: as the sheet wrote it (its own text, trailing zeros taken off), else as the number is written; four at most.
+// fixed: the figure's own count of decimals, zeros and all (a field that shows a fixed count or a least count: 32.0 is one), six at most
+function placesShown(shown, value, fixed) {
+    var s = shownPlain(shown), m = /^[-+\u2212]?\d+(?:\.(\d+))?$/.exec(s);
+    if (m) return m[1] ? (fixed === true ? Math.min(6, m[1].length) : Math.min(4, m[1].replace(/0+$/, '').length)) : 0;
+    return decShown(value);
 }
 // A figure of a measure in metric, its number alone: to the decimals the website shows (display-units.ts): as many as the figure shows, one
 // more where the metric unit is ten times the size (a metre is 3.28 ft), at least one for a whole figure (Move 5 is 4.6 m and Move 6 is
 // 5.5 m), trailing zeros taken off, and never 0 for a figure that is not. It is the figure AS SHOWN that is turned, where the sheet's text of
 // it reads as a number, since the website turns the figure it shows (the review of the v1.0.4 merge: a load of 1.86438 lb, shown as 1.86,
 // read 0.85 kg, where 1.86 lb is 0.84 kg and the website says 0.84). '' for no measure or no number
-function shownFig(shown) { var s = typeof shown === 'string' && shown.length <= 40 ? shown.trim() : ''; return /^[-+\u2212]?\d+(?:\.\d+)?$/.test(s) ? Number(s.replace(/^\u2212/, '-')) : NaN; }   // the sheet's text of a figure as a number; NaN where it is none
-function metricNum(unit, value, shown) {
+function shownFig(shown) { var s = shownPlain(shown); return /^[-+\u2212]?\d+(?:\.\d+)?$/.test(s) ? Number(s.replace(/^\u2212/, '-')) : NaN; }   // the sheet's text of a figure as a number; NaN where it is none
+// fmt (1.5.4, the field's decimals): fixed keeps the metric figure to the rule's decimals, zeros and all, as the website fixes a figure with a
+// set count (Basic Lift 22.0 lbs is 10.0 kg); group groups its thousands by commas. upTo (a list's stat or column in one of the website's
+// forms, listWords): the figure is the website's own of the number itself, to that many decimals at most, so the number is turned and never
+// its text, as the website turns a row's weight (units.number). Absent, as before
+function metricNum(unit, value, shown, fmt) {
     var m = typeof unit === 'string' && Object.prototype.hasOwnProperty.call(MEASURES, unit) ? MEASURES[unit] : null;
     if (!m || typeof value !== 'number' || !isFinite(value) || Math.abs(value) > 1e15) return '';
-    var s = shownFig(shown), d = placesShown(shown, value), up = Math.max(0, Math.round(Math.log10(1 / m.per))), dm = d + Math.max(up, d === 0 ? 1 : 0), v = (isFinite(s) ? s : value) * m.per;
-    while (v !== 0 && dm < 6 && Number(Math.abs(v).toFixed(dm)) === 0) dm++;
-    var t = v.toFixed(dm); if (t.indexOf('.') >= 0) t = t.replace(/\.?0+$/, ''); if (t === '-0') t = '0';
-    return t;
+    var fixed = isObj(fmt) && fmt.fixed === true, raw = isObj(fmt) && typeof fmt.upTo === 'number', s = raw ? NaN : shownFig(shown), d = raw ? decShown(value, fmt.upTo) : placesShown(shown, value, fixed), up = Math.max(0, Math.round(Math.log10(1 / m.per))), dm = d + Math.max(up, d === 0 ? 1 : 0), v = (isFinite(s) ? s : value) * m.per;
+    dm = decNonZero(v, dm);
+    var t = v.toFixed(dm); if (!fixed && t.indexOf('.') >= 0) t = t.replace(/\.?0+$/, ''); if (/^-0(\.0*)?$/.test(t)) t = t.slice(1);
+    return isObj(fmt) && fmt.group === true ? groupThousands(t) : t;
 }
+// A figure that is not zero is never shown as zero: the decimals its first digit needs, six at most (the website's decimalsForNonZero)
+function decNonZero(v, d) { while (v !== 0 && d < 6 && Number(Math.abs(v).toFixed(d)) === 0) d++; return d; }
+// A number's text to d decimals, trimmed where asked, never -0 (the website's numberText); a number's whole part grouped in thousands
+function numFixed(v, d, trim) { var t = v.toFixed(d); if (trim && t.indexOf('.') >= 0) t = t.replace(/\.?0+$/, ''); return /^-0(\.0*)?$/.test(t) ? t.slice(1) : t; }
+function groupThousands(t) { return String(t).replace(/^(-?)(\d+)/, function(x, sg, w) { return sg + w.replace(/\B(?=(\d{3})+$)/g, ','); }); }
+// A field's decimals (1.5.4): { lo, hi }, the fewest and the most it shows, from decMin and decMax (whole numbers 0 to 5, as the cleaner keeps
+// them; with only the fewest, at most two or that many), or null for a field that sets neither, which reads as it always did (fmtNum)
+function fieldDec(f) {
+    if (!isObj(f) || (typeof f.decMin !== 'number' && typeof f.decMax !== 'number')) return null;
+    var lo = typeof f.decMin === 'number' ? f.decMin : 0, hi = typeof f.decMax === 'number' ? f.decMax : Math.max(2, lo);
+    return { lo: lo, hi: Math.max(lo, hi) };
+}
+// A field's figure as the sheet writes it: to its most decimals, its trailing zeros taken off down to its fewest (32.0, 5.88, 9.8), its
+// thousands grouped where it says so (1,234.57); a field that sets neither as fmtNum writes it. Display only: no formula reads it
+function figText(f, v) {
+    if (typeof v !== 'number' || !isFinite(v)) return fmtNum(v);
+    var d = fieldDec(f), t = fmtNum(v);
+    if (d && Math.abs(v) < 1e15) { t = v.toFixed(d.hi); if (d.hi > d.lo) t = t.replace(new RegExp('0{1,' + (d.hi - d.lo) + '}$'), '').replace(/\.$/, ''); if (/^-0(\.0*)?$/.test(t)) t = t.slice(1); }
+    return isObj(f) && f.group === true ? groupThousands(t) : t;
+}
+// How a field's figure in metric is written: fixed where the field shows a least count or one count of decimals, grouped where it groups
+function figFmt(f) { var d = fieldDec(f); return { fixed: !!d && (d.lo > 0 || d.lo === d.hi), group: isObj(f) && f.group === true }; }
 function metricOf(unit, value, shown) { var n = metricNum(unit, value, shown); return n ? n + ' ' + MEASURES[unit].word : ''; }   // "6.4 m", or ''
 // What a sheet draws after a field's unit for the viewer's setting: under Metric (only true counts) a measure's figure in metric, in brackets,
-// " (6.4 m)"; a pool's two figures as one, " (4.6/9.1 m)"; else ''. value / shown: the figure drawn before the unit and its text
+// " (6.4 m)"; a pool's two figures as one, " (4.6/9.1 m)"; else ''. value / shown: the figure drawn before the unit and its text. The words
+// after a box the viewer types in: a box holds the book's figure, so this is its one form whatever the field's unitShow says
 function unitTail(f, value, shown, metric, max, shownMax) {
     if (metric !== true || !isObj(f)) return '';
-    var u = cleanFieldUnit(f.unit, f.kind); if (!u || u === 'height') return '';
+    var u = cleanFieldUnit(f.unit, f.kind); if (!u || u === 'height' || u === 'weight') return '';
     if (f.kind === 'resource') { var a = metricNum(u, value, shown), b = metricNum(u, max, shownMax); return a && b ? ' (' + a + '/' + b + ' ' + MEASURES[u].word + ')' : ''; }
     var t = metricOf(u, value, shown); return t ? ' (' + t + ')' : '';
 }
+// A figure READ with its unit, whole (1.5.4, the website's three forms of a measure). how: '' (as before) Imperial "7 yd", Metric "7 yd
+// (6.4 m)", the metric figure beside the book's as the website writes a yard of the book's text; swap: Imperial "32 lbs", Metric "14.5 kg",
+// the metric figure in its place as the website writes a weight; bare: Imperial "5", Metric "4.6 m/s", the book's figure alone and the
+// metric one with its word, as the website writes a Move. A unit that is no measure reads "3 pts" in both, and no unit the figure alone.
+// shown: the figure's text as the sheet writes it; kind: the field's kind (a stat or a column is a number); metric: true for Metric only;
+// fmt: figFmt's. Plain text, for a text node
+function measureWords(unit, how, kind, value, shown, metric, fmt) {
+    var t = String(shown), u = typeof unit === 'string' ? unit : '', m = u ? cleanFieldUnit(u, kind) : '';
+    if (!u) return t;
+    if (!m || m === 'height' || m === 'weight') return t + ' ' + u;
+    var hw = how === 'swap' || how === 'bare' ? how : '';
+    if (metric !== true) return hw === 'bare' ? t : t + ' ' + u;
+    var n = metricNum(m, value, shown, fmt);
+    if (!n) return hw === 'bare' ? t : t + ' ' + u;
+    return hw ? n + ' ' + MEASURES[m].word : t + ' ' + u + ' (' + n + ' ' + MEASURES[m].word + ')';
+}
+function unitWords(f, value, shown, metric) { return isObj(f) ? measureWords(f.unit, f.unitShow, f.kind, value, shown, metric, figFmt(f)) : String(shown); }
+// A list's stat or column read in one of the website's forms (1.5.4: a measure Instead or Bare, or with its own most decimals): its figure as
+// the website writes a row's figure, to four decimals or its own most, trailing zeros taken off and never 0 for a figure that is not (the
+// website's number, upTo: a weapon's 18.675 lbs, an implant's 0.11438 lbs at five). Null for any other stat or column, which the sheet writes
+// as it always did (statFmt), and for a figure that is no number
+function listUp(x) { return typeof x.decMax === 'number' ? x.decMax : 4; }
+function listFig(x, v) {
+    if (!isObj(x) || typeof v !== 'number' || !isFinite(v) || Math.abs(v) > 1e15 || !cleanFieldUnit(x.unit, 'number')) return null;
+    if (x.unitShow !== 'swap' && x.unitShow !== 'bare' && typeof x.decMax !== 'number') return null;
+    return numFixed(v, decNonZero(v, decShown(v, listUp(x))), true);
+}
+// A list's stat or column with its unit, whole, for the setting, as unitWords reads a field: in a website form its own figure (listFig) and
+// that number turned; else the sheet's figure (shown) as before. asShown (only true: a list's total under it) keeps the sheet's figure and
+// turns it as shown, as the website turns a total it has rounded. Plain text, for a text node
+function listWords(x, value, shown, metric, asShown) {
+    if (!isObj(x)) return String(shown);
+    var lf = asShown === true ? null : listFig(x, value);
+    return lf === null ? measureWords(x.unit, x.unitShow, 'number', value, shown, metric) : measureWords(x.unit, x.unitShow, 'number', value, lf, metric, { upTo: listUp(x) });
+}
+// A unit's words as the cleaner keeps them (1.5.4): a field's and a list stat's cut by code points, a column's as its text is cut. The System
+// editor reads a unit by this alone, so what it says Save does is what Save does
+function unitOf(v, col) { return col === true ? cutText(v, LIMITS.unit) : cutPoints(v, LIMITS.unit, ' '); }
+// The unit a column's head names: its words as written, or the metric word where the figures under it read in metric (swap and bare)
+function unitHead(unit, how, metric) { var m = typeof unit === 'string' ? cleanFieldUnit(unit, 'number') : ''; return metric === true && m && (how === 'swap' || how === 'bare') ? MEASURES[m].word : (typeof unit === 'string' ? unit : ''); }
 // A height or a weight written as text, read in ONE place as the website reads one (lib/display-units.ts readHeightText and readWeightText):
 // the sheet's display of a height (heightWords) and the ShadowBase bridge (sbHeightIn, sbWeightLb) both ask readMeasure. A half is folded
 // (curly quote marks straight, lower case) and read by the forms of its kind: a height's feet from centimetres, metres, inches, or feet with
@@ -247,27 +324,31 @@ function unitTail(f, value, shown, metric, max, shownMax) {
 // and the pair is read by its imperial half. { v, metric, pair }: the figure read (feet or pounds), whether it is metric, and a pair's two
 // halves as written, trimmed; null where nothing reads, a kind that is none, or a text that is no text
 var M_PER_FT = 0.3048, KG_PER_LB = 0.45359237, MEASURE_NUM = '(\\d+(?:\\.\\d*)?|\\.\\d+)', MEASURE_BARE = new RegExp('^' + MEASURE_NUM + '$');
+var MEASURE_BARE_PER = Object.freeze(Object.assign(Object.create(null), { height: M_PER_FT, weight: KG_PER_LB }));   // a bare TYPED figure under Metric: metres, kilograms
 var MEASURE_FORMS = Object.freeze(Object.assign(Object.create(null), {
     height: [[new RegExp('^' + MEASURE_NUM + '\\s*(?:cm|centimet(?:re|er)s?)$'), function(n) { return n / 100 / M_PER_FT; }, true], [new RegExp('^' + MEASURE_NUM + '\\s*(?:m|metres?|meters?)$'), function(n) { return n / M_PER_FT; }, true],
         [new RegExp('^' + MEASURE_NUM + '\\s*(?:in|inch|inches|")$'), function(n) { return n / 12; }, false], [new RegExp('^' + MEASURE_NUM + "\\s*(?:'|ft|foot|feet)\\s*(?:" + MEASURE_NUM + '\\s*(?:in|inch|inches|")?)?$'), function(n, i) { return n + (i ? Number(i) / 12 : 0); }, false]],
     weight: [[new RegExp('^' + MEASURE_NUM + '\\s*(?:kg|kgs|kilograms?|kilos?)\\.?$'), function(n) { return n / KG_PER_LB; }, true], [new RegExp('^' + MEASURE_NUM + '\\s*(?:lb|lbs|pounds?)\\.?$'), function(n) { return n; }, false]]
 }));
-function measureHalf(text, forms) {   // one half: { v, metric, said } or null
+function tidyNum(t) { if (t.charAt(t.length - 1) === '.') t = t.slice(0, -1); return t.charAt(0) === '.' ? '0' + t : t; }   // a number as typed, its stray point taken off (the website's tidyNumber)
+function measureHalf(text, forms, barePer) {   // one half: { v, metric, said, d, num } or null. barePer: a bare figure is metric, that many of the book's unit a metric one
     var t = String(text).replace(/[\u2018\u2019\u02bc\u2032]/g, "'").replace(/[\u201c\u201d\u2033]/g, '"').trim().toLowerCase(), m; if (!t) return null;
-    for (var i = 0; i < forms.length; i++) if ((m = forms[i][0].exec(t))) return { v: forms[i][1](Number(m[1]), m[2]), metric: forms[i][2], said: true };
-    return (m = MEASURE_BARE.exec(t)) ? { v: Number(m[1]), metric: false, said: false } : null;
+    for (var i = 0; i < forms.length; i++) if ((m = forms[i][0].exec(t))) return { v: forms[i][1](Number(m[1]), m[2]), metric: forms[i][2], said: true, d: decShown(Number(m[1])), num: tidyNum(m[1]) };
+    return (m = MEASURE_BARE.exec(t)) ? { v: barePer ? Number(m[1]) / barePer : Number(m[1]), metric: !!barePer, said: false, d: decShown(Number(m[1])), num: tidyNum(m[1]) } : null;
 }
-function readMeasure(text, kind) {
-    var forms = typeof kind === 'string' && Object.prototype.hasOwnProperty.call(MEASURE_FORMS, kind) ? MEASURE_FORMS[kind] : null, s = typeof text === 'string' ? text.trim() : '';
+// d (1.5.4): the decimals the half read was written to, as the website's decimalsShown counts them. bareMetric: only true reads a bare figure
+// in the metric unit (metres, kilograms), as a box typed under Metric is read; a stored text's bare figure is the book's
+function readMeasure(text, kind, bareMetric) {
+    var forms = typeof kind === 'string' && Object.prototype.hasOwnProperty.call(MEASURE_FORMS, kind) ? MEASURE_FORMS[kind] : null, s = typeof text === 'string' ? text.trim() : '', bp = bareMetric === true && forms ? MEASURE_BARE_PER[kind] : 0;
     if (!forms || !s) return null;
     var h = s.split('/'), a, b;
     if (h.length === 2) {
-        a = measureHalf(h[0], forms); b = measureHalf(h[1], forms);
+        a = measureHalf(h[0], forms, bp); b = measureHalf(h[1], forms, bp);
         if (!a || !b || !a.said || !b.said || a.metric === b.metric) return null;
-        return { v: (a.metric ? b : a).v, metric: false, pair: { metric: (a.metric ? h[0] : h[1]).trim(), imperial: (a.metric ? h[1] : h[0]).trim() } };
+        return { v: (a.metric ? b : a).v, metric: false, pair: { metric: (a.metric ? h[0] : h[1]).trim(), imperial: (a.metric ? h[1] : h[0]).trim() }, d: (a.metric ? b : a).d };
     }
     if (h.length !== 1) return null;
-    a = measureHalf(s, forms); return a && isFinite(a.v) ? { v: a.v, metric: a.metric, pair: null } : null;
+    a = measureHalf(s, forms, bp); return a && isFinite(a.v) ? { v: a.v, metric: a.metric, pair: null, d: a.d } : null;
 }
 // The inches a height read so stands for, as Ch2's rule works from them (handoffs (39) and (41)): an imperial height as written, a tenth kept
 // ("5'6.9\"" is 66.9), a metric one to the nearest whole inch, a half rounding up ("2.00 m" is 79); the float's own noise taken off first
@@ -285,6 +366,36 @@ function heightWords(text, metric) {
     if (want) return (r.v * M_PER_FT).toFixed(2) + ' m';
     var inch = measureInches(r);
     return Math.floor(inch / 12) + "'" + (inch % 12) + '"';
+}
+// A weight as the viewer's setting reads it (1.5.4, the website's showWeightText): its pair by the half of that setting; a single weight as
+// written where it is in that setting, else converted: pounds to kilograms, its decimals the precision rule's and kept (169 lb is 76.7 kg), or
+// kilograms to pounds to the decimals written (77 kg is 170 lb). A text that is no weight is shown as it is
+function weightWords(text, metric) {
+    if (typeof text !== 'string') return text === undefined || text === null ? '' : String(text);
+    var r = readMeasure(text, 'weight'), want = metric === true; if (!r) return text;
+    if (r.pair) return want ? r.pair.metric : r.pair.imperial;
+    if (r.metric === want) return text.trim();
+    if (want) { var kg = r.v * KG_PER_LB; return numFixed(kg, decNonZero(kg, r.d + (r.d === 0 ? 1 : 0)), false) + ' kg'; }
+    return numFixed(r.v, decNonZero(r.v, r.d), true) + ' lb';
+}
+// A text field's measure (height or weight) as the viewer's setting reads it; any other text as it is
+function textWords(f, text, metric) { var u = isObj(f) && f.kind === 'text' ? cleanFieldUnit(f.unit, 'text') : ''; return u === 'height' ? heightWords(text, metric) : u === 'weight' ? weightWords(text, metric) : text; }
+// What the sheet stores for a height or a weight typed in its box (1.5.4, the website's storeHeightText and storeWeightText): a figure in the
+// book's units as typed; a metric one as the book's pair, imperial half first and the metric half as typed, "2.00 m" stored 6'7" / 2.00 m and
+// 77 typed under Metric 170 lb / 77 kg. A bare figure is in the viewer's unit (metric: only true is Metric). A text that is no figure, a pair,
+// and a weight with a slash in it are stored as typed. This is the one way a typed figure is turned, and it writes the book's pair
+function inchesWords(inches) { var tenths = Math.round(Number((Number(inches) * 10).toPrecision(12))), ft = Math.floor(tenths / 120); return ft + "'" + ((tenths - ft * 120) / 10) + '"'; }   // the website's inchesAsFeetAndInches
+function measureStore(typed, kind, metric) {
+    if (typeof typed !== 'string' || (kind !== 'height' && kind !== 'weight')) return typed;
+    var want = metric === true, bp = want ? MEASURE_BARE_PER[kind] : 0;
+    if (kind === 'height') {
+        var r = readMeasure(typed, 'height', want); if (!r || r.pair || !r.metric) return typed;
+        var hh = measureHalf(typed, MEASURE_FORMS.height, bp); if (!hh) return typed;
+        return inchesWords(measureInches(r)) + ' / ' + (hh.said ? typed.trim() : hh.num + ' m');
+    }
+    var w = measureHalf(typed, MEASURE_FORMS.weight, bp);
+    if (!w || !w.metric || typed.indexOf('/') >= 0) return typed;
+    return numFixed(w.v, w.d, false) + ' lb / ' + (w.said ? typed.trim() : w.num + ' kg');
 }
 function cleanField(f, F, gmView) {
     if (!isObj(f) || typeof f.id !== 'string' || !FIELD_ID.test(f.id) || !KINDS[f.kind]) return null;
@@ -325,8 +436,10 @@ function cleanField(f, F, gmView) {
     }
     if (f.roll !== undefined) { var r = cleanFormulaText(f.roll); if (r) out.roll = r; }
     if (f.tile === true && (k === 'number' || k === 'formula' || k === 'skill' || k === 'resource')) out.tile = true;   // Stage 3: render this numeric field as a stat tile
-    if ((k === 'number' || k === 'formula' || k === 'skill' || k === 'resource') && typeof f.unit === 'string') { var un = cutPoints(f.unit, LIMITS.unit, ' '); if (un) out.unit = un; }   // Stage 5g: a unit after the value ("pts", "kg")
-    else if (k === 'text' && cleanFieldUnit(f.unit, k) === 'height') out.unit = 'height';   // 1.5.4: a text read as a height (the one unit a text field takes)
+    if ((k === 'number' || k === 'formula' || k === 'skill' || k === 'resource') && typeof f.unit === 'string') { var un = unitOf(f.unit); if (un) out.unit = un; }   // Stage 5g: a unit after the value ("pts", "kg")
+    else if (k === 'text' && cleanFieldUnit(f.unit, k)) out.unit = cleanFieldUnit(f.unit, k);   // 1.5.4: a text read as a height or a weight (the two units a text field takes)
+    if ((k === 'number' || k === 'formula' || k === 'skill') && out.unit && cleanFieldUnit(out.unit, k) && (f.unitShow === 'swap' || f.unitShow === 'bare')) out.unitShow = f.unitShow;   // 1.5.4: how a measure reads under Metric (absent: beside its figure)
+    if (k === 'number' || k === 'formula' || k === 'skill') { var dlo = decCount(f.decMin), dhi = decCount(f.decMax); if (dlo !== null) out.decMin = dlo; if (dhi !== null) out.decMax = dlo !== null && dhi < dlo ? dlo : dhi; if (f.group === true) out.group = true; }   // 1.5.4: the decimals a figure shows and its thousands (display only)
     if ((k === 'number' || k === 'formula' || k === 'skill') && f.sign === true) out.sign = true;   // Stage 5g: colour the value by its sign (green above zero, red below)
     if ((k === 'number' || k === 'formula') && Array.isArray(f.labels)) {   // Stage 6: names for the values 0, 1, 2… — a number becomes a dropdown that stores the position, a formula shows the name for its value; formulas always read the number
         var lbs = cleanLabels(f.labels);
@@ -340,6 +453,9 @@ function cleanField(f, F, gmView) {
     if ((k === 'number' || k === 'skill') && f.counter === true && !out.labels && !out.slider) out.counter = true;   // HUD frame (HF4a, H8): a counter — minus and plus either side of the box (a named number is a dropdown and a slider a range, never a counter)
     return out;
 }
+// 1.5.4: a count of decimals a figure shows, a whole number 0 to 5 (rounded, held there; five, the website's most, for an implant's weight),
+// or null for none set
+function decCount(v) { return typeof v === 'number' && isFinite(v) ? Math.max(0, Math.min(5, Math.round(v))) : null; }
 // L7: tones run parallel to a formula's value names — '' or one of TONES each, at most one per name, trailing blanks trimmed; null when all blank
 function cleanTones(v, n) {
     if (!Array.isArray(v)) return null;
@@ -1191,6 +1307,7 @@ function cleanListSpec(v, gmView, F) {   // F (F4c1): the engine, for a stat key
             } else {
             var sd = statNum(s.def); if (sd !== undefined && sd !== 0) so.def = sd;
             var slb = cleanLabels(s.labels); if (slb) so.labels = slb;
+            var sun = unitOf(s.unit); if (sun) { so.unit = sun; if (cleanFieldUnit(sun, 'number')) { if (s.unitShow === 'swap' || s.unitShow === 'bare') so.unitShow = s.unitShow; var sdm = decCount(s.decMax); if (sdm !== null) so.decMax = sdm; } }   // 1.5.4: a unit after its figure, a measure in metric under Metric as a field's is, and a measure's most decimals
             }   // names for the values 0, 1, 2... (a value past them shows as the number: no clamp, so lists sharing a key never fight)
             if (s.hide === true) so.hide = true;   // 1.5.4 Hidden: a figure the row only works with (a cost per level, a step) — never drawn on a row, in its details, in a table or in the picker; formulas read it and the row's own-values form shows it. It wins over On the row, and it is no secret (the players' view holds it alike)
             else if (s.show === true) so.show = true;   // On the row: a chip beside the name, a column in a rich table
@@ -1212,7 +1329,7 @@ function cleanListSpec(v, gmView, F) {   // F (F4c1): the engine, for a stat key
             var ck = statKey(cv.key, F); if (!ck || seenK[lower(ck)]) continue;
             seenK[lower(ck)] = 1;
             var co = { key: ck, label: cutText(cv.label, LIMITS.label) || ck, formula: cv.formula === null ? null : (cleanFormulaText(cv.formula) || '') };   // null: the players' view blanked it (a GM-only name) — kept, so the view is a fixed point
-            var cu = cutText(cv.unit, LIMITS.unit); if (cu) co.unit = cu;
+            var cu = unitOf(cv.unit, true); if (cu) { co.unit = cu; if (cleanFieldUnit(cu, 'number')) { if (cv.unitShow === 'swap' || cv.unitShow === 'bare') co.unitShow = cv.unitShow; var cdm = decCount(cv.decMax); if (cdm !== null) co.decMax = cdm; } }   // 1.5.4: how a measure reads under Metric, and its most decimals
             var clb = cleanLabels(cv.labels); if (clb) co.labels = clb;
             if (cv.hide === true) co.hide = true;   // worked out (totals, other columns) but not drawn on the row
             if (cv.foot === true) co.foot = true;   // its total under the list
@@ -3426,8 +3543,23 @@ function makeResolver(sys, char, F, ropts) {   // ropts.noFx: the values with no
     fn.detail = function(name) { return detail[lower(name)] || null; };   // 5h: { base, mods: [{name, op, v, gm}], via: [{through, name, op, v, gm}] } or null
     return fn;
 }
-// Stage 6: a caption's {…} — "±X" (or "+/-X") shows X with its sign (+2, -1, +0); the sign is never formula syntax, so no older caption reads differently
-function capExpr(s) { var t = String(s).trim(), m = /^(\u00b1|\+\/-)\s*/.exec(t); return m ? { expr: t.slice(m[0].length), signed: true } : { expr: t, signed: false }; }
+// Stage 6: a caption's {…} — "±X" (or "+/-X") shows X with its sign (+2, -1, +0); the sign is never formula syntax, so no older caption reads differently.
+// 1.5.4: "X|lbs" shows X with a unit (unit: the words after the last bar, cut as a field's unit); a bar is no formula syntax either, so a
+// caption that holds one read as an error before. Every reader of a caption's formula asks this, so the unit is never read as formula text
+function capExpr(s) {
+    var t = String(s).trim(), bar = t.lastIndexOf('|'), unit = '';
+    if (bar >= 0) { unit = cutPoints(t.slice(bar + 1), LIMITS.unit, ' '); t = t.slice(0, bar).trim(); }
+    var m = /^(\u00b1|\+\/-)\s*/.exec(t), out = m ? { expr: t.slice(m[0].length), signed: true } : { expr: t, signed: false };
+    if (unit) out.unit = unit;
+    return out;
+}
+// A caption's figure with its unit (1.5.4): "32 lbs" under Imperial, and a measure in metric in its place under Metric, "14.5 kg", as the
+// website writes a limit of its encumbrance table; a signed figure keeps its plus. shown: the figure as the caption writes it
+function capWords(unit, v, shown, signed, metric) {
+    var m = cleanFieldUnit(unit, 'number');
+    if (metric === true && m) { var n = metricNum(m, v, String(shown).replace(/^\+/, '')); if (n) return (signed && Number(n) > 0 ? '+' : '') + n + ' ' + MEASURES[m].word; }
+    return shown + ' ' + unit;
+}
 // HUD frame (HF5a, H3): a roll's label may show values like a caption. What players see of a label that names a GM-only value: its plain
 // text before the first "{", less a trailing separator ("Trap save ({GMFig})" -> "Trap save"), or Roll
 function labelHead(text) { return String(text).split('{')[0].replace(/[\s(\[:\u00b7-]+$/, '') || 'Roll'; }
@@ -3460,7 +3592,7 @@ function labelGmNames(sys, F, text) {
 }
 // Stage 5g Fold B: a field's caption as parts for the sheet to draw — plain text, and each {formula} worked out for this character (no
 // dice; at most LIMITS.captionExprs, the rest stays text). [{ text }] | [{ value, text }] | [{ error }]; the sheet draws them as text only.
-function captionParts(sys, char, F, text, vars) {   // vars: the render's own resolver (resolveAll(...).vars), so a caption reads values already worked out
+function captionParts(sys, char, F, text, vars, metric) {   // vars: the render's own resolver (resolveAll(...).vars), so a caption reads values already worked out; metric (1.5.4): the viewer's setting, for a {formula|unit}
     var out = []; if (typeof text !== 'string' || !text || !sys || !F) return out;
     var re = /\{([^{}]{1,300})\}/g, last = 0, m, n = 0, fn = null;
     while (n < LIMITS.captionExprs && (m = re.exec(text))) {
@@ -3471,7 +3603,8 @@ function captionParts(sys, char, F, text, vars) {   // vars: the render's own re
         if (!res || !res.ok) { out.push({ error: String((res && res.error && res.error.message) || 'error') }); continue; }
         var v = res.value;
         var mag = typeof v === 'number' ? fmtNum(Math.abs(v)) : '';
-        out.push({ value: v, text: typeof v === 'number' ? (ce.signed ? (v < 0 && mag !== '0' ? '-' : '+') + mag : fmtNum(v)) : typeof v === 'boolean' ? (v ? 'yes' : 'no') : String(v).slice(0, 60) });
+        var ctx = typeof v === 'number' ? (ce.signed ? (v < 0 && mag !== '0' ? '-' : '+') + mag : fmtNum(v)) : typeof v === 'boolean' ? (v ? 'yes' : 'no') : String(v).slice(0, 60);
+        out.push({ value: v, text: ce.unit && typeof v === 'number' && isFinite(v) ? capWords(ce.unit, v, ctx, ce.signed, metric) : ctx });
     }
     if (last < text.length) out.push({ text: text.slice(last) });
     return out;
@@ -3488,11 +3621,11 @@ function resolveAll(sys, char, F, tctx, ropts) {   // tctx: tokenCtx(...) = { fa
         if (k === 'text' || k === 'select' || k === 'notes') { e.value = storedOf(f, char); e.text = String(e.value); }
         else if (k === 'item-list') { e.value = storedOf(f, char); e.text = ''; if (!(ropts && ropts.noRows) && f.list && Array.isArray(f.list.cols) && f.list.cols.length) listCells(f, e, r); if (!(ropts && ropts.noRows) && f.list && Array.isArray(f.list.counters) && f.list.counters.length) listCts(f, e, r); if (!(ropts && ropts.noRows) && f.list && Array.isArray(f.list.rolls) && f.list.rolls.some(function(x) { return isObj(x) && x.needs; })) listNeeds(f, e, r); }   // a carried list; sheets.js renders it, not a number. F5a1: its columns' cells and totals
         else if (k === 'effects') { e.value = storedOf(f, char); e.text = ''; e.active = activeEffects(sys, e.value); }   // 5h: the rows; e.active names the ones switched on
-        else if (k === 'toggle' || k === 'number') { var tv = r(f.key); e.value = (tv === undefined || (tv && typeof tv === 'object')) ? storedOf(f, char) : tv; e.text = fmtNum(e.value); }   // 5h: through the resolver, so an effect shows
+        else if (k === 'toggle' || k === 'number') { var tv = r(f.key); e.value = (tv === undefined || (tv && typeof tv === 'object')) ? storedOf(f, char) : tv; e.text = k === 'number' ? figText(f, e.value) : fmtNum(e.value); }   // 5h: through the resolver, so an effect shows; 1.5.4: a number by its decimals and grouping
         else {
             var v = r(f.key);
             if (v && typeof v === 'object' && v.error) { e.error = v.error.message; e.text = '—'; }
-            else { e.value = v; e.text = fmtNum(v); }
+            else { e.value = v; e.text = k === 'resource' ? fmtNum(v) : figText(f, v); }   // 1.5.4: a formula and a skill by their decimals and grouping
             if (k === 'resource') { var m = r(f.key + '.max'); if (m && typeof m === 'object' && m.error) { e.max = null; if (!e.error) e.error = m.error.message; } else { e.max = m; e.text = fmtNum(e.value) + ' / ' + fmtNum(m); } }
             if (k === 'skill') { var rk = r(f.key + '.ranks'); e.ranks = rk; }
         }
@@ -3625,8 +3758,8 @@ function headerEntry(f, e, metric) {   // metric (1.5.4): the viewer's Measureme
     if (e.error) return { text: '\u2014', error: String(e.error) };
     if (e.text === undefined || e.text === null || e.text === '') return { text: '\u2014', empty: true };
     var numeric = (f.kind === 'number' || f.kind === 'formula' || f.kind === 'skill') && typeof e.value === 'number' && !e.label;   // a named value is a word, never red or green
-    var ht = f.kind === 'text' && cleanFieldUnit(f.unit, 'text') === 'height';   // 1.5.4: a height, by the half of the viewer's setting (with none told, as stored)
-    var out = { text: ht ? (metric === true || metric === false ? heightWords(String(e.text), metric) : e.text) : f.unit && !e.label ? e.text + ' ' + f.unit + unitTail(f, e.value, e.text, metric, e.max, typeof e.max === 'number' ? fmtNum(e.max) : '') : e.text };   // Stage 6: a named value is a word (no unit); 1.5.4: a measure in metric too under Metric
+    var ht = f.kind === 'text' && !!cleanFieldUnit(f.unit, 'text');   // 1.5.4: a height or a weight, by the half of the viewer's setting (with none told, as stored)
+    var out = { text: ht ? (metric === true || metric === false ? textWords(f, String(e.text), metric) : e.text) : f.unit && !e.label ? (f.kind === 'resource' ? e.text + ' ' + f.unit + unitTail(f, e.value, e.text, metric, e.max, typeof e.max === 'number' ? fmtNum(e.max) : '') : unitWords(f, e.value, e.text, metric)) : e.text };   // Stage 6: a named value is a word (no unit); 1.5.4: a measure in metric too under Metric, in the field's own form
     if (numeric && e.value < 0) out.neg = true; else if (numeric && f.sign && e.value > 0) out.pos = true;
     var why = fxText(e) || (f.kind === 'resource' ? fxText(e, true) : ''); if (why) out.why = why;   // 5h: where the number came from
     return out;
@@ -6246,6 +6379,6 @@ function orderBySide(rows, isPc, first) {
     var a = [], b = []; list.forEach(function(r) { (!!isPc(r) === (first === 'pc') ? a : b).push(r); });
     return a.concat(b);
 }
-var API = { VERSION: VERSION, cleanFieldUnit: cleanFieldUnit, metricOf: metricOf, unitTail: unitTail, readMeasure: readMeasure, heightWords: heightWords, MEASURES: MEASURES, rollNeedsOk: rollNeedsOk, rollNeedsSays: rollNeedsSays, onGroup: onGroup, onlyOne: onlyOne, onHeld: onHeld, cleanNeeds: cleanNeeds, hideNeeds: hideNeeds, needsMet: needsMet, needsSays: needsSays, needRule: needRule, ruleTrue: ruleTrue, setRuleJudge: setRuleJudge, cleanBudgets: cleanBudgets, budgetsOf: budgetsOf, budgetWatch: budgetWatch, budgetSays: budgetSays, cleanDesc: cleanDesc, cleanLvls: cleanLvls, EVERY_UNITS: EVERY_UNITS, cleanEvery: cleanEvery, timeRuleRun: timeRuleRun, cleanFace: cleanFace, charForView: charForView, mapGridOf: mapGridOf, tokenCell: tokenCell, shapeStandIn: shapeStandIn, cleanFrame: cleanFrame, openChar: openChar, newCharRules: newCharRules, charClash: charClash, coreOf: coreOf, setLibraryFind: setLibraryFind, statKeys: statKeys, statPicks: statPicks, cleanIcon: cleanIcon, droppedCounts: droppedCounts, parseLasts: parseLasts, lastsSecs: lastsSecs, roundSecs: roundSecs, fxLeftNow: fxLeftNow, fxTick: fxTick, mapCellScale: mapCellScale, moveAllowCells: moveAllowCells, dueActs: dueActs, gridCells: gridCells, cleanTurn: cleanTurn, TURN_UNITS: TURN_UNITS, TIME_WORDS: TIME_WORDS, roundActs: roundActs, combatChars: combatChars, applyRound: applyRound, thenChanges: thenChanges, showsIf: showsIf, rowRollNames: rowRollNames, applyAct: applyAct, applyScope: applyScope, cleanCharApply: cleanCharApply, APPLY_KINDS: APPLY_KINDS, hudView: hudView, hudHasContent: hudHasContent, pinTargetsAll: pinTargetsAll, TONES: TONES, valueTone: valueTone, cleanTones: cleanTones, playableChars: playableChars, activeCharOf: activeCharOf, activeChars: activeChars, ownedTokenPlan: ownedTokenPlan, applyOwnerOps: applyOwnerOps, migrateBindings: migrateBindings, tokenSourceFor: tokenSourceFor, playsAs: playsAs, cleanNewPlayers: cleanNewPlayers, newPlayerRules: newPlayerRules, waitingTokensOf: waitingTokensOf, waitingNeed: waitingNeed, stackZ: stackZ, LIMITS: LIMITS, PALETTE_KEYS: PALETTE_KEYS, headerEdits: headerEdits, pinTargets: pinTargets, pruneGroups: pruneGroups, GROUP_ID: GROUP_ID, GLYPHS: GLYPHS, glyphPath: glyphPath, ROLL_TONES: ROLL_TONES, KINDS: KINDS, STORED: STORED, DEF_PROP: DEF_PROP, LAYOUT: LAYOUT, validPageId: validPageId, BAND_KINDS: BAND_KINDS, IDENTITY_KINDS: IDENTITY_KINDS, LEDGER_KINDS: LEDGER_KINDS, headerEntry: headerEntry, captionParts: captionParts, capExpr: capExpr, labelNames: labelNames, labelGmNames: labelGmNames, valueOpts: valueOpts, rowIdOf: rowIdOf, cleanRowDef: cleanRowDef, rowDef: rowDef, projectRows: projectRows, cleanListSpec: cleanListSpec, STAT_KEY: STAT_KEY, statKey: statKey, cleanEntryStats: cleanEntryStats, rowStats: rowStats, rowStat: rowStat, plusText: plusText, rowPaid: rowPaid, cleanListRules: cleanListRules, cleanOv: cleanOv, mergeOv: mergeOv, itemReach: itemReach, OV_LOCK: OV_LOCK, lvlClamp: lvlClamp, rowLvl: rowLvl, rowOn: rowOn, cleanItemKey: cleanItemKey, ROW_WORDS: ROW_WORDS, applyRowOp: applyRowOp, orphanRows: orphanRows, stampRows: stampRows, libSnaps: libSnaps, carriedBy: carriedBy, cleanItemMods: cleanItemMods, fieldKinds: fieldKinds, unseenMods: unseenMods, cleanItemMsg: cleanItemMsg, RM_MODES: RM_MODES, applyEffectOp: applyEffectOp, cleanCharEffect: cleanCharEffect, gmEffectNames: gmEffectNames, fxText: fxText, activeEffects: activeEffects, tokenEffects: tokenEffects, autoEffectsOn: autoEffectsOn, tokenOwnEffects: tokenOwnEffects, projectEffects: projectEffects, FACING_NAMES: FACING_NAMES, TOKEN_NAMES: TOKEN_NAMES, POSTURE_IDS: POSTURE_IDS, POSTURE_NAMES: POSTURE_NAMES, DEFAULT_POSTURES: DEFAULT_POSTURES, cleanPostures: cleanPostures, postureList: postureList, ownPostures: ownPostures, postureAt: postureAt, postureSeven: postureSeven, stanceCtx: stanceCtx, tokenCtx: tokenCtx, withRound: withRound, rangeCtx: rangeCtx, withRange: withRange, sideOf: sideOf, threatArc: threatArc, cleanThreats: cleanThreats, facingCtx: facingCtx, charTokenOn: charTokenOn, cycleThreat: cycleThreat, RESERVED_SUFFIX: RESERVED_SUFFIX, emptySystem: emptySystem, uid: uid, validKey: validKey, cleanFormulaText: cleanFormulaText, hasDice: hasDice, cleanField: cleanField, cleanRollDef: cleanRollDef, cleanItemDef: cleanItemDef, cleanCombat: cleanCombat, cleanCover: cleanCover, cleanLightRules: cleanLightRules, lightName: lightName, lightPresets: lightPresets, LIGHT_UNITS: LIGHT_UNITS, cleanRangeRules: cleanRangeRules, rangeModOf: rangeModOf, rangeDist: rangeDist, rangeOf: rangeOf, RANGE_UNITS: RANGE_UNITS, cleanSenses: cleanSenses, secretFieldIds: secretFieldIds, gmViewFields: gmViewFields, coverTier: coverTier, coverOutcome: coverOutcome, coverDamage: coverDamage, cleanSystem: cleanSystem, cleanValue: cleanValue, cleanChar: cleanChar, cleanCharEdit: cleanCharEdit, cleanCharEdits: cleanCharEdits, resetTargets: resetTargets, cleanCharItem: cleanCharItem, cleanDenyReason: cleanDenyReason, cleanSheetStyle: cleanSheetStyle, fieldById: fieldById, itemDef: itemDef, keyIndex: keyIndex, makeResolver: makeResolver, resolveAll: resolveAll, hoverLines: hoverLines, gmOnlyNames: gmOnlyNames, gmDerivedNames: gmDerivedNames, gmPools: gmPools, initRoll: initRoll, orderByInit: orderByInit, cleanInitRules: cleanInitRules, cleanHeightRules: cleanHeightRules, heightModOf: heightModOf, heightOf: heightOf, HEIGHT_UNITS: HEIGHT_UNITS, initTie: initTie, sideFirst: sideFirst, orderBySide: orderBySide, validateSystem: validateSystem, charFor: charFor, applyEdit: applyEdit, autoLayout: autoLayout, aliasFromShadowBase: aliasFromShadowBase, sbRowOps: sbRowOps, sbRange: sbRange, sbMods: sbMods, sbFpText: sbFpText, sbTextBag: sbTextBag, sbFacing: sbFacing, sbWriteBack: sbWriteBack, sbProposal: sbProposal, sbApplyProposal: sbApplyProposal, cleanCharUpload: cleanCharUpload, cleanUploads: cleanUploads, fillMaking: fillMaking, sbFill: sbFill, fmtNum: fmtNum, suggest: suggest, lookRule: lookRule, cleanLooks: cleanLooks, applyStyle: applyStyle, cleanCharStyle: cleanCharStyle, lookOf: lookOf, lookFor: lookFor };
+var API = { VERSION: VERSION, cleanFieldUnit: cleanFieldUnit, metricOf: metricOf, unitTail: unitTail, readMeasure: readMeasure, heightWords: heightWords, MEASURES: MEASURES, measureWords: measureWords, unitWords: unitWords, unitHead: unitHead, listFig: listFig, listWords: listWords, unitOf: unitOf, figText: figText, figFmt: figFmt, weightWords: weightWords, textWords: textWords, measureStore: measureStore, rollNeedsOk: rollNeedsOk, rollNeedsSays: rollNeedsSays, onGroup: onGroup, onlyOne: onlyOne, onHeld: onHeld, cleanNeeds: cleanNeeds, hideNeeds: hideNeeds, needsMet: needsMet, needsSays: needsSays, needRule: needRule, ruleTrue: ruleTrue, setRuleJudge: setRuleJudge, cleanBudgets: cleanBudgets, budgetsOf: budgetsOf, budgetWatch: budgetWatch, budgetSays: budgetSays, cleanDesc: cleanDesc, cleanLvls: cleanLvls, EVERY_UNITS: EVERY_UNITS, cleanEvery: cleanEvery, timeRuleRun: timeRuleRun, cleanFace: cleanFace, charForView: charForView, mapGridOf: mapGridOf, tokenCell: tokenCell, shapeStandIn: shapeStandIn, cleanFrame: cleanFrame, openChar: openChar, newCharRules: newCharRules, charClash: charClash, coreOf: coreOf, setLibraryFind: setLibraryFind, statKeys: statKeys, statPicks: statPicks, cleanIcon: cleanIcon, droppedCounts: droppedCounts, parseLasts: parseLasts, lastsSecs: lastsSecs, roundSecs: roundSecs, fxLeftNow: fxLeftNow, fxTick: fxTick, mapCellScale: mapCellScale, moveAllowCells: moveAllowCells, dueActs: dueActs, gridCells: gridCells, cleanTurn: cleanTurn, TURN_UNITS: TURN_UNITS, TIME_WORDS: TIME_WORDS, roundActs: roundActs, combatChars: combatChars, applyRound: applyRound, thenChanges: thenChanges, showsIf: showsIf, rowRollNames: rowRollNames, applyAct: applyAct, applyScope: applyScope, cleanCharApply: cleanCharApply, APPLY_KINDS: APPLY_KINDS, hudView: hudView, hudHasContent: hudHasContent, pinTargetsAll: pinTargetsAll, TONES: TONES, valueTone: valueTone, cleanTones: cleanTones, playableChars: playableChars, activeCharOf: activeCharOf, activeChars: activeChars, ownedTokenPlan: ownedTokenPlan, applyOwnerOps: applyOwnerOps, migrateBindings: migrateBindings, tokenSourceFor: tokenSourceFor, playsAs: playsAs, cleanNewPlayers: cleanNewPlayers, newPlayerRules: newPlayerRules, waitingTokensOf: waitingTokensOf, waitingNeed: waitingNeed, stackZ: stackZ, LIMITS: LIMITS, PALETTE_KEYS: PALETTE_KEYS, headerEdits: headerEdits, pinTargets: pinTargets, pruneGroups: pruneGroups, GROUP_ID: GROUP_ID, GLYPHS: GLYPHS, glyphPath: glyphPath, ROLL_TONES: ROLL_TONES, KINDS: KINDS, STORED: STORED, DEF_PROP: DEF_PROP, LAYOUT: LAYOUT, validPageId: validPageId, BAND_KINDS: BAND_KINDS, IDENTITY_KINDS: IDENTITY_KINDS, LEDGER_KINDS: LEDGER_KINDS, headerEntry: headerEntry, captionParts: captionParts, capExpr: capExpr, labelNames: labelNames, labelGmNames: labelGmNames, valueOpts: valueOpts, rowIdOf: rowIdOf, cleanRowDef: cleanRowDef, rowDef: rowDef, projectRows: projectRows, cleanListSpec: cleanListSpec, STAT_KEY: STAT_KEY, statKey: statKey, cleanEntryStats: cleanEntryStats, rowStats: rowStats, rowStat: rowStat, plusText: plusText, rowPaid: rowPaid, cleanListRules: cleanListRules, cleanOv: cleanOv, mergeOv: mergeOv, itemReach: itemReach, OV_LOCK: OV_LOCK, lvlClamp: lvlClamp, rowLvl: rowLvl, rowOn: rowOn, cleanItemKey: cleanItemKey, ROW_WORDS: ROW_WORDS, applyRowOp: applyRowOp, orphanRows: orphanRows, stampRows: stampRows, libSnaps: libSnaps, carriedBy: carriedBy, cleanItemMods: cleanItemMods, fieldKinds: fieldKinds, unseenMods: unseenMods, cleanItemMsg: cleanItemMsg, RM_MODES: RM_MODES, applyEffectOp: applyEffectOp, cleanCharEffect: cleanCharEffect, gmEffectNames: gmEffectNames, fxText: fxText, activeEffects: activeEffects, tokenEffects: tokenEffects, autoEffectsOn: autoEffectsOn, tokenOwnEffects: tokenOwnEffects, projectEffects: projectEffects, FACING_NAMES: FACING_NAMES, TOKEN_NAMES: TOKEN_NAMES, POSTURE_IDS: POSTURE_IDS, POSTURE_NAMES: POSTURE_NAMES, DEFAULT_POSTURES: DEFAULT_POSTURES, cleanPostures: cleanPostures, postureList: postureList, ownPostures: ownPostures, postureAt: postureAt, postureSeven: postureSeven, stanceCtx: stanceCtx, tokenCtx: tokenCtx, withRound: withRound, rangeCtx: rangeCtx, withRange: withRange, sideOf: sideOf, threatArc: threatArc, cleanThreats: cleanThreats, facingCtx: facingCtx, charTokenOn: charTokenOn, cycleThreat: cycleThreat, RESERVED_SUFFIX: RESERVED_SUFFIX, emptySystem: emptySystem, uid: uid, validKey: validKey, cleanFormulaText: cleanFormulaText, hasDice: hasDice, cleanField: cleanField, cleanRollDef: cleanRollDef, cleanItemDef: cleanItemDef, cleanCombat: cleanCombat, cleanCover: cleanCover, cleanLightRules: cleanLightRules, lightName: lightName, lightPresets: lightPresets, LIGHT_UNITS: LIGHT_UNITS, cleanRangeRules: cleanRangeRules, rangeModOf: rangeModOf, rangeDist: rangeDist, rangeOf: rangeOf, RANGE_UNITS: RANGE_UNITS, cleanSenses: cleanSenses, secretFieldIds: secretFieldIds, gmViewFields: gmViewFields, coverTier: coverTier, coverOutcome: coverOutcome, coverDamage: coverDamage, cleanSystem: cleanSystem, cleanValue: cleanValue, cleanChar: cleanChar, cleanCharEdit: cleanCharEdit, cleanCharEdits: cleanCharEdits, resetTargets: resetTargets, cleanCharItem: cleanCharItem, cleanDenyReason: cleanDenyReason, cleanSheetStyle: cleanSheetStyle, fieldById: fieldById, itemDef: itemDef, keyIndex: keyIndex, makeResolver: makeResolver, resolveAll: resolveAll, hoverLines: hoverLines, gmOnlyNames: gmOnlyNames, gmDerivedNames: gmDerivedNames, gmPools: gmPools, initRoll: initRoll, orderByInit: orderByInit, cleanInitRules: cleanInitRules, cleanHeightRules: cleanHeightRules, heightModOf: heightModOf, heightOf: heightOf, HEIGHT_UNITS: HEIGHT_UNITS, initTie: initTie, sideFirst: sideFirst, orderBySide: orderBySide, validateSystem: validateSystem, charFor: charFor, applyEdit: applyEdit, autoLayout: autoLayout, aliasFromShadowBase: aliasFromShadowBase, sbRowOps: sbRowOps, sbRange: sbRange, sbMods: sbMods, sbFpText: sbFpText, sbTextBag: sbTextBag, sbFacing: sbFacing, sbWriteBack: sbWriteBack, sbProposal: sbProposal, sbApplyProposal: sbApplyProposal, cleanCharUpload: cleanCharUpload, cleanUploads: cleanUploads, fillMaking: fillMaking, sbFill: sbFill, fmtNum: fmtNum, suggest: suggest, lookRule: lookRule, cleanLooks: cleanLooks, applyStyle: applyStyle, cleanCharStyle: cleanCharStyle, lookOf: lookOf, lookFor: lookFor };
 if (typeof window !== 'undefined') window.wpSystemCore = API;
-export { VERSION, cleanFieldUnit, metricOf, unitTail, readMeasure, heightWords, MEASURES, rollNeedsOk, rollNeedsSays, onGroup, onlyOne, onHeld, cleanNeeds, hideNeeds, needsMet, needsSays, needRule, ruleTrue, setRuleJudge, cleanBudgets, budgetsOf, budgetWatch, budgetSays, cleanDesc, cleanLvls, EVERY_UNITS, cleanEvery, timeRuleRun, cleanFace, charForView, mapGridOf, tokenCell, shapeStandIn, cleanFrame, openChar, newCharRules, charClash, coreOf, setLibraryFind, statKeys, statPicks, cleanIcon, droppedCounts, parseLasts, lastsSecs, roundSecs, fxLeftNow, fxTick, mapCellScale, moveAllowCells, dueActs, gridCells, cleanTurn, TURN_UNITS, TIME_WORDS, roundActs, combatChars, applyRound, thenChanges, showsIf, rowRollNames, applyAct, applyScope, cleanCharApply, APPLY_KINDS, hudView, hudHasContent, pinTargetsAll, TONES, valueTone, cleanTones, playableChars, activeCharOf, activeChars, ownedTokenPlan, applyOwnerOps, migrateBindings, tokenSourceFor, playsAs, cleanNewPlayers, newPlayerRules, waitingTokensOf, waitingNeed, stackZ, LIMITS, PALETTE_KEYS, headerEdits, pinTargets, pruneGroups, GROUP_ID, GLYPHS, glyphPath, ROLL_TONES, KINDS, STORED, DEF_PROP, LAYOUT, validPageId, BAND_KINDS, IDENTITY_KINDS, LEDGER_KINDS, headerEntry, captionParts, capExpr, labelNames, labelGmNames, valueOpts, rowIdOf, cleanRowDef, rowDef, projectRows, cleanListSpec, STAT_KEY, statKey, cleanEntryStats, rowStats, rowStat, plusText, rowPaid, cleanListRules, cleanOv, mergeOv, itemReach, OV_LOCK, lvlClamp, rowLvl, rowOn, cleanItemKey, ROW_WORDS, applyRowOp, orphanRows, stampRows, libSnaps, carriedBy, cleanItemMods, fieldKinds, unseenMods, cleanItemMsg, RM_MODES, applyEffectOp, cleanCharEffect, gmEffectNames, fxText, activeEffects, tokenEffects, autoEffectsOn, tokenOwnEffects, projectEffects, FACING_NAMES, TOKEN_NAMES, POSTURE_IDS, POSTURE_NAMES, DEFAULT_POSTURES, cleanPostures, postureList, ownPostures, postureAt, postureSeven, stanceCtx, tokenCtx, withRound, rangeCtx, withRange, sideOf, threatArc, cleanThreats, facingCtx, charTokenOn, cycleThreat, RESERVED_SUFFIX, emptySystem, uid, validKey, cleanFormulaText, hasDice, cleanField, cleanRollDef, cleanItemDef, cleanCombat, cleanCover, cleanLightRules, lightName, lightPresets, LIGHT_UNITS, cleanRangeRules, rangeModOf, rangeDist, rangeOf, RANGE_UNITS, cleanSenses, secretFieldIds, gmViewFields, coverTier, coverOutcome, coverDamage, cleanSystem, cleanValue, cleanChar, cleanCharEdit, cleanCharEdits, resetTargets, cleanCharItem, cleanDenyReason, cleanSheetStyle, fieldById, itemDef, keyIndex, makeResolver, resolveAll, hoverLines, gmOnlyNames, gmDerivedNames, gmPools, initRoll, orderByInit, cleanInitRules, cleanHeightRules, heightModOf, heightOf, HEIGHT_UNITS, initTie, sideFirst, orderBySide, validateSystem, charFor, applyEdit, autoLayout, aliasFromShadowBase, sbRowOps, sbRange, sbMods, sbFpText, sbTextBag, sbFacing, sbWriteBack, sbProposal, sbApplyProposal, cleanCharUpload, cleanUploads, fillMaking, sbFill, fmtNum, suggest, lookRule, cleanLooks, applyStyle, cleanCharStyle, lookOf, lookFor };
+export { VERSION, cleanFieldUnit, metricOf, unitTail, readMeasure, heightWords, MEASURES, measureWords, unitWords, unitHead, listFig, listWords, unitOf, figText, figFmt, weightWords, textWords, measureStore, rollNeedsOk, rollNeedsSays, onGroup, onlyOne, onHeld, cleanNeeds, hideNeeds, needsMet, needsSays, needRule, ruleTrue, setRuleJudge, cleanBudgets, budgetsOf, budgetWatch, budgetSays, cleanDesc, cleanLvls, EVERY_UNITS, cleanEvery, timeRuleRun, cleanFace, charForView, mapGridOf, tokenCell, shapeStandIn, cleanFrame, openChar, newCharRules, charClash, coreOf, setLibraryFind, statKeys, statPicks, cleanIcon, droppedCounts, parseLasts, lastsSecs, roundSecs, fxLeftNow, fxTick, mapCellScale, moveAllowCells, dueActs, gridCells, cleanTurn, TURN_UNITS, TIME_WORDS, roundActs, combatChars, applyRound, thenChanges, showsIf, rowRollNames, applyAct, applyScope, cleanCharApply, APPLY_KINDS, hudView, hudHasContent, pinTargetsAll, TONES, valueTone, cleanTones, playableChars, activeCharOf, activeChars, ownedTokenPlan, applyOwnerOps, migrateBindings, tokenSourceFor, playsAs, cleanNewPlayers, newPlayerRules, waitingTokensOf, waitingNeed, stackZ, LIMITS, PALETTE_KEYS, headerEdits, pinTargets, pruneGroups, GROUP_ID, GLYPHS, glyphPath, ROLL_TONES, KINDS, STORED, DEF_PROP, LAYOUT, validPageId, BAND_KINDS, IDENTITY_KINDS, LEDGER_KINDS, headerEntry, captionParts, capExpr, labelNames, labelGmNames, valueOpts, rowIdOf, cleanRowDef, rowDef, projectRows, cleanListSpec, STAT_KEY, statKey, cleanEntryStats, rowStats, rowStat, plusText, rowPaid, cleanListRules, cleanOv, mergeOv, itemReach, OV_LOCK, lvlClamp, rowLvl, rowOn, cleanItemKey, ROW_WORDS, applyRowOp, orphanRows, stampRows, libSnaps, carriedBy, cleanItemMods, fieldKinds, unseenMods, cleanItemMsg, RM_MODES, applyEffectOp, cleanCharEffect, gmEffectNames, fxText, activeEffects, tokenEffects, autoEffectsOn, tokenOwnEffects, projectEffects, FACING_NAMES, TOKEN_NAMES, POSTURE_IDS, POSTURE_NAMES, DEFAULT_POSTURES, cleanPostures, postureList, ownPostures, postureAt, postureSeven, stanceCtx, tokenCtx, withRound, rangeCtx, withRange, sideOf, threatArc, cleanThreats, facingCtx, charTokenOn, cycleThreat, RESERVED_SUFFIX, emptySystem, uid, validKey, cleanFormulaText, hasDice, cleanField, cleanRollDef, cleanItemDef, cleanCombat, cleanCover, cleanLightRules, lightName, lightPresets, LIGHT_UNITS, cleanRangeRules, rangeModOf, rangeDist, rangeOf, RANGE_UNITS, cleanSenses, secretFieldIds, gmViewFields, coverTier, coverOutcome, coverDamage, cleanSystem, cleanValue, cleanChar, cleanCharEdit, cleanCharEdits, resetTargets, cleanCharItem, cleanDenyReason, cleanSheetStyle, fieldById, itemDef, keyIndex, makeResolver, resolveAll, hoverLines, gmOnlyNames, gmDerivedNames, gmPools, initRoll, orderByInit, cleanInitRules, cleanHeightRules, heightModOf, heightOf, HEIGHT_UNITS, initTie, sideFirst, orderBySide, validateSystem, charFor, applyEdit, autoLayout, aliasFromShadowBase, sbRowOps, sbRange, sbMods, sbFpText, sbTextBag, sbFacing, sbWriteBack, sbProposal, sbApplyProposal, cleanCharUpload, cleanUploads, fillMaking, sbFill, fmtNum, suggest, lookRule, cleanLooks, applyStyle, cleanCharStyle, lookOf, lookFor };

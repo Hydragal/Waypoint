@@ -8,7 +8,7 @@ import { getActiveCampaign } from './models.js';
 import { save, toast } from './io.js';
 import { picRef } from './safecore.js';
 import { showConfirm, showPrompt } from './dialogs.js';
-import { cleanFieldUnit, unitTail, heightWords, rollNeedsOk, rollNeedsSays, timeRuleRun, droppedCounts, validPageId, LIMITS, KINDS, showsIf, rowRollNames, gmOnlyNames, applyAct, applyScope, applyRound, dueActs, combatChars, roundSecs, fxLeftNow, lastsSecs, APPLY_KINDS, TURN_UNITS, LIGHT_UNITS, RANGE_UNITS, HEIGHT_UNITS, TIME_WORDS, STORED, DEF_PROP, BAND_KINDS, IDENTITY_KINDS, LEDGER_KINDS, headerEntry, captionParts, emptySystem, uid, validKey, cleanSystem, cleanChar, validateSystem, resolveAll, hoverLines, autoLayout, applyEdit, applyStyle, cleanLooks, lookOf, lookFor, lookRule, applyEffectOp, fxText, fmtNum, budgetsOf, budgetWatch, budgetSays, needsMet, needsSays, initRoll, aliasFromShadowBase, sbRowOps, sbApplyProposal, cleanUploads, sideOf, threatArc, facingCtx, stanceCtx, tokenCtx, POSTURE_IDS, POSTURE_NAMES, DEFAULT_POSTURES, postureList, postureAt, autoEffectsOn, initTie, charTokenOn, cycleThreat, valueTone, TONES, activeCharOf, playableChars, ownedTokenPlan, applyOwnerOps, migrateBindings, capExpr, cleanValue, fieldById, valueOpts, applyRowOp, rowIdOf, rowDef, orphanRows, stampRows, cleanRowDef, projectRows, STAT_KEY, PALETTE_KEYS, GLYPHS, glyphPath, headerEdits, pinTargets, pinTargetsAll, hudView, hudHasContent, resetTargets, cleanListSpec, statKey, rowStat, plusText, rowPaid, itemReach, gmDerivedNames, labelGmNames, gmEffectNames, labelNames, withRound, rangeCtx, withRange, rowLvl, rowOn, cleanItemKey, charForView, secretFieldIds, gmViewFields } from './systemcore.js';
+import { cleanFieldUnit, unitTail, heightWords, measureWords, unitWords, unitHead, listWords, unitOf, textWords, measureStore, rollNeedsOk, rollNeedsSays, timeRuleRun, droppedCounts, validPageId, LIMITS, KINDS, showsIf, rowRollNames, gmOnlyNames, applyAct, applyScope, applyRound, dueActs, combatChars, roundSecs, fxLeftNow, lastsSecs, APPLY_KINDS, TURN_UNITS, LIGHT_UNITS, RANGE_UNITS, HEIGHT_UNITS, TIME_WORDS, STORED, DEF_PROP, BAND_KINDS, IDENTITY_KINDS, LEDGER_KINDS, headerEntry, captionParts, emptySystem, uid, validKey, cleanSystem, cleanChar, validateSystem, resolveAll, hoverLines, autoLayout, applyEdit, applyStyle, cleanLooks, lookOf, lookFor, lookRule, applyEffectOp, fxText, fmtNum, budgetsOf, budgetWatch, budgetSays, needsMet, needsSays, initRoll, aliasFromShadowBase, sbRowOps, sbApplyProposal, cleanUploads, sideOf, threatArc, facingCtx, stanceCtx, tokenCtx, POSTURE_IDS, POSTURE_NAMES, DEFAULT_POSTURES, postureList, postureAt, autoEffectsOn, initTie, charTokenOn, cycleThreat, valueTone, TONES, activeCharOf, playableChars, ownedTokenPlan, applyOwnerOps, migrateBindings, capExpr, cleanValue, fieldById, valueOpts, applyRowOp, rowIdOf, rowDef, orphanRows, stampRows, cleanRowDef, projectRows, STAT_KEY, PALETTE_KEYS, GLYPHS, glyphPath, headerEdits, pinTargets, pinTargetsAll, hudView, hudHasContent, resetTargets, cleanListSpec, statKey, rowStat, plusText, rowPaid, itemReach, gmDerivedNames, labelGmNames, gmEffectNames, labelNames, withRound, rangeCtx, withRange, rowLvl, rowOn, cleanItemKey, charForView, secretFieldIds, gmViewFields } from './systemcore.js';
 import { fileBase, charToJson, charFromJson, sheetToMarkdown, isCharFile } from './sheetexport.js';
 import { cleanCalendar, fmtWhen, fmtDate, timeOf, calPreset, CAL_LIMITS } from './calendarcore.js';
 
@@ -1300,7 +1300,8 @@ function idnControl(f, c, e, tone) {
     var named = f.kind === 'number' && Array.isArray(f.labels) && f.labels.length;
     if (typeof lookOnPaper === 'function' && lookOnPaper(f, c)) { var pv = el('span', 'sheet-hdr-val' + (tone || ''), String(raw)); pv.title = String(raw); lookInto(pv, f, c, raw); return pv; }   // item 35: on paper a styled text is read with its look, as the locked sheet shows it (with no look it prints as it always did)
     if (typeof heightPaper === 'function') { var hP = heightPaper(f, c, tone); if (hP) return hP; }   // 1.5.4: on paper a height reads by the half of the viewer's setting, as the locked sheet shows it
-    if (f.kind === 'text') { ctl = typeof sbxNode === 'function' ? sbxNode(f, c, false) : null; if (!ctl) { ctl = el('input', 'field sheet-text sheet-idn-input'); ctl.type = 'text'; ctl.maxLength = f.max || 200; ctl.value = raw === undefined ? String(f.def || '') : String(raw); ctl.addEventListener('change', function() { commit(c, f, ctl.value); }); } }   // item 35: its own box where the box can serve
+    if (f.kind === 'text' && typeof measureBox === 'function') ctl = measureBox(f, c, 'field sheet-text sheet-idn-input');   // 1.5.4: a height or a weight, its box showing the half of the viewer's setting
+    if (ctl) { /* that box */ } else if (f.kind === 'text') { ctl = typeof sbxNode === 'function' ? sbxNode(f, c, false) : null; if (!ctl) { ctl = el('input', 'field sheet-text sheet-idn-input'); ctl.type = 'text'; ctl.maxLength = f.max || 200; ctl.value = raw === undefined ? String(f.def || '') : String(raw); ctl.addEventListener('change', function() { commit(c, f, ctl.value); }); } }   // item 35: its own box where the box can serve
     else if (f.kind === 'select') { ctl = el('select', 'field sheet-select sheet-idn-input'); var sv = raw === undefined ? f.def : raw; (f.options || []).forEach(function(o) { ctl.appendChild(opt(o, o, sv === o)); }); ctl.addEventListener('change', function() { commit(c, f, ctl.value); }); }
     else if (f.kind === 'toggle') { ctl = el('input', 'sheet-idn-check'); ctl.type = 'checkbox'; ctl.checked = raw === undefined ? f.def === true : raw === true; ctl.addEventListener('change', function() { commit(c, f, ctl.checked); }); }
     else if (named) {
@@ -2378,11 +2379,20 @@ function lostBits(host, rd, entry, c, f, gm, editable) {
 // 0.0001 lb as 0); a value name for a whole value inside a stat's names
 function statFmt(v) { if (typeof v !== 'number' || !isFinite(v)) return ''; if (Math.floor(v) === v) return String(v); return Math.abs(v) >= 1 ? String(Number(v.toFixed(2))) : String(Number(v.toPrecision(3))); }
 function statText(st, v) { if (typeof v === 'string') return v || '—'; var L = st && Array.isArray(st.labels) ? st.labels : null; return L && typeof v === 'number' && Math.floor(v) === v && v >= 0 && v < L.length && L[v] ? L[v] : statFmt(v); }
+// 1.5.4: a stat's figure with its unit, where it has one (a named value is a word): a measure in its own form for the viewer's setting,
+// "2.5 lbs" or "1.13 kg", and in one of the website's forms the website's own figure, "18.675 lbs" (the fieldunit slice's unitFig); with no
+// helper in reach, the unit after the figure
+function statShown(st, v) { var t = statText(st, v); if (!st || typeof st.unit !== 'string' || !st.unit || typeof v !== 'number' || t !== statFmt(v)) return t; return typeof unitFig === 'function' ? unitFig(st, v, t) : t + ' ' + st.unit; }
+// A column's cell with its unit: a figure in its measure's form for the setting; a word, an error or a unit that is no measure as before.
+// total (only true): the total under a list, which keeps the sheet's figure and is turned as shown, as the website turns a total
+function colShown(cc, v, total) { if (!v) return ''; if (!cc || !cc.unit || v.error) return v.text; return typeof v.value === 'number' && v.text === statFmt(v.value) && typeof unitFig === 'function' ? unitFig(cc, v.value, v.text, total === true) : v.text + ' ' + cc.unit; }
+// The unit a rich table's head names for a stat or a column: its metric word where the figures under it read in metric
+function headUnit(x) { return typeof unitHeadNow === 'function' ? unitHeadNow(x.unit, x.unitShow) : x.unit; }
 function statChips(host, def, spec, ovc) {   // the stats shown On the row: a chip each beside the name, its label small ("Acc 2"); F4c2: a dot on a value of the copy's own
-    (Array.isArray(spec.stats) ? spec.stats : []).forEach(function(s) { if (s.show !== true) return; var ch = el('span', 'sheet-chip sheet-item-stat'); ch.appendChild(el('small', null, s.label)); ch.appendChild(document.createTextNode(' ' + statText(s, rowStat(spec, def, s.key)))); var dt = statDot(s, spec, ovc); if (dt) ch.appendChild(dt); host.appendChild(ch); });
+    (Array.isArray(spec.stats) ? spec.stats : []).forEach(function(s) { if (s.show !== true) return; var ch = el('span', 'sheet-chip sheet-item-stat'); ch.appendChild(el('small', null, s.label)); ch.appendChild(document.createTextNode(' ' + statShown(s, rowStat(spec, def, s.key)))); var dt = statDot(s, spec, ovc); if (dt) ch.appendChild(dt); host.appendChild(ch); });
 }
 function statLine(entry, def, spec) {   // every stat, then what one cost: "Acc 2 · Wt 0.0001 · Paid 500" (the 📝 line: a player reads every stat there)
-    var parts = (Array.isArray(spec.stats) ? spec.stats : []).filter(function(s) { return s.hide !== true; }).map(function(s) { return s.label + ' ' + statText(s, rowStat(spec, def, s.key)); });   // 1.5.4: a Hidden stat is worked with, never listed
+    var parts = (Array.isArray(spec.stats) ? spec.stats : []).filter(function(s) { return s.hide !== true; }).map(function(s) { return s.label + ' ' + statShown(s, rowStat(spec, def, s.key)); });   // 1.5.4: a Hidden stat is worked with, never listed
     if (spec.price) parts.push('Paid ' + statFmt(rowPaid(spec, entry, def)));
     return parts.join(' · ');
 }
@@ -2391,7 +2401,7 @@ function statLineNode(entry, def, spec, ovc) {   // F4c2: the line as text (as b
     if (!sts.length && !spec.price) return null;   // every stat Hidden and nothing paid to say: no line
     if (!dots.some(Boolean)) return el('div', 'sheet-item-statline', statLine(entry, def, spec));
     var box = el('div', 'sheet-item-statline');
-    sts.forEach(function(s, i) { if (i) box.appendChild(document.createTextNode(' · ')); box.appendChild(document.createTextNode(s.label + ' ' + statText(s, rowStat(spec, def, s.key)))); if (dots[i]) box.appendChild(dots[i]); });
+    sts.forEach(function(s, i) { if (i) box.appendChild(document.createTextNode(' · ')); box.appendChild(document.createTextNode(s.label + ' ' + statShown(s, rowStat(spec, def, s.key)))); if (dots[i]) box.appendChild(dots[i]); });
     if (spec.price) box.appendChild(document.createTextNode(' · Paid ' + statFmt(rowPaid(spec, entry, def))));   // a dot sits on a listed stat, so one comes before
     return box;
 }
@@ -2481,16 +2491,16 @@ function ctCtl(host, entry, c, f, spec, editable, cells) {
 // Stage 6 F5a1: the columns shown on a row — a chip each, its label small ("Cost 11 pts"); an error reads "\u2014" with the message on hover
 function colChips(host, spec, cells) {
     if (!cells || !Array.isArray(spec.cols)) return;
-    spec.cols.forEach(function(cc, i) { var v = cells[i]; if (cc.hide === true || !v) return; var ch = el('span', 'sheet-chip sheet-item-col' + (v.error ? ' sheet-item-colerr' : '')); ch.appendChild(el('small', null, cc.label)); ch.appendChild(document.createTextNode(' ' + v.text + (cc.unit && !v.error ? ' ' + cc.unit : '') + (typeof plusText === 'function' ? plusText(v) : ''))); if (v.error) ch.title = v.error; host.appendChild(ch); });
+    spec.cols.forEach(function(cc, i) { var v = cells[i]; if (cc.hide === true || !v) return; var ch = el('span', 'sheet-chip sheet-item-col' + (v.error ? ' sheet-item-colerr' : '')); ch.appendChild(el('small', null, cc.label)); ch.appendChild(document.createTextNode(' ' + (typeof colShown === 'function' ? colShown(cc, v) : v.text + (cc.unit && !v.error ? ' ' + cc.unit : '')) + (typeof plusText === 'function' ? plusText(v) : ''))); if (v.error) ch.title = v.error; host.appendChild(ch); });
 }
 // F5a1: the totals under a list — each stat shown on the row and each column marked Total, summed over the rows carried (a kept curse is not)
 function totalsLine(wrap, spec, foot) {
     var parts = [];
-    (Array.isArray(spec.stats) ? spec.stats : []).forEach(function(s) { if (foot[s.key]) parts.push({ lab: s.label, t: foot[s.key] }); });
-    (Array.isArray(spec.cols) ? spec.cols : []).forEach(function(cc) { if (foot[cc.key]) parts.push({ lab: cc.label, t: foot[cc.key], unit: cc.unit }); });
+    (Array.isArray(spec.stats) ? spec.stats : []).forEach(function(s) { if (foot[s.key]) parts.push({ lab: s.label, t: foot[s.key], c: s }); });   // 1.5.4: a stat's unit too
+    (Array.isArray(spec.cols) ? spec.cols : []).forEach(function(cc) { if (foot[cc.key]) parts.push({ lab: cc.label, t: foot[cc.key], c: cc }); });
     if (!parts.length) return;
     var tl = el('div', 'sheet-item-totals'); tl.appendChild(el('span', 'sheet-item-totals-cap', 'Total'));
-    parts.forEach(function(p) { var sp = el('span', 'sheet-chip sheet-item-total'); sp.appendChild(el('small', null, p.lab)); sp.appendChild(document.createTextNode(' ' + p.t.text + (p.unit && !p.t.error ? ' ' + p.unit : ''))); if (p.t.error) sp.title = p.t.error; tl.appendChild(sp); });
+    parts.forEach(function(p) { var sp = el('span', 'sheet-chip sheet-item-total'); sp.appendChild(el('small', null, p.lab)); sp.appendChild(document.createTextNode(' ' + (typeof colShown === 'function' ? colShown(p.c, p.t, true) : p.t.text + (p.c && p.c.unit && !p.t.error ? ' ' + p.c.unit : '')))); if (p.t.error) sp.title = p.t.error; tl.appendChild(sp); });
     wrap.appendChild(tl);
 }
 function itemTableInto(wrap, f, c, carried, sysI, canThrow, editable, gm, empty, res, edit) {   // res (F5a1): the field's resolved entry; edit (the sheet's lock): as itemListInto's
@@ -2506,8 +2516,8 @@ function itemTableInto(wrap, f, c, carried, sysI, canThrow, editable, gm, empty,
     var table = el('table', 'sheet-itemtable'), thead = el('thead'), htr = el('tr');
     htr.appendChild(el('th', 'sheet-itcol-name', 'Item'));
     cols.forEach(function(col) { htr.appendChild(el('th', 'sheet-itcol-' + col, ITEM_COL_LABEL[col] || col)); });
-    shownSt.forEach(function(s) { htr.appendChild(el('th', 'sheet-itcol-stat', s.label)); });
-    shownCl.forEach(function(x) { htr.appendChild(el('th', 'sheet-itcol-col', x.c.label + (x.c.unit ? ' (' + x.c.unit + ')' : ''))); });   // F5a1
+    shownSt.forEach(function(s) { htr.appendChild(el('th', 'sheet-itcol-stat', s.label + (s.unit ? ' (' + headUnit(s) + ')' : ''))); });   // 1.5.4: a stat's unit, as a column's
+    shownCl.forEach(function(x) { htr.appendChild(el('th', 'sheet-itcol-col', x.c.label + (x.c.unit ? ' (' + headUnit(x.c) + ')' : ''))); });   // F5a1
     if (hasL) htr.appendChild(el('th', 'sheet-itcol-lvl', spec.lvl.label));
     if (hasO) htr.appendChild(el('th', 'sheet-itcol-on', spec.on.label));
     if (hasQ) htr.appendChild(el('th', 'sheet-itcol-qty', 'Qty'));
@@ -2528,8 +2538,8 @@ function itemTableInto(wrap, f, c, carried, sysI, canThrow, editable, gm, empty,
         lostBits(nameTd, rd, entry, c, f, gm, chg); needBits(nameTd, sysI, c, entry, rd, gm); gmItemBits(nameTd, def, entry, gm, hasO); keyShareChip(nameTd, entry, rd, unseenT); modsBits(nameTd, def, entry, spec, sysI);
         tr.appendChild(nameTd);
         cols.forEach(function(col) { tr.appendChild(el('td', 'sheet-itcol-' + col, itemCellText(col, def, typeof blastTag === 'function' ? blastTag : null))); });
-        shownSt.forEach(function(s) { var sTd = el('td', 'sheet-itcol-stat', statText(s, rowStat(spec, def, s.key))), sDt = statDot(s, spec, ovT); if (sDt) sTd.appendChild(sDt); tr.appendChild(sTd); });
-        var cellsT = res && res.cells ? res.cells[rid] : null; shownCl.forEach(function(x) { var v = cellsT ? cellsT[x.i] : null, cTd = el('td', 'sheet-itcol-col' + (v && v.error ? ' sheet-item-colerr' : ''), v ? v.text + (x.c.unit && !v.error ? ' ' + x.c.unit : '') + (typeof plusText === 'function' ? plusText(v) : '') : ''); if (v && v.error) cTd.title = v.error; tr.appendChild(cTd); });   // F5a1: its columns (1.5.4: and what a column's With stats add, in brackets)
+        shownSt.forEach(function(s) { var sTd = el('td', 'sheet-itcol-stat', statShown(s, rowStat(spec, def, s.key))), sDt = statDot(s, spec, ovT); if (sDt) sTd.appendChild(sDt); tr.appendChild(sTd); });
+        var cellsT = res && res.cells ? res.cells[rid] : null; shownCl.forEach(function(x) { var v = cellsT ? cellsT[x.i] : null, cTd = el('td', 'sheet-itcol-col' + (v && v.error ? ' sheet-item-colerr' : ''), v ? (typeof colShown === 'function' ? colShown(x.c, v) : v.text + (x.c.unit && !v.error ? ' ' + x.c.unit : '')) + (typeof plusText === 'function' ? plusText(v) : '') : ''); if (v && v.error) cTd.title = v.error; tr.appendChild(cTd); });   // F5a1: its columns (1.5.4: and what a column's With stats add, in brackets)
         if (hasL) { var lTd = el('td', 'sheet-itcol-lvl'), lcT = lvlCtl(entry, def, c, f, spec, chg); if (lcT) lTd.appendChild(lcT); tr.appendChild(lTd); }
         if (hasO) { var oTd = el('td', 'sheet-itcol-on'), ocT = onCtl(entry, c, f, spec, editable, false); if (ocT) oTd.appendChild(ocT); tr.appendChild(oTd); }
         if (hasQ) {
@@ -3075,7 +3085,7 @@ function fieldNode(f, c, e, gm, own, sysArg, vars, plc) {   // vars: the render'
 }
 function captionNode(text, sys, c, vars) {
     var line = el('div', 'sheet-caption');
-    captionParts(sys, c, F(), text, vars).forEach(function(p) {
+    captionParts(sys, c, F(), text, vars, typeof unitsMetric === 'function' ? unitsMetric() : undefined).forEach(function(p) {
         if (p.error) { var s = el('span', 'sheet-caption-val sheet-err', '\u2014'); s.title = p.error; line.appendChild(s); }
         else if (p.value !== undefined) line.appendChild(el('span', 'sheet-caption-val', p.text));
         else line.appendChild(document.createTextNode(p.text));
@@ -3093,7 +3103,7 @@ function fieldNodeBody(f, c, e, gm, own, sysArg, plc) {   // plc (F4b): the sect
     var playOk = editable && (!lk || f.live !== false), editOk = editable && (!lk || f.live === true);   // a list's two halves: what is used in play (a switch, a count, a use), and what changes the character (a level, a row, a note)
     var raw = c.values ? c.values[f.id] : undefined;
     var k = f.kind;
-    if (k === 'formula') { var v = el('div', 'sheet-value' + (e && e.error ? ' sheet-err' : '') + signTone(f, e), e && e.error ? '—' : e ? e.text + (f.unit && e.text !== '' && !e.label ? ' ' + (typeof unitText === 'function' ? unitText(f, e.value, e.text) : f.unit) : '') : ''); v.title = e && e.error ? e.error : f.formula || ''; if (f.badge && e && !e.error) { var tnB = valueTone(f, e), bd = el('span', 'sheet-badge' + (Object.prototype.hasOwnProperty.call(TONE_CLASS, tnB) ? TONE_CLASS[tnB] : ''), v.textContent); v.textContent = ''; v.appendChild(bd); } var fmF = fxMark(e); if (fmF) { v.appendChild(fmF); v.title += '\n' + fmF.title; } box.appendChild(v); return box; }
+    if (k === 'formula') { var v = el('div', 'sheet-value' + (e && e.error ? ' sheet-err' : '') + signTone(f, e), e && e.error ? '—' : e ? (f.unit && e.text !== '' && !e.label ? (typeof figWords === 'function' ? figWords(f, e.value, e.text) : e.text + ' ' + f.unit) : e.text) : ''); v.title = e && e.error ? e.error : f.formula || ''; if (f.badge && e && !e.error) { var tnB = valueTone(f, e), bd = el('span', 'sheet-badge' + (Object.prototype.hasOwnProperty.call(TONE_CLASS, tnB) ? TONE_CLASS[tnB] : ''), v.textContent); v.textContent = ''; v.appendChild(bd); } var fmF = fxMark(e); if (fmF) { v.appendChild(fmF); v.title += '\n' + fmF.title; } box.appendChild(v); return box; }
     if (k === 'number' && Array.isArray(f.labels) && f.labels.length) {   // Stage 6: a number with value names — a dropdown that stores the position (formulas read the number)
         var rowL = el('div', 'sheet-ctl'), ls = el('select', 'field sheet-select'), curL = Number(raw === undefined ? f.def : raw);
         ls.dataset.fid = f.id; f.labels.forEach(function(t, i) { ls.appendChild(opt(String(i), t || String(i), curL === i)); });
@@ -3128,8 +3138,9 @@ function fieldNodeBody(f, c, e, gm, own, sysArg, plc) {   // plc (F4b): the sect
         else row.appendChild(inp);
         var uAt = [Number(inp.value), inp.value];   // 1.5.4: the figure the unit follows: the box's, the effective value beside it, or a skill's total
         if (k === 'number' && e && e.mods && e.mods.length) { var fb = fxMark(e); if (fb) { fb.textContent = '\u2192 ' + fmtNum(e.value); row.appendChild(fb); uAt = [e.value, fmtNum(e.value)]; } }   // 5h: the box edits the base; the effective value beside it
-        if (k === 'skill') { var tot = el('span', 'sheet-total' + (e && e.error ? ' sheet-err' : '') + signTone(f, e), e && e.error ? '—' : '= ' + (e ? e.text : '')); tot.title = e && e.error ? e.error : (f.base ? 'ranks + ' + f.base : 'ranks'); row.appendChild(tot); var fmS = fxMark(e); if (fmS) { row.appendChild(fmS); tot.title += '\n' + fmS.title; } uAt = [e && !e.error ? e.value : NaN, e ? e.text : '']; }
-        if (f.unit) row.appendChild(el('span', 'sheet-unit', typeof unitText === 'function' ? unitText(f, uAt[0], uAt[1]) : f.unit));   // Stage 5g; 1.5.4: a measure in metric too under Metric
+        var skW = k === 'skill' && !!e && !e.error && !!f.unit && (f.unitShow === 'swap' || f.unitShow === 'bare') && typeof figWords === 'function';   // 1.5.4: a skill's total is read, so a Metric list other than beside writes it in its own form, its unit with it
+        if (k === 'skill') { var tot = el('span', 'sheet-total' + (e && e.error ? ' sheet-err' : '') + signTone(f, e), e && e.error ? '—' : '= ' + (e ? (skW ? figWords(f, e.value, e.text) : e.text) : '')); tot.title = e && e.error ? e.error : (f.base ? 'ranks + ' + f.base : 'ranks'); row.appendChild(tot); var fmS = fxMark(e); if (fmS) { row.appendChild(fmS); tot.title += '\n' + fmS.title; } uAt = [e && !e.error ? e.value : NaN, e ? e.text : '']; }
+        if (f.unit && !skW) row.appendChild(el('span', 'sheet-unit', typeof unitText === 'function' ? unitText(f, uAt[0], uAt[1]) : f.unit));   // Stage 5g; 1.5.4: a measure in metric too under Metric
         box.appendChild(row); return box;
     }
     if (k === 'resource') {
@@ -3583,17 +3594,36 @@ function lookReadRule(f) { var r = lookRule(f); if (!r || !lookPaper()) return r
 function unitsMetric() { try { return typeof state !== 'undefined' && !!state && state.measureUnit === 'metric'; } catch (e) { return false; } }
 function unitSig() { return unitsMetric() ? 'metric' : 'imperial'; }   // the viewer's Measurement system in a view's signature (stanceSigOf, dialSigOf)
 function unitText(f, value, shown, max, shownMax) { return String(f.unit) + (typeof unitTail === 'function' ? unitTail(f, value, shown, unitsMetric(), max, shownMax) : ''); }   // the words after a figure
-// A text field read as a height (the unit height), as the viewer's setting reads it: the text as stored, and the half shown. Null where it is
-// no height or where the half is the text itself
+// 1.5.4: a figure READ with its unit, whole, in the field's own form for the viewer's setting (systemcore unitWords): "7 yd (6.4 m)", "14.5 kg"
+// in place of "32 lbs", "4.6 m/s" for a bare "5". A box the viewer types in keeps its words after it (unitText). With no helper in reach,
+// as it always was
+function figWords(f, value, shown) { return typeof unitWords === 'function' ? unitWords(f, value, shown, unitsMetric()) : shown + ' ' + unitText(f, value, shown); }
+// A list stat's or column's figure with its unit (x: the stat or the column; total: a list's total), and the unit a table's head names, by
+// the same rule (systemcore listWords, unitHead)
+function unitFig(x, value, shown, total) { return typeof listWords === 'function' ? listWords(x, value, shown, unitsMetric(), total === true) : shown + ' ' + x.unit; }
+function unitHeadNow(unit, how) { return typeof unitHead === 'function' ? unitHead(unit, how, unitsMetric()) : String(unit); }
+// A text field read as a height or a weight (the unit height or weight), as the viewer's setting reads it: the text as stored, and the half
+// shown. Null where it is no measure or where the half is the text itself
 function heightNow(f, c) {
-    if (!f || f.kind !== 'text' || typeof cleanFieldUnit !== 'function' || typeof heightWords !== 'function' || cleanFieldUnit(f.unit, 'text') !== 'height') return null;
-    var raw = c && c.values ? c.values[f.id] : undefined, stored = raw === undefined || raw === null ? String(f.def || '') : String(raw), shown = heightWords(stored, unitsMetric());
+    var mt = f && f.kind === 'text' && typeof cleanFieldUnit === 'function' ? cleanFieldUnit(f.unit, 'text') : '';
+    if (!mt || (mt === 'height' ? typeof heightWords !== 'function' : typeof textWords !== 'function')) return null;
+    var raw = c && c.values ? c.values[f.id] : undefined, stored = raw === undefined || raw === null ? String(f.def || '') : String(raw), shown = mt === 'height' ? heightWords(stored, unitsMetric()) : textWords(f, stored, unitsMetric());
     return shown === stored ? null : { stored: stored, shown: shown };
 }
-// Where the field is only read here, or on paper: the half, in the box a read text is drawn in, the text as stored in its tooltip. Null where
-// the field may be used here (its box holds the text as stored) or there is no half to show: the field is then drawn as it always was
+// 1.5.4: where the field may be used, its box shows the half of the viewer's setting, as the website's own box does, and a figure typed in
+// it is stored as the website stores one (systemcore measureStore): in the book's units as typed, a metric one as the book's pair, the
+// imperial half first. Nothing is stored unless something was typed. Null with no measure or no helper: the field as it always was
+function measureBox(f, c, cls) {
+    var mt = f && f.kind === 'text' && typeof cleanFieldUnit === 'function' ? cleanFieldUnit(f.unit, 'text') : ''; if (!mt || typeof measureStore !== 'function' || typeof textWords !== 'function') return null;
+    var raw = c && c.values ? c.values[f.id] : undefined, stored = raw === undefined || raw === null ? String(f.def || '') : String(raw), ti = el('input', cls || 'field sheet-text');
+    ti.type = 'text'; ti.dataset.fid = f.id; ti.maxLength = f.max || 200; ti.value = textWords(f, stored, unitsMetric()); if (ti.value !== stored) ti.title = stored;
+    ti.addEventListener('change', function() { commit(c, f, measureStore(ti.value, mt, unitsMetric())); });
+    return ti;
+}
+// Where the field is only read here, or on paper: the half, in the box a read text is drawn in, the text as stored in its tooltip. Where it
+// may be used here its box is measureBox's. Null where there is no half to show: the field is then drawn as it always was
 function heightNode(f, c, use) {
-    var paper = typeof lookPaper === 'function' && lookPaper(); if (use && !paper) return null;
+    var paper = typeof lookPaper === 'function' && lookPaper(); if (use && !paper) return measureBox(f, c);
     var h = heightNow(f, c); if (!h) return null;
     var ti = el('input', 'field sheet-text'); ti.type = 'text'; ti.dataset.fid = f.id; ti.value = h.shown; ti.disabled = true; ti.title = h.stored; return ti;
 }
@@ -3607,9 +3637,24 @@ function unitWordsList() {
     try {
         if (document.getElementById('sysUnitWords')) return 'sysUnitWords';
         var dl = el('datalist'); dl.id = 'sysUnitWords';
-        [['yd', 'yards'], ['ft', 'feet'], ['in', 'inches'], ['lb', 'pounds'], ['mi', 'miles']].forEach(function(o) { dl.appendChild(opt(o[0], o[1])); });
+        [['yd', 'yards'], ['ft', 'feet'], ['in', 'inches'], ['lb', 'pounds'], ['mi', 'miles'], ['yd/s', 'yards a second']].forEach(function(o) { dl.appendChild(opt(o[0], o[1])); });
         (document.getElementById('systemModal') || document.body).appendChild(dl); return 'sysUnitWords';
     } catch (e) { return ''; }
+}
+function unitWordsOn(inp) { var id = unitWordsList(); if (id && inp) inp.setAttribute('list', id); return inp; }   // a Unit box of the Lists tab offered the measures too
+// 1.5.4: the System editor's Metric list for a measure, how its figure reads under Metric (systemcore measureWords): beside its figure, as
+// before; instead of it; or bare, the figure alone under Imperial and the metric one with its word under Metric, as the website shows a Move
+function metricSel(cls, v) {
+    var l = el('label', 'sys-hover sys-metric'), s = el('select', cls), cur = v === 'swap' || v === 'bare' ? v : '';
+    l.appendChild(document.createTextNode('Metric: '));
+    [['', 'Beside'], ['swap', 'Instead'], ['bare', 'Bare']].forEach(function(o) { s.appendChild(opt(o[0], o[1], cur === o[0])); });
+    l.appendChild(s); l.title = 'How a measure reads under Metric. Beside: 7 yd (6.4 m). Instead: 14.5 kg for 32 lbs. Bare: 5 under Imperial and 4.6 m/s under Metric. A box you type in keeps the book\'s figure, with its metric beside it'; return l;
+}
+// The fewest and the most decimals a figure shows (decMin, decMax), and whether its thousands are grouped (group), on a field's row
+function decBox(f) {
+    var l = el('label', 'sys-hover sys-dec'); l.appendChild(document.createTextNode('Decimals: '));
+    [['sys-decmin', f.decMin, 'least'], ['sys-decmax', f.decMax, 'most']].forEach(function(d) { var n = el('input', d[0] + ' field'); n.type = 'number'; n.min = '0'; n.max = '5'; n.step = '1'; n.value = typeof d[1] === 'number' ? String(d[1]) : ''; n.placeholder = d[2]; l.appendChild(n); });
+    l.title = 'The fewest and the most decimals the value shows, 0 to 5: 1 and 2 read 32.0 and 5.88. Blank: as before, two at most. Formulas, rolls and the character file read the figure as it is'; return l;
 }
 // [systemcheck:fieldunit-end]
 // [systemcheck:commitlook-start]
@@ -4092,7 +4137,7 @@ function downloadChar(charId, kind, gmAll) {
     var X = exportView(charId, gmAll); if (!X) { toast('This sheet cannot be downloaded here.'); return; }
     var base = fileBase(X.view.name) + (X.gm ? '-gm' : '');
     if (kind === 'md') {
-        var md = sheetToMarkdown(X.sys, X.view, X.all, { F: F(), gm: X.gm, sub: String(X.sys.name || ''), tctx: X.tctx, pageTitle: function(id) { var r = pageRef(id); return r && (X.gm || !r.gmOnly) ? r.title : null; } });
+        var md = sheetToMarkdown(X.sys, X.view, X.all, { F: F(), gm: X.gm, sub: String(X.sys.name || ''), tctx: X.tctx, metric: typeof unitsMetric === 'function' ? unitsMetric() : undefined, pageTitle: function(id) { var r = pageRef(id); return r && (X.gm || !r.gmOnly) ? r.title : null; } });
         if (saveTextFile(base + '.md', md, 'text/markdown')) toast('Saved ' + base + '.md');
         return;
     }
@@ -4594,14 +4639,32 @@ function refreshErrors() {
     });
     if (typeof cleanFieldUnit === 'function') draft.fields.forEach(function(f) {   // 1.5.4: a field's unit as Save reads it: a text field's unit that is not height goes, and a measure spelled so that it is not one stays as words
         var uw = f && typeof f.unit === 'string' ? f.unit.trim() : ''; if (!uw) return;
-        if (f.kind === 'text') { if (uw !== 'height') (errorsById[f.id] = errorsById[f.id] || []).push({ prop: 'unit', message: 'A text field takes the unit height alone, so Save drops \u201c' + uw + '\u201d.' }); return; }
+        if (f.kind === 'text') { if (!cleanFieldUnit(f.unit, 'text')) (errorsById[f.id] = errorsById[f.id] || []).push({ prop: 'unit', message: 'A text field takes the unit height or weight alone, so Save drops \u201c' + uw + '\u201d.' }); return; }
         if (f.kind !== 'number' && f.kind !== 'formula' && f.kind !== 'skill' && f.kind !== 'resource') return;
+        if (typeof unitOf === 'function') { uw = unitOf(f.unit); if (!uw) return; }   // the words Save keeps
         var NEAR = { yard: 'yd', yards: 'yd', yd: 'yd', yds: 'yd', foot: 'ft', feet: 'ft', ft: 'ft', inch: 'in', inches: 'in', 'in': 'in', pound: 'lb', pounds: 'lb', lb: 'lb', lbs: 'lb', mile: 'mi', miles: 'mi', mi: 'mi' }, lw = uw.toLowerCase().replace(/\.$/, '');
         if (Object.prototype.hasOwnProperty.call(NEAR, lw) && !cleanFieldUnit(uw, f.kind)) (warningsById[f.id] = warningsById[f.id] || []).push({ prop: 'unit', message: 'Its unit \u201c' + uw + '\u201d is shown as written in both settings. Write ' + NEAR[lw] + ' and Metric shows the figure in metric too.' });
+    });
+    if (typeof cleanFieldUnit === 'function') draft.fields.forEach(function(f) {   // 1.5.4: what Save does with a field's Metric list, its decimals and its 1,000s, as the cleaner reads them
+        if (!f) return;
+        var said = [], numK = f.kind === 'number' || f.kind === 'formula' || f.kind === 'skill', uw = typeof unitOf === 'function' ? unitOf(f.unit) : typeof f.unit === 'string' ? f.unit.trim() : '', dec = function(v) { return typeof v === 'number' && isFinite(v) ? Math.max(0, Math.min(5, Math.round(v))) : null; };
+        if ((f.unitShow === 'swap' || f.unitShow === 'bare') && !numK) said.push('Only a number, a formula or a skill takes a Metric list, so Save drops it.');
+        else if ((f.unitShow === 'swap' || f.unitShow === 'bare') && !cleanFieldUnit(uw, f.kind)) said.push('Metric ' + (f.unitShow === 'swap' ? 'instead' : 'bare') + ' needs a unit that is a measure, such as lb or yd/s, so Save drops it.');
+        if ((f.decMin !== undefined || f.decMax !== undefined) && !numK) said.push('Only a number, a formula or a skill shows decimals, so Save drops them.');
+        else if (numK) [['decMin', 'fewest'], ['decMax', 'most']].forEach(function(d) { var v = f[d[0]]; if (v === undefined) return; if (dec(v) === null) said.push('The ' + d[1] + ' decimals is no number, so Save drops it.'); else if (dec(v) !== v) said.push('Decimals are whole numbers from 0 to 5, so Save keeps ' + dec(v) + ' for the ' + d[1] + '.'); });
+        if (numK && dec(f.decMin) !== null && dec(f.decMax) !== null && dec(f.decMax) < dec(f.decMin)) said.push('The most decimals is below the fewest, so Save shows ' + dec(f.decMin) + ' always.');
+        if (f.group === true && !numK) said.push('Only a number, a formula or a skill groups its thousands, so Save drops 1,000s.');
+        if (said.length) said.forEach(function(m) { (warningsById[f.id] = warningsById[f.id] || []).push({ prop: 'fmt', message: m }); });
     });
     (draft.items || []).forEach(function(it) { if (it && it.key && !cleanItemKey(String(it.key), F())) (errorsById[it.id] = errorsById[it.id] || []).push({ prop: 'key', message: 'Not a usable key: a letter, then letters, digits and _ (up to 40); not a word formulas already use (count, qty, on, has, lvl, paid, row; max, min, cur, ranks, base; a function or reserved word such as floor, and, true; constructor). Save drops it.' }); });   // Stage 6 F4b
     // Stage 6 F4c1: each list's stats as Save will read them (a key it drops, a repeat, past the cap, a price naming none, another list's spelling),
     // under the list's card; and what Save drops when a saved stat is renamed or removed (a stat's key is its identity)
+    var decSaid = function(errs, who, v, measure) {   // 1.5.4: what Save does with a list stat's or column's most decimals (who: its words; v: as typed; measure: its unit is a measure, as Save reads it)
+        if (v === undefined) return;
+        if (!measure) { errs.push({ message: who + ': decimals need a unit that is a measure, such as lb, so Save drops them.' }); return; }
+        var d = typeof v === 'number' && isFinite(v) ? Math.max(0, Math.min(5, Math.round(v))) : null;
+        if (d === null) errs.push({ message: who + ': the decimals are no number, so Save drops them.' }); else if (d !== v) errs.push({ message: who + ': decimals are whole numbers from 0 to 5, so Save keeps ' + d + '.' });
+    };
     var capS = LIMITS.listStats, firstSp = Object.create(null), keptAll = Object.create(null), keptBy = Object.create(null), firstDef = Object.create(null);
     draft.fields.forEach(function(f) {
         if (!f || f.kind !== 'item-list') return;
@@ -4614,6 +4677,10 @@ function refreshErrors() {
             mine[l] = k; if (++n > capS) return;
             keptW[l] = 1;   // 1.5.4 With: the stats Save keeps of this list
             if (typeof s.def === 'number' && isFinite(s.def) && Math.abs(s.def) > LIMITS.statAbs) errs.push({ message: 'Stat "' + k + '" has a default past ±1,000,000,000: Save drops it.' });
+            var suW = typeof unitOf === 'function' ? unitOf(s.unit) : typeof s.unit === 'string' ? s.unit.trim() : '';   // 1.5.4: a stat's unit, its Metric list and its decimals, as the cleaner reads them
+            if (suW && s.kind === 'pick') errs.push({ message: 'Stat "' + k + '" is a choice, so Save drops its unit.' });
+            if ((s.unitShow === 'swap' || s.unitShow === 'bare') && !(s.kind !== 'pick' && typeof cleanFieldUnit === 'function' && cleanFieldUnit(suW, 'number'))) errs.push({ message: 'Stat "' + k + '": Metric ' + (s.unitShow === 'swap' ? 'instead' : 'bare') + ' needs a unit that is a measure, such as lb or yd/s, so Save drops it.' });
+            decSaid(errs, 'Stat "' + k + '"', s.decMax, s.kind !== 'pick' && typeof cleanFieldUnit === 'function' && !!cleanFieldUnit(suW, 'number'));
             keptAll[l] = 1; if (!firstDef[l]) firstDef[l] = s;
             if (!firstSp[l]) firstSp[l] = { key: k, list: nm }; else if (firstSp[l].key !== k) errs.push({ message: 'Stat "' + k + '" is spelled "' + firstSp[l].key + '" on ' + firstSp[l].list + ': Save uses that spelling here too (one key, one spelling).' });
         });
@@ -4621,6 +4688,12 @@ function refreshErrors() {
         if (typeof sp.price === 'string' && sp.price && !mine[sp.price.toLowerCase()]) errs.push({ message: 'The price names no stat of this list: Save drops it.' });
         var onD = sp.on && typeof sp.on === 'object' && !Array.isArray(sp.on) ? sp.on : null, onPer = onD && typeof onD.per === 'string' ? onD.per.trim() : '';   // 1.5.4 One at a time: a Per stat as Save reads it
         if (onPer && !keptW[onPer.toLowerCase()]) errs.push({ message: 'One at a time goes by "' + onD.per + '", which is no stat of this list. ' + (onD.one === true ? 'Save keeps one row on for the whole list.' : 'Save drops it.') });
+        (Array.isArray(sp.cols) ? sp.cols : []).forEach(function(cc) {   // 1.5.4: a column's Metric list and its decimals, as the cleaner reads them
+            if (!cc || typeof cc !== 'object') return;
+            var cnU = (typeof cc.label === 'string' && cc.label) || (typeof cc.key === 'string' && cc.key) || 'A column', cmU = typeof cleanFieldUnit === 'function' && !!cleanFieldUnit(typeof unitOf === 'function' ? unitOf(cc.unit, true) : typeof cc.unit === 'string' ? cc.unit.trim() : '', 'number');
+            if ((cc.unitShow === 'swap' || cc.unitShow === 'bare') && !cmU) errs.push({ message: 'Column "' + cnU + '": Metric ' + (cc.unitShow === 'swap' ? 'instead' : 'bare') + ' needs a unit that is a measure, such as lb or yd/s, so Save drops it.' });
+            decSaid(errs, 'Column "' + cnU + '"', cc.decMax, cmU);
+        });
         (Array.isArray(sp.cols) ? sp.cols : []).forEach(function(cc) {   // 1.5.4 With: what Save drops of a column's With stats, as the cleaner reads them
             if (!cc || typeof cc !== 'object' || !Array.isArray(cc.plus)) return;
             var cn = (typeof cc.label === 'string' && cc.label) || (typeof cc.key === 'string' && cc.key) || 'A column', seenP = Object.create(null), keptP = 0;
@@ -4980,7 +5053,8 @@ function fieldRow(f) {
     if ((f.kind === 'number' && !f.slider && !(Array.isArray(f.labels) && f.labels.length)) || f.kind === 'skill') { var cnl = el('label', 'sys-hover'); var cnc = el('input'); cnc.type = 'checkbox'; cnc.checked = !!f.counter; cnc.className = 'sys-counter-chk'; cnl.appendChild(cnc); cnl.appendChild(document.createTextNode(' Counter')); cnl.title = 'Draw \u2212 and + either side of the box (a turn counter, death saves, ammo, slots used)'; flags.appendChild(cnl); }   // HUD frame (HF4a, H8): never with a slider or value names
     if (f.kind !== 'formula') { var lvL = el('label', 'sys-hover sys-live'); lvL.appendChild(document.createTextNode('Locked: ')); var lvS = el('select', 'sys-live-sel'); [['', 'automatic'], ['on', 'stays live'], ['off', 'needs Edit sheet']].forEach(function(o) { lvS.appendChild(opt(o[0], o[1], (f.live === true ? 'on' : f.live === false ? 'off' : '') === o[0])); }); lvL.appendChild(lvS); lvL.title = 'On a locked sheet and in the HUD. Automatic: a pool, a switch, a counter and a number with value names keep working, and everything else needs Edit sheet. Choose here to say otherwise for this field'; flags.appendChild(lvL); }   // the sheet's lock: this field's own word on it
     if (f.kind === 'number' || f.kind === 'formula' || f.kind === 'skill' || f.kind === 'resource') { var uIn = flags.appendChild(input('sys-unit field', f.unit, 'A short unit after the value, on the sheet and in the header (pts, kg, ft). yd, ft, in, lb and mi are measures: under Metric the sheet shows the figure in metric too', 'Unit')); var uLs = typeof unitWordsList === 'function' ? unitWordsList() : ''; if (uLs) uIn.setAttribute('list', uLs); }   // Stage 5g; 1.5.4: the measures offered as a list, any other unit still typed
-    else if (f.kind === 'text') flags.appendChild(select('sys-unit-text', [['', 'Unit: none'], ['height', 'Unit: height']], f.unit === 'height' ? 'height' : '', 'Height: the text is read as a height. Imperial shows its feet and inches, Metric its metres'));   // 1.5.4
+    if ((f.kind === 'number' || f.kind === 'formula' || f.kind === 'skill') && typeof metricSel === 'function') { flags.appendChild(metricSel('sys-metricshow', f.unitShow)); flags.appendChild(decBox(f)); var grl = el('label', 'sys-hover'); var grc = el('input'); grc.type = 'checkbox'; grc.checked = f.group === true; grc.className = 'sys-group-chk'; grl.appendChild(grc); grl.appendChild(document.createTextNode(' 1,000s')); grl.title = 'Group the thousands with commas: 1,234.57'; flags.appendChild(grl); }   // 1.5.4: how a measure reads under Metric, the decimals, the thousands
+    else if (f.kind === 'text') flags.appendChild(select('sys-unit-text', [['', 'Unit: none'], ['height', 'Unit: height'], ['weight', 'Unit: weight']], f.unit === 'height' || f.unit === 'weight' ? f.unit : '', 'Height or weight: the text is read as one. Imperial shows its feet and inches or pounds, Metric its metres or kilograms'));   // 1.5.4
     if (f.kind === 'number' || f.kind === 'formula' || f.kind === 'skill') { var sgl = el('label', 'sys-hover'); var sgc = el('input'); sgc.type = 'checkbox'; sgc.checked = !!f.sign; sgc.className = 'sys-sign-chk'; sgl.appendChild(sgc); sgl.appendChild(document.createTextNode(' \u00b1 colour')); sgl.title = 'Colour the value by its sign: green above zero, red below (points remaining, a modifier)'; flags.appendChild(sgl); }   // Stage 5g
     if (f.kind !== 'notes' && f.kind !== 'text' && f.kind !== 'select' && f.kind !== 'item-list' && f.kind !== 'effects') flags.appendChild(input('sys-roll field', f.roll, 'A roll button for this field (dice allowed): d20 + ' + (f.key || 'Key'), 'Roll (optional)'));
     if (f.kind === 'number' || f.kind === 'formula') flags.appendChild(input('sys-vnames field', (f.labels || []).join(', '), 'Names for the values 0, 1, 2\u2026 separated by commas (Not stunned, Physical, Mental): a number becomes a dropdown, a formula shows the name for its value; formulas still read the number. A named value is a word: \u00b1 colour, unit and slider do not apply to it', 'Value names (optional)'));   // Stage 6
@@ -5317,6 +5391,8 @@ function listCard(f, allCats, targets, acts) {   // acts (turn-based combat T1):
         } else {
             sr.appendChild(numField('sys-list-statdef', typeof s.def === 'number' ? s.def : '', 'What an item without its own value reads (blank: 0)', 'default', 'any'));
             sr.appendChild(input('sys-list-statnames field', Array.isArray(s.labels) ? s.labels.join(', ') : '', 'Names for the values 0, 1, 2… separated by commas (E, A, H, VH): a row shows the name, Items a dropdown; the value stays a number', 'Value names (optional)'));
+            var suI = input('sys-list-statunit field', typeof s.unit === 'string' ? s.unit : '', 'A unit after the figure (lb, yd). yd, ft, in, lb, mi and yd/s are measures: under Metric the figure shows in metric', 'Unit'); suI.maxLength = LIMITS.unit; if (typeof unitWordsOn === 'function') unitWordsOn(suI); sr.appendChild(suI);   // 1.5.4
+            if (typeof metricSel === 'function') { sr.appendChild(metricSel('sys-list-statmetric', s.unitShow)); sr.appendChild(numField('sys-list-statdec', typeof s.decMax === 'number' ? s.decMax : '', 'The most decimals a measure shows, 0 to 5, its zeros taken off. Blank: four under Instead or Bare, and as before Beside. An implant\u2019s 0.11438 lbs needs five', 'decimals', '1')); }   // 1.5.4: how a measure reads under Metric, and its most decimals
         }
         sr.appendChild(checkLabel('sys-list-statshow', s.show === true && s.hide !== true, 'On the row', 'Shown beside the name on each row (a column in a rich table); every stat that is not Hidden reads in the row’s 📝 line'));
         sr.appendChild(checkLabel('sys-list-stathide', s.hide === true, 'Hidden', 'A figure the row only works with, such as a cost per level. It is never shown on a row or in its 📝 details. Formulas still read it, and ✎ still shows it. It is no secret: use a GM-only list for that'));
@@ -5334,7 +5410,8 @@ function listCard(f, allCats, targets, acts) {   // acts (turn-based combat T1):
         var ckI = input('sys-list-colkey field', typeof cc.key === 'string' ? cc.key : '', 'The column\u2019s key, as a stat\u2019s: a letter, then letters, digits and _ (up to 24); not a stat\u2019s key of this list or a word formulas already use. Totals read it as List.key', 'Key'); ckI.maxLength = 24; cr.appendChild(ckI);
         cr.appendChild(input('sys-list-collabel field', typeof cc.label === 'string' ? cc.label : '', 'The column\u2019s name on the sheet (blank: its key)', 'Label'));
         var cfI = input('sys-list-colformula field', typeof cc.formula === 'string' ? cc.formula : '', 'Worked out for each row, no dice: Row.lvl, Row.qty, Row.on, Row.has, Row.paid, Row.<stat> and Row.<another column> read the row; any other name reads the character', 'Formula (Row.lvl * 2 + Row.Rel)'); cfI.maxLength = LIMITS.formula; cr.appendChild(cfI);
-        var cuI = input('sys-list-colunit field', typeof cc.unit === 'string' ? cc.unit : '', 'A unit after the value (pts, lb)', 'Unit'); cuI.maxLength = LIMITS.unit; cr.appendChild(cuI);
+        var cuI = input('sys-list-colunit field', typeof cc.unit === 'string' ? cc.unit : '', 'A unit after the value (pts, lb). yd, ft, in, lb, mi and yd/s are measures: under Metric the figure shows in metric', 'Unit'); cuI.maxLength = LIMITS.unit; if (typeof unitWordsOn === 'function') unitWordsOn(cuI); cr.appendChild(cuI);
+        if (typeof metricSel === 'function') { cr.appendChild(metricSel('sys-list-colmetric', cc.unitShow)); cr.appendChild(numField('sys-list-coldec', typeof cc.decMax === 'number' ? cc.decMax : '', 'The most decimals a measure shows, 0 to 5, its zeros taken off. Blank: four under Instead or Bare, and as before Beside', 'decimals', '1')); }   // 1.5.4: how a measure reads under Metric, and its most decimals
         cr.appendChild(input('sys-list-colnames field', Array.isArray(cc.labels) ? cc.labels.join(', ') : '', 'Names for the values 0, 1, 2\u2026 separated by commas: the row shows the name, formulas read the number', 'Value names (optional)'));
         var cpI = input('sys-list-colplus field', Array.isArray(cc.plus) ? cc.plus.join(', ') : '', 'Number stats of this list that add to this column in a case of their own, by their keys, separated by commas. Where such a stat is not 0 the row shows the two added, with the stat\u2019s label: DR 15 (35 vs. energy)', 'With stats (optional)'); cpI.maxLength = 240; cr.appendChild(cpI);   // 1.5.4 With
         cr.appendChild(checkLabel('sys-list-colhide', cc.hide === true, 'Hidden', 'Worked out (for totals and other columns) but not shown on the row'));
@@ -6426,6 +6503,7 @@ function onInput(e) {
             else if (lcc.indexOf('sys-list-collabel') >= 0) cD.label = t.value.slice(0, LIMITS.label);
             else if (lcc.indexOf('sys-list-colformula') >= 0) cD.formula = t.value.slice(0, LIMITS.formula);
             else if (lcc.indexOf('sys-list-colunit') >= 0) { if (t.value.trim()) cD.unit = t.value.slice(0, LIMITS.unit); else delete cD.unit; }
+            else if (lcc.indexOf('sys-list-coldec') >= 0) { if (String(t.value).trim() === '' || !isFinite(Number(t.value))) delete cD.decMax; else cD.decMax = Number(t.value); }   // 1.5.4 (Save keeps a whole number 0 to 5)
             else if (lcc.indexOf('sys-list-colnames') >= 0) { var cln = t.value.split(',').map(function(s) { return s.trim(); }).slice(0, LIMITS.labels); while (cln.length && !cln[cln.length - 1]) cln.pop(); if (cln.some(Boolean)) cD.labels = cln; else delete cD.labels; }
             else if (lcc.indexOf('sys-list-colplus') >= 0) { var cpl = t.value.split(',').map(function(s) { return s.trim(); }).filter(Boolean).slice(0, 64); if (cpl.length) cD.plus = cpl; else delete cD.plus; }   // 1.5.4 With: stat keys as typed, which Save reads by the list's own stats
             else return;
@@ -6439,6 +6517,8 @@ function onInput(e) {
             else if (lcc.indexOf('sys-list-statlabel') >= 0) stD.label = t.value.slice(0, LIMITS.label);
             else if (lcc.indexOf('sys-list-statdef') >= 0) numOr(stD, 'def');
             else if (lcc.indexOf('sys-list-statnames') >= 0) { var stn = t.value.split(',').map(function(s) { return s.trim(); }).slice(0, LIMITS.labels); while (stn.length && !stn[stn.length - 1]) stn.pop(); if (stn.some(Boolean)) stD.labels = stn; else delete stD.labels; }
+            else if (lcc.indexOf('sys-list-statunit') >= 0) { if (t.value.trim()) stD.unit = t.value.slice(0, LIMITS.unit); else delete stD.unit; }   // 1.5.4 (Save cleans it)
+            else if (lcc.indexOf('sys-list-statdec') >= 0) { if (String(t.value).trim() === '' || !isFinite(Number(t.value))) delete stD.decMax; else stD.decMax = Number(t.value); }   // 1.5.4 (Save keeps a whole number 0 to 5)
             else return;
             var pCard = t.closest('.sys-list-card'), pSel = pCard ? pCard.querySelector('.sys-list-price') : null; if (pSel) priceOptions(pSel, lsp);   // the Price choices follow a key or a label as it is typed
             var oSel = pCard ? pCard.querySelector('.sys-list-onper') : null; if (oSel) perOptions(oSel, lsp);   // 1.5.4: and the Per choices
@@ -6470,6 +6550,7 @@ function onInput(e) {
         else if (c.indexOf('sys-max') >= 0) { if (t.value === '') delete f.max; else f.max = Number(t.value); }
         else if (c.indexOf('sys-step') >= 0) f.step = Number(t.value) || 1;
         else if (c.indexOf('sys-options') >= 0) f.options = t.value.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+        else if (c.indexOf('sys-decmin') >= 0 || c.indexOf('sys-decmax') >= 0) { var dk = c.indexOf('sys-decmin') >= 0 ? 'decMin' : 'decMax'; if (String(t.value).trim() === '' || !isFinite(Number(t.value))) delete f[dk]; else f[dk] = Number(t.value); }   // 1.5.4 (Save keeps a whole number 0 to 4)
         else return;
     } else if (r) {
         if (c.indexOf('sys-apply-formula') >= 0) { var chI = applyChangeOf(t, r); if (!chI) return; chI.formula = t.value.slice(0, LIMITS.formula); }   // Stage 6 HUD H7: a change's amount
@@ -6549,6 +6630,7 @@ function onChange(e) {
         else if (c.indexOf('sys-list-rollcost') >= 0) { var rcr = t.closest('.sys-list-roll'), rcD = rcr && Array.isArray(lsc.rolls) ? lsc.rolls[+rcr.dataset.ri] : null; if (!rcD || typeof rcD !== 'object') return; if (t.value) rcD.cost = t.value; else delete rcD.cost; }   // turn-based combat T1
         else if (c.indexOf('sys-list-rollkind') >= 0) { var rkr = t.closest('.sys-list-roll'), rkD = rkr && Array.isArray(lsc.rolls) ? lsc.rolls[+rkr.dataset.ri] : null; if (!rkD || typeof rkD !== 'object') return; if (t.value === 'apply') { if (!Array.isArray(rkD.apply)) rkD.apply = [{ f: '', formula: '' }]; } else delete rkD.apply; }   // Stage 6 HUD H7b: Roll | Apply (a formula typed before stays in the draft)
         else if (c.indexOf('sys-list-applytarget') >= 0 || c.indexOf('sys-list-applyop') >= 0 || c.indexOf('sys-list-applywhen') >= 0) { var atr = t.closest('.sys-list-applyrow'), atR = atr && Array.isArray(lsc.rolls) ? lsc.rolls[+atr.dataset.ri] : null, atK = atr && atr.dataset.k === 'then' ? 'then' : 'apply', atC = atR && Array.isArray(atR[atK]) ? atR[atK][+atr.dataset.ai] : null; if (!atC || typeof atC !== 'object') return; if (c.indexOf('sys-list-applytarget') >= 0) { if (t.value.indexOf('c:') === 0) { atC.c = t.value.slice(2); delete atC.f; } else { atC.f = t.value; delete atC.c; } } else if (c.indexOf('sys-list-applywhen') >= 0) { if (t.value === 'hit' || t.value === 'miss' || t.value === 'malf') atC.when = t.value; else delete atC.when; } else { delete atC.add; delete atC.set; if (t.value === 'add') atC.add = true; else if (t.value === 'set') atC.set = true; } }   // R2b: a counter, a consequence's When
+        else if (c.indexOf('sys-list-colmetric') >= 0 || c.indexOf('sys-list-statmetric') >= 0) { var mcol = c.indexOf('sys-list-colmetric') >= 0, mrw = t.closest(mcol ? '.sys-list-col' : '.sys-list-stat'), mLs = mcol ? lsc.cols : lsc.stats, mD = mrw && Array.isArray(mLs) ? mLs[+(mcol ? mrw.dataset.ci : mrw.dataset.si)] : null; if (!mD || typeof mD !== 'object') return; if (t.value === 'swap' || t.value === 'bare') mD.unitShow = t.value; else delete mD.unitShow; }   // 1.5.4: how a measure reads under Metric
         else if (c.indexOf('sys-list-price') >= 0) { _priceAt.delete(lsc); if (t.value) lsc.price = t.value; else delete lsc.price; }
         else return;
         markDirty(); renderAll(); return;
@@ -6565,7 +6647,7 @@ function onChange(e) {
     var ctx = fieldOfRow(t); if (!ctx) return;
     var f = ctx.f, r = ctx.r;
     if (f) {
-        if (c.indexOf('sys-kind') >= 0) { f.kind = t.value; delete f.formula; delete f.maxFormula; delete f.base; delete f.options; if (f.unit === 'height' ? f.kind !== 'text' : f.kind === 'text') delete f.unit; f.def = f.kind === 'toggle' ? false : f.kind === 'text' || f.kind === 'select' ? '' : f.kind === 'resource' ? 'max' : 0; if (f.kind === 'resource' && f.min === undefined) f.min = 0; markDirty(); renderAll(); return; }
+        if (c.indexOf('sys-kind') >= 0) { f.kind = t.value; delete f.formula; delete f.maxFormula; delete f.base; delete f.options; if (f.unit === 'height' || f.unit === 'weight' ? f.kind !== 'text' : f.kind === 'text') delete f.unit; if (f.kind !== 'number' && f.kind !== 'formula' && f.kind !== 'skill') { delete f.unitShow; delete f.decMin; delete f.decMax; delete f.group; } f.def = f.kind === 'toggle' ? false : f.kind === 'text' || f.kind === 'select' ? '' : f.kind === 'resource' ? 'max' : 0; if (f.kind === 'resource' && f.min === undefined) f.min = 0; markDirty(); renderAll(); return; }
         if (c.indexOf('sys-edit') >= 0) f.edit = t.value;
         else if (c.indexOf('sys-vis') >= 0) f.vis = t.value;
         else if (c.indexOf('sys-hover-chk') >= 0) f.hover = t.checked;
@@ -6588,7 +6670,9 @@ function onChange(e) {
         else if (c.indexOf('sys-vnames') >= 0 && f.kind === 'formula' && f.badge) { markDirty(); renderAll(); return; }   // L7: the tones row follows the value names
         else if (c.indexOf('sys-vnames') >= 0) { if (f.kind === 'number') { var rwV = t.closest('.sys-row'), dcV = rwV && rwV.querySelector('.sys-def'), wantCnt = !f.slider && !(Array.isArray(f.labels) && f.labels.length); if (rwV && !!rwV.querySelector('.sys-counter-chk') !== wantCnt) { if (Array.isArray(f.labels) && f.labels.length) delete f.counter; markDirty(); renderAll(); return; } if (dcV) buildDefCell(dcV, f); } markDirty(); patchErrors(); return; }   // HF4a: names given or cleared — the Counter box comes or goes (a named number is never a counter)   // Stage 6: a number's default cell follows (a pick of the names, or its own range back when they are cleared); nothing else in the row moves, so focus stays
         else if (c.indexOf('sys-def-lbl') >= 0) f.def = Number(t.value);
-        else if (c.indexOf('sys-unit-text') >= 0) { if (t.value === 'height') f.unit = 'height'; else delete f.unit; }   // 1.5.4: a text field's unit
+        else if (c.indexOf('sys-unit-text') >= 0) { if (t.value === 'height' || t.value === 'weight') f.unit = t.value; else delete f.unit; }   // 1.5.4: a text field's unit
+        else if (c.indexOf('sys-metricshow') >= 0) { if (t.value === 'swap' || t.value === 'bare') f.unitShow = t.value; else delete f.unitShow; }   // 1.5.4: how a measure reads under Metric
+        else if (c.indexOf('sys-group-chk') >= 0) { if (t.checked) f.group = true; else delete f.group; }   // 1.5.4: its thousands grouped
         else return;
     } else if (r) {
         if (c.indexOf('sys-roll-kind') >= 0) { if (t.value === 'apply') { if (!Array.isArray(r.apply)) r.apply = [{ f: '', formula: '' }]; delete r.init; } else { delete r.apply; delete r.round; delete r.each; delete r.by; } markDirty(); renderAll(); return; }   // Stage 6 HUD H7: Roll | Apply (a formula typed before stays in the draft)

@@ -58,10 +58,30 @@ Character sheets
   Stays live and Needs Edit sheet say otherwise for that one field.
 - A field's unit can be a measure: yd, ft, in, lb or mi. When Settings
   say Metric, the sheet shows the figure in metric too, as 7 yd (6.4 m)
-  or 32 lbs (14.5 kg). Formulas, rolls and files still read the figure
-  as it is. A text field can take the unit height: on a locked sheet
-  and in the HUD, a height written as 6'7" / 2.00 m reads 6'7" under
-  Imperial and 2.00 m under Metric.
+  or 32 lbs (14.5 kg). Formulas, rolls and the character file still
+  read the figure as it is. A text field can take the unit height: on
+  a locked sheet and in the HUD, a height written as 6'7" / 2.00 m
+  reads 6'7" under Imperial and 2.00 m under Metric.
+- A figure on the sheet can read as the website writes it under either
+  setting. A unit of yd/s is a speed, as Move's yards a second. A
+  field's Metric list says how a measure reads under Metric: beside its
+  figure as before, instead of it (32 lbs is 14.5 kg), or bare (Move 5
+  under Imperial and 4.6 m/s under Metric). Decimals and 1,000s say how
+  the figure itself is written: Basic Lift 32.0 lbs, a total 1,234.57.
+- A text field can take the unit weight, read by the half of the setting
+  as a height is: 272 lb / 124 kg reads 124 kg under Metric. Where a
+  height or a weight may be changed, its box shows that half, and a
+  metric figure typed in it is kept as the book's pair, the imperial
+  half first: 2.00 m is kept as 6'7" / 2.00 m.
+- A caption can give a figure its unit: {BLx|lbs} reads 32 lbs, and
+  14.5 kg under Metric. A roll's label keeps the book's unit, since
+  everyone at the table reads its card. A list's stat can carry a unit,
+  and a stat's or a column's measure reads in metric under Metric, by
+  its own Metric list, on the row, in a rich table and on the readable
+  page. Instead or Bare writes its figure as the website does, to four
+  decimals or the most its Decimals box sets, up to five. The readable
+  page reads every figure as your sheet does. Formulas, rolls and the
+  character file still read every figure as it is.
 - The button that lets a player fill in their whole sheet now reads
   Unlock for player, and Lock for player to close it again.
 - A list's stat can be Hidden, in the System editor's Lists tab. Use it
@@ -650,6 +670,9 @@ Fixes
   as 0.91 m. They stepped a metre, 1.1 yd, which could change whether a
   token clears low cover. The Elevation row of a sheet and of a HUD now
   reads in metres under Metric too.
+- A piece's Height and Ground height boxes in Properties step half a
+  yard in both settings, shown as 0.46 m in Metric. In Metric they
+  stepped half a metre.
 - A target mark's range tooltip gives its distance in your choice of
   Imperial or Metric. It said yards under Metric.
 - The Journal's unread count stays in sight while the top row is hidden,
