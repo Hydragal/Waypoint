@@ -2631,7 +2631,7 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
                     // the older faults the review of step 1 fixed, said in both release notes' 1.5.4 Fixes part, alike
                     const FIXN = '- Finding words no longer breaks a chart. A search in the panel over\n  the map, or the planner\'s own Find, could turn a flowchart or a chart\n  after the first one on the page into "Syntax error in text".\n- The search in the panel over the map no longer empties a sequence\n  diagram. The words it found went missing from the chart.\n';
                     const notes = [path.join(dir, '..', '..', '..', 'WHATSNEW.txt'), path.join(dir, '..', 'assets', 'whatsnew.txt')].map(f => fs.readFileSync(f, 'utf8').replace(/\r\n/g, '\n'));
-                    const fixAt = t => { const a = t.indexOf('\nFixes\n'), z = t.indexOf('\nWAYPOINT 1.5.3'), i = t.indexOf(FIXN); return t.split(FIXN).length === 2 && a > 0 && i > a && i < z && t.slice(0, z).indexOf('WAYPOINT 1.5.4') === 0; };
+                    const fixAt = t => { const s4 = t.indexOf('WAYPOINT 1.5.4'), a = t.indexOf('\nFixes\n', s4), z = t.indexOf('\nWAYPOINT 1.5.3'), i = t.indexOf(FIXN); return t.split(FIXN).length === 2 && s4 >= 0 && a > s4 && i > a && i < z && t.slice(0, s4).indexOf('WAYPOINT 1.5.3') < 0; };   // 1.5.4's own block, wherever it begins
                     check('the older faults the review of step 1 fixed are said in both release notes, alike, in 1.5.4\'s Fixes part: a search in the panel over the map or the planner\'s own Find turned a chart after the first into a syntax error, and the panel\'s search emptied a sequence diagram of the words it found',
                         notes.every(fixAt), notes.map(fixAt));
                 }

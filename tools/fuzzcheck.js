@@ -1005,6 +1005,7 @@ function mutations(tpl) {
             'char-name': { type: 'char-name', rid: 'r11', charId: 'c_p1', name: 'Ayla the Bold' },
             'char-done': { type: 'char-done', rid: 'r12', charId: 'c_p1' },
             'char-delete': { type: 'char-delete', rid: 'r12d', charId: 'c_p1' },
+            'char-ask': { type: 'char-ask', rid: 'r12a', charId: 'c_p1', fieldId: 'f_inv', rowId: 'w_x', stats: { wt: 2 } },   // 1.5.5: an ask for a copy's stats; this world's system has no ask rule
             'char-token': { type: 'char-token', rid: 'r13', name: 'Just Tok' },
             'tok-pic': { type: 'tok-pic', rid: 'r14', mapId: 'm_open', wbId: 'tok_p1plain', img: 'data:image/png;base64,iVBORw0KGgo=' },
             'tok-light': { type: 'tok-light', rid: 'r15', mapId: 'm_open', wbId: 'tok_p1', on: true, preset: 0, name: 'Torch' },
@@ -1188,6 +1189,7 @@ function mutations(tpl) {
         'char-name': o => o.p1.some(m => m.type === 'char-name-ans' && m.reason === 'notmaking'),
         'char-done': o => o.p1.some(m => m.type === 'char-done-ans' && m.reason === 'notmaking'),
         'char-delete': o => o.p1.some(m => m.type === 'char-delete-ans' && m.reason === 'inplay'),
+        'char-ask': o => o.p1.some(m => m.type === 'char-ask-ans' && typeof m.reason === 'string') && !(campH().uploads || []).some(u => u && u.ask === true),
         'char-token': o => o.p1.some(m => m.type === 'char-token-ans' && m.reason === 'have'),
         'tok-pic': o => rec.pics.length === 1 && o.p1.some(m => m.type === 'tok-pic-ans' && m.ok === true),
         'tok-light': o => tokH('tok_p1').light && tokH('tok_p1').light.name === 'Torch' && o.p1.some(m => m.type === 'tok-light-ans' && m.ok === true) && o.p2.some(m => m.type === 'item' || m.type === 'itemDelta'),

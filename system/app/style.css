@@ -1057,6 +1057,15 @@
   }
   .el-del{font-size:10px;padding:2px 5px}
   #toast.show{opacity:1;transform:translateX(-50%) translateY(0);pointer-events:auto}
+  /* 1.5.5: the GM's approval cards (sheets.js approveNote): over the map, its tool bars, every floating box and their menus (90020), under every
+     question, dialog and the tour; at the bottom left, clear of the top row, the zoom box, the party strip and Table Chat; never in the stream window */
+  .appr-cards { position: fixed; left: calc(var(--mainleft, 48px) + 12px); bottom: 96px; z-index: 95100; display: flex; flex-direction: column; gap: 8px; width: min(340px, calc(100vw - var(--mainleft, 48px) - 28px)); pointer-events: none; }
+  .appr-card { pointer-events: auto; background: var(--panel2); border: 1px solid var(--gold); border-radius: 9px; box-shadow: var(--shadow); padding: 10px 12px; font-size: 13px; display: flex; flex-direction: column; gap: 8px; }
+  .appr-text { color: var(--text); line-height: 1.35; overflow-wrap: anywhere; }
+  .appr-row { display: flex; gap: 8px; justify-content: flex-end; }
+  .appr-go { border-color: var(--gold); color: var(--gold); }
+  body.stream-mode .appr-cards { display: none; }
+  .sheet-rf-ask { font-size: 11px; color: var(--muted); margin: 2px 0 6px; }   /* 1.5.5: the line of a player's form that says each change is an ask */
   #toast button{background:transparent;border:1px solid var(--gold);color:var(--gold);border-radius:6px;padding:4px 10px;cursor:pointer;font:inherit;font-size:12px}
   
   /* Sidebar Layout */

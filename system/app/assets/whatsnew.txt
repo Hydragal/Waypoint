@@ -1,3 +1,22 @@
+WAYPOINT 1.5.5 — What's New
+============================
+
+Approvals
+- A new choice for Item stats on players' sheets, at the top of the
+  System editor's Lists tab: Players ask, the GM approves. A player's
+  ✎ on a row they carry then sends each change to you instead of
+  making it. The change waits in the Review beside their sheet
+  updates, and nothing changes until you apply it. They may ask this
+  for a library entry they can see as well, such as a power whose
+  first level the story gave them for free.
+  A stat you set can be asked for again. Its line comes unticked and
+  says you set it.
+- A card now comes up at the bottom left of your screen whenever
+  something waits for your approval: a player's sheet update, an ask,
+  or a character a player has finished. It stays until you press it.
+  Review opens the character's sheet and what waits, and × puts the
+  card away. The gold Review button in the top row stays as before.
+
 WAYPOINT 1.5.4 — What's New
 ============================
 

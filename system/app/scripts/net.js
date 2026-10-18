@@ -5102,6 +5102,22 @@ var _mkPending = {};
 var MK_WHY = { making: 'Finish the character you are making first (press Done on its sheet).', nomap: 'Wait until your GM brings you to a map.', paused: 'The table is paused.', closed: 'Making a character is not open at this table.', have: 'You already play a character here.', busy: 'Too many characters are being made at this table right now.', slow: 'A moment, please.', missing: 'That character is gone.', owner: 'That character is not yours.', notmaking: 'That character is finished already.', inplay: 'That is the character you play: only your GM can delete it.', bad: 'That name cannot be used.', off: 'Character sheets are off here.' };
 var TOK_WHY = { paused: 'The table is paused.', slow: 'A moment between pictures, please.', missing: 'That token is no longer here (it may have moved to another map).', tokowner: 'That token is not yours.', locked: 'The GM has locked that token.', bad: 'That picture could not be used.', off: 'The GM cannot take pictures here.', failed: 'The GM could not save that picture.' };   // tok-pic's answers, read by what we asked
 var LIGHT_WHY = { paused: 'The table is paused.', slow: 'A moment between changes of light, please.', missing: 'That token is no longer here (it may have moved to another map).', tokowner: 'That token is not yours.', locked: 'The GM has locked that token.', lightlock: 'The GM has locked that token\u2019s light.', preset: 'That light is no longer on offer (the GM changed the list).', nolight: 'That token carries no light to switch.', cap: 'This map already has the most light sources it can hold.', off: 'The GM cannot take a light here.' };   // tok-light's answers, read by what we asked
+var ASK_WHY = { paused: 'The table is paused.', off: 'Character sheets are off at this table.', missing: 'That row is no longer on your sheet.', owner: 'That character is not yours.', slow: 'A moment between asks, please.', field: 'That cannot be asked for here.', value: 'That change cannot be asked for.', full: 'Too many asks already wait for the GM.', same: 'That is already so.' };   // 1.5.5: an ask's answer, in its own words
+// 1.5.5: the stats of a player's ask as the wire may carry them: a plain object of at most 24 keys named as a list stat is (a letter, then letters,
+// digits or _, 32 at most), each a finite number, a choice's label (60 characters at most, no control character) or null; anything else none
+function askStats(v) {
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+    var pr = Object.getPrototypeOf(v); if (pr !== Object.prototype && pr !== null) return null;
+    var ks = Object.keys(v); if (!ks.length || ks.length > 24) return null;
+    var o = {};
+    for (var i = 0; i < ks.length; i++) {
+        var k = ks[i], x = v[k]; if (!/^[A-Za-z][A-Za-z0-9_]{0,31}$/.test(k)) return null;
+        if (x === null || (typeof x === 'number' && isFinite(x) && Math.abs(x) <= 1e15)) o[k] = x;
+        else if (typeof x === 'string' && x.length <= 60 && x.trim() && !/[\u0000-\u001f\u007f]/.test(x)) o[k] = x;
+        else return null;
+    }
+    return o;
+}
 function mkSend(type, m, done) {
     if (!net.active || net.role !== 'client' || net.stream) return { error: 'Not at a table.' };
     if (!net.foreign || !net.syncedPeer || !net.conns[0] || !net.conns[0].open || net.conns[0].peer !== net.syncedPeer) return { error: 'Not at the table yet.' };
@@ -5115,7 +5131,8 @@ function mkSend(type, m, done) {
 net.charMake = function(name, done) { return mkSend('char-make', { name: cleanCharName(name) }, done); };
 net.charName = function(charId, name, done) { var nm = cleanCharName(name); if (!nm) return { error: 'That name cannot be used.' }; return mkSend('char-name', { charId: String(charId), name: nm }, done); };
 net.charDone = function(charId, done) { return mkSend('char-done', { charId: String(charId) }, done); };
-net.charDelete = function(charId, done) { return mkSend('char-delete', { charId: String(charId) }, done); };   // an extra sheet of our own: the host judges which
+net.charDelete = function(charId, done) { return mkSend('char-delete', { charId: String(charId) }, done); };
+net.charAsk = function(charId, fieldId, rowId, stats, done) { var st = askStats(stats); if (!st) return { error: ASK_WHY.value }; return mkSend('char-ask', { charId: String(charId), fieldId: String(fieldId), rowId: String(rowId), stats: st }, done); };   // 1.5.5: a player's ask for their copy's stats, which waits for the GM's Review   // an extra sheet of our own: the host judges which
 // Onboarding F3b: Just a token — a name and their face, and they play at once (sheets on: an empty character, unlocked; off: a plain token)
 net.charToken = function(name, done) { return mkSend('char-token', { name: cleanCharName(name) }, done); };
 // The token creator (owner, 2026-09-27): a player's framed picture for their own plain token (a character's goes through char-pic)
@@ -5990,13 +6007,13 @@ function handleMessage(msg, conn) {
         var PIC_WHY = { paused: 'The table is paused.', off: 'Character sheets are off here.', slow: 'A moment between pictures, please.', missing: 'That character is gone.', owner: 'That character is not yours.', bad: 'That picture could not be used.', failed: 'The GM could not save that picture.' };
         if (typeof pP.done === 'function') pP.done(msg.ok === true ? { ok: true } : { error: typeof msg.reason === 'string' && Object.prototype.hasOwnProperty.call(PIC_WHY, msg.reason) ? PIC_WHY[msg.reason] : 'The GM could not take it.' });   // only a reason of our own is shown
         // [netcheck:charpicans-end]
-    } else if ((msg.type === 'char-make-ans' || msg.type === 'char-name-ans' || msg.type === 'char-done-ans' || msg.type === 'char-delete-ans' || msg.type === 'char-token-ans' || msg.type === 'tok-pic-ans' || msg.type === 'tok-light-ans') && net.role === 'client') {   // Onboarding F3: the host's answer to one of ours
+    } else if ((msg.type === 'char-ask-ans' || msg.type === 'char-make-ans' || msg.type === 'char-name-ans' || msg.type === 'char-done-ans' || msg.type === 'char-delete-ans' || msg.type === 'char-token-ans' || msg.type === 'tok-pic-ans' || msg.type === 'tok-light-ans') && net.role === 'client') {   // Onboarding F3: the host's answer to one of ours
         // [netcheck:charmakeans-start]
         if (typeof msg.rid !== 'string' || !Object.prototype.hasOwnProperty.call(_mkPending, msg.rid)) return;
         var pK = _mkPending[msg.rid]; delete _mkPending[msg.rid]; clearTimeout(pK.timer);
         if (typeof pK.done !== 'function') return;
-        if (msg.ok === true) { var aK = { ok: true, charId: typeof msg.charId === 'string' && /^c_[A-Za-z0-9_]{1,24}$/.test(msg.charId) ? msg.charId : null }; if (msg.kept === true) aK.kept = true; pK.done(aK); }
-        else { var WK = pK.kind === 'tok-pic' ? TOK_WHY : pK.kind === 'tok-light' ? LIGHT_WHY : MK_WHY; pK.done({ error: typeof msg.reason === 'string' && Object.prototype.hasOwnProperty.call(WK, msg.reason) ? WK[msg.reason] : 'The GM could not do that.' }); }   // in the words of what we asked
+        if (msg.ok === true) { var aK = { ok: true, charId: typeof msg.charId === 'string' && /^c_[A-Za-z0-9_]{1,24}$/.test(msg.charId) ? msg.charId : null }; if (msg.kept === true) aK.kept = true; if (msg.back === true) aK.back = true; pK.done(aK); }
+        else { var WK = pK.kind === 'char-ask' ? ASK_WHY : pK.kind === 'tok-pic' ? TOK_WHY : pK.kind === 'tok-light' ? LIGHT_WHY : MK_WHY; pK.done({ error: typeof msg.reason === 'string' && Object.prototype.hasOwnProperty.call(WK, msg.reason) ? WK[msg.reason] : 'The GM could not do that.' }); }   // in the words of what we asked
         // [netcheck:charmakeans-end]
     } else if (msg.type === 'char-review' && net.role === 'client') {   // Onboarding F3: what the GM did with our character
         // [netcheck:charreview-start]
@@ -6277,17 +6294,62 @@ function handleMessage(msg, conn) {
             prU.changes = prU.changes.filter(function(ch) { return doneU[ch.id] !== true; });
         }
         if (prU.changes.length) {
-            var upsU = (Array.isArray(campU.uploads) ? campU.uploads : []).filter(function(u) { return u && u.charId !== qu.charId; });   // a newer upload of the same character replaces the older
-            upsU.push({ id: 'up_' + nowU.toString(36) + Math.random().toString(36).slice(2, 6), charId: qu.charId, from: profU.id, name: String(profU.name || 'A player').slice(0, 60), at: nowU, changes: prU.changes, reader: rdU.id });   // the reader that read it applies it
+            var upsU = (Array.isArray(campU.uploads) ? campU.uploads : []).filter(function(u) { return u && (u.charId !== qu.charId || u.ask === true); });   // 1.5.5: a player's asks for that character stay   // a newer upload of the same character replaces the older
+            var idU = 'up_' + nowU.toString(36) + Math.random().toString(36).slice(2, 6);
+            upsU.push({ id: idU, charId: qu.charId, from: profU.id, name: String(profU.name || 'A player').slice(0, 60), at: nowU, changes: prU.changes, reader: rdU.id });   // the reader that read it applies it
             campU.uploads = upsU.slice(-Su.LIMITS.uploads);
             var tU = (profU.name || 'A player') + ' sent a sheet update for ' + (chU.name || 'their character') + ': ' + prU.changes.length + (prU.changes.length === 1 ? ' change' : ' changes') + ' to review (the gold Review button in the header).';
             toast(tU); logEvent('char', tU);
+            if (window.wpSheets && window.wpSheets.approveNote) window.wpSheets.approveNote(qu.charId, tU, 'review', idU);   // 1.5.5: a card that stays until the GM opens it, naming its entry
             if (window.wpSheets && window.wpSheets.uploadsChanged) window.wpSheets.uploadsChanged(qu.charId);
             wroteU = true;
         }
         if (wroteU) saveRemoteSoon();
         ansU({ n: prU.changes.length, auto: autoU });
         // [netcheck:charupload-end]
+    } else if (msg.type === 'char-ask' && net.role === 'host') {
+        // [netcheck:charask-start]
+        // 1.5.5 (the owner at the table, 2026-10-18: "lets allow it, but i approve the change after review"): under the list rule statsAsk a
+        // player's change of their own copy's stats waits for the GM. It is judged by systemcore statAsk and becomes one line of the character's ask,
+        // a Review entry marked ask: a sheet update never replaces it, a newer ask of the same stats of a row replaces the older line, and an ask
+        // that brings a row back to what it reads takes that line away. The GM is told by a card that opens the Review. Nothing of the character
+        // changes here, so nothing is sent to anyone but the answer
+        var ridK = typeof msg.rid === 'string' && /^[A-Za-z0-9_-]{1,24}$/.test(msg.rid) ? msg.rid : null; if (!ridK) return;
+        var ansK = function(o) { o.type = 'char-ask-ans'; o.rid = ridK; try { conn.send(o); } catch (e) { sendFailed(e); } };
+        var prK = own(net.roster, conn.peer) ? net.roster[conn.peer] : null; if (!prK) return;
+        if (net.paused || peerPaused(conn.peer)) { ansK({ reason: 'paused' }); return; }
+        if (window.wpVtt && !window.wpVtt.on('sheets')) { ansK({ reason: 'off' }); return; }
+        var campK = getActiveCampaign(), SK = SC(), FK = window.wpFormula, chK = campK && campK.chars && typeof msg.charId === 'string' && own(campK.chars, msg.charId) ? campK.chars[msg.charId] : null;
+        if (!campK || !campK.system || !chK || !SK || !FK || typeof SK.statAsk !== 'function') { ansK({ reason: 'missing' }); return; }
+        if (chK.npc || chK.ownerId !== prK.id) { ansK({ reason: 'owner' }); return; }
+        if (!allow('charask', { perMs: 400, burst: 8, windowMs: 30000, table: 60 }, conn.peer)) { ansK({ reason: 'slow' }); return; }
+        var fidK = typeof msg.fieldId === 'string' ? msg.fieldId : '', rowK = typeof msg.rowId === 'string' ? msg.rowId : '', stK = askStats(msg.stats); if (!stK) { ansK({ reason: 'value' }); return; }
+        var shK = function(id) { return !!(window.wpLibrary && window.wpLibrary.playerEntry && window.wpLibrary.playerEntry(id)); };   // a library entry of a pack players may see
+        var aK = SK.statAsk(campK.system, chK, fidK, rowK, stK, FK, { view: window.wpSheets && window.wpSheets.playerSystem ? window.wpSheets.playerSystem(campK) : null, shown: shK });
+        if (!aK.ok && aK.reason !== 'same') { ansK({ reason: aK.reason }); return; }
+        var upsK = Array.isArray(campK.uploads) ? campK.uploads : [], entK = null;
+        upsK.forEach(function(u) { if (!entK && u && u.ask === true && u.charId === chK.id) entK = u; });
+        var keysK = Object.keys(stK).map(function(k) { return k.toLowerCase(); });
+        var keepK = function(c) { return !(c && c.kind === 'stat' && c.f === fidK && c.row === rowK && c.ov && c.ov.stats && Object.keys(c.ov.stats).every(function(k) { return keysK.indexOf(k.toLowerCase()) >= 0; })); };   // an earlier ask of the same stats of that row goes
+        var chsK = entK && Array.isArray(entK.changes) ? entK.changes.filter(keepK) : [];
+        if (!aK.ok && (!entK || chsK.length === entK.changes.length)) { ansK({ reason: 'same' }); return; }   // nothing asked, nothing taken back
+        if (aK.ok) {
+            if (chsK.length >= SK.LIMITS.uploadChanges) { ansK({ reason: 'full' }); return; }
+            var nK = 0; chsK.forEach(function(c) { var m = /^u_([a-z0-9]{1,8})$/.exec(c.id || ''); if (m) nK = Math.max(nK, parseInt(m[1], 36) || 0); });
+            aK.change.id = 'u_' + (nK + 1).toString(36); chsK.push(aK.change);
+        }
+        var nowK = Date.now(), restK = upsK.filter(function(u) { return u !== entK; });
+        if (chsK.length) { var eK = entK || { id: 'up_' + nowK.toString(36) + Math.random().toString(36).slice(2, 6), charId: chK.id, from: prK.id, name: String(prK.name || 'A player').slice(0, 60), ask: true }; eK.at = nowK; eK.changes = chsK; restK.push(eK); }
+        campK.uploads = restK.slice(-SK.LIMITS.uploads);
+        saveRemoteSoon();
+        if (aK.ok) {
+            var tK = (prK.name || 'A player') + ' asks to change ' + (chK.name || 'their character') + ': ' + aK.change.label + ', ' + aK.change.from + ' to ' + aK.change.to + '.';
+            toast(tK); logEvent('char', tK);
+            if (window.wpSheets && window.wpSheets.approveNote) window.wpSheets.approveNote(chK.id, tK, 'review', eK.id);
+        }
+        if (window.wpSheets && window.wpSheets.uploadsChanged) window.wpSheets.uploadsChanged(chK.id);
+        ansK(aK.ok ? { ok: true } : { ok: true, back: true });
+        // [netcheck:charask-end]
     } else if (msg.type === 'char-item' && net.role === 'host') {
         // [netcheck:charitem-start]
         // a player's change of a carried list on their own character: same gates as char-edit, then applyRowOp reads every definition from the system
@@ -6604,7 +6666,7 @@ function handleMessage(msg, conn) {
             else { delete chD.unlocked; chD.review = 1; chD.updated = Date.now(); save(true); net.syncChar(chD.id); }
         } finally { net.applyingRemote = wasRD; }
         var tD = (prD.name || 'A player') + (stD === 'making' ? ' finished making ' : ' finished the sheet of ') + chD.name + (clD.length ? ' (the name is also ' + clD.map(function(k) { return CLW[k]; }).join(' and ') + ')' : '');
-        toast(tD + ' \u2014 review it on its sheet.'); logEvent('char', tD);
+        toast(tD + ' \u2014 review it on its sheet.'); logEvent('char', tD); if (window.wpSheets && window.wpSheets.approveNote) window.wpSheets.approveNote(chD.id, tD + '.', 'sheet');   // 1.5.5: a card that opens its sheet
         ansD(stD === 'making' && !playD ? { ok: true, kept: true } : { ok: true });   // kept: the character the GM gave them stays in play
         if (window.wpSheets && window.wpSheets.charChanged) window.wpSheets.charChanged(chD.id);
         if (window.wpRenderPartyStrip) window.wpRenderPartyStrip();

@@ -393,7 +393,7 @@ pendingChecks.push((async () => {
     check('M1: a Ban from the Players panel (its branch run for real) calls net.kickPlayer exactly once, with the first roster key of the profile, and that one call takes both of Pat\'s connections (told, closed, forgotten once); a profile not at the table and a player\'s machine call it not at all; in the source the Ban branch calls it once and never in a loop, net.js calls it twice (the roster\'s kick button, the Ban branch) and no other script does, and kickPlayer is the only place that sends \'kicked\'; the host has 25 message branches (the one new one is video-up, item 21)',
         js(ban1) === js({ threw: '', calls: ['pA1'], roster: ['pB', 'pX', 'pY'], kicked: ['pA1', 'pA2'], timers: 2, forgot: ['forget:u_a'], banned: ['u_a'], session: ['u_a'], saves: 1 }) && js(banAway.calls) === js([]) && banAway.kicked.length === 0 && banAway.threw === '' && js(banClient.calls) === js([]) && banClient.kicked.length === 0 && banClient.threw === ''
         && (noCom(banBody).match(/net\.kickPlayer\(/g) || []).length === 1 && !/forEach|\bfor \(|\bwhile \(/.test(noCom(banBody)) && js(kickCalls) === js([['net.js', 2]]) && (noCom(src).match(/net\.kickPlayer\(/g) || []).length === 2
-        && js(kickedSends) === js([['net.js', 1]]) && kickSrc.indexOf("conn.send({ type: 'kicked' });") >= 0 && (src.match(/msg\.type === '[a-z-]+' && net\.role === 'host'/g) || []).length === 27, js([ban1, banAway, banClient, kickCalls, kickedSends]));
+        && js(kickedSends) === js([['net.js', 1]]) && kickSrc.indexOf("conn.send({ type: 'kicked' });") >= 0 && (src.match(/msg\.type === '[a-z-]+' && net\.role === 'host'/g) || []).length === 28, js([ban1, banAway, banClient, kickCalls, kickedSends]));
 
     /* round 2: the review's three older gaps — a removed player's pointer and roster row, a second connection under one key, a queued request */
     const tg = { u_a: { mapId: 'm1', id: 'orc' }, u_b: { mapId: 'm1', id: 'gob' } }, withT = t => h => { h.env.net.targets = JSON.parse(js(t)); };
@@ -2243,6 +2243,69 @@ pendingChecks.push((async () => {
         && /\n    if \(!isRetry && !probe\) ringReset\(\);[^\n]*\n    leaveSession\(true\);/.test(js) && /\n    ringReset\(\);/.test(gu) && (outside.match(/ringReset\(\)/g) || []).length === 2,
         (outside.match(/[^\n]*(rollRing|ringSeq)[^\n]*/) || [''])[0]);
 }
+
+// 1.5.5 (the owner at the table, 2026-10-18: "lets allow it, but i approve the change after review"): a player's ask for their copy's stats.
+// The host's char-ask branch, sliced by its markers and run for real with the real core, the formula engine and askStats from net.js: under
+// the list rule statsAsk it becomes one line of the character's ask (a Review entry marked ask), the character unchanged, the GM told by a
+// toast, the log and a card; a newer ask of the same stat replaces the older line, another stat adds one, an ask back to the row's own figure
+// takes its line away (and the entry with its last line); every refusal answered once with nothing kept, saved or told
+pendingChecks.push((async () => {
+    const url = f => 'file:///' + path.resolve(path.join(__dirname, '..', 'system', 'app', 'scripts', f)).replace(/[\\]/g, '/');
+    const Sx = await import(url('systemcore.js')), Fx = await import(url('formula.js'));
+    const askSrc = between('// [netcheck:charask-start]', '// [netcheck:charask-end]', 'charask'), asF = fnSrc('function askStats(v) {', '\n}\n', 'askStats') + '\n}\n';
+    const raw = (rules, extra) => Object.assign({ v: 1, name: 'A', rolls: [], items: [{ id: 'i_gust', name: 'Gust', key: 'Gust', category: 'Power', stats: { cp: 10 } }, { id: 'i_gm', name: 'Secret', key: 'Secret', category: 'Power', vis: 'gm', stats: { cp: 5 } }],
+        fields: [{ id: 'f_pw', key: 'Powers', label: 'Powers', kind: 'item-list', vis: 'all', edit: 'owner', list: { stats: [{ key: 'granted', label: 'Granted points' }, { key: 'cp', label: 'CP' }, { key: 'al', label: 'Alignment', kind: 'pick', opts: [{ label: 'Dark', name: 'DarkA' }, { label: 'Light', name: 'LightA' }] }], custom: true } },
+            { id: 'f_gmL', key: 'Gifts', label: 'Gifts', kind: 'item-list', vis: 'all', edit: 'gm', list: { stats: [{ key: 'granted', label: 'Granted points' }] } }, { id: 'f_n', key: 'Num', label: 'Num', kind: 'number', vis: 'all', edit: 'owner' }],
+        listRules: rules }, extra || {});
+    const run = (o, msg) => {
+        o = o || {};
+        const camp = { id: 'k', system: Sx.cleanSystem(raw(o.rules === undefined ? { statsAsk: true } : o.rules), { F: Fx, gmView: true }), uploads: JSON.parse(JSON.stringify(o.uploads || [])),
+            chars: { c_a: { id: 'c_a', name: 'Ann', ownerId: 'u_a', npc: false, values: { f_pw: [{ id: 'w_1', defId: 'i_gust', qty: 1 }, { id: 'w_2', defId: 'i_gust', qty: 1, ov: { stats: { granted: 4 }, held: ['granted'] } }, { id: 'w_own', qty: 1, def: { name: 'Mine', stats: { cp: 3 } } }, { id: 'w_hid', defId: 'i_gust', qty: 1, hid: 1 }, { id: 'w_gm', defId: 'i_gm', qty: 1 }], f_gmL: [{ id: 'w_g', defId: 'i_gust', qty: 1 }] } },
+                c_b: { id: 'c_b', name: 'Bo', ownerId: 'u_b', npc: false, values: { f_pw: [{ id: 'w_1', defId: 'i_gust', qty: 1 }] } }, c_n: { id: 'c_n', name: 'Nix', ownerId: 'u_a', npc: true, values: { f_pw: [{ id: 'w_1', defId: 'i_gust', qty: 1 }] } } } };
+        if (o.chars) Object.assign(camp.chars, o.chars);
+        const before = JSON.stringify(camp.chars), out = { answer: [], toasts: [], logs: [], saves: 0, notes: [], changed: [], allowed: [], camp };
+        const conn = { peer: o.from || 'pA', send: m => { packCheck(m); out.answer.push(JSON.parse(JSON.stringify(m))); } };
+        const net = { active: true, role: 'host', paused: !!o.paused, roster: { pA: { id: 'u_a', name: 'Pat' }, pB: { id: 'u_b', name: 'Bea' } } };
+        const win = { wpFormula: Fx, wpVtt: { on: k => k !== 'sheets' || !o.sheetsOff }, wpSheets: { playerSystem: c => Sx.cleanSystem(c.system, { F: Fx, gmView: false }), approveNote: (id, t, k) => out.notes.push([id, t, k]), uploadsChanged: id => out.changed.push(id) } };
+        new Function('msg', 'conn', 'net', 'SC', 'window', 'peerPaused', 'getActiveCampaign', 'saveRemoteSoon', 'sendFailed', 'toast', 'logEvent', 'own', 'allow', asF + askSrc)(
+            Object.assign({ type: 'char-ask', rid: 'q1', charId: 'c_a', fieldId: 'f_pw', rowId: 'w_1', stats: { granted: 10 } }, msg || {}), conn, net, () => Sx, win, () => !!o.peerPaused, () => camp, () => { out.saves++; }, e => { throw e; },
+            t => out.toasts.push(t), (k, t) => out.logs.push([k, t]), H.own, k => { out.allowed.push(k); return o.slow !== k; });
+        out.charsSame = JSON.stringify(camp.chars) === before;
+        return out;
+    };
+    const j = JSON.stringify, ask0 = run(), e0 = ask0.camp.uploads[0] || {};
+    check('1.5.5 char-ask (host, run for real): an ask is one line of the character\'s ask — a Review entry marked ask, from its player by name, the line a stat change ticked with the list\'s and the row\'s names and the figures before and after; the character unchanged; saved once, the GM told by a toast, the log and a card that opens the Review; answered ok',
+        j(ask0.answer) === j([{ ok: true, type: 'char-ask-ans', rid: 'q1' }]) && ask0.camp.uploads.length === 1 && e0.ask === true && e0.charId === 'c_a' && e0.from === 'u_a' && e0.name === 'Pat' && /^up_[a-z0-9]+$/.test(e0.id) && typeof e0.at === 'number'
+        && j(e0.changes) === j([{ kind: 'stat', f: 'f_pw', row: 'w_1', label: 'Powers: Gust', from: 'Granted points 0', to: 'Granted points 10', ov: { stats: { granted: 10 } }, accept: true, held: false, id: 'u_1' }])
+        && ask0.charsSame && ask0.saves === 1 && j(ask0.toasts) === j(['Pat asks to change Ann: Powers: Gust, Granted points 0 to Granted points 10.']) && j(ask0.logs) === j([['char', ask0.toasts[0]]]) && j(ask0.notes) === j([['c_a', ask0.toasts[0], 'review']]) && j(ask0.changed) === j(['c_a']) && j(ask0.allowed) === j(['charask'])
+        && (cl => cl.length === 1 && cl[0].ask === true && cl[0].id === e0.id && j(cl[0].changes[0].ov) === j({ stats: { granted: 10 } }) && cl[0].changes[0].row === 'w_1' && cl[0].changes[0].accept === true)(Sx.cleanUploads(ask0.camp.uploads)), j([ask0.answer, ask0.camp.uploads, ask0.toasts, ask0.notes]));
+    const up0 = ask0.camp.uploads, ask1 = run({ uploads: up0 }, { stats: { granted: 5 } }), ask2 = run({ uploads: up0 }, { stats: { cp: 12 } }), back = run({ uploads: ask2.camp.uploads }, { stats: { granted: 0 } }), backAll = run({ uploads: up0 }, { stats: { granted: null } });
+    const sheetUp = [{ id: 'up_file', charId: 'c_a', from: 'u_a', name: 'Pat', at: 1, changes: [{ id: 'u_1', kind: 'value', f: 'f_n', label: 'Num', from: '0', to: '3', value: 3, accept: true }] }], withFile = run({ uploads: sheetUp });
+    check('1.5.5 char-ask: a newer ask of the same stat of a row replaces the older line; another stat adds a line of its own; an ask back to the row\'s own figure takes its line away (answered ok and back, the GM not told again), and with the entry\'s last line the entry; a sheet update waiting for the character stays beside the ask',
+        ask1.camp.uploads.length === 1 && j(ask1.camp.uploads[0].changes.map(c => [c.id, c.to])) === j([['u_1', 'Granted points 5']]) && ask1.camp.uploads[0].id === e0.id
+        && j(ask2.camp.uploads[0].changes.map(c => [c.id, c.to])) === j([['u_1', 'Granted points 10'], ['u_2', 'CP 12']])
+        && j(back.answer) === j([{ ok: true, back: true, type: 'char-ask-ans', rid: 'q1' }]) && j(back.camp.uploads[0].changes.map(c => c.id)) === j(['u_2']) && back.toasts.length === 0 && back.notes.length === 0 && back.saves === 1 && back.charsSame
+        && j(backAll.answer) === j([{ ok: true, back: true, type: 'char-ask-ans', rid: 'q1' }]) && backAll.camp.uploads.length === 0
+        && withFile.camp.uploads.length === 2 && withFile.camp.uploads[0].id === 'up_file' && withFile.camp.uploads[1].ask === true, j([ask1.camp.uploads, ask2.camp.uploads, back.answer, back.camp.uploads, backAll.camp.uploads, withFile.camp.uploads.map(u => u.id)]));
+    const held = run({}, { rowId: 'w_2', stats: { granted: 9 } }), pick = run({}, { stats: { al: 'Light' } });
+    check('1.5.5 char-ask: a stat the GM set on the copy is asked all the same, its line unticked and marked as the GM\'s; a choice by its label',
+        j(held.camp.uploads[0].changes[0]) === j({ kind: 'stat', f: 'f_pw', row: 'w_2', label: 'Powers: Gust', from: 'Granted points 4', to: 'Granted points 9', ov: { stats: { granted: 9 } }, accept: false, held: true, id: 'u_1' })
+        && pick.camp.uploads[0].changes[0].to === 'Alignment Light' && pick.answer[0].ok === true, j([held.camp.uploads, pick.camp.uploads, pick.answer]));
+    const refused = (why, o, msg) => { const t = run(o, msg); return j(t.answer) === j([{ reason: why, type: 'char-ask-ans', rid: 'q1' }]) && t.camp.uploads.length === (o && o.uploads ? o.uploads.length : 0) && t.saves === 0 && t.toasts.length === 0 && t.notes.length === 0 && t.charsSame; };
+    const many = {}; for (let i = 0; i < 25; i++) many['s' + i] = 1;
+    check('1.5.5 char-ask refused, answered why, nothing kept, saved or told: paused (the table or the player), sheets off, a character gone, a prototype\'s name for it, another player\'s, an NPC; the rate; stats that are none, empty, of a key a prototype holds or no stat\'s name, nested, a text with a control character, too long or 25 of them, a number past its bound, a stat the list lacks, a choice no option names; a row of their own, a row kept from them, a GM-only entry\'s copy, a row gone; a list only the GM changes, a field that is no list; the rule GM only or Players may change them; the same figure with nothing waiting',
+        refused('paused', { paused: true }) && refused('paused', { peerPaused: true }) && refused('off', { sheetsOff: true }) && refused('missing', {}, { charId: 'c_9' }) && refused('missing', {}, { charId: '__proto__' }) && refused('owner', {}, { charId: 'c_b' }) && refused('owner', {}, { charId: 'c_n' }) && refused('slow', { slow: 'charask' })
+        && refused('value', {}, { stats: null }) && refused('value', {}, { stats: {} }) && refused('value', {}, { stats: JSON.parse('{"__proto__":1}') }) && refused('value', {}, { stats: { '1x': 1 } }) && refused('value', {}, { stats: { granted: { a: 1 } } }) && refused('value', {}, { stats: { al: 'Li\u0007ght' } }) && refused('value', {}, { stats: { al: 'x'.repeat(61) } }) && refused('value', {}, { stats: many }) && refused('value', {}, { stats: { granted: 1e16 } }) && refused('value', {}, { stats: [1] })
+        && refused('value', {}, { stats: { nope: 1 } }) && refused('value', {}, { stats: { al: 'Grey' } })
+        && refused('field', {}, { rowId: 'w_own', stats: { cp: 4 } }) && refused('missing', {}, { rowId: 'w_hid' }) && refused('missing', {}, { rowId: 'w_gm' }) && refused('missing', {}, { rowId: 'w_9' }) && refused('value', {}, { rowId: 'bad id' })
+        && refused('field', {}, { fieldId: 'f_gmL', rowId: 'w_g' }) && refused('field', {}, { fieldId: 'f_n' }) && refused('field', { rules: null }) && refused('field', { rules: { ownerStats: true } })
+        && refused('same', {}, { stats: { granted: 0 } }) && run({}, { rid: 'q 1' }).answer.length === 0 && run({ from: 'pZ' }).answer.length === 0);
+    // the rule: a player's own hand never makes the change directly under it (Setting A alone does), and a sheet update never takes an ask away
+    const sysA = Sx.cleanSystem(raw({ statsAsk: true }), { F: Fx, gmView: true }), chA = { id: 'c_a', ownerId: 'u_a', values: { f_pw: [{ id: 'w_1', defId: 'i_gust', qty: 1 }] } };
+    const direct = Sx.applyRowOp(sysA, chA, 'f_pw', { op: 'ov', rowId: 'w_1', ov: { stats: { granted: 10 } } }, Fx, { player: true, view: Sx.cleanSystem(raw({ statsAsk: true }), { F: Fx, gmView: false }) });
+    check('1.5.5 char-ask: under the rule a player\'s own char-item change of a copy\'s stats is refused as it always was (only Players may change them lets their hand make it); the host\'s sheet update replaces an older sheet update of the character and never its ask; the answers\' branch takes char-ask-ans',
+        direct.ok === false && direct.reason === 'field' && /filter\(function\(u\) \{ return u && \(u\.charId !== qu\.charId \|\| u\.ask === true\); \}\)/.test(src) && /msg\.type === 'char-ask-ans' \|\| msg\.type === 'char-make-ans'/.test(src), j(direct));
+})());
 
 // HUD frame (HF4b): a player's batched edit (a section's Reset all) — one message, one rate token, judged whole by the host
 pendingChecks.push((async () => {
@@ -4214,7 +4277,7 @@ pendingChecks.push((async () => {
     check('fold M0 (source): combatHidden is defined once and read only by combatsFor and net.syncCombatHidden, inside the combats slice; net.syncCombatHidden is called once, from the host\'s save; the GM\'s own strip (whiteboard.js) reads neither; the host\'s message handler has the same number of branches as before',
         (src.match(/function combatHidden\(/g) || []).length === 1 && (src.match(/combatHidden\(/g) || []).length === 3 && (cbSrc.match(/combatHidden\(/g) || []).length === 3
         && (src.match(/syncCombatHidden/g) || []).length === 3 && (cbSrc.match(/syncCombatHidden/g) || []).length === 1 && (olsSrc.match(/syncCombatHidden/g) || []).length === 2 && (cbSrc.match(/_combatHidSig = combatHidSigNow\(\);/g) || []).length === 1
-        && !/combatsFor|combatHidden|syncCombatHidden/.test(wbAll) && (src.match(/msg\.type === '[a-z-]+' && net\.role === 'host'/g) || []).length === 27,
+        && !/combatsFor|combatHidden|syncCombatHidden/.test(wbAll) && (src.match(/msg\.type === '[a-z-]+' && net\.role === 'host'/g) || []).length === 28,
         j([(src.match(/combatHidden\(/g) || []).length, (src.match(/syncCombatHidden/g) || []).length, (src.match(/msg\.type === '[a-z-]+' && net\.role === 'host'/g) || []).length]));
 }
 
@@ -5384,12 +5447,12 @@ pendingChecks.push((async () => {
         dRef('notmaking', {}, { charId: 'c_f' }) && dRef('owner', {}, { charId: 'c_o' }) && dRef('owner', { chars: Object.assign({}, mkC, { c_n: { id: 'c_n', name: 'N', ownerId: 'u_a', npc: true, making: 1, values: {} } }) }, { charId: 'c_n' }) && dRef('missing', {}, { charId: 'c_9' }) && dRef('missing', {}, { charId: 'constructor' })
         && dRef('paused', { paused: true }) && dRef('paused', { peerPaused: true }) && dRef('slow', { slow: 'chardone' }) && dn({}, { rid: 'd 1' }).answer.length === 0);
     // the player's side: the answers, the GM's verdict
-    const mkWhy = lineOf('var MK_WHY = {') + '\n' + lineOf('var TOK_WHY = {') + '\n' + lineOf('var LIGHT_WHY = {'), ansSrc = between('// [netcheck:charmakeans-start]', '// [netcheck:charmakeans-end]', 'charmakeans');
+    const mkWhy = lineOf('var MK_WHY = {') + '\n' + lineOf('var TOK_WHY = {') + '\n' + lineOf('var LIGHT_WHY = {') + '\n' + lineOf('var ASK_WHY = {'), ansSrc = between('// [netcheck:charmakeans-start]', '// [netcheck:charmakeans-end]', 'charmakeans');
     const mkAns = (msg, kind) => { const got = [], pend = { k1: { kind, done: a => got.push(a), timer: 1 } }; let cleared = 0; new Function('msg', '_mkPending', 'clearTimeout', mkWhy + '\n' + ansSrc)(msg, pend, () => { cleared++; }); return { got, left: Object.keys(pend).length, cleared }; };
     const aOk = mkAns({ rid: 'k1', ok: true, charId: 'c_ab12' }), aBadId = mkAns({ rid: 'k1', ok: true, charId: '<img>' }), aHave = mkAns({ rid: 'k1', reason: 'have' }), aProto = ['__proto__', 'constructor', 'toString', 'nope', 5].map(r => mkAns({ rid: 'k1', reason: r }).got[0].error), aNo = mkAns({ rid: 'k9', ok: true }), aProtoRid = mkAns({ rid: '__proto__', ok: true }), aKept = mkAns({ rid: 'k1', ok: true, kept: true }), aKeptStr = mkAns({ rid: 'k1', ok: true, kept: 'yes' });
     check('F3a char-make / char-name / char-done answers (player, run for real): ok with a well-formed id only (else none), a reason of ours in words, a prototype-named or unknown reason a plain refusal; an answer to no question of ours does nothing',
         j(aOk.got) === j([{ ok: true, charId: 'c_ab12' }]) && aOk.left === 0 && aOk.cleared === 1 && j(aBadId.got) === j([{ ok: true, charId: null }]) && aHave.got[0].error === 'You already play a character here.' && aProto.every(e => e === 'The GM could not do that.')
-        && aNo.got.length === 0 && aNo.left === 1 && aProtoRid.got.length === 0 && j(aKept.got) === j([{ ok: true, charId: null, kept: true }]) && j(aKeptStr.got) === j([{ ok: true, charId: null }]) && /\} else if \(\(msg\.type === 'char-make-ans' \|\| msg\.type === 'char-name-ans' \|\| msg\.type === 'char-done-ans' \|\| msg\.type === 'char-delete-ans' \|\| msg\.type === 'char-token-ans' \|\| msg\.type === 'tok-pic-ans' \|\| msg\.type === 'tok-light-ans'\) && net\.role === 'client'\) \{[^\n]*\n\s*\/\/ \[netcheck:charmakeans-start\]/.test(src), j([aOk, aBadId, aHave, aProto]));
+        && aNo.got.length === 0 && aNo.left === 1 && aProtoRid.got.length === 0 && j(aKept.got) === j([{ ok: true, charId: null, kept: true }]) && j(aKeptStr.got) === j([{ ok: true, charId: null }]) && /\} else if \(\(msg\.type === 'char-ask-ans' \|\| msg\.type === 'char-make-ans' \|\| msg\.type === 'char-name-ans' \|\| msg\.type === 'char-done-ans' \|\| msg\.type === 'char-delete-ans' \|\| msg\.type === 'char-token-ans' \|\| msg\.type === 'tok-pic-ans' \|\| msg\.type === 'tok-light-ans'\) && net\.role === 'client'\) \{[^\n]*\n\s*\/\/ \[netcheck:charmakeans-start\]/.test(src), j([aOk, aBadId, aHave, aProto]));
     {   // the token creator's review: tok-pic's answers read in a token's words (the table chosen by what we asked, never by the host)
         const tw = r => mkAns({ rid: 'k1', reason: r }, 'tok-pic').got[0].error, cw = r => mkAns({ rid: 'k1', reason: r }).got[0].error, ckw = r => mkAns({ rid: 'k1', reason: r }, 'char-make').got[0].error;
         check('token creator review: tok-pic answers (player, run for real) read as a token\'s — gone (it may have moved to another map), not yours, locked, a picture that could not be used, the GM cannot take pictures, could not save it, a moment between pictures — the same reasons to char-make still read as a character\'s; a prototype-named reason a plain refusal either way; ok is ok',
@@ -6963,7 +7026,7 @@ pendingChecks.push((async () => {
             && /if \(hosting\) \{ window\.wpNet\.applyingRemote = true; save\(true\); window\.wpNet\.applyingRemote = false; if \(window\.wpFog\) window\.wpFog\.invalidateVision\(\); if \(backS && backS\.length && typeof window\.wpNet\.strokesBack === 'function'\) window\.wpNet\.strokesBack\(item\.id, backS\); if \(window\.wpNet\.sendItem\) window\.wpNet\.sendItem\(camp\.id, item\.id\);/.test(ioT));
         const dmT = read('datamap.js'), posCode = posS2.replace(/\/\/[^\n]*/g, ''), patCode = patS2.replace(/\/\/[^\n]*/g, '');
         check('senses S0 (source): nothing new comes in from a player — no branch of the host\'s message handler was added or names sight or senses, the hook and its timer read nothing of a message or of a connection\'s word, and what is kept (what a copy was made by, the text last known, the sends that wait) is never saved or sent: it lives in the host\'s memory, named nowhere else',
-            hostBranches.length === 27 && !hostBranches.some(b => /sens|sight/i.test(b)) && !/msg\.type === '[^']*(sens|sight)/i.test(src) && !/\bmsg\b/.test(smCode) && !/\bconn\b/.test(smCode) && !/type: '(?!combats'|targets')/.test(smCode)
+            hostBranches.length === 28 && !hostBranches.some(b => /sens|sight/i.test(b)) && !/msg\.type === '[^']*(sens|sight)/i.test(src) && !/\bmsg\b/.test(smCode) && !/\bconn\b/.test(smCode) && !/type: '(?!combats'|targets')/.test(smCode)
             && count(src, /_sensesSig/g) === count(flS + smS, /_sensesSig/g) && count(src, /_sensesPend/g) === count(smS, /_sensesPend/g) && count(smS, /_sensesPend/g) > 0 && count(flS, /_sensesSig/g) > 0 && !/_senses(Sig|Pend|At)/.test(sheetsT + ioT + fogT + dmT + read('main.js'))
             && count(src, /_sensesAt/g) === count(flS + smS, /_sensesAt/g) && count(flS, /_sensesAt/g) > 0 && count(smS, /_sensesAt/g) > 0
             && !/sensesReads|sensesHidden/.test(src) && count(smCode, /setTimeout\(/g) === 1 && count(smCode, /SENSES_RESEND_MS/g) === 2, j([hostBranches.length, count(src, /_sensesSig/g), count(src, /_sensesPend/g), count(src, /_sensesAt/g), count(smCode, /setTimeout\(/g)]));
@@ -7003,7 +7066,7 @@ pendingChecks.push((async () => {
         const cnt = (s, re) => (s.match(re) || []).length, hostB = cnt(src, /msg\.type === '[a-z-]+' && net\.role === 'host'/g);
         check('fold M0 (source): no pointer message goes to all outside broadcastTargets — net.js broadcasts one only there, in its branch for a table without fog, and (hidden pieces) that one too is built by targetsFor; every other pointer message is a player\'s own copy built by targetsFor; the combats slice now defines broadcastTargets, and the host\'s message handler has the same number of branches as before',
             btSrc.length > 0 && cnt(src, /broadcast\(\{ type: 'targets'/g) === 1 && cnt(btSrc, /broadcast\(\{ type: 'targets'/g) === 1 && cnt(src, /targets: net\.targets/g) === 0 && /broadcast\(\{ type: 'targets', targets: targetsFor\(null\) \}, null\)/.test(btSrc)
-            && cnt(src, /type: 'targets'/g) === cnt(src, /type: 'targets', targets: targetsFor\(/g) && cbS.indexOf(btSrc) >= 0 && cbS.indexOf('function targetsFor(') >= 0 && hostB === 27,
+            && cnt(src, /type: 'targets'/g) === cnt(src, /type: 'targets', targets: targetsFor\(/g) && cbS.indexOf(btSrc) >= 0 && cbS.indexOf('function targetsFor(') >= 0 && hostB === 28,
             j([btSrc.length, cnt(src, /broadcast\(\{ type: 'targets'/g), cnt(src, /type: 'targets'/g), cbS.indexOf(btSrc), hostB]));
 
         // (c) the live position relay and the drag that feeds it
@@ -7337,8 +7400,8 @@ pendingChecks.push((async () => {
         J([pF.map('mA').whiteboard.length, pF.rec.asked, pB.rec, threw, pT.net.applyingRemote]));
 
     // (8) where it sits: a client branch (the host's branches still 25), and nothing sends the message yet
-    check('fold M3: the catch-up is a client branch only (the host\'s branches are 27: none new but video-up of item 21, char-delete of 1.5.4 and char-style of item 35); the host builds it in one place only, its catch-up of a copy (fold M7)',
-        (src.match(/msg\.type === '[a-z-]+' && net\.role === 'host'/g) || []).length === 27 && /\} else if \(msg\.type === 'fogDiff' && net\.role === 'client'\) \{\n\s*\/\/ \[netcheck:fogdiff-start\]/.test(src)
+    check('fold M3: the catch-up is a client branch only (the host\'s branches are 28: none new but video-up of item 21, char-delete of 1.5.4, char-style of item 35 and char-ask of 1.5.5); the host builds it in one place only, its catch-up of a copy (fold M7)',
+        (src.match(/msg\.type === '[a-z-]+' && net\.role === 'host'/g) || []).length === 28 && /\} else if \(msg\.type === 'fogDiff' && net\.role === 'client'\) \{\n\s*\/\/ \[netcheck:fogdiff-start\]/.test(src)
         && (src.match(/msg\.type === 'fogDiff'/g) || []).length === 1 && (src.match(/type: 'fogDiff'/g) || []).length === 1 && /function fogCatchUp\([^]*?type: 'fogDiff'/.test(between('// [netcheck:fogmove-start]', '// [netcheck:fogmove-end]', 'fogmove')));
 })());
 // fold M4: an open drag is judged where it began. The real pos gate, patch path, relay, sends, kick, senses and the fogmove slice are compiled as

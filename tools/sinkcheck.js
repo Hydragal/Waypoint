@@ -2156,7 +2156,8 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         check('tok-light: the words a player reads for a refusal are the app\'s own fixed sentences, one for each reason the host gives, holding no markup',
             !!WHY && ['paused', 'slow', 'missing', 'tokowner', 'locked', 'lightlock', 'preset', 'nolight', 'cap', 'off'].every(k => Object.prototype.hasOwnProperty.call(WHY, k) && typeof WHY[k] === 'string' && WHY[k].length > 0 && !/[<>"&]/.test(WHY[k]))
             && (tlS.match(/reason: '([a-z]+)'/g) || []).every(r => Object.prototype.hasOwnProperty.call(WHY, /'([a-z]+)'/.exec(r)[1])) && (tlS.match(/reason: '([a-z]+)'/g) || []).length >= 10
-            && /var WK = pK\.kind === 'tok-pic' \? TOK_WHY : pK\.kind === 'tok-light' \? LIGHT_WHY : MK_WHY; pK\.done\(\{ error: typeof msg\.reason === 'string' && Object\.prototype\.hasOwnProperty\.call\(WK, msg\.reason\) \? WK\[msg\.reason\] : 'The GM could not do that\.' \}\);/.test(netO), WHY);
+            && (a => !!a && ['paused', 'off', 'missing', 'owner', 'slow', 'field', 'value', 'full', 'same'].every(k => typeof a[k] === 'string' && a[k].length > 0 && !/[<>"&]/.test(a[k])))((m => m ? new Function('return ' + m[1] + ';')() : null)(/\nvar ASK_WHY = (\{[^\n]*\});[^\n]*\n/.exec(netO)))   // 1.5.5: an ask's answers too
+            && /var WK = pK\.kind === 'char-ask' \? ASK_WHY : pK\.kind === 'tok-pic' \? TOK_WHY : pK\.kind === 'tok-light' \? LIGHT_WHY : MK_WHY; pK\.done\(\{ error: typeof msg\.reason === 'string' && Object\.prototype\.hasOwnProperty\.call\(WK, msg\.reason\) \? WK\[msg\.reason\] : 'The GM could not do that\.' \}\);/.test(netO), WHY);
     }
     {   // conditions C1: a token's effects drawn on it (whiteboard.js tokenFxHtml, sliced by its tokenfx markers) and which list a screen draws
         // (sheets.js tokenFx, tokenfxlist), run for real on hostile names and icons
@@ -4932,6 +4933,13 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             && atEl > inspAll.lastIndexOf("listEl.querySelectorAll('.el-name').forEach(function(el) {", atEl) && inspAll.lastIndexOf("if(!target) return;", atEl) > inspAll.lastIndexOf("el.addEventListener('click', function() {", atEl), J([pv, pd]));
     }
 
+    {   // 1.5.5: the GM's approval cards draw words that come from the table (a player's and a character's names) as text alone
+        const shC = fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', 'sheets.js'), 'utf8').replace(/\r\n/g, '\n');
+        const a = shC.indexOf('// [systemcheck:approvenote-start]'), z = shC.indexOf('// [systemcheck:approvenote-end]'), sl = a >= 0 && z > a ? shC.slice(a, z) : '';
+        check('1.5.5 the approval cards (sheets.js approvenote): the words are set through el\'s text alone, the buttons\' words fixed; no markup, attribute from the words, handler attribute or web address anywhere in the slice',
+            sl.length > 0 && sl.includes("card.appendChild(el('div', 'appr-text', t));") && !/innerHTML|outerHTML|insertAdjacentHTML|document\.write|\.src\s*=|href|on[a-z]+\s*=\s*['"]/.test(sl)
+            && (sl.match(/setAttribute\(/g) || []).length === 3 && !/setAttribute\([^)]*\bt\b/.test(sl));
+    }
     summed = true;
     console.log('\n' + pass + ' passed, ' + fail + ' failed.');
     if (fail) process.exit(1);

@@ -2600,7 +2600,8 @@ function rowRights(entry, rd, spec, gm, sysI) {   // who may change this copy's 
     if (!spec || !rd) return '';
     if (gm) return rd.src === 'lib' || rd.src === 'lost' || rd.src === 'custom' ? 'gm' : '';
     if (rd.src === 'custom') return entry.own === 1 && spec.custom === true && !(rd.def && rd.def.vis === 'gm') ? 'own' : '';
-    return rd.src === 'lib' && !!(sysI && sysI.listRules && sysI.listRules.ownerStats === true) && Array.isArray(spec.stats) && spec.stats.length > 0 ? 'stats' : '';
+    if (rd.src === 'inline' && typeof entry.src === 'string' && entry.src && !!(sysI && sysI.listRules && sysI.listRules.statsAsk === true) && Array.isArray(spec.stats) && spec.stats.length > 0) return 'stats';   // 1.5.5: a library entry reaches its owner as an inline copy naming the entry (src); under the ask rule its stats are asked for, and the host judges its own row
+    return rd.src === 'lib' && !!(sysI && sysI.listRules && (sysI.listRules.ownerStats === true || sysI.listRules.statsAsk === true)) && Array.isArray(spec.stats) && spec.stats.length > 0 ? 'stats' : '';   // 1.5.5: statsAsk too, each change an ask
 }
 function rfOpen(c, f, rid, view) { return !!(_rowForm && _rowForm.charId === c.id && _rowForm.fieldId === f.id && _rowForm.rowId === rid && (_rowForm.view || 'sheet') === (view || _fxView)); }
 function editBtn(entry, c, f, mode, cust) {   // ✎ opens this row's form (or closes it), in the view it is drawn in (kept now: another view may be drawn before the click); cust (F4c3): a custom row
@@ -2672,7 +2673,8 @@ function rowForm(entry, rd, c, f, spec, sysI, mode) {
     var rid = rowIdOf(entry), ov = entry.ov && typeof entry.ov === 'object' ? entry.ov : {}, base = rd.base || {}, lost = rd.src === 'lost', stRef = _rowForm, typed = stRef && stRef.typed ? stRef.typed : {};
     var lib = lost ? 'Its copy: ' : 'Library: ', ovS = ov.stats && typeof ov.stats === 'object' ? ov.stats : {}, heldL = (Array.isArray(ov.held) ? ov.held : []).map(function(k) { return String(k).toLowerCase(); });
     var form = el('div', 'sheet-row-form'), head = el('div', 'sheet-rf-head'), grid = el('div', 'sheet-rf-grid');
-    var send = function(p) { commitItem(c, f, { op: 'ov', rowId: rid, ov: p }); }, one = function(k, v) { var p = {}; p[k] = v; send(p); }, partOf = function(name) { return 'rf-' + rid + '-' + name; };
+    var asks = mode === 'stats' && typeof isClient === 'function' && isClient() && !!(sysI && sysI.listRules && sysI.listRules.statsAsk === true);   // 1.5.5: players ask, the GM approves
+    var send = function(p) { if (asks && typeof askStatsOf === 'function') { askStatsOf(c, f, rid, p, ovS, heldL); return; } commitItem(c, f, { op: 'ov', rowId: rid, ov: p }); }, one = function(k, v) { var p = {}; p[k] = v; send(p); }, partOf = function(name) { return 'rf-' + rid + '-' + name; };
     var keepTyped = function(ctl, part) { if (typeof typed[part] === 'string') ctl.value = typed[part]; ctl.addEventListener('input', function() { if (stRef && stRef.typed) stRef.typed[part] = ctl.value; }); };
     var took = function(part) { if (stRef && stRef.typed) delete stRef.typed[part]; };
     var hold = function(part, v) { if (!_rfClearing) return false; if (stRef && stRef.typed) stRef.typed[part] = v; return true; };   // the view is being cleared: keep it typed, commit nothing
@@ -2692,15 +2694,16 @@ function rowForm(entry, rd, c, f, spec, sysI, mode) {
         s.addEventListener('change', function() { one(k, s.value || null); });
         add(cap, s, k, ov[k] !== undefined, function() { one(k, null); });
     };
-    var ownS = Object.keys(ovS).filter(function(k) { return heldL.indexOf(k.toLowerCase()) < 0; });
+    var ownS = Object.keys(ovS).filter(function(k) { return asks || heldL.indexOf(k.toLowerCase()) < 0; });   // 1.5.5: under the ask rule a stat the GM set may be asked back too
     if (mode === 'gm' ? Object.keys(ov).length > 0 : ownS.length > 0) {
         var fb = el('button', 'tool ghost sys-btn sheet-rf-follow', lost ? 'Back to its copy' : 'Follow the library'); fb.type = 'button'; fb.dataset.fid = f.id; fb.dataset.part = 'ed-' + rid;
-        fb.title = mode === 'gm' ? (lost ? 'Every value of this copy back to the copy kept when the item left the library' : 'Every value of this copy back to the library’s') : 'Your own stats back to the library’s (a stat the GM set stays)';
+        fb.title = mode === 'gm' ? (lost ? 'Every value of this copy back to the copy kept when the item left the library' : 'Every value of this copy back to the library’s') : asks ? 'Ask the GM for every stat of this copy back to the library’s' : 'Your own stats back to the library’s (a stat the GM set stays)';
         fb.addEventListener('click', function() { send(mode === 'gm' ? null : { stats: null }); }); head.appendChild(fb);
     }
     var dn = el('button', 'tool ghost sys-btn sheet-rf-done', 'Done'); dn.type = 'button'; dn.dataset.fid = f.id; dn.dataset.part = 'ed-' + rid;
     dn.addEventListener('click', function() { _rowForm = null; renderViews(c.id); }); head.appendChild(dn);
     form.appendChild(head); form.appendChild(grid);
+    if (asks) form.insertBefore(el('div', 'sheet-rf-ask', 'Each change goes to the GM. It takes effect once they apply it.'), grid);
     if (mode === 'gm') {
         text('name', 'Name', LIMITS.name, base.name || '');
         text('icon', 'Icon', 48, base.icon || 'An emoji, or icon:name');
@@ -2714,7 +2717,7 @@ function rowForm(entry, rd, c, f, spec, sysI, mode) {
     }
     (spec && Array.isArray(spec.stats) ? spec.stats : []).forEach(function(s) {
         if (!s || typeof s.key !== 'string' || !SK_RE.test(s.key)) return;
-        var k = s.key, lk = k.toLowerCase(), mine, name = 's-' + k, part = partOf(name), bv = rowStat(spec, base, k), lock = mode === 'stats' && heldL.indexOf(lk) >= 0, ctl;
+        var k = s.key, lk = k.toLowerCase(), mine, name = 's-' + k, part = partOf(name), bv = rowStat(spec, base, k), gmSet = mode === 'stats' && heldL.indexOf(lk) >= 0, lock = gmSet && !asks, ctl;   // 1.5.5: under the ask rule a stat the GM set is asked for again, and the GM sees that they set it
         Object.keys(ovS).forEach(function(x) { if (mine === undefined && x.toLowerCase() === lk && (typeof ovS[x] === 'number' || (s.kind === 'pick' && typeof ovS[x] === 'string'))) mine = ovS[x]; });
         var put = function(n) { var p = {}; p[k] = n; send({ stats: p }); }, shown = typeof mine === 'number' ? String(mine) : '';
         if (s.kind === 'pick') {   // F5a2: a choice — its labels
@@ -2731,7 +2734,7 @@ function rowForm(entry, rd, c, f, spec, sysI, mode) {
             ctl.addEventListener('change', function() { if (hold(part, ctl.value)) return; took(part); var sv = String(ctl.value).trim(), n = Number(sv); if (ctl.validity && ctl.validity.badInput) { ctl.value = shown; return; } if (sv === '') { put(null); return; } if (!isFinite(n) || Math.abs(n) > LIMITS.statAbs) { ctl.value = shown; return; } put(n); });
         }
         if (lock) ctl.disabled = true;
-        add(s.label || k, ctl, name, mine !== undefined && !lock, function() { put(null); }, lock ? 'Set by the GM' : lib + statText(s, bv));
+        add(s.label || k, ctl, name, mine !== undefined && !lock, function() { put(null); }, lock ? 'Set by the GM' : gmSet ? 'Set by the GM. A change goes to them as an ask.' : lib + statText(s, bv));
     });
     if (mode === 'gm') {
         var bi = el('input', 'field sheet-rf-num'), bShown = ov.area && typeof ov.area === 'object' && ov.area.ft ? String(ov.area.ft) : ''; bi.type = 'number'; bi.min = '0'; bi.max = String(LIMITS.maxBlastFt); bi.step = '1'; bi.value = bShown; bi.placeholder = base.area && base.area.ft ? String(base.area.ft) : 'none'; keepTyped(bi, partOf('ft'));
@@ -3729,6 +3732,18 @@ function commitEffect(c, f, q) {
     if (res.clamp) Object.keys(res.clamp).forEach(function(fid) { c.values[fid] = res.clamp[fid]; d[fid] = res.clamp[fid]; });
     afterCharChange(c, false, d);
 }
+// 1.5.5 (the owner at the table, 2026-10-18: "lets allow it, but i approve the change after review"): under the list rule statsAsk a player's
+// change of their own copy's stats is an ask (net.charAsk), which waits for the GM's Review; the sheet stays as it is meanwhile and is drawn
+// again, so the box shows what the character holds. Follow the library asks for each stat of their own (never one the GM set) back to the entry's
+function askStatsOf(c, f, rid, p, ovS, heldL) {
+    var st = null;
+    if (p && typeof p === 'object' && p.stats === null) { st = {}; Object.keys(ovS || {}).forEach(function(k) { st[k] = null; }); }   // every stat of their copy, one the GM set too: the GM sees which
+    else if (p && typeof p === 'object' && p.stats && typeof p.stats === 'object') st = p.stats;
+    if (!st || !Object.keys(st).length) return;
+    var n = net(); if (!n || !n.charAsk) { toast('Your GM\u2019s Waypoint cannot take this yet.'); return; }
+    var r = n.charAsk(c.id, f.id, rid, st, function(a) { if (a && a.error) toast(a.error); else toast(a && a.back ? 'Your ask is taken back. The row stays as it is.' : 'Sent to the GM. It changes once they apply it.'); renderViews(c.id); });
+    if (r && r.error) toast(r.error);
+}
 function commitItem(c, f, q) {   // Stage 6 F4a: a row op q = { op: add|remove|setQty|keep|undo, defId?, rowId, qty? }; F4b set (facts: lvl, on, note; F4c1 paid); F4c2 ov (a copy's own values); F4c3 custom (def: a custom row's patch)
     var camp = getActiveCampaign(), sys = systemOf(camp); if (!camp || !sys) return;
     var before = q.rowId ? rowQty(c, f, q.rowId) : 0;
@@ -4332,12 +4347,20 @@ function importJson() {   // the owner sends their sheet file to the GM (the GM 
 var _review = null;   // { upId }
 function closeReview() { var m = ui('uploadModal'); if (m) m.style.display = 'none'; _review = null; renderReviewChip(); }
 // [sinkcheck:uploadreview-start]
-function openReview(charId, mine) {   // mine: the GM's own file, read on this machine by a reader's ui.gmImport: never queued, nobody told
-    var camp = getActiveCampaign(), up = mine && mine.own === true && mine.charId === charId ? mine : uploadsOf(camp, charId)[0], m = ui('uploadModal'); if (!up || !m || isClient()) return;
+function openReview(charId, mine, pick) {   // mine: the GM's own file, read on this machine by a reader's ui.gmImport: never queued, nobody told. pick (1.5.5): the id of the entry to open, else the first that waits
+    var camp = getActiveCampaign(), ups = uploadsOf(camp, charId), up = mine && mine.own === true && mine.charId === charId ? mine : (typeof pick === 'string' && ups.filter(function(u) { return u.id === pick; })[0]) || ups[0], m = ui('uploadModal'); if (!up || !m || isClient()) return;
     var c = charById(up.charId, camp); if (!c) return;
+    var sigOf = function(u) { return u ? (u.at || '') + '|' + JSON.stringify(u.changes) : ''; }, seen = up.own === true ? '' : sigOf(up);   // 1.5.5: what the GM is shown, to be found again at Apply and Reject
+    var SCq = window.wpSystemCore, sysQ = systemOf(camp);
+    if (up.ask === true && SCq && SCq.statAsk && sysQ && F()) up = Object.assign({}, up, { changes: up.changes.map(function(ch) {   // 1.5.5: an ask's lines judged again as they stand now: a stat the GM set since comes unticked and marked, one already so unticked
+        if (!ch || ch.kind !== 'stat' || !ch.ov || !ch.ov.stats) return ch;
+        var a = SCq.statAsk(sysQ, c, ch.f, ch.row, ch.ov.stats, F(), { shown: function() { return true; } });
+        if (a && a.ok && a.change) return Object.assign({}, ch, { from: a.change.from, to: a.change.to, held: a.change.held, accept: a.change.accept });
+        return a && a.reason === 'same' ? Object.assign({}, ch, { accept: false, now: true }) : ch;
+    }) });
     _review = { upId: up.id }; var ticks = {};
     up.changes.forEach(function(ch) { ticks[ch.id] = ch.accept === true; });
-    var head = ui('uploadHead'), list = ui('uploadList'); head.textContent = (up.own === true ? 'Your file for ' : up.name + '\u2019s sheet update for ') + c.name + ' \u2014 ' + up.changes.length + (up.changes.length === 1 ? ' change' : ' changes');
+    var head = ui('uploadHead'), list = ui('uploadList'); head.textContent = (up.own === true ? 'Your file for ' : up.ask === true ? up.name + ' asks to change ' : up.name + '\u2019s sheet update for ') + c.name + ' \u2014 ' + up.changes.length + (up.changes.length === 1 ? ' change' : ' changes');
     list.textContent = '';
     var KIND = { value: 'Value', add: 'New row', fact: 'Row', stat: 'Its own values', def: 'Its numbers', remove: 'Not in the file' };
     up.changes.forEach(function(ch) {
@@ -4350,14 +4373,20 @@ function openReview(charId, mine) {   // mine: the GM's own file, read on this m
         row.appendChild(el('span', 'upl-arrow', '\u2192'));
         row.appendChild(el('span', 'upl-to', ch.to || ''));
         if (ch.held) row.appendChild(el('span', 'upl-note', 'you set this'));
+        if (ch.now) row.appendChild(el('span', 'upl-note', 'already so'));
         list.appendChild(row);
     });
     var apply = ui('uploadApply'), rej = ui('uploadReject'), SCr = window.wpSystemCore, rdA = up.reader && SCr && SCr.readerById ? SCr.readerById(up.reader) : null, noRd = !!up.reader && !rdA;   // the reader that read the file applies it (its own row op)
     if (noRd) head.textContent += '. It was read by a sheet reader this Waypoint does not have, so it cannot be applied here.';
     var count = function() { var n = Object.keys(ticks).filter(function(k) { return ticks[k]; }).length; apply.textContent = 'Apply ' + n + (n === 1 ? ' change' : ' changes'); apply.disabled = !n || noRd; };
     count();
+    var stale = function(cmp) {   // 1.5.5: an entry the player changed while the Review was open (an ask that grew, was replaced or taken back) is applied and removed by nobody: it is shown again as it stands
+        if (up.own === true) return false;
+        var live = uploadsOf(cmp, up.charId).filter(function(u) { return u.id === up.id; })[0]; if (live && sigOf(live) === seen) return false;
+        toast('What waits for your review changed while it was open. Here it is as it stands now.'); closeReview(); if (live) openReview(up.charId, null, up.id); return true;
+    };
     apply.onclick = function() {
-        var cmp = getActiveCampaign(), sys = systemOf(cmp), ch2 = charById(up.charId, cmp); if (!sys || !ch2 || !F() || noRd) return;
+        var cmp = getActiveCampaign(), sys = systemOf(cmp), ch2 = charById(up.charId, cmp); if (!sys || !ch2 || !F() || noRd || stale(cmp)) return;
         var acc = {}; Object.keys(ticks).forEach(function(k) { if (ticks[k]) acc[k] = true; });
         var r = applyProposal(sys, ch2, up, acc, F(), rdA ? { rowOp: rdA.rowOp } : {});
         ch2.values = r.values; lastChange = null;   // the values are replaced whole: no single field to Revert
@@ -4368,18 +4397,49 @@ function openReview(charId, mine) {   // mine: the GM's own file, read on this m
         closeReview();
     };
     rej.onclick = function() {
-        var cmp = getActiveCampaign(); cmp.uploads = (Array.isArray(cmp.uploads) ? cmp.uploads : []).filter(function(u) { return !u || u.id !== up.id; });
+        var cmp = getActiveCampaign(); if (stale(cmp)) return; cmp.uploads = (Array.isArray(cmp.uploads) ? cmp.uploads : []).filter(function(u) { return !u || u.id !== up.id; });
         save(true); var n2 = net(); if (up.own !== true && n2 && n2.uploadDone) n2.uploadDone(up.charId, 0, up.changes.length);
         toast('Kept ' + c.name + ' as it was.'); closeReview(); renderViews(c.id);
     };
     m.style.display = 'flex';
 }
 // [sinkcheck:uploadreview-end]
+// [systemcheck:approvenote-start]
+// 1.5.5 (the owner at the table, 2026-10-18: "there should also be a pop up notification when i need to approve something which takes me to what I
+// need when clicked, im usually unaware players have uploaded sheets until they tell me"): a card on the GM's screen for each character with
+// something waiting for them, which stays until it is pressed or put away. kind 'review' (a sheet update or an ask): Review opens the character's
+// sheet and its Review; 'sheet' (a character finished in the making or unlocked): its sheet, whose own bar is the review. One card a character,
+// with the newest words, at most eight, the oldest going first; a card whose review is over (answered from the top row's Review button, Keep it
+// pressed) goes too. Text nodes alone, since a name comes from the table. Only on the machine that owns the campaign: never on a player's app or
+// in the stream window
+var _appr = {};
+function apprBox() { var b = document.getElementById('approveCards'); if (!b) { b = el('div', 'appr-cards'); b.id = 'approveCards'; b.setAttribute('role', 'status'); b.setAttribute('aria-live', 'polite'); document.body.appendChild(b); } return b; }
+function apprDrop(cid) { var a = Object.prototype.hasOwnProperty.call(_appr, cid) ? _appr[cid] : null; if (!a) return; delete _appr[cid]; if (a.card && a.card.parentNode) a.card.parentNode.removeChild(a.card); }
+function apprOpen(charId, kind, upId) { var camp = getActiveCampaign(); if (!camp || !charById(charId, camp)) return; openSheet(charId); if (kind === 'review' && uploadsOf(camp, charId).length) openReview(charId, null, upId); }   // upId: the entry the card tells of, else the first that waits
+function approveNote(charId, text, kind, upId) {   // upId (a review): the entry the card tells of
+    if (typeof document === 'undefined' || !document.body || isClient() || !canWrite() || typeof charId !== 'string' || !charById(charId)) return null;
+    var k = kind === 'sheet' ? 'sheet' : 'review', t = String(text || '').replace(/\s+/g, ' ').trim().slice(0, 300) || 'A player asks for your review.';
+    apprDrop(charId);
+    var box = apprBox(), card = el('div', 'appr-card'), row = el('div', 'appr-row');
+    card.appendChild(el('div', 'appr-text', t));
+    var go = el('button', 'tool appr-go', 'Review'); go.type = 'button'; go.title = k === 'sheet' ? 'Open its sheet' : 'Open its sheet and what waits for your review';
+    var x = el('button', 'tool ghost appr-x', '\u00d7'); x.type = 'button'; x.title = 'Put this away. The Review button in the top row stays while anything waits'; x.setAttribute('aria-label', 'Put away');
+    var upK = typeof upId === 'string' ? upId : null;
+    go.addEventListener('click', function() { var cmp = getActiveCampaign(); if (k === 'sheet' || !cmp || uploadsOf(cmp, charId).length <= 1) apprDrop(charId); apprOpen(charId, k, upK); });   // a card stays while another entry waits for that character
+    x.addEventListener('click', function() { apprDrop(charId); });
+    row.appendChild(go); row.appendChild(x); card.appendChild(row);
+    box.appendChild(card); _appr[charId] = { card: card, kind: k };
+    var ids = Object.keys(_appr); while (ids.length > 8) apprDrop(ids.shift());
+    return card;
+}
+function apprSync() { var camp = getActiveCampaign(); Object.keys(_appr).forEach(function(cid) { var a = _appr[cid], c = camp ? charById(cid, camp) : null; if (!c || isClient() || (a.kind === 'review' ? !uploadsOf(camp, cid).length : c.review !== 1)) apprDrop(cid); }); }
+// [systemcheck:approvenote-end]
 // [systemcheck:reviewchip-start]
 // The header's Review button: there for as long as a player's sheet upload waits for the GM, whatever is open (the toast that tells of an
 // upload fades). Its number is the uploads waiting; a press opens the oldest one's sheet and its Review. Never on a player's app.
 function reviewWaiting() { var camp = getActiveCampaign(); return camp && canWrite() && !isClient() && featureOn() ? uploadsOf(camp, null).filter(function(u) { return !!charById(u.charId, camp); }) : []; }
 function renderReviewChip() {
+    if (typeof apprSync === 'function') apprSync();   // 1.5.5: a card whose review is over goes
     var chip = ui('reviewChip'); if (!chip) return;
     var ups = reviewWaiting(), camp = getActiveCampaign();
     chip.style.display = ups.length ? '' : 'none';
@@ -5197,7 +5257,7 @@ function itemStatsBox(it, defs) {
 function renderLists() {
     var box = ui('sysListRows'); if (!box) return; box.textContent = '';
     var lists = (draft.fields || []).filter(function(f) { return f.kind === 'item-list'; }), rules = ui('sysListRules');
-    if (rules) { rules.textContent = ''; if (lists.length) rules.appendChild(labeledSelect('sys-listrules-stats', 'Item stats on players’ sheets', [['', 'GM only'], ['owner', 'Players may change them']], draft.listRules && draft.listRules.ownerStats === true ? 'owner' : '', 'Players may change the stats of their own copies with ✎ (a dot marks each; Follow the library takes them back; a stat you set on a copy holds). Turning it off keeps what they set')); if (lists.length) rules.appendChild(labeledSelect('sys-listrules-upload', 'A player’s sheet upload', [['', 'Everything waits for you'], ['facts', 'Their row facts apply at once']], draft.listRules && draft.listRules.uploadFacts === true ? 'facts' : '', 'When a player sends their sheet file (Import JSON on their sheet): everything waits for your review, or the levels, switches and quantities of rows they already carry apply at once (the rest still waits)')); }   // Stage 6 F4c2: the Rules box (Setting A), per system
+    if (rules) { rules.textContent = ''; if (lists.length) rules.appendChild(labeledSelect('sys-listrules-stats', 'Item stats on players’ sheets', [['', 'GM only'], ['owner', 'Players may change them'], ['ask', 'Players ask, the GM approves']], draft.listRules && draft.listRules.statsAsk === true ? 'ask' : draft.listRules && draft.listRules.ownerStats === true ? 'owner' : '', 'Players may change the stats of their own copies with ✎ (a dot marks each; Follow the library takes them back; a stat you set on a copy holds). Turning it off keeps what they set. With Players ask, each change waits for you in the Review, of a library entry they may see too')); if (lists.length) rules.appendChild(labeledSelect('sys-listrules-upload', 'A player’s sheet upload', [['', 'Everything waits for you'], ['facts', 'Their row facts apply at once']], draft.listRules && draft.listRules.uploadFacts === true ? 'facts' : '', 'When a player sends their sheet file (Import JSON on their sheet): everything waits for your review, or the levels, switches and quantities of rows they already carry apply at once (the rest still waits)')); }   // Stage 6 F4c2: the Rules box (Setting A), per system
     if (!lists.length) { box.appendChild(el('div', 'sys-empty', 'No item lists yet. Add an Item list field in Fields (Skills, Weapons, Gear\u2026), then shape it here.')); return; }
     var cats = [], seen = Object.create(null);
     (draft.items || []).forEach(function(it) { var cc = String((it && it.category) || '').trim(); if (cc && !seen[cc.toLowerCase()]) { seen[cc.toLowerCase()] = 1; cats.push(cc); } });
@@ -6465,7 +6525,7 @@ function onChange(e) {
     if (c.indexOf('sys-combat-height-rule') >= 0) { var hrD = draft.combat.height && typeof draft.combat.height === 'object' && !Array.isArray(draft.combat.height) ? draft.combat.height : null; if (t.value === 'clears') draft.combat.height = Object.assign({}, hrD || {}, { rule: 'clears' }); else if (hrD) { delete hrD.rule; if (!Object.keys(hrD).length) delete draft.combat.height; } markDirty(); patchErrors(); return; }   // item 19 H1
     if (c.indexOf('sys-combat-cover-style') >= 0) { if (!draft.combat.cover) draft.combat.cover = { on: false, style: 'graded' }; draft.combat.cover.style = t.value === 'binary' ? 'binary' : 'graded'; markDirty(); patchErrors(); renderCombat(); return; }
     if (c.indexOf('sys-combat-cover-area') >= 0) { var cvA = draft.combat.cover || (draft.combat.cover = { on: false, style: 'graded' }), gA = t.dataset.grade; if (['half', 'threeq', 'cover', 'total'].indexOf(gA) < 0) return; var arA = cvA.area && typeof cvA.area === 'object' ? cvA.area : {}; if (t.value === 'half' || t.value === 'none') arA[gA] = t.value; else delete arA[gA]; if (Object.keys(arA).length) cvA.area = arA; else delete cvA.area; markDirty(); patchErrors(); return; }   // cover follow-ups
-    if (c.indexOf('sys-listrules-stats') >= 0 || c.indexOf('sys-listrules-upload') >= 0) { var lr = Object.assign({}, draft.listRules || {}); if (c.indexOf('sys-listrules-stats') >= 0) { if (t.value === 'owner') lr.ownerStats = true; else delete lr.ownerStats; } else { if (t.value === 'facts') lr.uploadFacts = true; else delete lr.uploadFacts; } if (Object.keys(lr).length) draft.listRules = lr; else delete draft.listRules; markDirty(); patchErrors(); return; }   // Stage 6: settings A and B   // Stage 6 F4c2: Setting A
+    if (c.indexOf('sys-listrules-stats') >= 0 || c.indexOf('sys-listrules-upload') >= 0) { var lr = Object.assign({}, draft.listRules || {}); if (c.indexOf('sys-listrules-stats') >= 0) { delete lr.ownerStats; delete lr.statsAsk; if (t.value === 'owner') lr.ownerStats = true; else if (t.value === 'ask') lr.statsAsk = true; } else { if (t.value === 'facts') lr.uploadFacts = true; else delete lr.uploadFacts; } if (Object.keys(lr).length) draft.listRules = lr; else delete draft.listRules; markDirty(); patchErrors(); return; }   // Stage 6: settings A and B   // Stage 6 F4c2: Setting A
     var fxc = fxOfRow(t);   // 5h: a library effect's selects
     if (fxc) {
         if (c.indexOf('sys-fx-tone') >= 0) { fxc.tone = t.value; markDirty(); patchErrors(); return; }
@@ -6819,7 +6879,7 @@ setInterval(function() { var c = getActiveCampaign(), id = c ? c.id : null; if (
 window.wpSheetsSync = sync;
 setTimeout(sync, 0);
 window.wpSheets = { bellNote: bellNote, runTimeRules: runTimeRules, startMaking: startMaking, inviteMaking: inviteMaking, applyTokenFace: applyTokenFace, open: open, close: close, playerSystem: playerSystem, readablePages: readablePages, openPage: openPage, sheetRefsChanged: sheetRefsChanged, systemOf: systemOf, save: saveDraft, startFrom: startFrom, sync: sync, roundHook: roundHook, turnHook: turnHook, runDue: runDue, draft: function() { return draft; },
-    gmFinder: gmFinder, uploadsChanged: uploadsChanged, openReview: openReview, readersChanged: readersChanged, emojiSet: EMOJI_SET, applyCharFace: applyCharFace, applyCharFrame: applyCharFrame, applyTokenFrame: applyTokenFrame,
+    gmFinder: gmFinder, uploadsChanged: uploadsChanged, approveNote: approveNote, openReview: openReview, readersChanged: readersChanged, emojiSet: EMOJI_SET, applyCharFace: applyCharFace, applyCharFrame: applyCharFrame, applyTokenFrame: applyTokenFrame,
     charsOf: charsOf, charList: charList, charById: charById, newCharacter: newCharacter, addCharacter: addCharacter, askDeleteSheet: askDeleteSheet, deleteCharacter: deleteCharacter, linkToken: linkToken, newFromToken: newFromToken, syncOwners: syncOwners, giveCharacter: giveCharacter, unbindName: unbindName, ownerFromToken: ownerFromToken,
     charSelectHtml: charSelectHtml, wireCharSelect: wireCharSelect, hoverLinesForToken: hoverLinesForToken, hoverLinesForTokenId: hoverLinesForTokenId, tokenFx: tokenFx, tokenFxModel: tokenFxModel, tokenFxCharOp: tokenFxCharOp,
     playerFinder: playerFinder, charFromJson: charFromJson, startFromFile: startFromFile,
