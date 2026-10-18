@@ -14,7 +14,7 @@
      the GM has it off; the choice is kept per table in one capped key, wp_vtt_local. Nothing from a
      table ever writes wp_vtt_global or any of the player's own campaigns.
    on(f) is the only effective-value gate: whiteboard.js stanceOn, the inspector, the blast tool, the
-   ShadowBase bridge and the minimap all funnel through it. The campaign branch never allocates (it runs
+   sheet readers and the minimap all funnel through it. The campaign branch never allocates (it runs
    per token per render). Loaded before main.js; reads window.wpNet only at call time. */
 import { state } from './state.js';
 

@@ -119,7 +119,7 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         && g2e === 'M0 0H100V100H0Z' && g2h === F.guidePath('hexagon', 60, 52) && g3e === 'M0 0H100V100H0Z' && g3b === 'M0 0H100V100H0Z' && g1.els.frameDim.attrs.d === 'M0 0H100V100H0Z' + gHex, j([gHex, gRect, gCirc, g2e, g2h]));
     const lf1 = mkFramer({ bad: true }); let lfC = 0; const lr1 = lf1.api.open(FILE, { onCancel: () => { lfC++; } }, () => { lfC += 10; });
     const lf2 = mkFramer({ err: true }); let lfE = 0; lf2.api.open('/saves/images/x.png', { onCancel: () => { lfE++; } }, () => { lfE += 10; });
-    check('the creator (run for real): a picture it cannot read ends the framing — a toast, onCancel once, never OK, the file it read freed — so a caller waiting on it (the ShadowBase import) goes on',
+    check('the creator (run for real): a picture it cannot read ends the framing — a toast, onCancel once, never OK, the file it read freed — so a caller waiting on it (a token import) goes on',
         lr1 === true && lfC === 1 && lf1.log.revoked === 1 && !lf1.api.isOpen() && lf1.log.toasts.length === 1 && lfE === 1 && !lf2.api.isOpen() && lf2.log.toasts.length === 1);
     const lf3 = mkFramer({ err: true }); let lfErr = 0, lfCan = 0; lf3.api.open(FILE, { onError: () => { lfErr++; }, onCancel: () => { lfCan++; } }, () => {});
     check('the creator (run for real): a picture it cannot read ends as onError when the caller gives one (the GM\'s Frame picture… then frames the picture the token wears), else as onCancel',

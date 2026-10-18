@@ -962,5 +962,15 @@ const tabsSrc = dpSlice('tabs'), tabdoSrc = dpSlice('tabdo');
         missing.length === 0 && runs.every(r => suites.includes(r)) && !runs.includes('fuzzcheck.js') && runs.length === suites.length - 1 && new Set(runs).size === runs.length, J([missing, runs.filter(r => !suites.includes(r))]));
 }
 
+/* ---------- what git keeps out of the repository ---------- */
+{
+    // docs/ holds local research and the owner's own campaign build in folders of their own, and private/ an outside sheet reader of the owner's own.
+    // Neither is ever committed, on any clone: a line of .git/info/exclude is one machine's alone. Both rules are anchored to the repository's root,
+    // so that a folder of either name anywhere else in the tree is not ignored by them, and the README's picture in docs/ stays tracked
+    const gi = fs.readFileSync(path.join(root, '.gitignore'), 'utf8').replace(/\r\n/g, '\n').split('\n').map(l => l.trim());
+    check('git keeps the owner\'s own material out on every clone: .gitignore ignores every folder under docs/ and the private/ folder, each anchored to the repository\'s root, beside docs\' own Markdown, and no rule ignores every folder named private',
+        gi.includes('/docs/*/') && gi.includes('/private/') && gi.includes('docs/*.md') && !gi.includes('private/') && !gi.includes('private') && !gi.includes('docs/') && !gi.includes('/docs/'), J(gi.filter(l => /docs|private/.test(l))));
+}
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed.');
 if (fail) process.exit(1);

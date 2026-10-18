@@ -2027,7 +2027,7 @@ export {
 
 };
 
-// Modules without an import edge to io.js (net, sidebar, planner, inspector, shadowbase) reach the gate here
+// Modules without an import edge to io.js (net, sidebar, planner, inspector) reach the gate here
 window.wpCanPersistLocal = canPersistLocal;
 window.wpResetHistory = resetHistory;
 window.wpHistFlush = flushHistory;     // net.js: before a player's change lands in a map

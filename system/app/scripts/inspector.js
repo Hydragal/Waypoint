@@ -5,6 +5,8 @@ function toast(msg) { if(window.appToast) window.appToast(msg); }
 
 
 function render() { if(window.appRender) window.appRender(); }
+// An outside sheet reader with a part of its own in a token's Properties (systemcore registerReader: a module of the GM's, none ships with the app)
+function sheetReaderTok() { var S = window.wpSystemCore, rs = S && typeof S.readers === 'function' ? S.readers() : []; for (var i = 0; i < rs.length; i++) if (rs[i].ui && typeof rs[i].ui.tokenPanel === 'function') return rs[i]; return null; }
 
 
 
@@ -981,21 +983,7 @@ if(_el_addCatBtn) _el_addCatBtn.addEventListener('click', function() {
                     var npcTok = !!(w.charId && campNow && campNow.chars && Object.prototype.hasOwnProperty.call(campNow.chars, w.charId) && campNow.chars[w.charId] && campNow.chars[w.charId].npc);   // a player never owns an NPC's token
                     html += '<div class="field"><label for="wbOwner">Player Owner (can move this token)</label><select id="wbOwner"' + (npcTok ? ' disabled title="An NPC\u2019s token \u2014 unlink it from the NPC first"' : '') + '>'+ownerOpts+'</select></div>';
                     if (window.wpSheets) html += window.wpSheets.charSelectHtml(w);   // character sheets (1.5.0): which campaign character this token stands for
-                    // ShadowBase sheet: attach the site's character JSON and this token
-                    // round-trips it — Export re-emits it with the token's art as portrait
-                    var sheetLabel = w.sheet
-                        ? '&#128196; ' + esc(w.sheet.name || 'sheet') + (w.sheet.points && num(w.sheet.points.total, 0) ? ' &middot; ' + num(w.sheet.points.total, 0) + ' pts' : '')
-                        : 'No sheet attached &mdash; Export still makes a starter file.';
-                    html += '<div class="field"><label>ShadowBase Sheet (shadow-base.com)</label>'
-                        + '<div class="muted" style="margin-bottom:5px;">' + sheetLabel + '</div>'
-                        + '<div style="display:flex; gap:5px;">'
-                        + (w.sheet ? '<button class="tool ghost" id="wbSheetView" style="flex:1;" title="Read the attached sheet — stats, traits, skills, inventory">View</button>' : '')
-                        + '<button class="tool ghost" id="wbSheetAttach" style="flex:1;" title="Attach a ShadowBase character JSON to this token">' + (w.sheet ? 'Replace' : 'Attach JSON') + '</button>'
-                        + '<button class="tool ghost" id="wbSheetExport" style="flex:1;" title="Download a site-ready character JSON with this token\'s art as the portrait">Export JSON</button>'
-                        + (w.sheet ? '<button class="tool ghost danger" id="wbSheetDetach" style="padding:4px 10px;" title="Detach the sheet">&times;</button>' : '')
-                        + '</div>'
-                        + (w.sheet && window.wpSheets && window.wpSheets.systemOf(getActiveCampaign()) ? '<div style="margin-top:5px;"><button class="tool ghost" id="wbSheetToChar" style="width:100%;" title="Copy the sheet\'s attributes, resources and skills once into a campaign character, by the system\'s matching keys (ST or STR, DX or DEX, HT or CON, IQ or INT, HP, FP, Will, Per, Dodge, Parry, skills by name)">' + (w.charId ? 'Copy the sheet\'s values into the character' : 'Character from this sheet') + '</button></div>' : '')
-                        + '</div>';
+                    var rdT = sheetReaderTok(); if (rdT) html += '<div class="field" id="wbReaderBox"></div>';   // an outside sheet reader's own part of a token's Properties (2026-10-18): its page code fills it below
                 }
             }
               
@@ -1226,43 +1214,8 @@ if(_el_addCatBtn) _el_addCatBtn.addEventListener('click', function() {
                 if (wbElev) wbElev.addEventListener('change', function() { var St = window.wpStance; St.setElevation(w, St.ydIn ? St.ydIn(this.value) : this.value); if (St.boxHeight) St.boxHeight(this, St.tokenElevation(w)); else this.value = St.tokenElevation(w); save(); renderWhiteboard(); });   // item 19 H1: typed in the viewer's unit, kept in yards; the box shows it as kept, and steps from there
                 var wbPosture = document.getElementById('wbPosture');
                 if (wbPosture) wbPosture.addEventListener('change', function() { window.wpStance.setPosture(w, this.value); save(); renderWhiteboard(); });
-                var wbSheetView = document.getElementById('wbSheetView');
-                if (wbSheetView) wbSheetView.addEventListener('click', function() {
-                    import('./shadowbase.js').then(function(m) { m.showSheet(w); });
-                });
-                var wbSheetAttach = document.getElementById('wbSheetAttach');
-                if (wbSheetAttach) wbSheetAttach.addEventListener('click', function() {
-                    var fi = document.getElementById('sheetFileIn');
-                    if (!fi) return;
-                    fi.onchange = function() {
-                        var f = this.files[0];
-                        this.value = '';
-                        import('./shadowbase.js').then(function(m) {
-                            m.attachSheet(w, f, function() { save(); renderInspector(); });
-                        });
-                    };
-                    fi.click();
-                });
-                var wbSheetExport = document.getElementById('wbSheetExport');
-                if (wbSheetExport) wbSheetExport.addEventListener('click', function() {
-                    var campX = getActiveCampaign();
-                    import('./shadowbase.js').then(function(m) {
-                        m.exportCharacterJson(w, campX ? campX.name : '');
-                    });
-                });
-                var wbSheetToChar = document.getElementById('wbSheetToChar');
-                if (wbSheetToChar) wbSheetToChar.addEventListener('click', function() {   // character sheets (1.5.0): copy once
-                    if (!window.wpSheets || !window.wpSheets.fromShadowBase) return;
-                    var rS = window.wpSheets.fromShadowBase(w);
-                    if (rS && rS.error) { import('./io.js').then(function(m) { m.toast(rS.error); }); return; }
-                    renderInspector();
-                });
-                var wbSheetDetach = document.getElementById('wbSheetDetach');
-                if (wbSheetDetach) wbSheetDetach.addEventListener('click', function() {
-                    delete w.sheet;
-                    save(); renderInspector();
-                    import('./io.js').then(function(m) { m.toast('Sheet detached.'); });
-                });
+                var wbReaderBox = document.getElementById('wbReaderBox'), rdW = wbReaderBox ? sheetReaderTok() : null;
+                if (rdW) { try { rdW.ui.tokenPanel(w, wbReaderBox, renderInspector); } catch (e) { console.error(e); } }   // the reader's own controls, made by its own code into the box
                 var wbOwner = document.getElementById('wbOwner');
                 if(wbOwner) wbOwner.addEventListener('change', function() {
                     var campO = getActiveCampaign(), linkedO = !!(window.wpSheets && w.charId && campO && campO.chars && Object.prototype.hasOwnProperty.call(campO.chars, w.charId));

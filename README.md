@@ -16,7 +16,7 @@ A portable desktop companion for tabletop RPG campaigns: linked data maps for th
 
 **Multiplayer.** The GM hosts a campaign over the internet with a ten-character room code. Players join from their own copy of Waypoint or a browser, land on the map the GM chooses, see only what the GM shares (GM notes and hidden items never leave the host), move the tokens they own, draw on the map, chat, and receive images on demand. The GM can pause the table, summon everyone or a single player, approve or ban players, and end the session for all. A dropped connection reconnects on its own; a crashed host can resume with the same code. Connections are direct where the networks allow it; for players behind carrier-grade NAT the GM configures a TURN relay of their own under **Settings ▸ Relay server** (the app ships with none). Step-by-step instructions are in the app under Help ▸ Multiplayer: Hosting ▸ *Setting up a relay server*, and the Relay server box links straight to them. A **Stream window** (Settings) shows only the play map from the party's standpoint — what the players' tokens see together, never the GM's whole map — for screen-sharing to a spectator without the app.
 
-**Character sheets.** Tokens can carry a character JSON from the ShadowBase character-sheet site: attach one to a token, view it in the inspector, export it back with the token's art as the portrait, or import a sheet as a ready-made token.
+**Character sheets.** Every PC and NPC has a sheet built from the campaign's own system: fields, formulas, rolls and lists, laid out by the GM in the System editor. Players fill theirs in at the table, and a sheet can be downloaded as a character file, a readable page or a PDF.
 
 **Assets.** Images dropped on a map are stored under `saves/images/<map>/`. An in-app library lists everything the campaign holds. Portraits and tokens are shared between maps.
 
@@ -80,7 +80,7 @@ To cut a release:
    node tools/release.js
    ```
 
-   This zips `system/app` as `waypoint-app-<version>.zip` with a `.sha256`, writes `manifest.json`, compiles the installer with [Inno Setup 6](https://jrsoftware.org/isinfo.php), and collects everything under `dist/<version>/` with the release notes. The notes are the top section of `WHATSNEW.txt` rendered as markdown; `--notes-only` regenerates just that file.
+   This zips `system/app` as `waypoint-app-<version>.zip` with a `.sha256`, writes `manifest.json`, copies what an install needs and nothing else into `dist/<version>/stage`, compiles the installer there with [Inno Setup 6](https://jrsoftware.org/isinfo.php), and collects everything under `dist/<version>/` with the release notes. The notes are the top section of `WHATSNEW.txt` rendered as markdown; `--notes-only` regenerates just that file.
 3. Publish: create a GitHub Release tagged with the version and attach the four files, or run `node tools/release.js --publish` with a `GITHUB_TOKEN` that can write releases.
 
 The repository the app checks is the `UPDATE_REPO` constant at the top of `system/resources/app/main.js`.

@@ -24,6 +24,11 @@
    The installer is code-signed only when WAYPOINT_SIGNTOOL is set: a whole command line, in which
    {file} stands for the installer's path (the path is appended when the command has no {file}).
 
+   The installer is compiled from a clean copy, never from this folder. installer.iss packs every file that lies
+   beside it, and this folder holds more than an install needs. So the build copies what an install needs, by name,
+   into dist/<version>/stage (stageList, stageCopy), compiles the copy of installer.iss that lies there and takes
+   the installer out of it. installer.iss itself is not changed, so the core is not either.
+
    The runtime. The Electron under system/ is not in the repository and reaches an install only through
    the installer. Which version that is is recorded as "electron" in system/resources/app/package.json
    and published in the manifest. The build compares the record with system/version and says so in one
@@ -33,7 +38,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const https = require('https');
-const { execSync } = require('child_process');
+const { execSync, execFileSync } = require('child_process');
 
 const ROOT = path.join(__dirname, '..');
 const SYSTEM = path.join(ROOT, 'system');
@@ -84,6 +89,116 @@ if (!NOTES_ONLY) {
     SHELL_SINCE = rev.since;
 }
 
+// The repository's private/ folder (an outside sheet reader of the owner's own, git-ignored) never ships. A build is refused while the app
+// folder holds one, since the update zip packs the app folder whole; and while what the installer packs holds one that installer.iss does
+// not exclude. The installer packs the stage alone (below), so the build asks that half of the stage's list, never of this folder.
+// Null where a build may go on, else one plain line
+// [servercheck:privateguard-start]
+function privateGuard(rootHasPrivate, appHasPrivate, iss) {
+    if (appHasPrivate) return 'Not built: system/app/private exists. Nothing private may stand in the app folder, which every update packs whole.';
+    if (!rootHasPrivate) return null;
+    const m = /^Source: "\*";[^\n]*Excludes: "([^"]*)"/m.exec(typeof iss === 'string' ? iss : ''), ex = m ? m[1].split(',').map(s => s.trim().toLowerCase()) : [];
+    return ex.indexOf('private') >= 0 && ex.indexOf('private\\*') >= 0 ? null : 'Not built: the private folder stands beside this build and installer.iss does not exclude it (private,private\\*). The installer would pack it.';
+}
+// [servercheck:privateguard-end]
+
+// The installer is compiled from a clean copy of what an install needs, never from this folder. installer.iss packs every file that
+// lies beside it, less its own excludes, and this folder holds more than an install needs: the maintainer's own notes, working copies
+// of the repository, a private folder, and whatever else comes. So the build copies into dist/<version>/stage by name, never by
+// leaving things out: at the top only what an install needs (the launcher, the licence and the notes the installer shows, the README)
+// and installer.iss itself, and the folder system/ whole but for the per-install settings, the updater's own working folders and a
+// private folder. Then it compiles the copy of installer.iss that lies there, as it is. A link or a junction anywhere in what would be
+// copied refuses the build and is named, so nothing outside this folder is ever packed. So does a file of the list that is missing,
+// and a file or folder that Windows marks hidden: the installer leaves out what is hidden, and a copy of a hidden folder is not hidden,
+// so the stage would pack what this folder never did.
+// [servercheck:stage-start]
+const STAGE_FILES = ['Waypoint.exe', 'license.txt', 'README.md', 'WHATSNEW.txt', 'installer.iss'];
+const STAGE_SKIP = ['system/userdata', 'system/app.prev', 'system/app.new', 'system/app.bad', 'system/app/private'];
+// Which of rels (paths under root, written with forward slashes) Windows marks hidden. One PowerShell, named by its full path, reads
+// the marks of exactly the paths handed in and nothing inside a folder that is passed over. Each path goes over as plain ASCII and
+// comes back as its place in the list. [] where the system has no such mark; null where the marks could not be read.
+function hiddenOf(root, rels) {
+    if (process.platform !== 'win32' || !rels.length) return [];
+    const ps = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+    const script = "$ErrorActionPreference = 'Stop'; $i = 0; foreach ($b in [Console]::In.ReadToEnd().Split([char]10)) { if ($b.Trim()) { if ([IO.File]::GetAttributes([Text.Encoding]::Unicode.GetString([Convert]::FromBase64String($b.Trim()))) -band [IO.FileAttributes]::Hidden) { $i }; $i++ } }";
+    const input = rels.map(r => Buffer.from(path.join(root, r), 'utf16le').toString('base64')).join('\n') + '\n';
+    let out = ''; try { out = execFileSync(ps, ['-NoProfile', '-NonInteractive', '-Command', script], { input, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, timeout: 120000 }); } catch (e) { return null; }
+    const at = String(out).split(/\s+/).filter(Boolean);
+    return at.every(s => /^\d+$/.test(s) && +s < rels.length) ? at.map(s => rels[+s]) : null;
+}
+// What the stage will hold, read from root: { files, dirs }, each a path under root written with forward slashes (the folders from
+// system/ down, each before the ones inside it), or { why }, one plain line. A skipped folder is passed over by its name, in any
+// letter case, before anything in it is read. Nothing is written. Whether a path of the list is marked hidden is asked of
+// hidden(root, paths), and of hiddenOf where none is handed in.
+function stageList(root, hidden) {
+    const files = [], dirs = [], skip = STAGE_SKIP.map(s => s.toLowerCase());
+    const kindOf = rel => {
+        let st = null; try { st = fs.lstatSync(path.join(root, rel)); } catch (e) { return e && e.code === 'ENOENT' ? null : 'unreadable'; }
+        return st.isSymbolicLink() ? 'link' : st.isFile() ? 'file' : st.isDirectory() ? 'dir' : 'other';
+    };
+    const odd = (rel, k) => ({ why: 'Not built: ' + rel + (k === 'link' ? ' is a link or a junction. Nothing reached through one is packed: put the real file or folder there.'
+        : k === 'dir' ? ' is a folder where the installer needs a file.' : k === 'file' ? ' is a file where the installer needs a folder.'
+        : k === 'other' ? ' is not a plain file or folder.' : ' could not be read.') });
+    for (const f of STAGE_FILES) {
+        const k = kindOf(f);
+        if (k === null) return { why: 'Not built: ' + f + ' is missing, and the installer needs it.' };
+        if (k !== 'file') return odd(f, k);
+        files.push(f);
+    }
+    const sk = kindOf('system');
+    if (sk === null) return { why: 'Not built: the folder system is missing, and the installer needs it.' };
+    if (sk !== 'dir') return odd('system', sk);
+    for (let i = 0, todo = ['system']; i < todo.length; i++) {
+        const dir = todo[i];
+        let names = null; try { names = fs.readdirSync(path.join(root, dir)).sort(); } catch (e) { return odd(dir, 'unreadable'); }
+        dirs.push(dir);
+        for (const n of names) {
+            const rel = dir + '/' + n;
+            if (skip.indexOf(rel.toLowerCase()) >= 0) continue;
+            const k = kindOf(rel);
+            if (k === 'dir') todo.push(rel); else if (k === 'file') files.push(rel); else return odd(rel, k);
+        }
+    }
+    let h = null; try { h = (typeof hidden === 'function' ? hidden : hiddenOf)(root, files.concat(dirs)); } catch (e) { h = null; }
+    if (!Array.isArray(h) || !h.every(r => typeof r === 'string')) return { why: 'Not built: the hidden marks of what would be copied could not be read.' };
+    if (h.length) return { why: 'Not built: ' + h[0] + ' is marked hidden' + (h.length > 1 ? ', and ' + (h.length - 1) + ' more' : '') + '. The installer leaves out what is hidden, and a copy of a hidden folder is not hidden: take the mark off, or take it away.' };
+    return { files, dirs };
+}
+// Copies what stageList names into stage, made fresh: whatever was there before goes first. Every file byte for byte, keeping its own
+// times (the installer stores them). The stage is a folder of its own: never root, a folder that holds root, or one inside what is
+// copied. A refusal writes nothing. { files, bytes } or { why }, one plain line. hidden: as for stageList.
+function stageCopy(root, stage, hidden) {
+    const R = path.resolve(root), S = path.resolve(stage);
+    const under = (a, b) => { const r = path.relative(a, b); return r === '' || (r !== '..' && !r.startsWith('..' + path.sep) && !path.isAbsolute(r)); };
+    if (under(S, R) || STAGE_FILES.concat(['system']).some(e => under(path.join(R, e), S))) return { why: 'Not built: the stage (' + S + ') may not be this folder, hold it, or lie inside what is copied.' };
+    const list = stageList(R, hidden);
+    if (list.why) return list;
+    let bytes = 0;
+    try {
+        fs.rmSync(S, { recursive: true, force: true });
+        fs.mkdirSync(S, { recursive: true });
+        for (const d of list.dirs) fs.mkdirSync(path.join(S, d));
+        for (const f of list.files) {
+            const from = path.join(R, f), to = path.join(S, f), st = fs.lstatSync(from);
+            if (!st.isFile()) return { why: 'Not built: ' + f + ' changed while the stage was made. It is no longer a plain file.' };
+            fs.copyFileSync(from, to, fs.constants.COPYFILE_EXCL);
+            fs.utimesSync(to, st.atime, st.mtime);
+            bytes += st.size;
+        }
+    } catch (e) { return { why: 'Not built: the stage could not be made (' + (e && e.message || String(e)) + ').' }; }
+    return { files: list.files.length, bytes };
+}
+// [servercheck:stage-end]
+// Before the first thing this build writes: what the stage will hold is read (a file of the list that is missing, or a link, refuses
+// the build here), and no private folder is in it or in the app folder.
+if (!NOTES_ONLY) {
+    const sl = stageList(ROOT);
+    if (sl.why) { console.error(sl.why); process.exit(1); }
+    let issP = ''; try { issP = fs.readFileSync(path.join(ROOT, 'installer.iss'), 'utf8'); } catch (e) { issP = ''; }
+    const pg = privateGuard(sl.files.concat(sl.dirs).some(f => /^private(\/|$)/i.test(f)), fs.existsSync(path.join(SYSTEM, 'app', 'private')), issP);
+    if (pg) { console.error(pg); process.exit(1); }
+}
+
 const dist = path.join(ROOT, 'dist', VERSION);
 fs.mkdirSync(dist, { recursive: true });
 const zipName = 'waypoint-app-' + VERSION + '.zip';
@@ -121,12 +236,19 @@ fs.writeFileSync(zipPath + '.sig', sig + '\n');
 // 2. manifest
 fs.writeFileSync(path.join(dist, 'manifest.json'), JSON.stringify({ version: VERSION, minShell: SHELL_SINCE, built: new Date().toISOString(), electron: typeof pkg.electron === 'string' ? pkg.electron : null }, null, 2));   // electron: the runtime the installer packs, as package.json records it
 
-// 3. installer
+// 3. installer, compiled from the stage: a clean copy of what an install needs (stageCopy, above), made fresh, so installer.iss packs
+//    nothing else. Its OutputDir=. puts the installer beside it in the stage, and every step after this one takes it from there.
+const STAGE = path.join(dist, 'stage');
+console.log('Copying what an install needs into ' + path.relative(ROOT, STAGE) + '...');
+const staged = stageCopy(ROOT, STAGE);
+if (staged.why) { console.error(staged.why); process.exit(1); }
+console.log('  ' + staged.files + ' files, ' + Math.round(staged.bytes / 1048576) + ' MB');
 console.log('Compiling installer with Inno Setup...');
-execSync(`"${ISCC}" "${path.join(ROOT, 'installer.iss')}"`, { stdio: 'inherit' });
+execSync(`"${ISCC}" "${path.join(STAGE, 'installer.iss')}"`, { stdio: 'inherit' });
+const SETUP = path.join(STAGE, 'Waypoint_Setup.exe');
 // 3b. code-signing the installer is optional (a certificate is a separate purchase): only when WAYPOINT_SIGNTOOL says how
 if (SIGNTOOL) {
-    const exe = '"' + path.join(ROOT, 'Waypoint_Setup.exe') + '"';
+    const exe = '"' + SETUP + '"';
     console.log('Code-signing the installer (WAYPOINT_SIGNTOOL)...');
     execSync(SIGNTOOL.includes('{file}') ? SIGNTOOL.split('{file}').join(exe) : SIGNTOOL + ' ' + exe, { stdio: 'inherit' });
 } else {
@@ -134,11 +256,13 @@ if (SIGNTOOL) {
 }
 // 3c. the installer's own signature, over its bytes as they now are (after any code-signing): an install that updates its
 //     own core checks this before it runs the file. The name is part of what is signed, so it never passes for the zip's.
-const setupSha = crypto.createHash('sha256').update(fs.readFileSync(path.join(ROOT, 'Waypoint_Setup.exe'))).digest('hex');
+const setupSha = crypto.createHash('sha256').update(fs.readFileSync(SETUP)).digest('hex');
 const setupSig = signkey.signZip('Waypoint_Setup.exe', setupSha, VERSION, SIGNKEY);
 if (!updater.verifyUpdate(UPDATE_PUBKEY, 'Waypoint_Setup.exe', setupSha, VERSION, setupSig)) { console.error('Not built: the installer\'s signature does not check against the public key in updatekey.js.'); process.exit(1); }
-fs.copyFileSync(path.join(ROOT, 'Waypoint_Setup.exe'), path.join(dist, 'Waypoint_Setup.exe'));
+fs.copyFileSync(SETUP, path.join(dist, 'Waypoint_Setup.exe'));
 fs.writeFileSync(path.join(dist, 'Waypoint_Setup.exe.sig'), setupSig + '\n');
+// the stage is a copy, and goes once the installer is out of it. A build that stops before here leaves it to be looked at; the next one makes it fresh.
+fs.rmSync(STAGE, { recursive: true, force: true });
 }
 
 // 4. notes: the top section of WHATSNEW.txt, turned into markdown for the GitHub Release body.

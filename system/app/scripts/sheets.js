@@ -8,7 +8,7 @@ import { getActiveCampaign } from './models.js';
 import { save, toast } from './io.js';
 import { picRef } from './safecore.js';
 import { showConfirm, showPrompt } from './dialogs.js';
-import { cleanFieldUnit, unitTail, heightWords, measureWords, unitWords, unitHead, listWords, unitOf, textWords, measureStore, rollNeedsOk, rollNeedsSays, timeRuleRun, droppedCounts, validPageId, LIMITS, KINDS, showsIf, rowRollNames, gmOnlyNames, applyAct, applyScope, applyRound, dueActs, combatChars, roundSecs, fxLeftNow, lastsSecs, APPLY_KINDS, TURN_UNITS, LIGHT_UNITS, RANGE_UNITS, HEIGHT_UNITS, TIME_WORDS, STORED, DEF_PROP, BAND_KINDS, IDENTITY_KINDS, LEDGER_KINDS, headerEntry, captionParts, emptySystem, uid, validKey, cleanSystem, cleanChar, validateSystem, resolveAll, hoverLines, autoLayout, applyEdit, applyStyle, cleanLooks, lookOf, lookFor, lookRule, applyEffectOp, fxText, fmtNum, budgetsOf, budgetWatch, budgetSays, needsMet, needsSays, initRoll, aliasFromShadowBase, sbRowOps, sbApplyProposal, cleanUploads, sideOf, threatArc, facingCtx, stanceCtx, tokenCtx, POSTURE_IDS, POSTURE_NAMES, DEFAULT_POSTURES, postureList, postureAt, autoEffectsOn, initTie, charTokenOn, cycleThreat, valueTone, TONES, activeCharOf, playableChars, ownedTokenPlan, applyOwnerOps, migrateBindings, capExpr, cleanValue, fieldById, valueOpts, applyRowOp, rowIdOf, rowDef, orphanRows, stampRows, cleanRowDef, projectRows, STAT_KEY, PALETTE_KEYS, GLYPHS, glyphPath, headerEdits, pinTargets, pinTargetsAll, hudView, hudHasContent, resetTargets, cleanListSpec, statKey, rowStat, plusText, rowPaid, itemReach, gmDerivedNames, labelGmNames, gmEffectNames, labelNames, withRound, rangeCtx, withRange, rowLvl, rowOn, cleanItemKey, charForView, secretFieldIds, gmViewFields } from './systemcore.js';
+import { cleanFieldUnit, unitTail, heightWords, measureWords, unitWords, unitHead, listWords, unitOf, textWords, measureStore, rollNeedsOk, rollNeedsSays, timeRuleRun, droppedCounts, validPageId, LIMITS, KINDS, showsIf, rowRollNames, gmOnlyNames, applyAct, applyScope, applyRound, dueActs, combatChars, roundSecs, fxLeftNow, lastsSecs, APPLY_KINDS, TURN_UNITS, LIGHT_UNITS, RANGE_UNITS, HEIGHT_UNITS, TIME_WORDS, STORED, DEF_PROP, BAND_KINDS, IDENTITY_KINDS, LEDGER_KINDS, headerEntry, captionParts, emptySystem, uid, validKey, cleanSystem, cleanChar, validateSystem, resolveAll, hoverLines, autoLayout, applyEdit, applyStyle, cleanLooks, lookOf, lookFor, lookRule, applyEffectOp, fxText, fmtNum, budgetsOf, budgetWatch, budgetSays, needsMet, needsSays, initRoll, applyProposal, cleanUploads, sideOf, threatArc, facingCtx, stanceCtx, tokenCtx, POSTURE_IDS, POSTURE_NAMES, DEFAULT_POSTURES, postureList, postureAt, autoEffectsOn, initTie, charTokenOn, cycleThreat, valueTone, TONES, activeCharOf, playableChars, ownedTokenPlan, applyOwnerOps, migrateBindings, capExpr, cleanValue, fieldById, valueOpts, applyRowOp, rowIdOf, rowDef, orphanRows, stampRows, cleanRowDef, projectRows, STAT_KEY, PALETTE_KEYS, GLYPHS, glyphPath, headerEdits, pinTargets, pinTargetsAll, hudView, hudHasContent, resetTargets, cleanListSpec, statKey, rowStat, plusText, rowPaid, itemReach, gmDerivedNames, labelGmNames, gmEffectNames, labelNames, withRound, rangeCtx, withRange, rowLvl, rowOn, cleanItemKey, charForView, secretFieldIds, gmViewFields } from './systemcore.js';
 import { fileBase, charToJson, charFromJson, sheetToMarkdown, isCharFile } from './sheetexport.js';
 import { cleanCalendar, fmtWhen, fmtDate, timeOf, calPreset, CAL_LIMITS } from './calendarcore.js';
 
@@ -301,7 +301,7 @@ function tokenSpotOf(camp, pid, charId) {
     return w ? { x: (w.x || 0) + (w.w || 60) / 2, y: (w.y || 0) + (w.h || 52) / 2 } : null;
 }
 // EVERY path that gives a character an owner (the Characters tab's owner select and In play, token Properties' Player Owner, linking a
-// player's token, a new character from one, the ShadowBase bridge) comes here, and so does taking one away (pid ''). o: { play (default on:
+// player's token, a new character from one, an outside sheet reader) comes here, and so does taking one away (pid ''). o: { play (default on:
 // the newly given character is the one they play, the one they played before is kept), keep (the token that wins) }. GM side only.
 function giveCharacter(pid, charId, o) {
     var camp = getActiveCampaign(), c = charById(charId, camp); if (!camp || !c) return false;
@@ -787,7 +787,7 @@ function renderSheet() {
     var revert = ui('sheetRevert'); if (revert) revert.style.display = gm && lastChange && lastChange.charId === c.id ? '' : 'none';
     var pick = ui('sheetPick'); if (pick) { pick.textContent = ''; var pickL = gm ? charList(camp) : charList(camp).filter(function(x) { return !x.partial && x.ownerId === myId(); }); if (gm || pickL.length > 1) { pickL.forEach(function(x) { pick.appendChild(opt(x.id, x.name + (x.npc ? ' (NPC)' : '') + (x.making === 1 ? ' (being made)' : ''), x.id === c.id)); }); pick.style.display = ''; } else pick.style.display = 'none'; }
     var por = ui('sheetPortrait'); if (por) { if (c.portrait) { por.src = imgSrc(c.portrait); por.style.display = ''; } else por.style.display = 'none'; }
-    var upB = ui('sheetUpload'); if (upB) { var gmUp = gm && canWrite(); upB.style.display = !lockedS && (gmUp || (isClient() && own && !c.partial && (c.making !== 1 || fillOk()))) ? '' : 'none'; upB.title = gmUp ? 'Import JSON: fill or update this sheet from a ShadowBase character file. You review what changes before anything is applied' : c.making === 1 ? 'Fill this character from a file: your own sheet download (.wpchar.json) or a ShadowBase sheet' : 'Import JSON: send your ShadowBase sheet file to the GM, who approves what changes'; }   // Stage 6 U3: the owner's Import JSON (to the GM, as proposed changes); Onboarding F4: while making, a file fills it
+    var upB = ui('sheetUpload'); if (upB) { var rdG = gm && canWrite() ? gmReader() : null, outF = !gm && sheetFilesOk(); upB.style.display = !lockedS && (rdG || (isClient() && own && !c.partial && (c.making === 1 ? fillOk() : outF))) ? '' : 'none'; upB.title = rdG ? 'Import: fill or update this sheet from a ' + rdG.name + ' file. You review what changes before anything is applied' : c.making === 1 ? 'Fill this character from a file: your own sheet download (.wpchar.json)' + (outF ? ', or a sheet file your GM\u2019s Waypoint reads' : '') : 'Import: send your sheet file to the GM, who approves what changes'; }   // Stage 6 U3: the owner's Import (to the GM, as proposed changes) where the GM's Waypoint reads such a file; the GM's own where a reader is at hand here; Onboarding F4: while making, a file fills it
     var picB = ui('sheetPic'); if (picB) picB.style.display = !lockedS && isClient() && own && !c.partial ? '' : 'none';   // Onboarding F1c: the owner's own picture for it
     var dlB = ui('sheetDownload'); if (dlB) dlB.style.display = canOpen(c.id) && !c.partial ? '' : 'none';   // Onboarding F2a: whoever may open it takes it away
     var dnB = ui('sheetDone'); if (dnB) { var dnOn = isClient() && own && !c.partial && (c.making === 1 || c.unlocked === 1); dnB.style.display = dnOn ? '' : 'none'; }   // Onboarding F3: the owner's Done
@@ -3123,7 +3123,7 @@ function fieldNodeBody(f, c, e, gm, own, sysArg, plc) {   // plc (F4b): the sect
             var ends = el('div', 'sheet-slider-ends'); ends.appendChild(el('span', 'sheet-slider-low', f.slider.low || '')); ends.appendChild(el('span', 'sheet-slider-high', f.slider.high || '')); sw.appendChild(ends);
             var rg = el('input', 'sheet-range'); rg.type = 'range'; rg.min = String(f.min); rg.max = String(f.max); rg.step = String(f.step || 1); rg.value = inp.value; rg.disabled = !use; rg.dataset.fid = f.id; rg.dataset.part = 'range';
             rg.style.background = 'linear-gradient(90deg, ' + (f.slider.lowColor || 'var(--blue)') + ', ' + (f.slider.midColor ? f.slider.midColor + ', ' : '') + (f.slider.highColor || 'var(--gold)') + ')';   // colours are hex-validated by cleanSlider
-            rg.title = (f.slider.low || String(f.min)) + ' \u2026 ' + (f.slider.high || String(f.max));   // "Dusk Pole … Dawn Pole", or "-100 … 100"
+            rg.title = (f.slider.low || String(f.min)) + ' \u2026 ' + (f.slider.high || String(f.max));   // "Chaos … Order", or "-100 … 100"
             // arrow keys fire a change per step: one commit after the last step, so a player's nudges reach the GM as one edit (inside the
             // host's rate gate) and a drag still commits once on release; an unchanged value is never re-sent
             var rgTimer = null, rgSent = rg.value;
@@ -3771,8 +3771,6 @@ function revertLast() {
     afterCharChange(c, d[Object.keys(d)[0]] === null, d);
     toast('Reverted.');
 }
-// The ShadowBase bridge (decision 10g, copy once): the sheet attached to a token gives its attributes, resources and
-// skills to a campaign character through the alias table; a token without a character gets one named after it
 /* ---------- Onboarding F1c: a character's own picture ---------- */
 // The picture of a character comes from a plan (net.js charFacePlan): a picture is saved into the campaign's pictures — a PNG made from the
 // player's photo (a square of at most 256 pixels), or a bundled picture copied into the tutorial folder where the Image Library already keeps
@@ -4195,89 +4193,6 @@ function printSheet(charId, gmAll) {
         if (nH && nH.heldDone) nH.heldDone();
     });
 }
-// [systemcheck:sbexport-start]
-/* ---------- Export for ShadowBase: the way back to the website ---------- */
-// The owner, 2026-10-04: "waypoint takes the shadowbase json and exports it in a way shadowbase can read it". The character's own ShadowBase
-// file, picked here, with what the table changed written into a copy of it (systemcore sbWriteBack): the copy is a whole file the website's
-// Import Character reads. Worked out on this machine from the viewer's own copy of the character (the GM's whole copy, a player's own);
-// nothing is stored, sent or changed in the campaign. What a file holds reaches the page only as text nodes (sbExportBody).
-// 85 (the owner, 2026-10-04: "i just need to be able to let them download their characters and save them to shadowbase easily"): the
-// character's ShadowBase file is remembered once it has been read on this machine, by Import or by a pick here, so For ShadowBase needs no
-// second pick. In memory only, until the app closes: never stored and never sent, since a file kept from another day could put old figures
-// back on the website. By campaign and character, the newest SB_KEEP files
-var _sbKept = Object.create(null), SB_KEEP = 8, SB_KEEP_MAX = 8 * 1024 * 1024;
-function sbIsSheet(j) { return !!j && typeof j === 'object' && !Array.isArray(j) && !isCharFile(j) && (!j.type || j.type === 'character') && !!(j.name || j.attributes || j.points); }
-function sbKeepKey(campId, charId) { return typeof campId === 'string' && campId && typeof charId === 'string' && charId ? campId + '|' + charId : ''; }
-function sbKeep(campId, charId, text, name, at) {
-    var k = sbKeepKey(campId, charId); if (!k || typeof text !== 'string' || !text || text.length > SB_KEEP_MAX) return false;
-    delete _sbKept[k]; _sbKept[k] = { text: text, name: typeof name === 'string' ? name : '', at: typeof at === 'number' && isFinite(at) ? at : Date.now() };
-    var ks = Object.keys(_sbKept); while (ks.length > SB_KEEP) delete _sbKept[ks.shift()];   // the one read longest ago goes first
-    return true;
-}
-function sbKept(campId, charId) { var k = sbKeepKey(campId, charId); return k && _sbKept[k] ? _sbKept[k] : null; }
-// how long ago a file was read, in plain words (worked out from the two times alone, so it reads the same on every machine)
-function sbKeptAgo(at, now) {
-    var m = Math.floor(((typeof now === 'number' ? now : Date.now()) - at) / 60000); if (!(m >= 1)) return 'just now';
-    return m < 60 ? m + (m === 1 ? ' minute ago' : ' minutes ago') : m < 1440 ? Math.floor(m / 60) + (m < 120 ? ' hour ago' : ' hours ago') : 'more than a day ago';
-}
-function sbKeptName(name) { var s = String(name == null ? '' : name).replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim(); return s ? (s.length > 48 ? s.slice(0, 48) + '\u2026' : s) : 'the file read here'; }
-function sbExportPlan(charId, j) {   // { r, name } or { error: words }
-    if (isCharFile(j)) return { error: 'That is a Waypoint character file. Pick the character\u2019s ShadowBase file (the website\u2019s Export JSON).' };
-    var S = window.wpSystemCore, X = exportView(charId, !isClient()); if (!S || !S.sbWriteBack || !X) return { error: 'This sheet cannot be exported here.' };
-    var c0 = charById(charId, X.camp), fl = tokenFlags(), t = c0 ? facingTarget(c0, X.camp) : null, tok = t ? {} : null;
-    if (t && fl.posture) { var rawP = typeof t.tok.posture === 'string' ? t.tok.posture : '', p7 = rawP && typeof S.postureSeven === 'function' ? S.postureSeven(rawP, X.sys) : ''; tok.posture = !rawP ? 'standing' : (p7 || rawP); }   // one of the website's seven under an older spelling is that posture (the owed review, 2026-10-09); a text that is none of the seven is handed over as stored, so the write-back says it does not know it and the file's own posture stands
-    if (t && fl.elevation) { var st = stanceCtx(t.tok, fl); tok.elevation = st ? st.elevation : 0; }
-    var r = S.sbWriteBack(j, X.sys, X.view, X.all, tok);
-    if (!r || r.error) return { error: r && r.error === 'system' ? 'This campaign has no system to read the sheet by.' : 'That does not look like a ShadowBase character sheet (the website\u2019s Export JSON).' };
-    return { r: r, name: typeof X.view.name === 'string' ? X.view.name : '' };
-}
-// the copy's text, laid out as the picked file was (its indent, its line ends, its closing line break), and the name it is saved under
-function sbExportFile(text, name, json) {
-    var src = typeof text === 'string' ? text : '', ind = /^\s*\{\r?\n([ \t]{1,8})"/.exec(src), crlf = /\r\n/.test(src), out = JSON.stringify(json, null, ind ? ind[1] : 0);
-    if (crlf) out = out.replace(/\n/g, '\r\n');
-    if (/\n$/.test(src)) out += crlf ? '\r\n' : '\n';
-    var base = String(name == null ? '' : name).replace(/\.json$/i, '').replace(/[\u0000-\u001f\u007f\\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80).replace(/ ?\(from Waypoint\)$/, '').trim();
-    return { text: out, name: (base || 'character') + ' (from Waypoint).json' };
-}
-function sbExportWords(v) { return typeof v === 'number' && isFinite(v) ? String(v) : typeof v === 'string' ? (v.length > 40 ? v.slice(0, 40) + '\u2026' : v) : typeof v === 'boolean' ? (v ? 'yes' : 'no') : v === null || v === undefined ? 'nothing' : 'something else'; }
-function sbExportBody(r, sheetName, fileCharName, kept) {   // the question's list, as text nodes only; kept (85): the remembered file it was made from, said first
-    var box = el('div', 'sb-export-list'), line = function(cls, t) { box.appendChild(el('div', cls, t)); }, cut = function(s) { s = String(s); return s.length > 60 ? s.slice(0, 60) + '\u2026' : s; };
-    if (kept) line('sb-export-warn', 'From \u201c' + sbKeptName(kept.name) + '\u201d, read here ' + sbKeptAgo(kept.at) + '. If the character changed on the website since then, pick the newer file.');
-    var nmS = String(sheetName || '').trim().toLowerCase(), nmF = typeof fileCharName === 'string' ? fileCharName.trim().toLowerCase() : '';   // a short name beside a full one ("Sorrell", "Sorrell Holme") is the same character
-    if (nmS && nmF && nmS.indexOf(nmF) < 0 && nmF.indexOf(nmS) < 0) line('sb-export-warn', 'The file is for \u201c' + cut(fileCharName.trim()) + '\u201d; this sheet is \u201c' + cut(sheetName || '') + '\u201d.');
-    r.changes.forEach(function(c) { line('sb-export-row', cut(c.label) + ': ' + sbExportWords(c.from) + ' \u2192 ' + sbExportWords(c.to)); });
-    if (r.same.length) line('sb-export-dim', 'Already the same: ' + r.same.map(cut).join(', ') + '.');
-    if (r.left.length) line('sb-export-dim', 'Not written: ' + r.left.map(cut).join('; ') + '.');
-    line('sb-export-dim', 'Everything else in the file stays as the website wrote it. Items, conditions, notes and character points are not carried: change those on the website.');
-    return box;
-}
-// the copy made from one file's text and offered for saving; kept: the remembered file it came from, which the question then names
-function sbExportRun(charId, txt, fileName, kept) {
-    var j = null; try { j = JSON.parse(txt); } catch (e) { toast('That file is not valid JSON.'); return; }
-    var P = sbExportPlan(charId, j); if (P.error) { toast(P.error); return; }
-    if (!P.r.changes.length) { toast('Nothing to write: that file already holds what this sheet shows.'); return; }
-    showConfirm('Write this session into a copy of that ShadowBase file?', function(yes) {
-        if (!yes) return;
-        var f = sbExportFile(txt, fileName, P.r.json);
-        if (saveTextFile(f.name, f.text, 'application/json')) toast('Saved ' + f.name + '. On the website: Import Character.');
-    }, { body: sbExportBody(P.r, P.name, typeof j.name === 'string' ? j.name : '', kept || null) });
-}
-function exportShadowBase(charId, useKept) {   // useKept (85): from the file remembered for this character, with no pick; none remembered: the pick, as ever
-    var campK = getActiveCampaign(), kept = useKept === true ? sbKept(campK && campK.id, charId) : null;
-    if (kept) { sbExportRun(charId, kept.text, kept.name, kept); return; }
-    var inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.json,application/json';
-    inp.addEventListener('change', function() {
-        var file = inp.files && inp.files[0]; if (!file) return;
-        if (file.size > 8 * 1024 * 1024) { toast('That file is too large.'); return; }
-        file.text().then(function(txt) {
-            var jP = null, campP = getActiveCampaign(); try { jP = JSON.parse(txt); } catch (e) { jP = null; }
-            if (campP && sbIsSheet(jP)) sbKeep(campP.id, charId, txt, file.name);   // 85: a later For ShadowBase needs no pick
-            sbExportRun(charId, txt, file.name, null);
-        });
-    });
-    inp.click();
-}
-// [systemcheck:sbexport-end]
 // The Download menu (the sheet's head ⤓): on the page, not in the panel (the panel clips what overflows it); Escape and a click elsewhere close it
 var _dlPop = null, _dlGm = false;   // _dlGm: the GM's "Include GM-only fields", off each time the app starts
 function closeDownloadMenu() { if (_dlPop) { _dlPop.remove(); _dlPop = null; document.removeEventListener('mousedown', dlOutside, true); document.removeEventListener('keydown', dlKey, true); } }
@@ -4287,13 +4202,11 @@ function openDownloadMenu(anchor) {
     if (_dlPop) { closeDownloadMenu(); return; }   // its button toggles it
     var c = sheetOpen ? charById(sheetOpen) : null; if (!c || c.partial || !canOpen(c.id)) return;
     var gm = !isClient(), cid = c.id, pop = el('div', 'sheet-dl-pop'); pop.setAttribute('role', 'menu'); pop._anchor = anchor;
-    var item = function(label, sub, kind) { var b = el('button', 'sheet-dl-item'); b.type = 'button'; b.setAttribute('role', 'menuitem'); b.appendChild(el('span', 'sheet-dl-t', label)); b.appendChild(el('span', 'sheet-dl-s', sub)); b.addEventListener('click', function(e) { e.preventDefault(); closeDownloadMenu(); if (kind === 'print') printSheet(cid, gm && _dlGm); else if (kind === 'sb') exportShadowBase(cid); else if (kind === 'sbkept') exportShadowBase(cid, true); else downloadChar(cid, kind, gm && _dlGm); }); pop.appendChild(b); };
+    var item = function(label, sub, kind) { var b = el('button', 'sheet-dl-item'); b.type = 'button'; b.setAttribute('role', 'menuitem'); b.appendChild(el('span', 'sheet-dl-t', label)); b.appendChild(el('span', 'sheet-dl-s', sub)); b.addEventListener('click', function(e) { e.preventDefault(); closeDownloadMenu(); if (kind === 'print') printSheet(cid, gm && _dlGm); else if (typeof kind === 'function') kind(); else downloadChar(cid, kind, gm && _dlGm); }); pop.appendChild(b); n++; }, n = 0;
     item('Character file (.wpchar.json)', 'Every value on the sheet, to keep', 'json');
     item('Readable page (.md)', 'The sheet as text \u2014 it imports as a handbook page', 'md');
     item('Print or save as PDF\u2026', 'Exactly as it shows, every tab in turn', 'print');
-    var campD = getActiveCampaign(), keptD = sbKept(campD && campD.id, cid);   // 85: the ShadowBase file read here for this character, if one was
-    if (keptD) { item('For ShadowBase (.json)', 'From ' + sbKeptName(keptD.name) + ', read here ' + sbKeptAgo(keptD.at), 'sbkept'); item('For ShadowBase, from another file\u2026', 'Pick a newer export from the website', 'sb'); }
-    else item('For ShadowBase (.json)\u2026', 'This session written into a copy of its ShadowBase file', 'sb');
+    sheetReaders().forEach(function(rd) { var rows = []; try { rows = rd.ui && typeof rd.ui.downloadRows === 'function' ? rd.ui.downloadRows(cid) : []; } catch (e) { rows = []; } (Array.isArray(rows) ? rows : []).forEach(function(rw) { if (rw && typeof rw.label === 'string' && typeof rw.run === 'function') item(rw.label, typeof rw.sub === 'string' ? rw.sub : '', rw.run); }); });   // an outside reader's own rows (its way back to where the file came from)
     if (gm) { var lb = el('label', 'sheet-dl-gm'), cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = _dlGm; cb.addEventListener('change', function() { _dlGm = cb.checked; }); lb.appendChild(cb); lb.appendChild(document.createTextNode(' Include GM-only fields')); lb.title = 'Off: the sheet as its player sees it. On: your own copy, with every GM-only field and row (the file is named \u2026-gm)'; pop.appendChild(lb); }
     else pop.appendChild(el('div', 'sheet-dl-note', 'Your sheet as you see it.'));
     pop.addEventListener('mousedown', function(e) { e.stopPropagation(); });
@@ -4303,11 +4216,20 @@ function openDownloadMenu(anchor) {
         e.preventDefault(); var its = Array.prototype.slice.call(pop.querySelectorAll('.sheet-dl-item, .sheet-dl-gm input')), at = its.indexOf(document.activeElement), nx = its[(at + (e.key === 'ArrowDown' ? 1 : its.length - 1) + its.length) % its.length]; try { if (nx) nx.focus(); } catch (er) {}
     });
     document.body.appendChild(pop); _dlPop = pop;
-    var r = anchor.getBoundingClientRect(); pop.style.left = Math.max(8, Math.min(window.innerWidth - 288, r.right - 280)) + 'px'; pop.style.top = Math.max(8, Math.min(window.innerHeight - (keptD ? 284 : 232), r.bottom + 6)) + 'px';
+    var r = anchor.getBoundingClientRect(); pop.style.left = Math.max(8, Math.min(window.innerWidth - 288, r.right - 280)) + 'px'; pop.style.top = Math.max(8, Math.min(window.innerHeight - (24 + 52 * n), r.bottom + 6)) + 'px';
     document.addEventListener('mousedown', dlOutside, true); document.addEventListener('keydown', dlKey, true);   // Escape here first: the panel's own Escape closes the sheet
     var first = pop.querySelector('.sheet-dl-item'); try { if (first) first.focus(); } catch (er) {}
 }
 /* ---------- Stage 6 U3: a player's sheet upload — their Import JSON, the GM's review ---------- */
+// An outside sheet file (2026-10-18) is read only where a reader is at hand: on the GM's own machine one that a module of the GM's registered
+// (systemcore registerReader: none ships with the app), at someone's table the host's, which its snapshot says (net.sheetFilesOk). A
+// Waypoint character file needs none
+function sheetReaders() { var S = window.wpSystemCore; return S && typeof S.readers === 'function' ? S.readers() : []; }
+function gmReader() { var out = null; sheetReaders().forEach(function(r) { if (!out && r.ui && typeof r.ui.gmImport === 'function') out = r; }); return out; }
+function sheetFilesOk() { if (!isClient()) return sheetReaders().length > 0; var n = net(); return !!(n && typeof n.sheetFilesOk === 'function' && n.sheetFilesOk() === true); }
+function readerUiFor(j) { var S = window.wpSystemCore, r = S && typeof S.readerFor === 'function' ? S.readerFor(j) : null; return r && r.ui ? r.ui : null; }
+function keepFile(campId, charId, j, txt, name) { var u = readerUiFor(j); if (u && typeof u.keep === 'function' && campId) { try { u.keep(campId, charId, txt, name); } catch (e) {} } }   // a reader may remember the file it read here (in memory only)
+function readersChanged() { renderViews(null); renderReviewChip(); }   // a reader registered after the sheet was drawn
 function uploadsOf(camp, charId) { return cleanUploads(camp && camp.uploads).filter(function(u) { return !charId || u.charId === charId; }); }
 // Onboarding F4: whether this table lets a player start a character from a file (the rules the host sent)
 function fillOk() { var camp = getActiveCampaign(), S = window.wpSystemCore; if (!camp || !S || !S.newCharRules) return false; return !!S.newCharRules(camp, !window.wpVtt || !window.wpVtt.rulesOn || window.wpVtt.rulesOn('sheets') !== false).fromFile; }
@@ -4316,14 +4238,14 @@ function fillOk() { var camp = getActiveCampaign(), S = window.wpSystemCore; if 
 // own view: the file's own labels, as text)
 function fillNote(a, j) {
     var camp = getActiveCampaign(), view = camp && camp.system ? camp.system : null, miss = [];
-    try { if (view && isCharFile(j)) miss = (charFromJson(view, j, null) || { unmatched: [] }).unmatched; else if (view && window.wpSystemCore && window.wpSystemCore.sbFill) miss = window.wpSystemCore.sbFill(j, view, F(), null).skipped; } catch (e) { miss = []; }
+    try { var rdN = view && !isCharFile(j) && window.wpSystemCore && window.wpSystemCore.readerFor ? window.wpSystemCore.readerFor(j) : null; if (view && isCharFile(j)) miss = (charFromJson(view, j, null) || { unmatched: [] }).unmatched; else if (rdN) miss = rdN.fill(j, view, F(), null).skipped; } catch (e) { miss = []; }
     var cut = miss.filter(function(s) { return /^amputated: /.test(s); }).map(function(s) { return s.slice(11); }); miss = miss.filter(function(s) { return !/^amputated: /.test(s); });
     var nN = function(n2, w) { return n2 + ' ' + w + (n2 === 1 ? '' : 's'); }, few = function(l) { return l.slice(0, 6).join(', ') + (l.length > 6 ? ' and ' + (l.length - 6) + ' more' : ''); };
     return (a.auto ? nN(a.auto, 'part') + ' filled in' : 'Nothing could be filled in') + (a.left ? '; ' + nN(a.left, 'part') + ' could not be taken' : '') + (miss.length ? '; not in this campaign: ' + few(miss) : '') + (cut.length ? '; left out as amputated: ' + few(cut) : '') + '.';
 }
 // [sinkcheck:fillnote-end]
 // [sinkcheck:filepic-start]
-// Onboarding F4b: a file's own picture (a character file's picture, a ShadowBase sheet's portrait — a PNG, JPEG or WebP data URL, never a web address
+// Onboarding F4b: a file's own picture (a character file's picture, a sheet file's portrait — a PNG, JPEG or WebP data URL, never a web address
 // or an SVG) offered through the token creator and sent as the character's picture (char-pic: the host checks it whole again); else a character
 // file's own face (never "photo": a photo is saved as a picture). Nothing without one
 var FILE_PIC = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+\/=]+$/;
@@ -4341,7 +4263,8 @@ function filePicture(id, j) {
     return false;
 }
 // [sinkcheck:filepic-end]
-// Onboarding F4b: start a character from a file (the join card): the file read here first (a character file or a ShadowBase sheet — a bad one never
+// Onboarding F4b: start a character from a file (the join card): the file read here first (a character file, or a sheet file where the GM's
+// Waypoint reads one — a bad one never
 // makes a character), a name (the file's to start with), the character made (char-make) and filled (char-upload); a refused fill leaves an empty
 // one in the making that Import can fill later; its picture offered through the token creator
 function startFromFile() {
@@ -4353,8 +4276,8 @@ function startFromFile() {
         if (file.size > 8 * 1024 * 1024) { toast('That file is too large.'); return; }
         file.text().then(function(txt) {
             var j = null; try { j = JSON.parse(txt); } catch (e) { toast('That file is not valid JSON.'); return; }
-            var isFile = isCharFile(j), isSb = !isFile && !!j && typeof j === 'object' && !Array.isArray(j) && (!j.type || j.type === 'character') && !!(j.name || j.attributes || j.points);
-            if (!isFile && !isSb) { toast('That is neither a character file nor a ShadowBase character.'); return; }
+            var isFile = isCharFile(j), isOut = !isFile && sheetFilesOk() && !!j && typeof j === 'object' && !Array.isArray(j);
+            if (!isFile && !isOut) { toast('That is not a character file this table reads.'); return; }
             var prof = n.getProfile ? n.getProfile() : {}, nm0 = typeof j.name === 'string' && j.name.trim() ? j.name.trim().slice(0, 60) : ((prof && typeof prof.name === 'string' && prof.name) || '');
             showPrompt('A name for your character', nm0, function(nm) {
                 if (nm === null || nm === undefined || !String(nm).trim()) return;
@@ -4362,7 +4285,7 @@ function startFromFile() {
                     if (a.error) { toast(a.error); return; }
                     if (!a.charId) return;
                     var id = a.charId; openSheet(id);
-                    if (isSb && typeof sbKeep === 'function' && typeof getActiveCampaign === 'function') { var campS = getActiveCampaign(); if (campS) sbKeep(campS.id, id, txt, file.name); }   // 85: For ShadowBase then needs no pick
+                    if (isOut && typeof keepFile === 'function' && typeof getActiveCampaign === 'function') { var campS = getActiveCampaign(); if (campS) keepFile(campS.id, id, j, txt, file.name); }   // a reader may remember the file read here
                     var rU = n.charUpload(id, j, function(b) { if (b.error) { toast(b.error + ' Your character is made: Import on its sheet can fill it later.'); return; } toast(fillNote(b, j)); filePicture(id, j); });
                     if (rU && rU.error) toast(rU.error + ' Your character is made: Import on its sheet can fill it later.');
                 });
@@ -4372,38 +4295,9 @@ function startFromFile() {
     });
     inp.click();
 }
-// The GM's own Import, on any character's sheet (an NPC's too): the ShadowBase file is read on this machine and what it would change opens in
-// the Review a player's upload opens, so nothing changes until Apply. It is never queued and nobody is told.
-// [systemcheck:gmimport-start]
-function gmImportRead(c, j) {   // { error } or { up }: the record the Review reads
-    var camp = getActiveCampaign(), sys = systemOf(camp), SCo = window.wpSystemCore;
-    if (isClient() || !canWrite()) return { error: 'Only the GM imports a file here.' };
-    if (!c || !sys || !F() || !SCo || !SCo.sbProposal) return { error: 'The campaign has no system yet. Press the campaign\'s name in the top row, then System, to make one.' };
-    if (isCharFile(j)) return { error: 'That is a Waypoint character file: it fills a character a player is still making. Import here reads a ShadowBase character JSON.' };
-    if (!j || typeof j !== 'object' || Array.isArray(j) || (j.type && j.type !== 'character') || (!j.name && !j.attributes && !j.points)) return { error: 'That does not look like a ShadowBase character JSON.' };
-    var pr = SCo.sbProposal(sys, c, j, F(), sbFinder(camp, sys));
-    if (!pr || !Array.isArray(pr.changes) || !pr.changes.length) return { error: 'Nothing to change: the sheet already matches that file.' };
-    return { up: { id: 'up_gm' + Date.now().toString(36), charId: c.id, from: '', name: 'Your file', at: Date.now(), changes: pr.changes, own: true } };
-}
-// [systemcheck:gmimport-end]
-function gmImportJson(c) {
-    var id = c.id, inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.json,application/json';
-    inp.addEventListener('change', function() {
-        var file = inp.files && inp.files[0]; if (!file) return;
-        if (file.size > 8 * 1024 * 1024) { toast('That file is too large.'); return; }
-        file.text().then(function(txt) {
-            var j = null; try { j = JSON.parse(txt); } catch (e) { toast('That file is not valid JSON.'); return; }
-            var campG = typeof sbKeep === 'function' && typeof sbIsSheet === 'function' ? getActiveCampaign() : null; if (campG && charById(id) && sbIsSheet(j)) sbKeep(campG.id, id, txt, file.name);   // 85: For ShadowBase then needs no pick (kept whatever the review comes to)
-            var cNow = charById(id), r = cNow ? gmImportRead(cNow, j) : { error: 'That character is no longer here.' };
-            if (r.error) { toast(r.error); return; }
-            openReview(id, r.up);
-        });
-    });
-    inp.click();
-}
 function importJson() {   // the owner sends their sheet file to the GM (the GM approves what changes); Onboarding F4: while they are making it, the file fills it at once
     var c = sheetOpen ? charById(sheetOpen) : null; if (!c) return;
-    if (!isClient()) { gmImportJson(c); return; }   // the GM's own Import: read and reviewed on this machine
+    if (!isClient()) { var rdI = canWrite() ? gmReader() : null; if (rdI) rdI.ui.gmImport(c); return; }   // the GM's own Import: the reader's own, read and reviewed on this machine
     if (c.partial || c.ownerId !== myId()) return;
     var making = c.making === 1, id = c.id, nm = c.name;
     if (making && !fillOk()) { toast('Starting a character from a file is not open at this table.'); return; }
@@ -4415,9 +4309,9 @@ function importJson() {   // the owner sends their sheet file to the GM (the GM 
             var j = null; try { j = JSON.parse(txt); } catch (e) { toast('That file is not valid JSON.'); return; }
             var isFile = isCharFile(j);
             if (isFile && !making) { toast('A character file only fills a character you are still making.'); return; }   // Onboarding F2a: never sent as a dossier (owner, 2026-09-27: in play, Import stays as it was)
-            if (!isFile && (!j || typeof j !== 'object' || Array.isArray(j) || (j.type && j.type !== 'character') || (!j.name && !j.attributes && !j.points))) { toast(making ? 'That is neither a character file nor a ShadowBase character.' : 'That does not look like a ShadowBase character JSON.'); return; }
+            if (!isFile && (!sheetFilesOk() || !j || typeof j !== 'object' || Array.isArray(j))) { toast(making ? 'That is not a character file this table reads.' : 'That is not a sheet file your GM\u2019s Waypoint reads.'); return; }
             var n = net(); if (!n || !n.charUpload) return;
-            if (!isFile && typeof sbKeep === 'function') { var campI = getActiveCampaign(); if (campI) sbKeep(campI.id, id, txt, file.name); }   // 85: For ShadowBase then needs no pick
+            if (!isFile && typeof keepFile === 'function') { var campI = getActiveCampaign(); if (campI) keepFile(campI.id, id, j, txt, file.name); }   // a reader may remember the file read here
             if (making) {
                 showConfirm('Fill ' + nm + ' from this file? What it carries replaces what the sheet has.', function(y) {
                     if (!y) return;
@@ -4438,7 +4332,7 @@ function importJson() {   // the owner sends their sheet file to the GM (the GM 
 var _review = null;   // { upId }
 function closeReview() { var m = ui('uploadModal'); if (m) m.style.display = 'none'; _review = null; renderReviewChip(); }
 // [sinkcheck:uploadreview-start]
-function openReview(charId, mine) {   // mine: the GM's own file, read on this machine (gmImportRead): never queued, nobody told
+function openReview(charId, mine) {   // mine: the GM's own file, read on this machine by a reader's ui.gmImport: never queued, nobody told
     var camp = getActiveCampaign(), up = mine && mine.own === true && mine.charId === charId ? mine : uploadsOf(camp, charId)[0], m = ui('uploadModal'); if (!up || !m || isClient()) return;
     var c = charById(up.charId, camp); if (!c) return;
     _review = { upId: up.id }; var ticks = {};
@@ -4458,13 +4352,14 @@ function openReview(charId, mine) {   // mine: the GM's own file, read on this m
         if (ch.held) row.appendChild(el('span', 'upl-note', 'you set this'));
         list.appendChild(row);
     });
-    var apply = ui('uploadApply'), rej = ui('uploadReject');
-    var count = function() { var n = Object.keys(ticks).filter(function(k) { return ticks[k]; }).length; apply.textContent = 'Apply ' + n + (n === 1 ? ' change' : ' changes'); apply.disabled = !n; };
+    var apply = ui('uploadApply'), rej = ui('uploadReject'), SCr = window.wpSystemCore, rdA = up.reader && SCr && SCr.readerById ? SCr.readerById(up.reader) : null, noRd = !!up.reader && !rdA;   // the reader that read the file applies it (its own row op)
+    if (noRd) head.textContent += '. It was read by a sheet reader this Waypoint does not have, so it cannot be applied here.';
+    var count = function() { var n = Object.keys(ticks).filter(function(k) { return ticks[k]; }).length; apply.textContent = 'Apply ' + n + (n === 1 ? ' change' : ' changes'); apply.disabled = !n || noRd; };
     count();
     apply.onclick = function() {
-        var cmp = getActiveCampaign(), sys = systemOf(cmp), ch2 = charById(up.charId, cmp); if (!sys || !ch2 || !F()) return;
+        var cmp = getActiveCampaign(), sys = systemOf(cmp), ch2 = charById(up.charId, cmp); if (!sys || !ch2 || !F() || noRd) return;
         var acc = {}; Object.keys(ticks).forEach(function(k) { if (ticks[k]) acc[k] = true; });
-        var r = sbApplyProposal(sys, ch2, up, acc, F());
+        var r = applyProposal(sys, ch2, up, acc, F(), rdA ? { rowOp: rdA.rowOp } : {});
         ch2.values = r.values; lastChange = null;   // the values are replaced whole: no single field to Revert
         cmp.uploads = (Array.isArray(cmp.uploads) ? cmp.uploads : []).filter(function(u) { return !u || u.id !== up.id; });
         afterCharChange(ch2, true);
@@ -4495,8 +4390,9 @@ function renderReviewChip() {
 function reviewNext() { var up = reviewWaiting()[0]; if (!up) { renderReviewChip(); return; } openSheet(up.charId); openReview(up.charId); }
 // [systemcheck:reviewchip-end]
 function uploadsChanged(charId) { renderViews(typeof charId === 'string' ? charId : null); renderReviewChip(); }   // the Review button on its sheet, and the header's
-// Stage 6 F7: the GM's own entries by name — the system's items, then the library's packs in their order (lower-case name -> entries)
-function sbFinder(camp, sys) {
+// Stage 6 F7: the GM's own entries by name — the system's items, then the library's packs in their order (lower-case name -> entries). A
+// reader of a sheet file finds its rows' entries by it
+function gmFinder(camp, sys) {
     var by = Object.create(null), add = function(e) { if (e && typeof e.name === 'string' && typeof e.id === 'string') { var k = e.name.trim().toLowerCase(); (by[k] = by[k] || []).push(e); } };
     (Array.isArray(sys.items) ? sys.items : []).forEach(add);
     var L = window.wpLibrary, packs = camp && camp.library && Array.isArray(camp.library.packs) ? camp.library.packs : [];
@@ -4514,23 +4410,6 @@ function playerFinder(camp, view) {
     if (L && L.playerIndexOf) packs.forEach(function(p) { var ix = p ? L.playerIndexOf(p.id, view) : null; if (ix && ix.byId) Object.keys(ix.byId).forEach(function(id) { ids[id] = 1; add(ix.byId[id]); }); });
     return { find: function(name) { return by[String(name).trim().toLowerCase()] || []; }, findKey: function(key) { return bk[String(key).trim().toLowerCase()] || []; },
         lib: L && L.entry ? function(id) { return typeof id === 'string' && ids[id] === 1 ? L.entry(id) : null; } : null };   // an entry of a pack players may see: the host's own copy
-}
-function fromShadowBase(w) {
-    var camp = getActiveCampaign(), sys = systemOf(camp);
-    if (!w || !w.sheet) return { error: 'No ShadowBase sheet on this token.' };
-    if (!sys || !F()) return { error: 'The campaign has no system yet. Press the campaign\'s name in the top row, then System, to make one.' };
-    var r = aliasFromShadowBase(w.sheet, sys, F()), ro = sbRowOps(w.sheet, sys, sbFinder(camp, sys));   // Stage 6 F7: its rows too
-    if (!r.matched && !ro.rows) return { error: 'Nothing on the sheet matches the system\'s keys (ST or STR, DX or DEX, HT or CON, IQ or INT, HP, FP, Will, Per, Dodge, Parry, skills by name).' };
-    var c = w.charId ? charById(w.charId, camp) : null;
-    if (!c) { c = newCharacter({ name: w.charName || w.name || w.sheet.name || 'Character' }); linkToken(w, c.id); }
-    c.values = c.values || {}; Object.keys(r.values).forEach(function(k) { c.values[k] = r.values[k]; });
-    ro.lists.forEach(function(fid) { c.values[fid] = (Array.isArray(c.values[fid]) ? c.values[fid] : []).filter(function(x) { return x && x.hid === 1; }); });   // a list the sheet fills is replaced (a kept curse, the GM's secret, stays)
-    var rowsIn = 0, rowsOut = 0;
-    ro.ops.forEach(function(o) { var a = applyRowOp(sys, c, o.f, o.q, F(), {}); var mk = o.q.op === 'add' || o.q.op === 'custom'; if (a.ok) { c.values[o.f] = a.value; if (mk) rowsIn++; } else if (mk) rowsOut++; });   // as the GM's own hand makes them
-    afterCharChange(c, true);
-    var nN = function(n, w) { return n + ' ' + w + (n === 1 ? '' : 's'); }, left = ro.skipped.slice(); if (rowsOut) left.unshift(nN(rowsOut, 'row'));
-    toast(nN(r.matched, 'value') + (rowsIn ? ' and ' + nN(rowsIn, 'row') : '') + ' copied into ' + c.name + '\'s sheet' + (left.length ? '; not carried over: ' + left.join(', ') + ' (no such list here).' : '.'));
-    return { ok: true, charId: c.id, matched: r.matched, rows: rowsIn, missed: rowsOut, skipped: ro.skipped };
 }
 // net.js hooks: a character arrived, changed or went
 function charChanged(id) {
@@ -5081,8 +4960,8 @@ function fieldRow(f) {
     }
     if (f.kind === 'number' && f.slider) {   // Stage 5e: the slider's end labels and track colours
         var srow = el('div', 'sys-sec-style sys-slider-row'); srow.appendChild(el('span', 'sys-sec-style-lbl', 'Slider'));
-        srow.appendChild(input('sys-slider-low field', f.slider.low, 'The label at the low end (e.g. Dusk Pole)', 'Low end label'));
-        srow.appendChild(input('sys-slider-high field', f.slider.high, 'The label at the high end (e.g. Dawn Pole)', 'High end label'));
+        srow.appendChild(input('sys-slider-low field', f.slider.low, 'The label at the low end (e.g. Chaos)', 'Low end label'));
+        srow.appendChild(input('sys-slider-high field', f.slider.high, 'The label at the high end (e.g. Order)', 'High end label'));
         var themeHex = function(v, fb) { try { var x = getComputedStyle(document.documentElement).getPropertyValue(v).trim(); return /^#[0-9a-fA-F]{6}$/.test(x) ? x.toLowerCase() : fb; } catch (er) { return fb; } };   // an unset colour draws the theme's own, so the swatch shows that one
         [['lowColor', 'Low colour', themeHex('--blue', '#4db3d3')], ['midColor', 'Middle colour', '#757575'], ['highColor', 'High colour', themeHex('--gold', '#e0a54f')]].forEach(function(cd) { var lab = el('label', 'sys-sec-color'); var ci = el('input'); ci.type = 'color'; ci.className = 'sys-slider-' + cd[0]; ci.value = f.slider[cd[0]] || cd[2]; ci.title = cd[1] + ' of the track'; lab.appendChild(ci); lab.appendChild(document.createTextNode(' ' + cd[1])); srow.appendChild(lab); });
         if (f.slider.lowColor || f.slider.midColor || f.slider.highColor) { var slc = el('button', 'tool ghost sys-btn', 'Theme colours'); slc.dataset.act = 'slidercl'; slc.title = 'Back to the theme\u2019s accent and gold'; srow.appendChild(slc); }
@@ -6940,11 +6819,21 @@ setInterval(function() { var c = getActiveCampaign(), id = c ? c.id : null; if (
 window.wpSheetsSync = sync;
 setTimeout(sync, 0);
 window.wpSheets = { bellNote: bellNote, runTimeRules: runTimeRules, startMaking: startMaking, inviteMaking: inviteMaking, applyTokenFace: applyTokenFace, open: open, close: close, playerSystem: playerSystem, readablePages: readablePages, openPage: openPage, sheetRefsChanged: sheetRefsChanged, systemOf: systemOf, save: saveDraft, startFrom: startFrom, sync: sync, roundHook: roundHook, turnHook: turnHook, runDue: runDue, draft: function() { return draft; },
-    sbFinder: sbFinder, uploadsChanged: uploadsChanged, openReview: openReview, emojiSet: EMOJI_SET, applyCharFace: applyCharFace, applyCharFrame: applyCharFrame, applyTokenFrame: applyTokenFrame,
+    gmFinder: gmFinder, uploadsChanged: uploadsChanged, openReview: openReview, readersChanged: readersChanged, emojiSet: EMOJI_SET, applyCharFace: applyCharFace, applyCharFrame: applyCharFrame, applyTokenFrame: applyTokenFrame,
     charsOf: charsOf, charList: charList, charById: charById, newCharacter: newCharacter, addCharacter: addCharacter, askDeleteSheet: askDeleteSheet, deleteCharacter: deleteCharacter, linkToken: linkToken, newFromToken: newFromToken, syncOwners: syncOwners, giveCharacter: giveCharacter, unbindName: unbindName, ownerFromToken: ownerFromToken,
     charSelectHtml: charSelectHtml, wireCharSelect: wireCharSelect, hoverLinesForToken: hoverLinesForToken, hoverLinesForTokenId: hoverLinesForTokenId, tokenFx: tokenFx, tokenFxModel: tokenFxModel, tokenFxCharOp: tokenFxCharOp,
     playerFinder: playerFinder, charFromJson: charFromJson, startFromFile: startFromFile,
-    openSheet: openSheet, closeSheet: closeSheet, openHud: openHud, closeHud: closeHud, closeHuds: closeHuds, hudFor: hudFor, rolled: rolled, tokenTurned: tokenTurned, tokenCtxFor: tokenCtxFor, dialSig: dialSigFor, canOpen: canOpen, renderSheet: renderViews, renderSheetInto: renderSheetInto, charChanged: charChanged, charGone: charGone, editResult: editResult, styleResult: styleResult, commitLook: commitLook, sheetOpen: function() { return sheetOpen; }, canRoll: canRoll, hasInitRoll: hasInitRoll, rollInit: rollInit, initTieNow: initTieNow, fromShadowBase: fromShadowBase, LIMITS: LIMITS };
+    openSheet: openSheet, closeSheet: closeSheet, openHud: openHud, closeHud: closeHud, closeHuds: closeHuds, hudFor: hudFor, rolled: rolled, tokenTurned: tokenTurned, tokenCtxFor: tokenCtxFor, dialSig: dialSigFor, canOpen: canOpen, renderSheet: renderViews, renderSheetInto: renderSheetInto, charChanged: charChanged, charGone: charGone, editResult: editResult, styleResult: styleResult, commitLook: commitLook, sheetOpen: function() { return sheetOpen; }, canRoll: canRoll, hasInitRoll: hasInitRoll, rollInit: rollInit, initTieNow: initTieNow, LIMITS: LIMITS,
+    readerKit: function() { return { exportView: exportView, charById: charById, tokenFlags: tokenFlags, facingTarget: facingTarget, stanceCtx: stanceCtx, el: el, saveTextFile: saveTextFile, systemOf: systemOf, F: F, isClient: isClient, canWrite: canWrite, newCharacter: newCharacter, linkToken: linkToken, afterCharChange: afterCharChange, openReview: openReview, gmFinder: gmFinder, renderViews: renderViews, sheetOpen: function() { return sheetOpen; } }; } };   // what an outside reader's page code reads the sheet by
+
+// An outside sheet reader (2026-10-18): a module of the GM's own may stand beside the app, in the repository's private/ folder, which only the
+// development server serves (none ships with the app). It is asked for once, after the page has drawn and never in the stream window; it
+// registers itself (systemcore registerReader) and tells the sheet (readersChanged). Where it is not there the one request fails quietly
+(function askReader() {
+    if (/[?&]stream=1/.test(location.search)) return;
+    var go = function() { setTimeout(function() { import('/private/index.js').catch(function() {}); }, 0); };
+    if (document.readyState === 'complete') go(); else window.addEventListener('load', go, { once: true });
+})();
 
 // Pop the open sheet out into its own window (like the doc panel); dock-back there reopens the in-app panel.
 (function wireSheetPopout() {

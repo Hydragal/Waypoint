@@ -597,6 +597,7 @@ process.on('exit', code => { if (!summed && !code) { console.log(NL + 'FAIL     
             fs.mkdirSync(path.join(r, 'system', 'app'), { recursive: true });
             fs.writeFileSync(path.join(r, 'system', 'app', 'version.json'), '{"version":"0.0.0"}' + NL); fs.writeFileSync(path.join(r, 'system', 'app', 'index.html'), '<!doctype html>');
             fs.writeFileSync(path.join(r, 'README.md'), 'Current release: **0.0.0**' + NL); fs.writeFileSync(path.join(r, 'WHATSNEW.txt'), 'WAYPOINT 0.0.0' + NL + '====' + NL + NL + '- x' + NL);
+            fs.writeFileSync(path.join(r, 'Waypoint.exe'), 'MZ'); fs.writeFileSync(path.join(r, 'license.txt'), 'the licence' + NL);   // the rest of what the installer's stage takes from the top
             return r;
         }
         const keyOf = r => { try { delete require.cache[require.resolve(path.join(r, 'system/resources/app/updatekey.js'))]; return require(path.join(r, 'system/resources/app/updatekey.js')).UPDATE_PUBKEY; } catch (e) { return null; } };
@@ -680,10 +681,10 @@ process.on('exit', code => { if (!summed && !code) { console.log(NL + 'FAIL     
                 && /const ASSETS = \['Waypoint_Setup\.exe', 'Waypoint_Setup\.exe\.sig', zipName, zipName \+ '\.sha256', zipName \+ '\.sig', 'manifest\.json'\];/.test(src) && /const missing = ASSETS\.filter\(/.test(src) && /for \(const f of ASSETS\) \{/.test(src) && (src.match(/'manifest\.json'\]/g) || []).length === 1
                 && /const SIGNTOOL = process\.env\.WAYPOINT_SIGNTOOL;/.test(src) && /if \(SIGNTOOL\) \{/.test(src) && /not code-signed/.test(src) && !/Get-AuthenticodeSignature/.test(src), j([iKey, iDist, iReadme]));
             // the installer's own signature, and the core's record
-            const iRev = src.indexOf('shellrev.status(ROOT)'), iIscc = src.indexOf('execSync(`"${ISCC}"'), iTool = src.indexOf('if (SIGNTOOL) {'), iSetupSig = src.indexOf("signkey.signZip('Waypoint_Setup.exe', setupSha, VERSION, SIGNKEY)"), iCopy = src.indexOf("fs.copyFileSync(path.join(ROOT, 'Waypoint_Setup.exe'), path.join(dist, 'Waypoint_Setup.exe'));");
-            check('release.js, pinned: the installer is signed with the update key after it is compiled and after the optional code-signing step (which changes its bytes) — the same three lines with the installer\'s own name the first —, the signature is checked at once as an install will check it and goes out as Waypoint_Setup.exe.sig; minShell in the manifest and in the app\'s own version.json is the version tools/shellrev.json records, never a constant, and a stale record stops the build before the first thing it writes',
+            const iRev = src.indexOf('shellrev.status(ROOT)'), iIscc = src.indexOf('execSync(`"${ISCC}"'), iTool = src.indexOf('if (SIGNTOOL) {'), iSetupSig = src.indexOf("signkey.signZip('Waypoint_Setup.exe', setupSha, VERSION, SIGNKEY)"), iCopy = src.indexOf("fs.copyFileSync(SETUP, path.join(dist, 'Waypoint_Setup.exe'));");
+            check('release.js, pinned: the installer, taken from the stage it is compiled in, is signed with the update key after it is compiled and after the optional code-signing step (which changes its bytes) — the same three lines with the installer\'s own name the first —, the signature is checked at once as an install will check it and goes out as Waypoint_Setup.exe.sig; minShell in the manifest and in the app\'s own version.json is the version tools/shellrev.json records, never a constant, and a stale record stops the build before the first thing it writes',
                 iRev > iKey && iRev < iDist && iRev < iReadme && iIscc > 0 && iTool > iIscc && iSetupSig > iTool && iCopy > iSetupSig && /if \(!updater\.verifyUpdate\(UPDATE_PUBKEY, 'Waypoint_Setup\.exe', setupSha, VERSION, setupSig\)\) \{/.test(src)
-                && /fs\.writeFileSync\(path\.join\(dist, 'Waypoint_Setup\.exe\.sig'\), setupSig \+ '\\n'\);/.test(src) && /const setupSha = crypto\.createHash\('sha256'\)\.update\(fs\.readFileSync\(path\.join\(ROOT, 'Waypoint_Setup\.exe'\)\)\)\.digest\('hex'\);/.test(src)
+                && /fs\.writeFileSync\(path\.join\(dist, 'Waypoint_Setup\.exe\.sig'\), setupSig \+ '\\n'\);/.test(src) && /const setupSha = crypto\.createHash\('sha256'\)\.update\(fs\.readFileSync\(SETUP\)\)\.digest\('hex'\);/.test(src) && /\nconst SETUP = path\.join\(STAGE, 'Waypoint_Setup\.exe'\);\n/.test(src)
                 && !/MIN_SHELL/.test(src) && /JSON\.stringify\(\{ version: VERSION, minShell: SHELL_SINCE, built: /.test(src) && /JSON\.stringify\(\{ version: VERSION, minShell: SHELL_SINCE \}\) \+ '\\n'\)/.test(src) && !/minShell: '/.test(src), j([iKey, iRev, iDist, iIscc, iTool, iSetupSig, iCopy]));
             // run for real on the scratch copy, the right key at hand: a stale record stops it; a fresh one lets it past both refusals (it then stops at the first build step, which the scratch copy lacks)
             const mainFile = path.join(repo, 'system/resources/app/main.js'), mainText = fs.readFileSync(mainFile, 'utf8');
@@ -702,6 +703,65 @@ process.on('exit', code => { if (!summed && !code) { console.log(NL + 'FAIL     
             let vj = null; try { vj = JSON.parse(ver()); } catch (e) { vj = null; }
             check('with the right key and a fresh record the build goes past both refusals, and the app\'s own version.json — the first thing it writes into the app, inside what is signed — names the core it needs (minShell: the record\'s since)',
                 !/Not built/.test(pastSaid) && !!vj && vj.version === require('../system/resources/app/package.json').version && vj.minShell === JSON.parse(recText).since && j(Object.keys(vj)) === j(['version', 'minShell']) && !fs.existsSync(path.join(repo, 'Waypoint_Setup.exe')), j([past.status, vj, pastSaid.slice(0, 200)]));
+
+            /* ---- the installer is compiled from a clean copy (the stage): release.js run to its end on a scratch copy, the right key at hand. Inno Setup,
+               the app zip's archiver and the tour's check are stand-ins of the suite's own (the stand-in for Inno Setup writes down what it was handed and
+               every file beside the script it was handed, then puts an installer there), so nothing of Inno Setup runs on any machine, and PowerShell runs on Windows alone, to read which files
+               are marked hidden ---- */
+            {
+                const vNow = require('../system/resources/app/package.json').version, win = process.platform === 'win32', same = (a, b) => (win ? String(a).toLowerCase() === String(b).toLowerCase() : a === b);
+                const put = (root, rel, data) => { const p = path.join(root, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, data); };
+                const link = (target, at) => { try { fs.symlinkSync(target, at, 'junction'); return true; } catch (e) { return false; } };
+                const stub = path.join(tmp, 'stubs' + (++seq)), log = path.join(stub, 'iscc-log.json'), isccJs = path.join(stub, 'iscc.js'), psJs = path.join(stub, 'ps.js');
+                fs.mkdirSync(stub, { recursive: true });
+                fs.writeFileSync(isccJs, ["'use strict';", "const fs = require('fs'), path = require('path'), crypto = require('crypto');", "const iss = process.argv[2], dir = path.dirname(iss), files = {};",
+                    "const walk = rel => { for (const n of fs.readdirSync(rel ? path.join(dir, rel) : dir)) { const r = rel ? rel + '/' + n : n, p = path.join(dir, r), st = fs.lstatSync(p); if (st.isSymbolicLink()) files[r] = 'link'; else if (st.isDirectory()) { files[r + '/'] = 'folder'; walk(r); } else files[r] = crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex'); } };",
+                    "walk('');", "fs.writeFileSync(process.env.WP_ISCC_LOG, JSON.stringify({ args: process.argv.slice(2), files: files }));", "fs.writeFileSync(path.join(dir, 'Waypoint_Setup.exe'), 'an installer the stand-in made');"].join(NL) + NL);
+                fs.writeFileSync(psJs, ["'use strict';", "const m = /-DestinationPath '([^']+)'/.exec(process.argv.slice(2).join(' '));", "require('fs').writeFileSync(m[1], 'PK an archive the stand-in made');"].join(NL) + NL);
+                const exe = (name, js) => { const p = path.join(stub, name + (win ? '.cmd' : '')); fs.writeFileSync(p, win ? '@"' + process.execPath + '" "' + js + '" %*\r\n' : '#!/bin/sh\nexec "' + process.execPath + '" "' + js + '" "$@"\n'); if (!win) fs.chmodSync(p, 0o755); return p; };
+                const iscc = exe('iscc', isccJs); exe('powershell', psJs);
+                const envOf = () => { const e = cleanEnv({ WAYPOINT_SIGNING_KEY: priv2, ISCC: iscc, WP_ISCC_LOG: log }), pk = Object.keys(e).find(k => k.toUpperCase() === 'PATH') || 'PATH'; e[pk] = stub + path.delimiter + (e[pk] || ''); return e; };
+                const sr = scratchRepo(pub2);
+                fs.writeFileSync(path.join(sr, 'tools', 'tutorialcheck.js'), "'use strict';" + NL);   // the tour's own suite checks the tour: here it passes
+                const DECOYS = { 'NOTES.md': 'private notes', '.agent/worktrees/w/system/app/scripts/x.js': 'old code', 'IMPROVEMENTS.md': '# ideas', 'private/reader.js': 'mine', 'saves/data.json': '{}', 'docs/plan.md': '#', '.github/workflows/checks.yml': 'name: x', '.gitattributes': '* text', 'Waypoint_Setup.exe': 'an old installer', 'unknown-root-file.txt': '?', 'system/userdata/settings.json': '{"mine":1}', 'system/app.prev/index.html': 'prev', 'system/app.new/index.html': 'new', 'system/app.bad/index.html': 'bad' };
+                for (const k of Object.keys(DECOYS)) put(sr, k, DECOYS[k]);
+                put(sr, 'system/app/assets/fonts/Some Face/SomeFace-Regular.ttf', Buffer.from([0, 1, 0, 0, 13, 10, 0, 255]));
+                const ran = node(path.join(sr, 'tools', 'release.js'), [], envOf()), said = String(ran.stdout) + String(ran.stderr);
+                let got = null; try { got = JSON.parse(fs.readFileSync(log, 'utf8')); } catch (e) { got = null; }
+                // what the stage should hold, read from the scratch tree by the suite's own walk: the five files at the top, and system/ but for its five folders
+                const SKIP = ['system/userdata', 'system/app.prev', 'system/app.new', 'system/app.bad', 'system/app/private'], want = {};
+                for (const f of ['Waypoint.exe', 'license.txt', 'README.md', 'WHATSNEW.txt', 'installer.iss']) want[f] = sha256(fs.readFileSync(path.join(sr, f)));
+                const wantWalk = rel => { want[rel + '/'] = 'folder'; for (const n of fs.readdirSync(path.join(sr, rel))) { const r = rel + '/' + n; if (SKIP.indexOf(r.toLowerCase()) >= 0) continue; if (fs.statSync(path.join(sr, r)).isDirectory()) wantWalk(r); else want[r] = sha256(fs.readFileSync(path.join(sr, r))); } };
+                wantWalk('system');
+                const sortKeys = o => { const out = {}; for (const k of Object.keys(o || {}).sort()) out[k] = o[k]; return out; };
+                const dist = path.join(sr, 'dist', vNow), setupFile = path.join(dist, 'Waypoint_Setup.exe'), setupBytes = fs.existsSync(setupFile) ? fs.readFileSync(setupFile) : Buffer.alloc(0);
+                let setupSig = ''; try { setupSig = fs.readFileSync(setupFile + '.sig', 'utf8').trim(); } catch (e) { setupSig = ''; }
+                const distList = fs.existsSync(dist) ? fs.readdirSync(dist).sort() : [], zipN = 'waypoint-app-' + vNow + '.zip';
+                check('release.js run to its end (a scratch copy, the right key, stand-ins for Inno Setup and the archiver): Inno Setup is handed the staged installer.iss in dist/<version>/stage and nothing else, and beside it lie exactly the five files of the top and system/ but for its five folders, each byte for byte as the build left it (the README naming the release and the app\'s version.json written before the copy), while a notes file, a folder of working copies, IMPROVEMENTS.md, private/, saves/, docs/, .github/, .gitattributes, an old installer, a file nobody knows and the five folders lie beside the real script and are not copied; a private folder beside the build no longer stops it',
+                    ran.status === 0 && !!got && Array.isArray(got.args) && got.args.length === 1 && same(got.args[0], path.join(fs.realpathSync(sr), 'dist', vNow, 'stage', 'installer.iss'))
+                    && j(sortKeys(got.files)) === j(sortKeys(want)) && /Current release: \*\*\d+\.\d+\.\d+\*\*/.test(fs.readFileSync(path.join(sr, 'README.md'), 'utf8')) && JSON.parse(fs.readFileSync(path.join(sr, 'system', 'app', 'version.json'), 'utf8')).version === vNow,
+                    j([ran.status, said.slice(-400), got && got.args, got && Object.keys(got.files).filter(k => !(k in want)), Object.keys(want).filter(k => !got || !(k in got.files))]));
+                check('the installer is taken out of the stage: the copy in dist/<version>/ is the one Inno Setup made there, its signature (Waypoint_Setup.exe.sig) checks against the key as an install will check it, the stage is removed once it is out, nothing is written at the top of the tree (an old installer there stays as it was), and dist/<version>/ holds what a release carries and its notes, nothing else',
+                    ran.status === 0 && setupBytes.toString('utf8') === 'an installer the stand-in made' && updater.verifyUpdate(pub2, 'Waypoint_Setup.exe', sha256(setupBytes), vNow, setupSig) === true && !fs.existsSync(path.join(dist, 'stage'))
+                    && fs.readFileSync(path.join(sr, 'Waypoint_Setup.exe'), 'utf8') === 'an old installer' && j(distList) === j(['RELEASE_NOTES.md', 'Waypoint_Setup.exe', 'Waypoint_Setup.exe.sig', zipN, zipN + '.sha256', zipN + '.sig', 'manifest.json'].sort()) && /Copying what an install needs into /.test(said), j([ran.status, distList, setupSig.length]));
+                // and a file of the list that is missing, or a junction in what would be copied, refuses the build before the first thing it writes
+                const before = r => ({ readme: fs.readFileSync(path.join(r, 'README.md'), 'utf8'), ver: fs.readFileSync(path.join(r, 'system', 'app', 'version.json'), 'utf8') });
+                const asWas = (r, b) => { const n = before(r); return n.readme === b.readme && n.ver === b.ver && !fs.existsSync(path.join(r, 'dist')) && !fs.existsSync(path.join(r, 'Waypoint_Setup.exe')); };
+                const m = scratchRepo(pub2); fs.unlinkSync(path.join(m, 'license.txt')); const mB = before(m), mRun = node(path.join(m, 'tools', 'release.js'), [], envOf()), mSaid = String(mRun.stdout) + String(mRun.stderr);
+                const k = scratchRepo(pub2); put(tmp, 'outside' + seq + '/secret.txt', 'outside the tree'); const kLinked = link(path.join(tmp, 'outside' + seq), path.join(k, 'system', 'app', 'away'));
+                const kB = before(k), kRun = node(path.join(k, 'tools', 'release.js'), [], envOf()), kSaid = String(kRun.stdout) + String(kRun.stderr);
+                check('release.js refuses to build, exit 1, in one plain line naming it and before the first thing it writes (no dist folder, the README and version.json as they were): a file the installer needs that is missing (license.txt)' + (kLinked ? ', and a junction inside system/app to a folder outside the tree' : ' (no junction could be made on this machine)'),
+                    mRun.status === 1 && mSaid.indexOf('Not built: license.txt is missing, and the installer needs it.') >= 0 && asWas(m, mB)
+                    && (!kLinked || (kRun.status === 1 && kSaid.indexOf('Not built: system/app/away is a link or a junction.') >= 0 && asWas(k, kB))), j([mRun.status, mSaid.slice(0, 200), kLinked, kRun.status, kSaid.slice(0, 200)]));
+                // and a folder that Windows marks hidden: the installer leaves it out, and its copy in the stage would not be hidden
+                if (win) {
+                    const hd = scratchRepo(pub2); put(hd, 'system/app/assets/x.png', 'p'); let hMarked = false;
+                    try { cp.execFileSync(path.join(process.env.SystemRoot || 'C:\Windows', 'System32', 'attrib.exe'), ['+h', path.join(hd, 'system', 'app', 'assets')], { stdio: 'ignore', windowsHide: true }); hMarked = true; } catch (e) { hMarked = false; }
+                    const hB = before(hd), hRun = node(path.join(hd, 'tools', 'release.js'), [], envOf()), hSaid = String(hRun.stdout) + String(hRun.stderr);
+                    check('release.js refuses to build, exit 1, in one plain line naming it and before the first thing it writes, while a folder of what would be copied is marked hidden (system/app/assets, marked by Windows\' own attrib): the installer leaves out what is hidden, and its copy in the stage would not be hidden',
+                        hMarked && hRun.status === 1 && hSaid.indexOf('Not built: system/app/assets is marked hidden. ') >= 0 && asWas(hd, hB), j([hMarked, hRun.status, hSaid.slice(0, 200)]));
+                }
+            }
         }
         {   /* ---- the core's revision: tools/shellrev.js ---- */
             const sr = shellrev, pkgV = require('../system/resources/app/package.json').version, st = sr ? sr.status(ROOT) : {};

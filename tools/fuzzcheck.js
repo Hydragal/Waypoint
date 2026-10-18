@@ -645,6 +645,7 @@ function mkCampaign(SC, F) {
     fx.rolls.push({ id: 'r_heal', label: 'Heal', apply: [{ f: 'f_hp', formula: '2', add: true }] });
     fx.fields.push({ id: 'f_gmword', key: 'GMWord', label: 'GM word', kind: 'text', edit: 'gm', vis: 'gm', hover: false }, { id: 'f_gmtxt', key: 'GMTxt', label: 'GM text', kind: 'text', edit: 'gm', vis: 'all', hover: false });   // item 35: a text only the GM sees and edits (no look of a player's reaches it, and its words never leave)
     fx.combat = { light: { presets: [{ name: 'Torch', bright: 2, dim: 4, unit: 'yd', pick: true }] } };
+    fx.listRules = { uploadFacts: true };   // setting B: a player's own row facts from an uploaded sheet apply at once, through the reader's own row op
     const sys = SC.cleanSystem(fx, { F, gmView: true, libCats: {} });
     const tok = (id, o) => Object.assign({ id, type: 'circle', isChar: true, w: 50, h: 50, layer: 'middle' }, o);
     const camp = {
@@ -838,11 +839,33 @@ function mutations(tpl) {
     const SC = window.wpSystemCore, F = window.wpFormula, DC = window.wpDiceCore, FC = window.wpFogCore, BC = window.wpBuildCore;
     check('the core modules load for real (dicecore, systemcore, fogcore, buildcore, formula, vtt…)', !!(SC && F && DC && FC && BC && typeof BC.pieceProps === 'function' && window.wpVtt) && skipped.length === 0, { skipped, buildcore: typeof BC, pieceProps: BC ? typeof BC.pieceProps : 'no buildcore' });
 
+    // an outside sheet reader of the suite's own (none ships with the app; systemcore registerReader), so that the host's upload path past readerFor
+    // is fuzzed: the proposal kept for the GM with the reader's id, setting B through the reader's own row op, the counted answer. It claims a sheet
+    // with a name and no format, and proposes from what the sheet holds as a reader does, each value checked: ST as a number, a row's count by its
+    // place in the sheet's items, a row of Rope where the character has none there. Its row op is applyRowOp, counted
+    let readerRowOps = 0;
+    const FUZZ_READER = { id: 'fuzz', name: 'Fuzz sheets', claims: js => !!js && typeof js === 'object' && typeof js.name === 'string' && js.format === undefined,
+        fill: () => ({ values: {}, lists: [], ops: [], fxLists: [], fx: [] }),
+        propose: (sys, ch, js) => {
+            const out = { changes: [] }, vals = ch && ch.values && typeof ch.values === 'object' ? ch.values : {}, at = js.attributes && typeof js.attributes === 'object' ? js.attributes : null, st = at ? at.ST : undefined;
+            if (typeof st === 'number' && isFinite(st) && st !== vals.f_str) out.changes.push({ id: 'u_1', kind: 'value', f: 'f_str', label: 'ST', from: String(vals.f_str), to: String(st), value: st, accept: true });
+            const its = Array.isArray(js.items) ? js.items.slice(0, 4) : [], rows = Array.isArray(vals.f_inv) ? vals.f_inv : [];
+            its.forEach((it, i) => {
+                if (!it || typeof it !== 'object' || typeof it.name !== 'string') return;
+                const row = rows[i] && typeof rows[i] === 'object' && typeof rows[i].id === 'string' ? rows[i] : null;
+                if (row && typeof it.qty === 'number' && isFinite(it.qty) && it.qty !== row.qty) out.changes.push({ id: 'u_q' + i, kind: 'fact', f: 'f_inv', row: row.id, label: 'Inventory: ' + it.name.slice(0, 40), from: String(row.qty), to: String(it.qty), qty: it.qty, accept: true });
+                else if (!row && it.name === 'Rope') out.changes.push({ id: 'u_a' + i, kind: 'add', f: 'f_inv', label: 'Inventory: Rope', from: '', to: 'Rope', ops: [{ op: 'add', defId: 'i_rope', rowId: 'w_r' + i, qty: 1 }], accept: true });
+            });
+            return out;
+        },
+        rowOp: (sys, ch, fid, q, F2, o) => { readerRowOps++; return SC.applyRowOp(sys, ch, fid, q, F2, o); } };
+    check('an outside sheet reader of the suite\'s own registers in the fuzz world (systemcore registerReader), so that the host\'s upload path past readerFor is fuzzed', SC.registerReader(FUZZ_READER) === true && SC.readerById('fuzz') !== null);
+
     const sheetsStub = () => ({
         playerSystem: camp => SC.cleanSystem(camp.system, { F, gmView: false, libCats: {} }), readablePages: () => [],
         charChanged() {}, charGone() {}, renderSheet() {}, sheetRefsChanged: () => false, tokenTurned() {}, uploadsChanged() {},
         applyCharFace(id, plan) { rec.pics.push({ id, plan: plan && plan.kind }); return Promise.resolve(true); }, applyTokenFace(mapId, wbId, plan) { rec.pics.push({ wbId, plan: plan && plan.kind }); return Promise.resolve(true); },
-        giveCharacter(pid, cid, o) { rec.gives.push({ pid, cid }); }, deleteCharacter(cid) { rec.gives.push({ deleted: cid }); }, sbFinder: () => null, playerFinder: () => null, charFromJson: () => null,
+        giveCharacter(pid, cid, o) { rec.gives.push({ pid, cid }); }, deleteCharacter(cid) { rec.gives.push({ deleted: cid }); }, gmFinder: () => null, playerFinder: () => null, charFromJson: () => null,
         bellNote() {}, editResult() {}, rollInit: () => ({ error: 'no dice here' }), rolled() {}, roundHook() {}, turnHook() {}, systemOf: () => null, tokenCtxFor: () => null
     });
     function installStubs() {
@@ -1152,7 +1175,7 @@ function mutations(tpl) {
         'char-apply': o => o.p1.some(m => m.type === 'char-ack') && o.p1.some(m => m.type === 'apply'),
         'turn-hold': () => net.combats.m_open.turn === 1 && net.combats.m_open.rows.some(r => r.id === 'row_p1' && r.held === 1),
         'turn-end': () => net.combats.m_open.turn === 1,
-        'char-upload': o => o.p1.some(m => m.type === 'char-upload-ans' && typeof m.n === 'number'),
+        'char-upload': o => o.p1.some(m => m.type === 'char-upload-ans' && typeof m.n === 'number') && (campH().uploads || []).some(u => u.charId === 'c_p1' && u.reader === 'fuzz'),   // read by the suite's own reader (FUZZ_READER): the proposal waits for the GM with the reader's id, and the answer counts it
         'char-item': o => Array.isArray(campH().chars.c_p1.values.f_inv) && campH().chars.c_p1.values.f_inv.length === 1 && o.p1.some(m => m.type === 'char-ack'),
         'lib-idx': o => o.p1.some(m => m.type === 'lib-idx-ans'),
         'char-effect': o => o.p1.some(m => m.type === 'char-ack') && Array.isArray(campH().chars.c_p1.values.f_fx) && campH().chars.c_p1.values.f_fx.length === 1,
@@ -1370,6 +1393,26 @@ function mutations(tpl) {
         const c3 = connect('peer_p3'), nDlg = rec.confirms.length, adm3 = await admit(c3, { id: 'u_p3', name: 'Cato' }, K3);
         check('host: a right proof made over another connection\'s certificates admits nobody and asks nobody — the join is refused in the app\'s own words, the connection closed, no key issued, and the GM told once by a notice naming the player (a toast and a Session Log line; three more tries inside the minute say nothing more); the same player over their own connection\'s pair goes straight in, nobody asked', between && cm.open === false && againOk && quietM && adm3.ok && rec.confirms.length === nDlg, { admM, den: denM, told: toldM.length, logged: logM.length, againOk, quietM, adm3 });
         c3.close(); flushTimers(); await drain(); flushTimers();
+    }
+    {   // an outside sheet reader (FUZZ_READER): an upload it claims is read past readerFor — setting B applies a row's count at once through the reader's own
+        // row op, the rest waits for the GM with the reader's id, and the answer counts both; a sheet no reader claims, and any sheet while no reader is
+        // registered, is answered unread with nothing kept, saved or sent to anyone else
+        await resetWorld(); const campR = stubs.getActiveCampaign();
+        campR.chars.c_p1.values.f_inv = [{ id: 'w_s', defId: 'i_rope', qty: 1 }];
+        const sbR = sentLog.length, opsR = readerRowOps;
+        await fireHost('p1', 'char-upload (the suite\'s reader)', 'a row\'s count and a value', { type: 'char-upload', rid: 'q1', charId: 'c_p1', sheet: { name: 'Ayla', attributes: { ST: 13 }, items: [{ name: 'Rope', qty: 3 }] } });
+        const ansR1 = sentLog.slice(sbR).filter(s => s.to === conns.p1.peer && s.m.type === 'char-upload-ans').map(s => s.m), upR1 = (campR.uploads || [])[0] || null, opsR1 = readerRowOps - opsR;
+        const rowR = (campR.chars.c_p1.values.f_inv || [])[0] || {}, strR = campR.chars.c_p1.values.f_str;
+        clockOff += 11000; const sbR2 = sentLog.length, upsR2 = JSON.stringify(campR.uploads);
+        await fireHost('p1', 'char-upload (a sheet no reader claims)', 'another format', { type: 'char-upload', rid: 'q2', charId: 'c_p1', sheet: { format: 'elsewhere', name: 'Ayla', attributes: { ST: 15 } } });
+        const outR2 = sentLog.slice(sbR2).map(s => [s.to === conns.p1.peer ? 'p1' : s.to, s.m.type, s.m.reason || null]).filter(x => x[1] !== 'hb'), sameR2 = JSON.stringify(campR.uploads) === upsR2;
+        clockOff += 11000; SC.dropReader('fuzz'); let outR3 = null, sameR3 = false;
+        try { const sbR3 = sentLog.length, upsR3 = JSON.stringify(campR.uploads); await fireHost('p1', 'char-upload (no reader registered)', 'well-formed', { type: 'char-upload', rid: 'q3', charId: 'c_p1', sheet: { name: 'Ayla', attributes: { ST: 15 } } }); outR3 = sentLog.slice(sbR3).map(s => [s.to === conns.p1.peer ? 'p1' : s.to, s.m.type, s.m.reason || null]).filter(x => x[1] !== 'hb'); sameR3 = JSON.stringify(campR.uploads) === upsR3; }
+        finally { SC.registerReader(FUZZ_READER); }
+        check('host (an outside sheet reader): an upload the suite\'s reader claims is read past readerFor, setting B applying the row\'s count at once through the reader\'s own row op while the value waits for the GM with the reader\'s id, and the answer counts one of each; a sheet no reader claims, and a sheet while no reader is registered, is answered unread to its sender alone with nothing kept',
+            JSON.stringify(ansR1.map(m => [m.rid, m.n, m.auto, m.reason || null])) === JSON.stringify([['q1', 1, 1, null]]) && rowR.qty === 3 && strR === 14 && opsR1 >= 1 && !!upR1 && upR1.reader === 'fuzz' && JSON.stringify(upR1.changes.map(c => c.id)) === JSON.stringify(['u_1'])
+            && JSON.stringify(outR2) === JSON.stringify([['p1', 'char-upload-ans', 'unread']]) && sameR2 && JSON.stringify(outR3) === JSON.stringify([['p1', 'char-upload-ans', 'unread']]) && sameR3 && SC.readerById('fuzz') !== null,
+            { ansR1, row: rowR, strR, opsR1, upR1, outR2, outR3 });
     }
     {   // the GM-only field through the players' paths: a roll naming it, an edit of it, an apply reading it
         await resetWorld(); const sb = sentLog.length;

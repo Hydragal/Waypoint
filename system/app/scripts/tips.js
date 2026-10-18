@@ -24,7 +24,7 @@ var BY_ID = {
     wbCharSel: 'The campaign character this token stands for: its sheet, values and player. New character from this token makes one named after it; several tokens may share a character.',
     wbOwner: 'The player allowed to drag this token in multiplayer. Their moves are mirrored to everyone.',
     wbElev: 'Height above the ground, in yards or in metres as you chose under Measuring — a ledge at +3 yd, a catwalk at +5, a pit at −2. Its arrows step one yard. Shown as a chip on the token; the Radius tool measures straight-line, height included.',
-    wbPosture: 'Standing, crouching, sitting, kneeling, crawling, lying prone or lying face up (handbook ch. 9). Shown as a chip on the token; an attached ShadowBase sheet seeds it.',
+    wbPosture: 'Standing, crouching, sitting, kneeling, crawling, lying prone or lying face up. Shown as a chip on the token.',
     blastFt: 'The size of the shape, in the ruler\'s unit on this map. For a circle it is read as a radius or as a diameter.',
     blastElev: 'The height the last shape or blast is measured from. It starts at the height of the token in its cell, else the ground. Its arrows step one yard.',
     blastDmg: 'The damage of the explosion. It is a number or a roll, and you type it each time.',
@@ -99,7 +99,6 @@ var BY_TEXT = {
     'alignment': 'Where the text sits inside its box: left / center / right / justified, and top / middle / bottom.',
     'text alignment': 'Where the text sits inside its box. Horizontal: left / center / right / justified. Vertical: top / middle / bottom.',
     'box background': 'A backdrop behind the text so it reads over busy art. None keeps it transparent.',
-    'shadowbase sheet shadow base com': 'A character sheet from shadow-base.com attached to this token: view it at the table, or export a site-ready file with this token’s art as the portrait.',
     'player owner can move this token': 'The player allowed to drag this token in multiplayer.',
     // sidebar
     'planners': 'Document pages: session plans, encounter tables, flowcharts, notes. Nest them under each other. Never sent to players.',

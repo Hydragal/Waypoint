@@ -605,16 +605,17 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         const EV = '(?:abort|animation\\w+|auxclick|before\\w+|afterprint|blur|cancel|canplay\\w*|change|click|close|contextmenu|copy|cuechange|cut|dblclick|drag\\w*|drop|durationchange|emptied|ended|error|focus(?:in|out)?|formdata|fullscreen\\w+|gotpointercapture|hashchange|input|invalid|key(?:down|press|up)|languagechange|load\\w*|lostpointercapture|message(?:error)?|mouse\\w+|offline|online|page(?:hide|show)|paste|pause|play(?:ing)?|pointer\\w+|popstate|progress|ratechange|readystatechange|reset|resize|scroll(?:end)?|search|securitypolicyviolation|seek(?:ed|ing)|select\\w*|slotchange|stalled|storage|submit|suspend|timeupdate|toggle|touch\\w+|transition\\w+|unhandledrejection|rejectionhandled|unload|volumechange|waiting|webkit\\w+|wheel|begin|end|repeat|show)';
         const SCAN = [['a handler attribute in markup', new RegExp('[\\s"\'<]on' + EV + '\\s*=\\s*\\\\?["\']', 'gi')], ['a handler attribute in a tag', new RegExp('<[a-zA-Z][^<>\\n]{0,300}?\\son' + EV + '\\s*=', 'gi')], ['a handler set as an attribute', /setAttribute\(\s*["'`]on|setAttributeNS\(\s*[^,()]*,\s*["'`]on/gi], ['a javascript: address', /["'`]\s*javascript:/gi],
             ['text run as code', /\bnew\s+Function\b|\bFunction\s*\(|\.constructor\s*\(|\[\s*["'`]constructor["'`]\s*\]\s*\(|\bset(Timeout|Interval)\(\s*["'`]|\bdocument\.write(ln)?\(|\bimportScripts\(|\beval\s*\(/g], ['a script element made by hand', /createElement\(\s*["'`]script["'`]\s*\)/gi],
-            ['a module or worker from somewhere else', /\bimport\(\s*(?!["']\.\/[\w.-]+["']\s*\))|^\s*import\s[^\n]*?\bfrom\s+["'](?!\.\/)|^\s*import\s+["'](?!\.\/)|\bnew\s+(Shared)?Worker\(|serviceWorker/gm]];
+            ['a module or worker from somewhere else', /\bimport\(\s*(?!["']\.\/[\w.-]+["']\s*\))(?!'\/private\/index\.js'\)\.catch\(function\(\) \{\}\); \}, 0\); \};)|^\s*import\s[^\n]*?\bfrom\s+["'](?!\.\/)|^\s*import\s+["'](?!\.\/)|\bnew\s+(Shared)?Worker\(|serviceWorker/gm]];
         const scan = src => { const out = []; SCAN.forEach(p => { p[1].lastIndex = 0; let m; while ((m = p[1].exec(src))) { out.push(p[0] + ': ' + src.slice(Math.max(0, m.index - 30), m.index + 50).replace(/\s+/g, ' ')); if (m.index === p[1].lastIndex) p[1].lastIndex++; } }); return out; };
         const found = []; allScripts.forEach(p => scan(p[1]).forEach(x => found.push(p[0] + ' — ' + x)));
         const indirect = allScripts.map(p => [p[0], (p[1].match(/\(0, eval\)\(/g) || []).length]).filter(p => p[1] > 0), anyEval = allScripts.filter(p => /\beval\b\s*[),(]/.test(p[1])).map(p => p[0]);
         const probe = ['el.innerHTML = \'<b onclick="go()">x</b>\';', 'h += "<img src=x onerror=\\"go()\\">";', 'el.setAttribute(\'onclick\', \'go()\');', 'a.href = "javascript:go()";', 'var f = new Function("return 1");', 'setTimeout("go()", 5);', 'var s = document.createElement("script");', 'import("https://example.com/x.js");', 'import(name);', 'new Worker("w.js");', 'x = eval("1");',
-            'var f = Function("return 1");', 'var g = window.Function("a", "return a");', 'x = (function() {}).constructor("return 1")();', 'x = go["constructor"](code)();', 'el.setAttribute("on" + n, code);', 'el.setAttribute(`on${n}`, code);', 'el.setAttributeNS(null, "onclick", code);'];
+            'var f = Function("return 1");', 'import(\'/private/index.js\').then(go);', 'import(\'/private/x.js\').catch(function() {}); }, 0); };', 'var g = window.Function("a", "return a");', 'x = (function() {}).constructor("return 1")();', 'x = go["constructor"](code)();', 'el.setAttribute("on" + n, code);', 'el.setAttribute(`on${n}`, code);', 'el.setAttributeNS(null, "onclick", code);'];
         const fine = ['el.onclick = function() {};', 'el.addEventListener("click", go);', 'import(\'./dialogs.js\').then(go);', 'import { a } from \'./state.js\';', 'setTimeout(function() {}, 5);', 'var ongoing = "x", once = "y", only = \'z\'; if (ongoing === "y") {}', '// the import (a Merge or a Replace) is cleaned first','h += \'<span title="carry on = yes">\';',
             'if (typeof f === "function") f();', 'function isFunction(v) { return typeof v === "function"; }', 'el.setAttribute("aria-pressed", "on");', 'el.setAttribute("data-kind", only);', 'if (Object.prototype.hasOwnProperty.call(o, "constructor")) return null;', 'var BAD = ["__proto__", "constructor", "prototype"];'];
         check('no script of the app writes a handler attribute or a javascript: address into markup, runs text as code, makes a script element by hand or loads a module or worker from anywhere but the app\'s own scripts folder (every file in system/app/scripts scanned; the scan itself proven on a line of each kind, and quiet on the ways the app does wire a handler); the one place text is run as code is the Developer mode console (devconsole.js, twice: the typed line, and the probe that tells a refusal by the page\'s policy from an error of the typed line)',
-            scriptNames.length >= 50 && found.length === 0 && probe.every(l => scan(l).length > 0) && fine.every(l => scan(l).length === 0) && j(indirect) === j([['devconsole.js', 2]]) && j(anyEval) === j(['devconsole.js']), [found.slice(0, 6), probe.filter(l => scan(l).length === 0), fine.filter(l => scan(l).length > 0), indirect, anyEval]);
+            scriptNames.length >= 50 && found.length === 0 && probe.every(l => scan(l).length > 0) && j(allScripts.filter(p => /import\(\s*'\/private\//.test(p[1])).map(p => [p[0], p[1].split('import(').length - 1])) === j([['sheets.js', 1]])
+            && /\(function askReader\(\) \{\n    if \(\/\[\?&\]stream=1\/\.test\(location\.search\)\) return;\n    var go = function\(\) \{ setTimeout\(function\(\) \{ import\('\/private\/index\.js'\)\.catch\(function\(\) \{\}\); \}, 0\); \};\n    if \(document\.readyState === 'complete'\) go\(\); else window\.addEventListener\('load', go, \{ once: true \}\);\n\}\)\(\);/.test(read('sheets.js')) && fine.every(l => scan(l).length === 0) && j(indirect) === j([['devconsole.js', 2]]) && j(anyEval) === j(['devconsole.js']), [found.slice(0, 6), probe.filter(l => scan(l).length === 0), fine.filter(l => scan(l).length > 0), indirect, anyEval]);
     }
 
     /* ---- docrender: a page's layout numbers even when it never met cleanDoc ---- */
@@ -709,7 +710,7 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         const T = '<img src=x onerror=alert(1)>', queue = [{ id: 'up_a', charId: 'c_1', from: 'u_a', name: T + 'Pat', at: 1, changes: [{ id: 'u_1', kind: 'value', f: 'f_st', label: T, from: '"><script>x()</script>', to: '<b onmouseover=y()>', value: 1, accept: true }, { id: 'u_2', kind: 'explode', f: 'f_st', label: T }] }];
         const camp = { uploads: queue, chars: { c_1: { id: 'c_1', name: T + 'Ana', values: {} } } };
         const el = (tag, cls, text) => { const e = fake(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
-        const openReview = new Function('ui', 'getActiveCampaign', 'uploadsOf', 'charById', 'isClient', 'el', 'systemOf', 'F', 'sbApplyProposal', 'afterCharChange', 'net', 'toast', 'save', 'renderViews', 'closeReview', 'var _review = null, lastChange = null;\n' + slice('sheets.js', 'uploadreview') + '\nreturn openReview;')(
+        const openReview = new Function('ui', 'getActiveCampaign', 'uploadsOf', 'charById', 'isClient', 'el', 'systemOf', 'F', 'applyProposal', 'afterCharChange', 'net', 'toast', 'save', 'renderViews', 'closeReview', 'var _review = null, lastChange = null;\n' + slice('sheets.js', 'uploadreview') + '\nreturn openReview;')(
             id => nodes[id], () => camp, (cp, id) => SYC.cleanUploads(cp.uploads).filter(u => u.charId === id), (id, cp) => cp.chars[id] || null, () => false, el, () => null, () => null, () => ({}), () => {}, () => null, () => {}, () => {}, () => {}, () => {});
         openReview('c_1');
         const texts = made.map(e => e.textContent).filter(Boolean), rows = nodes.uploadList.children;
@@ -944,7 +945,7 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         const jj = JSON.stringify, SCf = SCc, SAFE = await import(modUrl('safecore.js'));
         const wbF = read('whiteboard.js'), gfS = slice('whiteboard.js', 'gmframe'), tgA = wbF.indexOf('function tokenGuide('), tgB = wbF.indexOf('\n', wbF.indexOf('window.wpTokenGuide = tokenGuide;'));
         const tgWin = { wpSystemCore: SCf }, tokenGuideF = new Function('window', wbF.slice(tgA, tgB) + '\nreturn tokenGuide;')(tgWin);
-        check('token creator (GM): the outline guide is published as window.wpTokenGuide (the roster portrait and the ShadowBase import frame against it)',
+        check('token creator (GM): the outline guide is published as window.wpTokenGuide (the roster portrait and an outside reader\'s token import frame against it)',
             tgWin.wpTokenGuide === tokenGuideF && jj(tgWin.wpTokenGuide({ isChar: true, type: 'image', src: 'x', w: 60, h: 52 }, { meta: { gridType: 'hex' } })) === jj({ shape: 'hexagon', w: 60, h: 52 }));
         const mkGm = (o) => {
             o = o || {}; const out = { opened: [], toasts: [], calls: [] };
@@ -1076,28 +1077,6 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             jj(idxI.refs['/saves/images/orig one.png']) === jj(['k']) && jj(idxI.refs['/saves/images/orig%20one.png']) === jj(['k']) && jj(idxI.refs['/saves/images/corig.png']) === jj(['k']) && jj(idxI.refs['/saves/images/p.png']) === jj(['k'])
             && uT.count === 1 && jj(uT.maps) === jj(['Hall']) && uC.count === 1 && jj(uC.maps) === jj(['the characters of K']) && uP.count === 1 && uN.count === 0, jj([idxI.refs, uT, uC, uP]));
 
-        // the ShadowBase import (shadowbase.js importCharacterToken, run for real): the token art framed from the sheet's portrait
-        const sbBody = slice('shadowbase.js', 'sbimport').replace('export function importCharacterToken(', 'function importCharacterToken(').split("(await import('./state.js'))").join('(await __imp())');
-        const sbRun = (o) => new Promise(resolve => {
-            o = o || {}; const opened = [], uploads = [], toasts = []; let saves = 0;
-            const map = { id: 'm1', type: 'map', meta: { gridType: 'hex' }, whiteboard: [] };
-            const win = { wpSystemCore: SCf, wpTokenGuide: tokenGuideF, appRender() {}, wpSeatCell() {},
-                wpFrame: o.noFrame ? undefined : { open(src, opts, cb) { opened.push({ src, opts }); if (o.mode === 'refuse') return false; if (o.mode === 'cancel') opts.onCancel(); else cb({ blob: 'FRAMED', rect: { x: 4, y: 5, s: 60 }, w: 100, h: 100, keep: o.keep !== false }); return true; } } };
-            const fetchS = (u, opt) => { if (/^data:image\//.test(u)) return Promise.resolve({ blob: async () => 'WHOLE' }); const nm = new URL('http://x' + u).searchParams.get('filename'); uploads.push([nm, opt.body]); return Promise.resolve({ json: async () => ({ url: '/saves/images/m1/' + nm }) }); };
-            const done = () => resolve({ opened, uploads, toasts, saves, map });
-            const fn = new Function('window', 'document', 'fetch', 'toast', 'save', 'canPersistLocal', 'getActiveCampaign', 'getActiveMap', 'isCharFile', 'loadImage', 'toPortrait', 'seedStance', '__imp', 'buildStatsLine', sbBody + '\nreturn importCharacterToken;')(
-                win, { getElementById: () => null }, fetchS, t => { toasts.push(t); setTimeout(done, 0); }, () => { saves++; }, () => true, () => ({ id: 'k', activeItemId: 'm1' }), () => map, () => false, async () => ({}),
-                o.portraitThrows ? () => { throw new Error('x'); } : () => 'data:image/png;base64,NORM', () => {}, async () => ({ state: {} }), () => '');
-            fn({ name: 'ana.json', text: async () => JSON.stringify({ name: 'Ana', type: 'character', portrait: 'data:image/png;base64,ORIG' }) });
-        });
-        const S1 = await sbRun({}), S2 = await sbRun({ keep: false }), S3 = await sbRun({ mode: 'cancel' }), S4 = await sbRun({ mode: 'refuse' }), S5 = await sbRun({ portraitThrows: true }), S6 = await sbRun({ noFrame: true });
-        const it1 = S1.map.whiteboard[0] || {}, gpI = tokenGuideF({ isChar: true, type: 'image', src: 'x', w: 60, h: 52 }, S1.map);
-        check('token creator (GM, the ShadowBase import run for real): the creator opens on the sheet\'s normalised portrait (256 px, a PNG blob, the map\'s cell as the outline, Keep the original ticked); OK places the token wearing the framed square and, kept, the whole portrait as its original; not kept: the square alone; Cancel imports nothing; a portrait the creator cannot take, or no creator, gives the whole portrait as before; a portrait that cannot be read: a token with no art; and the sheet keeps its portrait exactly as the file gave it, read or not (the site\'s handoff of 2026-10-15)',
-            !/import\(/.test(sbBody) && S1.opened.length === 1 && S1.opened[0].src === 'data:image/png;base64,NORM' && S1.opened[0].opts.px === 256 && S1.opened[0].opts.as === 'blob' && S1.opened[0].opts.keep === true && typeof S1.opened[0].opts.onCancel === 'function' && jj(S1.opened[0].opts.guide) === jj(gpI) && gpI.shape === 'hexagon'
-            && jj(S1.uploads) === jj([['Ana - token.png', 'FRAMED'], ['Ana - portrait.png', 'WHOLE']]) && it1.src === '/saves/images/m1/Ana - token.png' && jj(it1.frame) === jj({ src: '/saves/images/m1/Ana - portrait.png', x: 4, y: 5, s: 60, of: it1.src }) && S1.saves === 1
-            && jj(S2.uploads) === jj([['Ana - token.png', 'FRAMED']]) && !('frame' in S2.map.whiteboard[0]) && jj(S3.toasts) === jj(['Import cancelled.']) && S3.uploads.length === 0 && S3.map.whiteboard.length === 0 && S3.saves === 0
-            && jj(S4.uploads) === jj([['Ana - token.png', 'WHOLE']]) && !('frame' in S4.map.whiteboard[0]) && jj(S6.uploads) === jj([['Ana - token.png', 'WHOLE']])
-            && S5.opened.length === 0 && S5.uploads.length === 0 && S5.map.whiteboard.length === 1 && !S5.map.whiteboard[0].src && S5.map.whiteboard[0].sheet.portrait === 'data:image/png;base64,ORIG' && it1.sheet.portrait === 'data:image/png;base64,ORIG', jj([S1.opened.map(x => x.src), S1.uploads, it1.frame, S3.toasts, S4.uploads, S5.map.whiteboard]));
 
         // New character sheet… from a framed token (sheets.js newFromToken, run for real): its kept original goes with its picture
         const nfA = shF.indexOf('function newFromToken('), nfB = shF.indexOf('\nfunction charSelectHtml(');
@@ -1137,8 +1116,9 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             n1 === '2 parts filled in; 1 part could not be taken; not in this campaign: ' + evil + '.' && n2 === 'Nothing could be filled in.' && /toast\(a\.error \|\| fillNote\(a, j\)\)/.test(shN) && /toast\(fillNote\(b, j\)\)/.test(shN) && (shN.match(/fillNote\(/g) || []).length === 3
             && /export function toast\(msg\) \{[\s\S]{0,120}document\.getElementById\('toastMsg'\)\.textContent = msg;/.test(ioN), JSON.stringify([n1, n2]));
         const FXn = await import(modUrl('formula.js')), sysA = SCf.cleanSystem({ v: 1, name: 'A', rolls: [], fields: [{ id: 'f_lc', key: 'Locations', label: 'Locations', kind: 'item-list', vis: 'all', list: {} }] }, { F: FXn, gmView: false });
-        const nA = new Function('getActiveCampaign', 'isCharFile', 'charFromJson', 'window', 'F', fnS + '\nreturn fillNote;')(() => ({ system: sysA }), XPx.isCharFile, XPx.charFromJson, { wpSystemCore: SCf }, () => FXn)({ auto: 1, left: 0 }, { name: 'V', characteristics: { locations: [{ name: 'Left Arm', isAmputated: true }, { name: 'Torso' }] }, inventory: { general: [{ name: 'Rope' }] } });
-        check('Onboarding F4: a hit location left out because it is amputated is said so, never "not in this campaign" (that is for what the campaign has no place for)',
+        const stubN = { id: 'test', name: 'Test sheets', claims: js => !!js && js.name === 'V' && js.format === undefined, fill: () => ({ values: {}, lists: [], ops: [], fxLists: [], fx: [], skipped: ['gear', 'amputated: Left Arm'] }), propose: () => ({ changes: [] }), rowOp: SCf.applyRowOp };   // an outside reader of the suite's own: what it left out
+        let nA = ''; SCf.registerReader(stubN); try { nA = new Function('getActiveCampaign', 'isCharFile', 'charFromJson', 'window', 'F', fnS + '\nreturn fillNote;')(() => ({ system: sysA }), XPx.isCharFile, XPx.charFromJson, { wpSystemCore: SCf }, () => FXn)({ auto: 1, left: 0 }, { name: 'V', characteristics: { locations: [{ name: 'Left Arm', isAmputated: true }, { name: 'Torso' }] }, inventory: { general: [{ name: 'Rope' }] } }); } finally { SCf.dropReader('test'); }
+        check('Onboarding F4: a hit location a reader left out because it is amputated is said so, never "not in this campaign" (that is for what the campaign has no place for)',
             nA === '1 part filled in; not in this campaign: gear; left out as amputated: Left Arm.', nA);
         // Onboarding F4b: a file's own picture (sheets.js filePicture, run for real) — framed first, only a PNG, JPEG or WebP data URL; else its own face
         const netH = read('net.js'), hF = new Function('localStorage', 'crypto', netH.slice(netH.indexOf('// [netcheck:helpers-start]'), netH.indexOf('// [netcheck:helpers-end]')) + '\nreturn { cleanFace };')({ getItem: () => null, setItem() {} }, globalThis.crypto);
@@ -1150,7 +1130,7 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         const png = 'data:image/png;base64,' + Buffer.from('PNGDATA').toString('base64');
         const q1 = fpRun({ picture: png }), q2 = fpRun({ portrait: png }), q3 = fpRun({ picture: 'data:image/svg+xml;base64,PHN2Zz4=', face: '\u{1F409}' }), q4 = fpRun({ portrait: 'https://evil.example/x.png' }), q5 = fpRun({ face: 'photo' });
         const q6 = fpRun({ picture: 'data:image/png;base64,' + 'A'.repeat(12 * 1024 * 1024 + 8) }), q7 = fpRun({ picture: png }, { noFrame: true }), q8 = fpRun({ picture: 'data:image/png;base64,AB<script>' }), q9 = fpRun({ face: '<img src=x>' });
-        check('Onboarding F4b: a file\'s own picture (filePicture, run for real) — a PNG, JPEG or WebP data URL (a character file\'s picture, a ShadowBase portrait) opens the token creator on its bytes (256 px, a data URL within 200,000) and goes as the character\'s picture (char-pic checks it again); an SVG, a web address, anything malformed or past 12 MB never does; else its own face (never "photo", nothing that is not a face); nothing without either',
+        check('Onboarding F4b: a file\'s own picture (filePicture, run for real) — a PNG, JPEG or WebP data URL (a character file\'s picture, a sheet file\'s portrait) opens the token creator on its bytes (256 px, a data URL within 200,000) and goes as the character\'s picture (char-pic checks it again); an SVG, a web address, anything malformed or past 12 MB never does; else its own face (never "photo", nothing that is not a face); nothing without either',
             q1.r === true && q1.opened.length === 1 && q1.opened[0].type === 'image/png' && q1.opened[0].size === 7 && q1.opened[0].opts.px === 256 && q1.opened[0].opts.as === 'data' && q1.opened[0].opts.max === 200000 && JSON.stringify(q1.pics) === JSON.stringify([['c_1', '', 'data:image/png;base64,FRAMED']])
             && q2.opened.length === 1 && q3.opened.length === 0 && JSON.stringify(q3.pics) === JSON.stringify([['c_1', '\u{1F409}', '']]) && q4.r === false && q4.opened.length === 0 && q4.pics.length === 0 && q5.r === false && q5.pics.length === 0
             && q6.opened.length === 0 && q7.r === false && q7.pics.length === 0 && q8.opened.length === 0 && q9.r === false && q9.pics.length === 0, JSON.stringify([q1, q3.pics, q4, q5, q9]));
@@ -4752,7 +4732,7 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
     }
     // fold B5: a secret door, the end of its checks
 
-    /* ---- 1.5.4: a column's With stats on the sheet, in the System editor and on the readable page, and the website's typed DR (systemcore.js sbRowOps) ---- */
+    /* ---- 1.5.4: a column's With stats on the sheet, in the System editor and on the readable page ---- */
     {
         const j = JSON.stringify, SYw = await import(modUrl('systemcore.js')), FOw = await import(modUrl('formula.js')), XPw = await import(modUrl('sheetexport.js')), DMw = await import(modUrl('docmd.js'));
         const shW = read('sheets.js'), HTMLW = /innerHTML|insertAdjacentHTML|outerHTML|setAttribute|document\.write/;
@@ -4771,37 +4751,12 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             cols: [{ key: 'DR', label: T + P, formula: 'Row.lvl', plus: ['vsenergy', 'VSION', T, P, X1, '__proto__', 'constructor', 'kind', 'vsEnergy', 'vsCold'] }] } }] };
         const sysW = SYw.cleanSystem(JSON.parse(j(rawW)), { F: FOw, gmView: true }), fW = sysW.fields[0], OWN = ['stated', 'pen', 'vsEnergy', 'vsIon', 'vsCold'];
         const protoKeys = () => j([Object.keys(Object.prototype), ({}).vsEnergy, ({}).stated, ({}).ghost, ({}).polluted, typeof ({}).constructor, typeof ({}).toString]), proto0 = protoKeys();
-        // the hostile website file: kinds that are markup, a script address, a prototype's name; rows whose ids are a prototype's names; names past any length
-        const fileW = { characteristics: { locations: [{ id: 'a1', name: 'Torso', type: 'Torso', relativeSM: 2, status: 'Healthy' }], locationDr: [
-            { id: 'a1', name: 'Torso', type: 'Torso', dr: 15, typedDr: [{ vs: 'energy', bonus: 20 }, { vs: T, bonus: 3 }, { vs: 'javascript:alert(1)', bonus: 4 }, { vs: '__proto__', bonus: 5 }, { vs: '<b>', bonus: 6 }, { vs: 'ion', bonus: 10 }, { vs: 'ENERGY ', bonus: 99 }, { vs: 'acid', bonus: 2 }, { vs: 'cold', bonus: 2e9 }, { vs: 'cold', bonus: '<b>' }, null, { vs: '<i>', bonus: 0 }] },
-            { id: '__proto__', name: LONGW, type: 'Torso', dr: 3, typedDr: 'x' },
-            { id: 'constructor', name: 'Odd' + LONGW, type: 'Nothing', dr: 4, typedDr: [{ vs: 'cold', bonus: 9 }] },
-            { id: 'toString', name: LONGW, type: 'Torso', dr: 9, typedDr: [], amputated: true },
-            { id: 'ghost', name: 'Ghost', type: 'Torso', dr: 1 },
-            { id: 'real', name: 'Real', type: 'Torso', dr: 2 }] },
-            automatonBuild: { locationStates: Object.assign(Object.create({ ghost: 'Crippled' }), { real: 'Crippled' }) } };
-        const findW = n => String(n).trim().toLowerCase() === 'torso' ? [sysW.items[0]] : [];
-        const roW = SYw.sbRowOps(fileW, sysW, findW), rowsW = [], byRow = Object.create(null);
-        roW.ops.forEach(o => { const q = o.q; if (!byRow[q.rowId]) { byRow[q.rowId] = { ops: [] }; rowsW.push(byRow[q.rowId]); } byRow[q.rowId].ops.push(q); });
-        const opOf = (r, op) => r ? r.ops.filter(q => q.op === op) : [], onOf = r => { const s = opOf(r, 'set')[0]; return s && s.facts ? s.facts.on : undefined; };
-        const statBags = roW.ops.map(o => o.q.op === 'ov' && o.q.ov && o.q.ov.stats ? o.q.ov.stats : o.q.op === 'custom' && o.q.def && o.q.def.stats ? o.q.def.stats : null).filter(Boolean);
-        const kindWords = roW.skipped.filter(w => !/^amputated: /.test(w)), NMAX = SYw.LIMITS.name, cutName = LONGW.slice(0, NMAX);
-        check('typed DR (a hostile website file, sbRowOps run for real): a kind that is markup, a script address or __proto__ is said only in the fixed words "typed DR of a kind that does not read", once; a kind is named only as 1 to 20 small letters; a figure past the bound or no number carries nothing; a second entry of a kind is not added; no stat is written but the list\'s own number stats, each a number or null; no prototype is touched',
-            j(kindWords) === j(['typed DR of a kind that does not read', 'typed DR vs. acid']) && kindWords.every(w => /^typed DR (of a kind that does not read|vs\. [a-z]{1,20})$/.test(w))
-            && j(opOf(rowsW[0], 'ov').map(q => q.ov)) === j([{ stats: { pen: 3 } }, { stats: { stated: 1, vsEnergy: 20, vsIon: 10, vsCold: null } }])
-            && statBags.length >= 4 && statBags.every(s => Object.keys(s).every(k => OWN.indexOf(k) >= 0 && (s[k] === null || (typeof s[k] === 'number' && isFinite(s[k])))) && (Object.getPrototypeOf(s) === Object.prototype || Object.getPrototypeOf(s) === null))
-            && protoKeys() === proto0 && !/<b>|<i>|javascript|__proto__|onerror=alert\(1\)>"/.test(j(kindWords)) && !/2000000000|"99"|:99[,}]/.test(j(statBags)),
-            j([roW.skipped.map(w => w.slice(0, 60)), statBags]));
-        check('typed DR (a hostile website file): a row whose id is __proto__, constructor or a name the automaton\'s locationStates only inherits reads no status from it (Healthy), a row whose id is its own key there reads it; an amputated row is skipped under its cut name; a row\'s name reaches a library row\'s own name and a custom row only as text cut to the name\'s length',
-            rowsW.length === 5 && roW.rows === 5 && onOf(rowsW[1]) === false && onOf(rowsW[2]) === false && onOf(rowsW[3]) === false && onOf(rowsW[4]) === true && onOf(rowsW[0]) === false
-            && j(opOf(rowsW[1], 'ov')[0] && opOf(rowsW[1], 'ov')[0].ov) === j({ name: cutName }) && cutName.length === NMAX
-            && opOf(rowsW[2], 'custom').length === 1 && opOf(rowsW[2], 'custom')[0].def.name === ('Odd' + LONGW).slice(0, NMAX) && j(opOf(rowsW[2], 'custom')[0].def.stats) === j({ stated: 1, vsCold: 9 })
-            && roW.skipped.indexOf('amputated: ' + cutName) >= 0 && roW.skipped.every(w => w.length <= 'amputated: '.length + NMAX) && protoKeys() === proto0,
-            j([rowsW.length, rowsW.map(onOf), roW.skipped.map(w => w.length), opOf(rowsW[1], 'ov').map(q => q.ov && q.ov.name ? q.ov.name.length : q.ov)]));
 
         // the sheet: the rows the file made, resolved by the real core, drawn by the real colChips and the rich table's own cell statement
         const chW = { id: 'c_w', name: 'W', ownerId: '', npc: true, values: {} }, refusedW = [];
-        roW.ops.forEach(o => { const r = SYw.applyRowOp(sysW, chW, o.f, o.q, FOw, {}); if (r.ok) chW.values[o.f] = r.value; else refusedW.push(o.q.op + ':' + r.reason); });
+        // the rows a hostile file makes (a name past any length, a choice, a figure that is null), as row ops made by hand
+        const handW = [{"f":"f_loc","q":{"op":"add","defId":"i_torso","rowId":"w_h1"}},{"f":"f_loc","q":{"op":"set","rowId":"w_h1","facts":{"lvl":15,"on":false}}},{"f":"f_loc","q":{"op":"ov","rowId":"w_h1","ov":{"stats":{"pen":3}}}},{"f":"f_loc","q":{"op":"ov","rowId":"w_h1","ov":{"stats":{"stated":1,"vsEnergy":20,"vsIon":10,"vsCold":null}}}},{"f":"f_loc","q":{"op":"add","defId":"i_torso","rowId":"w_h2"}},{"f":"f_loc","q":{"op":"set","rowId":"w_h2","facts":{"lvl":3,"on":false}}},{"f":"f_loc","q":{"op":"ov","rowId":"w_h2","ov":{"name":LONGW.slice(0, SYw.LIMITS.name)}}},{"f":"f_loc","q":{"op":"ov","rowId":"w_h2","ov":{"stats":{"stated":1,"vsEnergy":null,"vsIon":null,"vsCold":null}}}},{"f":"f_loc","q":{"op":"custom","rowId":"w_h3","def":{"name":('Odd' + LONGW).slice(0, SYw.LIMITS.name),"stats":{"stated":1,"vsCold":9}}}},{"f":"f_loc","q":{"op":"set","rowId":"w_h3","facts":{"lvl":4,"on":false}}},{"f":"f_loc","q":{"op":"add","defId":"i_torso","rowId":"w_h4"}},{"f":"f_loc","q":{"op":"set","rowId":"w_h4","facts":{"lvl":1,"on":false}}},{"f":"f_loc","q":{"op":"ov","rowId":"w_h4","ov":{"name":"Ghost"}}},{"f":"f_loc","q":{"op":"ov","rowId":"w_h4","ov":{"stats":{"stated":1,"vsEnergy":null,"vsIon":null,"vsCold":null}}}},{"f":"f_loc","q":{"op":"add","defId":"i_torso","rowId":"w_h5"}},{"f":"f_loc","q":{"op":"set","rowId":"w_h5","facts":{"lvl":2,"on":true}}},{"f":"f_loc","q":{"op":"ov","rowId":"w_h5","ov":{"name":"Real"}}},{"f":"f_loc","q":{"op":"ov","rowId":"w_h5","ov":{"stats":{"stated":1,"vsEnergy":null,"vsIon":null,"vsCold":null}}}}];
+        handW.forEach(o => { const r = SYw.applyRowOp(sysW, chW, o.f, o.q, FOw, {}); if (r.ok) chW.values[o.f] = r.value; else refusedW.push(o.q.op + ':' + r.reason); });
         const resW = SYw.resolveAll(sysW, chW, FOw), rid0 = SYw.rowIdOf(chW.values.f_loc[0]), cells0 = resW.f_loc.cells[rid0], WORDS = ' (35 ' + T + ', 25 ' + P + ')';
         check('With stats (the cleaner and the cell, run for real): a hostile name, a prototype\'s name and a choice in a column\'s With leave the list\'s own number stats in the list\'s own spelling, each once; the cell\'s extra words are the figure, a space and the stat\'s label, joined by commas inside one pair of brackets, and nothing else (plusText)',
             j(fW.list.cols[0].plus) === j(['vsEnergy', 'vsIon', 'vsCold']) && refusedW.length === 0 && j(cells0[0].more) === j([{ key: 'vsEnergy', label: T, text: '35' }, { key: 'vsIon', label: P, text: '25' }])
@@ -4905,287 +4860,6 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             && said4.every(c => c.every(k => k[3] === 0)) && PG2.clean() && !HTML4.test(ecSrc4), j([said4, PG2.htmlSet, PG2.attrs]));
     }
 
-    /* ---- [m412] the review of build 8, the bridge's readings on the sheet: what the eight readings write onto a row (systemcore.js sbRowOps and
-       aliasFromShadowBase, run for real on a hostile website file) is drawn by the sheet's own stat chips and stat line (sheets.js statChips,
-       statLine and statLineNode, run for real on a page that refuses markup) only as a number or one of the system's own labels, as text. The
-       file puts markup and a prototype's name in a skill's name, a weapon's skill, a row's own words, a Class Type and a damage mode, and none
-       of it is drawn; the system, from a file too, has hostile labels, which are drawn as the text they are ---- */
-    {
-        const j = JSON.stringify, SY5 = await import(modUrl('systemcore.js')), FO5 = await import(modUrl('formula.js'));
-        const sh5 = read('sheets.js'), HTML5 = /innerHTML|insertAdjacentHTML|outerHTML|setAttribute|document\.write/;
-        const cut5 = (a, b) => { const i = sh5.indexOf(a), k = i < 0 ? -1 : sh5.indexOf(b, i + a.length); if (i < 0 || k < 0) throw new Error('sinkcheck: sheets.js ' + a.trim().slice(0, 40) + ' not found'); return sh5.slice(i, k); };
-        const line5 = k => cut5('\n' + k, '\n').slice(1);
-        const mkPage5 = () => {
-            const made = [], htmlSet = [], attrs = [];
-            const fake = tag => { const e = { tag, children: [], childNodes: [], style: {}, dataset: {}, className: '', textContent: '', appendChild(k) { this.children.push(k); this.childNodes.push(k); return k; }, setAttribute(n, v) { attrs.push([n, v]); }, addEventListener() {} }; ['innerHTML', 'outerHTML'].forEach(p => Object.defineProperty(e, p, { set(v) { htmlSet.push(v); }, get() { return ''; } })); e.insertAdjacentHTML = (w, v) => { htmlSet.push(v); }; made.push(e); return e; };
-            const doc = { createElement: fake, createTextNode: t => { const n = { tag: '#text', textContent: String(t) }; made.push(n); return n; } };
-            return { made, htmlSet, attrs, fake, doc, clean: () => htmlSet.length === 0 && attrs.length === 0 && made.every(e => e.tag === '#text' || Object.keys(e.style).length === 0) };
-        };
-        // what only the FILE writes (its markers are never drawn), and a system from a file whose stat labels are hostile
-        const FX = '<img src=x onerror=alert(5) data-file=1>', FP = '__proto__', sp = (key, extra) => Object.assign({ key, label: T + key, show: true }, extra || {});
-        const SENSE5 = [['V', T + ' Vision'], ['H', P + ' Hearing'], ['S', 'Taste ' + T + ' Smell'], ['T', 'Touch']], YES5 = ['No', T + 'Yes'], DB5 = ['Flat', T + 'Swing', P + 'Thrust'];
-        const sys5 = SY5.cleanSystem({ v: 1, name: T, rolls: [], fields: [{ id: 'f_strike', key: 'StrikeST', label: T, kind: 'number', vis: 'all' }, { id: 'f_mlost', key: 'MotiveLost', label: P, kind: 'toggle', vis: 'all' },
-            { id: 'f_sk', key: 'Skills', label: T, kind: 'item-list', vis: 'all', list: { cats: ['Skill'], noQty: true, custom: true, multi: true, lvl: { label: 'Level', min: -10, max: 40, def: 10 }, stats: [{ key: 'attr' }, { key: 'diff' }, { key: 'fix' }, { key: 'free' }, sp('npar')] } },
-            { id: 'f_adv', key: 'Advantages', label: T, kind: 'item-list', vis: 'all', list: { cats: ['Advantage'], noQty: true, custom: true, lvl: { label: 'Level', min: 0, max: 10, def: 0 }, stats: [{ key: 'bp' }, { key: 'per' }, sp('sense', { kind: 'pick', opts: SENSE5.map(p => ({ name: p[0], label: p[1] })) })] } },
-            { id: 'f_wp', key: 'Weapons', label: T, kind: 'item-list', vis: 'all', list: { cats: ['Melee Weapon', 'Ranged Weapon', 'Energyblade'], custom: true, multi: true, stats: [{ key: 'wt' }, { key: 'cr' }, sp('dd'), sp('da'), sp('db', { labels: DB5 }), sp('wsl'), sp('wdf', { labels: ['Parry and Block', 'Parry', 'Block', 'None'] }), sp('scrap', { labels: YES5 })] } },
-            { id: 'f_gear', key: 'Gear', label: T, kind: 'item-list', vis: 'all', list: { cats: ['Gear'], custom: true, multi: true, stats: [{ key: 'wt' }, { key: 'cr' }, sp('scrap', { labels: YES5 })] } },
-            { id: 'f_am', key: 'Ammo', label: T, kind: 'item-list', vis: 'all', list: { cats: ['Ammunition'], custom: true, multi: true, stats: [sp('wt'), sp('cr')] } }] }, { F: FO5, gmView: true });
-        const LIB5 = [{ id: 'i_m412s_b', name: 'Broadsword', key: 'Broadsword', category: 'Skill', desc: 'Defaults: DX-5.' }, { id: 'i_m412s_r', name: 'Rope', key: 'Rope', category: 'Gear' },
-            { id: 'i_m412s_v', name: 'Pulseblade', key: 'Pulseblade', category: 'Melee Weapon', stats: { dd: 2, da: -1, db: 1 } }, { id: 'i_m412s_a', name: 'Acute Senses', key: 'AcuteSenses', category: 'Advantage', lvl: 1, stats: { bp: 0, per: 2 } },
-            { id: 'i_m412s_s', name: 'Beamblade', key: 'Beamblade', category: 'Energyblade', stats: {} }];
-        const find5 = n => LIB5.filter(e => e.name.toLowerCase() === String(n).trim().toLowerCase());
-        const file5 = { type: 'character', name: FX, details: { isAutomaton: true }, automatonBuild: {}, attributes: { dexterity: { value: 10, effective: 10 } }, characteristics: { strikingSt: { levels: 3 }, locationDr: [{ id: 'l', name: FX, type: 'Leg', dr: 3, typedDr: [], status: 'Destroyed' }] },
-            skills: [{ name: 'Broadsword', level: '12', relativeLevel: 'DX/A+2' }, { name: FX, level: '14' }, { name: FP, level: 14 }, { name: 'Guns (' + FX + ')', level: 13 }],
-            traits: { advantages: [{ name: 'Striking ST', level: 3, points: 15 }, { name: 'Acute Senses', level: 1, points: 2, description: FX + ' Hearing ' + FP }, { name: 'Enhanced Parry (Narrowed)', level: 2, points: 10, description: FX + ' broadsword ' + FP }] },
-            inventory: { general: [{ name: 'Rope', condition: 'Destroyed' }, { name: FX, condition: 'Destroyed' }],
-                weapons: { melee: [{ baseType: 'Pulseblade', baseSkill: 'Broadsword', damageModes: [{ stType: 'thr', bonusDice: 1, bonus: 1, label: FX }], conditionTracked: true, conditionShown: 'Destroyed' }, { customName: FX + 'B', baseSkill: FX, finalCost: 1 }],
-                    blasters: [{ customName: 'Odd ' + FP, baseSkill: 'Guns (' + FX + ')', finalCost: 1 }, { customName: 'Wreck', baseSkill: 'Guns', finalCost: 9, conditionTracked: true, conditionShown: 'Destroyed', loadedAmmunitionData: { name: FX + ' Pack', cost: 25, type: FX } }],
-                    energyblades: [{ name: FX, classType: FX, conditionTracked: true, conditionShown: 'Destroyed' }, { name: 'Beamblade', calculatedDamage: '5d ' + FX, finalParryMod: FX }] } } };
-        const proto5 = () => j([Object.keys(Object.prototype), ({}).polluted, ({}).npar, ({}).sense, typeof ({}).constructor]), p05 = proto5();
-        const ch5 = { id: 'c_m412', name: 'S', ownerId: '', npc: true, values: {} }, refused5 = [];
-        let ro5 = null, v5 = null;
-        SY5.setLibraryFind(id => LIB5.find(e => e.id === id) || null);
-        const PG5 = mkPage5(), drawn5 = [];
-        try {
-            ro5 = SY5.sbRowOps(file5, sys5, find5); v5 = SY5.aliasFromShadowBase(file5, sys5, FO5).values;
-            ro5.ops.forEach(o => { const a = SY5.applyRowOp(sys5, ch5, o.f, o.q, FO5, {}); if (a.ok) ch5.values[o.f] = a.value; else refused5.push(o.q.op + ':' + a.reason); });
-            const W5 = new Function('document', 'rowStat', 'rowPaid', 'ovDot', "'use strict';\n" + line5('function el(tag, cls, text) {') + cut5('\nfunction statFmt(v) {', '\n// F4c1: what one of a row cost') + cut5('\nfunction statDot(s, spec, ovc) {', '\nvar _rfClearing') + '\nreturn { statChips, statLineNode };')(PG5.doc, SY5.rowStat, SY5.rowPaid, () => null);
-            sys5.fields.filter(f => f.kind === 'item-list').forEach(f => (ch5.values[f.id] || []).forEach(r => { const rd = SY5.rowDef(sys5, r), host = PG5.fake('div');
-                W5.statChips(host, rd.def, f.list, null); const ln = W5.statLineNode(r, rd.def, f.list, null);
-                drawn5.push({ f: f.id, name: rd.def.name, chips: host.children.map(c => [c.tag, c.className, c.children.map(k => [k.tag, k.textContent, (k.children || []).length])]), line: ln ? [ln.tag, ln.textContent, ln.children.map(k => [k.tag, k.textContent])] : null }); }));
-        } finally { SY5.setLibraryFind(null); }
-        const chipOf = (f, name, key) => { const d = drawn5.find(x => x.f === f && x.name === name), st = sys5.fields.find(x => x.id === f).list.stats.find(s => s.key === key), c = d ? d.chips.find(k => k[2][0][1] === st.label) : null; return c ? c[2][1][1] : null; };
-        const allowed = f => { const out = []; sys5.fields.find(x => x.id === f).list.stats.forEach(s => { (s.labels || []).forEach(l => out.push(l)); (s.opts || []).forEach(o => out.push(o.label)); }); return out; };
-        const texts5 = PG5.made.filter(e => e.tag === '#text' || typeof e.textContent === 'string').map(e => e.textContent).join('\n');
-        const chipsOk = drawn5.every(d => d.chips.every(c => c[0] === 'span' && c[1] === 'sheet-chip sheet-item-stat' && c[2].length === 2 && c[2][0][0] === 'small' && c[2][0][2] === 0 && c[2][1][0] === '#text'
-            && sys5.fields.find(x => x.id === d.f).list.stats.some(s => s.label === c[2][0][1]) && (/^ -?\d+(\.\d+)?$/.test(c[2][1][1]) || allowed(d.f).indexOf(c[2][1][1].slice(1)) >= 0 || c[2][1][1] === ' —')));
-        check('m412 the bridge\'s readings on the sheet (sbRowOps and the sheet\'s own statChips and statLineNode, run for real on a page that refuses markup): from a hostile website file every figure a reading writes is drawn as a chip of a small label and ONE text node that is a number or one of the system\'s own labels (a choice\'s label, a stat\'s value name), and a line of text; the narrowed parry (2), the sense the row\'s words name (the system\'s label for Hearing), the damage mode (1, 1, Thrust by its label), the skill level (12, 14 and 13 through markup in a held skill\'s name), the scrap mark (Yes by its label); the review of that half: a energyblade\'s library copy whose damage text holds markup takes its dice alone (5), and the loaded pack of a blaster the track destroyed comes in as an Ammo row of its price (25) and no weight, whatever its name; nothing the file wrote is drawn, nothing is written as markup, an attribute or a style, and no prototype is touched',
-            !!ro5 && refused5.length === 0 && drawn5.length >= 10 && chipsOk && PG5.clean() && !/data-file|alert\(5\)/.test(texts5) && texts5.indexOf(FP) < 0
-            && chipOf('f_sk', 'Broadsword', 'npar') === ' 2' && chipOf('f_adv', 'Acute Senses', 'sense') === ' ' + P + ' Hearing' && chipOf('f_wp', 'Pulseblade', 'dd') === ' 1' && chipOf('f_wp', 'Pulseblade', 'da') === ' 1' && chipOf('f_wp', 'Pulseblade', 'db') === ' ' + P + 'Thrust'
-            && chipOf('f_wp', 'Pulseblade', 'wsl') === ' 12' && chipOf('f_wp', 'Pulseblade', 'scrap') === ' ' + T + 'Yes' && chipOf('f_wp', FX + 'B', 'wsl') === ' 14' && chipOf('f_wp', FX + 'B', 'wdf') === ' None' && chipOf('f_wp', FX, 'scrap') === ' ' + T + 'Yes' && chipOf('f_wp', 'Odd ' + FP, 'wsl') === ' 13' && chipOf('f_gear', 'Rope', 'scrap') === ' ' + T + 'Yes' && chipOf('f_wp', 'Beamblade', 'dd') === ' 5' && chipOf('f_am', FX + ' Pack', 'cr') === ' 25' && chipOf('f_am', FX + ' Pack', 'wt') === ' 0'
-            && drawn5.every(d => !d.line || (d.line[0] === 'div' && d.line[2].length === 0 && !/data-file|alert\(5\)/.test(d.line[1]))) && v5.f_mlost === true && v5.f_strike === 0 && proto5() === p05 && !HTML5.test(cut5('\nfunction statFmt(v) {', '\n// F4c1: what one of a row cost')),
-            j([refused5, drawn5.map(d => [d.f, d.name.length > 30 ? d.name.slice(0, 30) : d.name, d.chips.map(c => c[2][1] && c[2][1][1])]), PG5.htmlSet, PG5.attrs, v5 && [v5.f_mlost, v5.f_strike]]));
-    }
-
-    /* ---- [m413] the bridge's readings of 2026-10-15 on the sheet: what a worn piece's fit, the size, the Basic Lift, a loose part that is Destroyed,
-       a weapon's own narrowed parry, Acute Senses on Disadvantages, a piece's weight class and the Armor specialty write (systemcore.js sbRowOps
-       and aliasFromShadowBase, run for real on a hostile website file) is drawn by the sheet's own row details (sheets.js noteBits, with
-       statChips, statLineNode and descBits, run for real on a page that refuses markup) as text alone: the reason a piece cannot be worn and
-       the file's own words after it are one text of a notes line, every figure is a number or one of the system's own labels, and the size
-       and the Basic Lift reach a field as a number or not at all ---- */
-    {
-        const j = JSON.stringify, SYQ = await import(modUrl('systemcore.js')), FOQ = await import(modUrl('formula.js'));
-        const shQ = read('sheets.js'), HTMLQ = /innerHTML|insertAdjacentHTML|outerHTML|setAttribute|document\.write/;
-        const cutQ = (a, b) => { const i = shQ.indexOf(a), k = i < 0 ? -1 : shQ.indexOf(b, i + a.length); if (i < 0 || k < 0) throw new Error('sinkcheck: sheets.js ' + a.trim().slice(0, 40) + ' not found'); return shQ.slice(i, k); };
-        const lineQ = k => cutQ('\n' + k, '\n').slice(1);
-        const mkPageQ = () => {
-            const made = [], htmlSet = [], attrs = [];
-            const fake = tag => { const e = { tag, children: [], childNodes: [], style: {}, dataset: {}, className: '', textContent: '', appendChild(k) { this.children.push(k); this.childNodes.push(k); return k; }, setAttribute(n, v) { attrs.push([n, v]); }, addEventListener() {} }; ['innerHTML', 'outerHTML'].forEach(p => Object.defineProperty(e, p, { set(v) { htmlSet.push(v); }, get() { return ''; } })); e.insertAdjacentHTML = (w, v) => { htmlSet.push(v); }; made.push(e); return e; };
-            const doc = { createElement: fake, createTextNode: t => { const n = { tag: '#text', textContent: String(t) }; made.push(n); return n; } };
-            return { made, htmlSet, attrs, fake, doc, clean: () => htmlSet.length === 0 && attrs.length === 0 && made.every(e => e.tag === '#text' || Object.keys(e.style).length === 0) };
-        };
-        // what only the FILE writes, and a system from a file whose labels are hostile
-        const FX = '<img src=x onerror=alert(13) data-file=1>', FP = '__proto__', sp = (key, extra) => Object.assign({ key, label: T + key, show: true }, extra || {});
-        // (a weight class is read by the label that names it exactly, so those labels are the class's own words; a sense by the word in its label)
-        const TIQ = ['None', 'Light', 'Medium', 'Heavy'], SENQ = [T + 'None', 'Vision', P + 'Hearing', 'Taste & Smell', 'Touch'];
-        const lst = (id, key, list) => ({ id: 'f_' + id, key, label: T, kind: 'item-list', vis: 'all', list });
-        const sysQ = SYQ.cleanSystem({ v: 1, name: T, rolls: [], fields: [{ id: 'f_dx', key: 'DX', label: T, kind: 'number', vis: 'all' }, { id: 'f_mb', key: 'MoveBonus', label: P, kind: 'number', vis: 'all' }, { id: 'f_sm', key: 'SM', label: T, kind: 'number', vis: 'all', step: 0.01 }, { id: 'f_bl', key: 'BL', label: P, kind: 'number', vis: 'all', step: 0.01 },
-            lst('sk', 'Skills', { cats: ['Skill'], noQty: true, custom: true, multi: true, lvl: { label: 'Level', min: -10, max: 40, def: 10 }, stats: [{ key: 'attr' }, { key: 'diff' }, { key: 'fix' }, { key: 'free' }, sp('armT', { labels: TIQ })] }),
-            lst('adv', 'Advantages', { cats: ['Advantage'], noQty: true, custom: true, lvl: { label: 'Level', min: 0, max: 10, def: 0 }, stats: [{ key: 'bp' }, { key: 'per' }] }),
-            lst('dis', 'Disadvantages', { cats: ['Disadvantage'], noQty: true, custom: true, lvl: { label: 'Level', min: 0, max: 10, def: 0 }, stats: [{ key: 'bp' }, { key: 'per' }, sp('sense', { labels: SENQ })] }),
-            lst('wp', 'Weapons', { cats: ['Melee Weapon', 'Ranged Weapon', 'Energyblade'], custom: true, multi: true, stats: [{ key: 'wt' }, { key: 'cr' }, sp('wnp')] }),
-            lst('ar', 'Armor', { cats: ['Armor'], custom: true, multi: true, on: { label: T }, stats: [sp('wt'), sp('cr'), sp('drTorso'), sp('tier', { labels: TIQ })] }),
-            lst('am', 'Ammo', { custom: true, multi: true, stats: [sp('wt'), sp('cr')] })], items: [{ id: 'i_m413s_arm', name: 'Armor', key: 'Armor', category: 'Skill' }] }, { F: FOQ, gmView: true });
-        const findQ = n => sysQ.items.filter(e => e.name.toLowerCase() === String(n).trim().toLowerCase());
-        const fileQ = { type: 'character', name: FX, details: { isAutomaton: false, sizeModifier: FX, sizeModifierEffective: FX }, attributes: { dexterity: { value: null, effective: 10 } }, characteristics: { basicLift: FX + ' lbs' },
-            skills: [{ name: 'Armor (Heavy)', level: 12 }, { name: FX, level: 11 }, { name: 'Armor (' + FX + ')', level: 10 }],
-            traits: { advantages: [{ name: 'Enhanced Parry (Narrowed)', level: 2, points: 10, description: FX + ' clanblade ' + FP }], disadvantages: [{ name: 'Acute Senses', level: 1, points: 2, description: FX + ' hearing ' + FP }, { name: FX, level: 1, points: -5, description: FX }] },
-            inventory: { armor: [{ name: FX, type: FX, equipped: true, weight: 5, cost: 50, drTorso: 3, tier: 'Heavy', fit: { cutForSm: FX, wornAtSm: FX, misSized: true, wearable: false, illFittingAnyCause: false, refitOwed: false }, effects: FX + ' ' + P },
-                { name: 'Vest', equipped: true, weight: 1, cost: 9, tier: FX, itemSizeModifier: FX, illFitting: true, effects: FX }],
-                weapons: { melee: [{ customName: FX + ' Clanblade', baseSkill: 'Broadsword', finalCost: 1 }], blasters: [{ customName: 'Clanblade ' + FX, baseSkill: 'Guns (' + FX + ')', finalCost: 1 }] },
-                ammunition: [{ name: FX, condition: 'Destroyed', weight: 0.2, cost: 7, type: FX, notes: FX }] } };
-        const automatonQ = (build, more) => Object.assign({ type: 'character', name: FX, details: { isAutomaton: true, sizeModifier: FX }, automatonBuild: build }, more || {});
-        const protoQ = () => j([Object.keys(Object.prototype), ({}).polluted, ({}).tier, ({}).armT, ({}).wnp, ({}).sense, ({}).misSized, typeof ({}).constructor]), pQ0 = protoQ();
-        const chQ = { id: 'c_m413', name: 'S', ownerId: '', npc: true, values: {} }, refusedQ = [], drawnQ = [];
-        let roQ = null, vQ = null, vD = null, vT3 = null;
-        const PGQ = mkPageQ();
-        try {
-            roQ = SYQ.sbRowOps(fileQ, sysQ, findQ); vQ = SYQ.aliasFromShadowBase(fileQ, sysQ, FOQ).values;
-            vD = SYQ.aliasFromShadowBase(automatonQ({ chassisId: FX, head: { componentId: FP, customHeightM: FX } }, { inventory: { armor: [{ name: FX, fit: { wornAtSm: FX } }] }, characteristics: { basicLift: [FX] } }), sysQ, FOQ).values;
-            vT3 = SYQ.aliasFromShadowBase(automatonQ({ chassisId: 'wedge-series', head: { componentId: 'tx-rotating' }, legs: [{ componentId: 'tx-leg' }] }, { characteristics: { basicLift: '5.88 lbs' } }), sysQ, FOQ).values;
-            roQ.ops.forEach(o => { const a = SYQ.applyRowOp(sysQ, chQ, o.f, o.q, FOQ, {}); if (a.ok) chQ.values[o.f] = a.value; else refusedQ.push(o.q.op + ':' + a.reason); });
-            const WQ = new Function('document', 'rowStat', 'rowPaid', 'ovDot', 'rowLvl', 'fmtNum', 'LIMITS', 'commitItem', 'rowIdOf', "'use strict';\n" + lineQ('function el(tag, cls, text) {') + '\n' + lineQ('function lvlText(L, lv) {') + cutQ('\nfunction noteBits(', '\nvar _noteOpen')
-                + cutQ('\nfunction statFmt(v) {', '\n// F4c1: what one of a row cost') + cutQ('\nfunction statDot(s, spec, ovc) {', '\nvar _rfClearing') + '\nreturn { statChips, noteBits };')(PGQ.doc, SYQ.rowStat, SYQ.rowPaid, () => null, SYQ.rowLvl, SYQ.fmtNum, SYQ.LIMITS, () => {}, SYQ.rowIdOf);
-            sysQ.fields.filter(f => f.kind === 'item-list').forEach(f => (chQ.values[f.id] || []).forEach(r => { const rd = SYQ.rowDef(sysQ, r), host = PGQ.fake('div');
-                WQ.statChips(host, rd.def, f.list, null); const nb = WQ.noteBits(r, rd.def, null, f, false, null);
-                drawnQ.push({ f: f.id, name: rd.def.name, chips: host.children.map(c => [c.tag, c.className, c.children.map(k => [k.tag, k.textContent, (k.children || []).length])]), notes: nb ? nb.children.map(k => [k.tag, k.className, k.textContent, k.children.length]) : null }); }));
-        } catch (e) { refusedQ.push('threw: ' + String(e && e.stack || e).slice(0, 300)); }
-        const chipQ = (f, name, key) => { const d = drawnQ.find(x => x.f === f && x.name === name), st = sysQ.fields.find(x => x.id === f).list.stats.find(s => s.key === key), c = d ? d.chips.find(k => k[2][0][1] === st.label) : null; return c ? c[2][1][1] : null; };
-        const notesQ = (f, name) => { const d = drawnQ.find(x => x.f === f && x.name === name), n = d && d.notes ? d.notes.find(k => k[1] === 'sheet-item-notes') : null; return n ? n : null; };
-        const allowedQ = f => { const out = []; sysQ.fields.find(x => x.id === f).list.stats.forEach(s => { (s.labels || []).forEach(l => out.push(l)); (s.opts || []).forEach(o => out.push(o.label)); }); return out; };
-        const chipsOkQ = drawnQ.every(d => d.chips.every(c => c[0] === 'span' && c[1] === 'sheet-chip sheet-item-stat' && c[2].length === 2 && c[2][0][0] === 'small' && c[2][0][2] === 0 && c[2][1][0] === '#text'
-            && sysQ.fields.find(x => x.id === d.f).list.stats.some(s => s.label === c[2][0][1]) && (/^ -?\d+(\.\d+)?$/.test(c[2][1][1]) || allowedQ(d.f).indexOf(c[2][1][1].slice(1)) >= 0)));
-        // the file's own words are drawn only as the text of a notes line, an element with no child
-        const fileText = PGQ.made.filter(e => typeof e.textContent === 'string' && e.textContent.indexOf('data-file') >= 0);
-        const REASON = 'Cut two or more sizes from its wearer. It cannot be worn and gives nothing while worn. ';
-        check('m413 the bridge\'s readings of 2026-10-15 on the sheet (sbRowOps and the sheet\'s own noteBits, statChips and statLineNode, run for real on a page that refuses markup): from a hostile website file every op applies, every figure a reading writes is drawn as a chip of a small label and ONE text node that is a number or one of the system\'s own labels (the weight class Heavy by its label, None for a tier that is markup; the Armor specialty Heavy, None for a skill named in markup or for a specialty in markup; the sense the row\'s words name, Hearing by its label; the narrowed parry 2 on the blade its words name and 0 on a gun; a Destroyed loose part at 0.2 and 7); a piece that cannot be worn says why, its file\'s words after the reason in the SAME text of a notes line, an element that holds no child; nothing the file wrote is drawn but as such a text, nothing is written as markup, an attribute or a style; the size and the Basic Lift reach a number field as a number (a T3\'s -1.85, 5.88; a automaton whose build derives no size at its stored record, which is markup here and so 0, as Number reads it) or not at all, never as the file\'s text; and no prototype is touched',
-            !!roQ && refusedQ.length === 0 && drawnQ.length >= 10 && chipsOkQ && PGQ.clean()
-            && chipQ('f_ar', FX, 'tier') === ' Heavy' && chipQ('f_ar', 'Vest', 'tier') === ' None' && chipQ('f_ar', FX, 'drTorso') === ' 3' && chipQ('f_sk', 'Armor (Heavy)', 'armT') === ' Heavy' && chipQ('f_sk', FX, 'armT') === ' None' && chipQ('f_sk', 'Armor (' + FX + ')', 'armT') === ' None'
-            && chipQ('f_dis', 'Acute Senses', 'sense') === ' ' + P + 'Hearing' && chipQ('f_wp', FX + ' Clanblade', 'wnp') === ' 2' && chipQ('f_wp', 'Clanblade ' + FX, 'wnp') === ' 0' && chipQ('f_am', FX, 'wt') === ' 0.2' && chipQ('f_am', FX, 'cr') === ' 7'
-            && j(notesQ('f_ar', FX)) === j(['div', 'sheet-item-notes', REASON + FX + ' ' + P, 0]) && j(notesQ('f_ar', 'Vest')) === j(['div', 'sheet-item-notes', FX, 0]) && j(notesQ('f_am', FX)) === j(['div', 'sheet-item-notes', FX, 0])
-            && fileText.length === 3 && fileText.every(e => e.tag === 'div' && e.className === 'sheet-item-notes' && e.children.length === 0)
-            && !!vQ && !('f_sm' in vQ) && !('f_bl' in vQ) && typeof vQ.f_dx === 'number' && !!vD && vD.f_sm === 0 && !('f_bl' in vD) && !!vT3 && vT3.f_sm === -1.85 && vT3.f_bl === 5.88
-            && protoQ() === pQ0 && !HTMLQ.test(cutQ('\nfunction noteBits(', '\nvar _noteOpen') + cutQ('\nfunction statFmt(v) {', '\n// F4c1: what one of a row cost')),
-            j([refusedQ, drawnQ.map(d => [d.f, d.name.length > 30 ? d.name.slice(0, 30) : d.name, d.chips.map(c => c[2][1] && c[2][1][1]), d.notes && d.notes.map(n => [n[1], n[2].slice(0, 40)])]), PGQ.htmlSet, PGQ.attrs, vQ, vD, vT3, fileText.length]));
-    }
-
-    /* ---- [m415] the bridge's unfamiliar culture on the page: the culture a website file names, as the player typed it there, read into the
-       sheet's field (systemcore.js aliasFromShadowBase, run for real on a hostile file), and the one typed here, written back by For ShadowBase
-       (sbWriteBack), reach the question For ShadowBase asks (sheets.js sbExportBody and sbExportWords, run for real on a page that refuses
-       markup) only as the text of a line: markup and a prototype's name as the characters they are, a long one cut, a control character
-       never read into the field, and a value that is no text in fixed words ---- */
-    {
-        const j = JSON.stringify, SYU = await import(modUrl('systemcore.js')), FOU = await import(modUrl('formula.js'));
-        const shU = read('sheets.js'), HTMLU = /innerHTML|insertAdjacentHTML|outerHTML|setAttribute|document\.write/;
-        const cutU = (a, b) => { const i = shU.indexOf(a), k = i < 0 ? -1 : shU.indexOf(b, i + a.length); if (i < 0 || k < 0) throw new Error('sinkcheck: sheets.js ' + a.trim().slice(0, 40) + ' not found'); return shU.slice(i, k); };
-        const lineU = k => cutU('\n' + k, '\n').slice(1);
-        const mkPageU = () => {
-            const made = [], htmlSet = [], attrs = [];
-            const fake = tag => { const e = { tag, children: [], childNodes: [], style: {}, dataset: {}, className: '', textContent: '', appendChild(k) { this.children.push(k); this.childNodes.push(k); return k; }, setAttribute(n, v) { attrs.push([n, v]); }, addEventListener() {} }; ['innerHTML', 'outerHTML'].forEach(p => Object.defineProperty(e, p, { set(v) { htmlSet.push(v); }, get() { return ''; } })); e.insertAdjacentHTML = (w, v) => { htmlSet.push(v); }; made.push(e); return e; };
-            const doc = { createElement: fake, createTextNode: t => { const n = { tag: '#text', textContent: String(t) }; made.push(n); return n; } };
-            return { made, htmlSet, attrs, fake, doc, clean: () => htmlSet.length === 0 && attrs.length === 0 && made.every(e => e.tag === '#text' || Object.keys(e.style).length === 0) };
-        };
-        // what only the FILE writes, what only the player types here, and a system from a file whose labels are hostile
-        const FX = '<img src=x onerror=alert(15) data-file=1>', FP = '__proto__', BEL = String.fromCharCode(7);
-        const sysU = SYU.cleanSystem({ v: 1, name: T, rolls: [], fields: [{ id: 'f_uo', key: 'UnfCultureOn', label: T, kind: 'toggle', vis: 'all' }, { id: 'f_uc', key: 'UnfCulture', label: P, kind: 'text', vis: 'all' }] }, { F: FOU, gmView: true });
-        const fileU = { type: 'character', writtenBySiteVersion: '1.0.3', name: FX, details: { unfamiliarCultureOn: false, unfamiliarCulture: FX + ' Grub ' + FP + BEL } };
-        const typedU = '"><script>x()</script>' + FP + ' ' + 'y'.repeat(30);
-        const oddU = { type: 'character', name: 'O', details: { unfamiliarCultureOn: JSON.parse('{"toString":"x"}'), unfamiliarCulture: JSON.parse('{"toString":"x","valueOf":"y"}') } };
-        const protoU = () => j([Object.keys(Object.prototype), ({}).polluted, ({}).unfamiliarCulture, typeof ({}).constructor]), pU0 = protoU();
-        const PGU = mkPageU();
-        let vU = null, vO = null, rU = null, rO = null, linesU = null, linesO = null, threwU = null;
-        try {
-            vU = SYU.aliasFromShadowBase(fileU, sysU, FOU).values; vO = SYU.aliasFromShadowBase(oddU, sysU, FOU).values;
-            const chU = { id: 'c_m415', name: FX, ownerId: '', npc: true, values: Object.assign({}, vU, { f_uo: true, f_uc: typedU }) };
-            rU = SYU.sbWriteBack(fileU, sysU, chU, SYU.resolveAll(sysU, chU, FOU), null);
-            const chO = { id: 'c_m415o', name: 'O', ownerId: '', npc: true, values: { f_uo: true, f_uc: 'A' } };
-            rO = SYU.sbWriteBack(oddU, sysU, chO, SYU.resolveAll(sysU, chO, FOU), null);
-            const WU = new Function('document', 'sbKeptName', 'sbKeptAgo', "'use strict';\n" + lineU('function el(tag, cls, text) {') + cutU('\nfunction sbExportWords(v) {', '\n// the copy made from one file') + '\nreturn { body: sbExportBody };')(PGU.doc, n => String(n), () => 'just now');
-            const say = box => box.children.map(c => [c.tag, c.className, c.textContent, (c.children || []).length]);
-            linesU = say(WU.body(rU, FX, fileU.name, null)); linesO = say(WU.body(rO, 'O', 'O', null));
-        } catch (e) { threwU = String(e && e.stack || e).slice(0, 300); }
-        // the question's words for a value, written out again here: a text past 40 characters cut there, a value that is no text in fixed words
-        const wordU = v => typeof v === 'string' ? (v.length > 40 ? v.slice(0, 40) + '…' : v) : typeof v === 'boolean' ? (v ? 'yes' : 'no') : 'something else';
-        const rowsU = ls => (ls || []).filter(l => l[1] === 'sb-export-row');
-        const wantU = [['div', 'sb-export-row', T + ': ' + wordU(false) + ' → ' + wordU(true), 0], ['div', 'sb-export-row', P + ': ' + wordU(FX + ' Grub ' + FP + BEL) + ' → ' + wordU(typedU), 0]];
-        const wantO = [['div', 'sb-export-row', T + ': something else → yes', 0], ['div', 'sb-export-row', P + ': something else → A', 0]];
-        const fileTextU = PGU.made.filter(e => typeof e.textContent === 'string' && /data-file|<script>/.test(e.textContent));
-        check('m415 the unfamiliar culture from a hostile website file and the one typed here (aliasFromShadowBase and sbWriteBack, then the sheet\'s own sbExportBody and sbExportWords, run for real on a page that refuses markup): the culture the file names is read into the field as the characters it is, with no control character; the question For ShadowBase asks says each change as the text of one line with no child, the file\'s culture and the typed one cut at 40 characters, markup and a prototype\'s name never markup, an attribute or a style; a switch and a culture that are objects naming toString are read as the website\'s import reads them (character-json-importer.ts lines 187 and 188: off, no culture) and said as something else; nothing reaches a prototype',
-            threwU === null && !!vU && vU.f_uc === FX + ' Grub ' + FP && vU.f_uo === false && j(vO) === j({ f_uo: false, f_uc: '' }) && j(rowsU(linesU)) === j(wantU) && j(rowsU(linesO)) === j(wantO)
-            && linesU.concat(linesO).every(l => l[0] === 'div' && typeof l[2] === 'string' && l[3] === 0) && fileTextU.length === 1 && fileTextU.every(e => e.tag === 'div' && e.children.length === 0)
-            && PGU.clean() && protoU() === pU0 && !HTMLU.test(cutU('\nfunction sbExportWords(v) {', '\n// the copy made from one file')),
-            j([threwU, vU, vO, linesU, linesO, PGU.htmlSet, PGU.attrs, fileTextU.length]));
-    }
-
-    /* ---- [m417] the bridge's readings of the website's v1.0.4 on the sheet: what Air Move, a height and a weight read by their imperial half,
-       Indomitable's level, the Furfolk's renamed row and a automaton's custom head in inches write (systemcore.js aliasFromShadowBase and
-       sbRowOps, run for real on a hostile website file, each op applied) is drawn by the sheet's own row details (sheets.js noteBits and
-       statChips, run for real on a page that refuses markup) as text alone: a number field takes a number or nothing, a text field the file's
-       own words as a value, a row's level a number, and the only name a reading writes onto a row is one of the Furfolk row's two names ---- */
-    {
-        const j = JSON.stringify, SYR = await import(modUrl('systemcore.js')), FOR = await import(modUrl('formula.js'));
-        const shR = read('sheets.js'), HTMLR = /innerHTML|insertAdjacentHTML|outerHTML|setAttribute|document\.write/;
-        const cutR = (a, b) => { const i = shR.indexOf(a), k = i < 0 ? -1 : shR.indexOf(b, i + a.length); if (i < 0 || k < 0) throw new Error('sinkcheck: sheets.js ' + a.trim().slice(0, 40) + ' not found'); return shR.slice(i, k); };
-        const lineR = k => cutR('\n' + k, '\n').slice(1);
-        const made = [], htmlSet = [], attrs = [];
-        const fake = tag => { const e = { tag, children: [], childNodes: [], style: {}, dataset: {}, className: '', textContent: '', appendChild(k) { this.children.push(k); this.childNodes.push(k); return k; }, setAttribute(n, v) { attrs.push([n, v]); }, addEventListener() {} }; ['innerHTML', 'outerHTML'].forEach(p => Object.defineProperty(e, p, { set(v) { htmlSet.push(v); }, get() { return ''; } })); e.insertAdjacentHTML = (w, v) => { htmlSet.push(v); }; made.push(e); return e; };
-        const docR = { createElement: fake, createTextNode: t => { const n = { tag: '#text', textContent: String(t) }; made.push(n); return n; } };
-        // what only the FILE writes, and a system from a file whose labels are hostile
-        const FX = '<img src=x onerror=alert(17) data-file=1>', FP = '__proto__', DO = 'Distinctive Features (8ft tall)', DN = 'Distinctive Features (Towering, furred)';
-        const lst = (id, key, cats) => ({ id: 'f_' + id, key, label: T, kind: 'item-list', vis: 'all', list: { cats, noQty: true, custom: true, lvl: { label: P, min: 0, max: 10, def: 0 }, stats: [{ key: 'bp', label: T + 'bp', show: true }, { key: 'per', label: P }, { key: 'granted', label: T }] } });
-        const sysR = SYR.cleanSystem({ v: 1, name: T, rolls: [], fields: [{ id: 'f_sm', key: 'SM', label: T, kind: 'number', vis: 'all', step: 0.01 }, { id: 'f_air', key: 'AirMove', label: P, kind: 'number', vis: 'all' },
-            { id: 'f_h', key: 'Height', label: T, kind: 'number', vis: 'all', unit: 'in', step: 0.1 }, { id: 'f_w', key: 'Weight', label: P, kind: 'text', vis: 'all' }, lst('adv', 'Advantages', ['Advantage']), lst('dis', 'Disadvantages', ['Disadvantage'])],
-            items: [{ id: 'i_m417_ind', name: 'Indomitable', key: 'Indomitable', category: 'Advantage', stats: { bp: 0, per: 3 } }, { id: 'i_m417_df', name: DN, key: 'DFeat', category: 'Disadvantage', notes: T, stats: { bp: -1 } }] }, { F: FOR, gmView: true });
-        const findR = n => sysR.items.filter(e => e.name.toLowerCase() === String(n).trim().toLowerCase());
-        const fileR = { type: 'character', writtenBySiteVersion: FX, name: FX, species: FX, details: { isAutomaton: false, height: FX + " / 6'7\"", weight: FX + ' / 72 kg', sizeModifier: 0.24 },
-            characteristics: { airMove: { effective: FX, unencumbered: FX }, basicSpeed: { effective: FX } },
-            traits: { advantages: [{ name: 'Indomitable', level: FX, points: 15, description: FX }, { name: 'Indomitable (' + FX + ')', points: 15, baselinePoints: 15 }, { name: 'Flight', points: 30, description: FX }],
-                disadvantages: [{ name: DO, points: -1, fromSpecies: FX, description: FX }, { name: DO, points: -1, fromSpecies: 'Furfolk' }, { name: FX, points: -1 }] } };
-        const automatonR = { type: 'character', name: FX, details: { isAutomaton: true, sizeModifier: FX, height: "6'7\" / 2.00 m" }, automatonBuild: { chassisId: 'sphere-chassis', head: { componentId: FP, customHeightIn: FX, customHeightM: { toString: FX } }, chassisMods: { motiveMountIds: [FX, 'micro-hover'] } } };
-        const protoR = () => j([Object.keys(Object.prototype), ({}).polluted, ({}).level, ({}).unencumbered, typeof ({}).constructor]), pR0 = protoR();
-        const chR = { id: 'c_m417', name: 'S', ownerId: '', npc: true, values: {} }, refusedR = [], drawnR = [];
-        let vR = null, vD = null;
-        try {
-            vR = SYR.aliasFromShadowBase(fileR, sysR, FOR).values; vD = SYR.aliasFromShadowBase(automatonR, sysR, FOR).values;
-            Object.assign(chR.values, vR);
-            SYR.sbRowOps(fileR, sysR, findR).ops.forEach(o => { const a = SYR.applyRowOp(sysR, chR, o.f, o.q, FOR, {}); if (a.ok) chR.values[o.f] = a.value; else refusedR.push(o.q.op + ':' + a.reason); });
-            const WR = new Function('document', 'rowStat', 'rowPaid', 'ovDot', 'rowLvl', 'fmtNum', 'LIMITS', 'commitItem', 'rowIdOf', "'use strict';\n" + lineR('function el(tag, cls, text) {') + '\n' + lineR('function lvlText(L, lv) {') + cutR('\nfunction noteBits(', '\nvar _noteOpen')
-                + cutR('\nfunction statFmt(v) {', '\n// F4c1: what one of a row cost') + cutR('\nfunction statDot(s, spec, ovc) {', '\nvar _rfClearing') + '\nreturn { statChips, noteBits };')(docR, SYR.rowStat, SYR.rowPaid, () => null, SYR.rowLvl, SYR.fmtNum, SYR.LIMITS, () => {}, SYR.rowIdOf);
-            sysR.fields.filter(f => f.kind === 'item-list').forEach(f => (chR.values[f.id] || []).forEach(r => { const rd = SYR.rowDef(sysR, r), host = fake('div');
-                WR.statChips(host, rd.def, f.list, null); const nb = WR.noteBits(r, rd.def, null, f, false, null);
-                drawnR.push({ f: f.id, copy: !!r.defId, name: rd.def.name, lvl: r.lvl, chips: host.children.map(c => [c.tag, c.className, c.children.map(k => [k.tag, k.textContent, (k.children || []).length])]), notes: nb ? nb.children.map(k => [k.tag, k.className, k.textContent, k.children.length]) : null }); }));
-        } catch (e) { refusedR.push('threw: ' + String(e && e.stack || e).slice(0, 300)); }
-        const chipsOkR = drawnR.every(d => d.chips.every(c => c[0] === 'span' && c[2].length === 2 && c[2][0][0] === 'small' && c[2][0][2] === 0 && c[2][1][0] === '#text' && /^ -?\d+(\.\d+)?$/.test(c[2][1][1])));
-        const notesOkR = drawnR.every(d => !d.notes || d.notes.every(n => typeof n[2] === 'string' && n[3] === 0));
-        const rowsR = drawnR.map(d => [d.f, d.copy ? 'copy' : 'own', d.name, typeof d.lvl === 'number' ? d.lvl : '-']);
-        check('m417 the bridge\'s v1.0.4 readings on the sheet (aliasFromShadowBase and sbRowOps from a hostile website file, every op applied, then the sheet\'s own statChips and noteBits on a page that refuses markup): Air Move a number or nothing (markup is no figure, and Flight with no readable Basic Speed writes none); a height of two halves one of which is markup nothing, a pair that reads into a number field in inches by its imperial half (79), a weight that is no pair into a text field as the characters it is; a automaton\'s custom head that is markup stands on nothing (-2.3); Indomitable\'s level a number (5 for a level that is markup), a variant named in markup a row of its own; the Furfolk\'s row a copy under one of its two names alone (the old one where it is not the package\'s, the new one where it is), a row named in markup a row of its own; every chip a small label and one text node that is a number, every notes line one text with no child, and nothing written as markup, an attribute or a style',
-            refusedR.length === 0 && !!vR && !('f_air' in vR) && !('f_h' in vR) && vR.f_w === FX + ' / 72 kg' && !!vD && Math.round(vD.f_sm * 100) === -230 && vD.f_h === 79
-            && j(rowsR) === j([['f_adv', 'copy', 'Indomitable', 5], ['f_adv', 'own', 'Indomitable (' + FX + ')', 5], ['f_adv', 'own', 'Flight', 0], ['f_dis', 'copy', DO, 0], ['f_dis', 'own', DN, 0], ['f_dis', 'own', FX, 0]])
-            && chipsOkR && notesOkR && htmlSet.length === 0 && attrs.length === 0 && made.every(e => e.tag === '#text' || Object.keys(e.style).length === 0) && protoR() === pR0 && !HTMLR.test(cutR('\nfunction noteBits(', '\nvar _noteOpen')),
-            j([refusedR, vR, vD, rowsR, htmlSet, attrs]));
-    }
-
-    /* ---- [free traits] a trait row the bridge reads by its name whatever its points (the owner, 2026-10-17): the file's own name of a qualified
-       variant ("High Pain Threshold (<markup>)") becomes a library copy's own name, its price the copy's own figures, and a row of its own read
-       before is offered as that copy in the Review (systemcore.js sbRowOps and sbProposal, run for real on a hostile website file, each op
-       applied). Drawn by the sheet's own row name, statChips and noteBits (sheets.js, run for real on a page that refuses markup) and by the
-       Review's own drawing (openReview), it is text alone, and a price a number ---- */
-    {
-        const j = JSON.stringify, SYV = await import(modUrl('systemcore.js')), FOV = await import(modUrl('formula.js'));
-        const shV = read('sheets.js'), HTMLV = /innerHTML|insertAdjacentHTML|outerHTML|setAttribute|document\.write/;
-        const cutV = (a, b) => { const i = shV.indexOf(a), k = i < 0 ? -1 : shV.indexOf(b, i + a.length); if (i < 0 || k < 0) throw new Error('sinkcheck: sheets.js ' + a.trim().slice(0, 40) + ' not found'); return shV.slice(i, k); };
-        const lineV = k => cutV('\n' + k, '\n').slice(1);
-        const made = [], htmlSet = [], attrs = [];
-        const fake = tag => { const e = { tag, children: [], childNodes: [], style: {}, dataset: {}, className: '', textContent: '', appendChild(k) { this.children.push(k); this.childNodes.push(k); return k; }, setAttribute(n, v) { attrs.push([n, v]); }, addEventListener() {} }; ['innerHTML', 'outerHTML'].forEach(p => Object.defineProperty(e, p, { set(v) { htmlSet.push(v); }, get() { return ''; } })); e.insertAdjacentHTML = (w, v) => { htmlSet.push(v); }; made.push(e); return e; };
-        const docV = { createElement: fake, createTextNode: t => { const n = { tag: '#text', textContent: String(t) }; made.push(n); return n; } };
-        const FX = '<img src=x onerror=alert(17) data-file=1>', VN = ('High Pain Threshold (' + FX + ')').slice(0, 60);
-        const sysV = SYV.cleanSystem({ v: 1, name: T, rolls: [], fields: [{ id: 'f_ph', key: 'PainHigh', label: T, kind: 'formula', vis: 'all', formula: 'Advantages.HighPain.has' },
-            { id: 'f_adv', key: 'Advantages', label: T, kind: 'item-list', vis: 'all', list: { cats: ['Advantage'], noQty: true, custom: true, lvl: { label: P, min: 0, max: 10, def: 0 }, stats: [{ key: 'bp', label: T + 'bp', show: true }, { key: 'per', label: P, show: true }, { key: 'granted', label: T }, { key: 'named', label: T }] } }],
-            items: [{ id: 'i_ftv_hpt', name: 'High Pain Threshold', key: 'HighPain', category: 'Advantage', notes: T, stats: { bp: 10, per: 2, named: 1 } }, { id: 'i_ftv_x', name: FX, key: 'Fx', category: 'Advantage', notes: P, stats: { bp: 5 } }] }, { F: FOV, gmView: true });
-        const findV = n => sysV.items.filter(e => e.name.toLowerCase() === String(n).trim().toLowerCase());
-        const fileV = { type: 'character', name: FX, traits: { advantages: [{ name: 'High Pain Threshold (' + FX + ')', points: 0, level: 1, description: FX, modifiers: { [FX]: 3, __proto__: { health: 9 } } }, { name: FX, points: 0, baselinePoints: 0, description: FX }] } };
-        const protoV = () => j([Object.keys(Object.prototype), ({}).polluted, ({}).health, typeof ({}).constructor]), pV0 = protoV();
-        const chV = { id: 'c_ftv', name: 'S', ownerId: '', npc: true, values: {} }, refusedV = [], drawnV = [];
-        let prV = null, phV = null, nRowsV = 0;
-        try {
-            SYV.sbRowOps(fileV, sysV, findV).ops.forEach(o => { const a = SYV.applyRowOp(sysV, chV, o.f, o.q, FOV, {}); if (a.ok) chV.values[o.f] = a.value; else refusedV.push(o.q.op + ':' + a.reason); });
-            phV = SYV.resolveAll(sysV, chV, FOV).vars('PainHigh');
-            const WV = new Function('document', 'rowStat', 'rowPaid', 'ovDot', 'rowLvl', 'fmtNum', 'LIMITS', 'commitItem', 'rowIdOf', "'use strict';\n" + lineV('function el(tag, cls, text) {') + '\n' + lineV('function lvlText(L, lv) {') + cutV('\nfunction noteBits(', '\nvar _noteOpen')
-                + cutV('\nfunction statFmt(v) {', '\n// F4c1: what one of a row cost') + cutV('\nfunction statDot(s, spec, ovc) {', '\nvar _rfClearing') + '\nreturn { el, statChips, noteBits };')(docV, SYV.rowStat, SYV.rowPaid, () => null, SYV.rowLvl, SYV.fmtNum, SYV.LIMITS, () => {}, SYV.rowIdOf);
-            const fV = sysV.fields.find(f => f.id === 'f_adv');
-            (chV.values.f_adv || []).forEach(r => { const rd = SYV.rowDef(sysV, r), host = fake('div'), nm = WV.el('span', 'sheet-item-name', rd.def.name);
-                WV.statChips(host, rd.def, fV.list, null); const nb = WV.noteBits(r, rd.def, null, fV, false, null);
-                drawnV.push({ copy: !!r.defId, name: nm.textContent, kids: nm.children.length, chips: host.children.map(c => [c.tag, c.className, c.children.map(k => [k.tag, k.textContent, (k.children || []).length])]), notes: nb ? nb.children.map(k => [k.tag, k.className, k.textContent, k.children.length]) : null }); });
-            nRowsV = made.length;   // what the sheet drew (the Review's window below is shown by its own style)
-            // the Review: a character holding the variant as a row of its own (the reading before 2026-10-17) is offered the copy in its place
-            const chO = { id: 'c_ftv', name: FX, ownerId: '', npc: true, values: { f_adv: [{ id: 'w_ftvold', qty: 1, lvl: 1, def: { name: VN, category: 'Advantage', icon: '', notes: '', vis: 'all', stats: { bp: 0 } } }] } };
-            prV = SYV.sbProposal(sysV, chO, fileV, FOV, findV);
-            const nodes = { uploadModal: fake('div'), uploadHead: fake('h3'), uploadList: fake('div'), uploadApply: fake('button'), uploadReject: fake('button') };
-            const campV = { uploads: [{ id: 'up_ftv', charId: 'c_ftv', from: 'u_a', name: P, at: 1, changes: prV.changes }], chars: { c_ftv: chO } };
-            const elV = (tag, cls, text) => { const e = fake(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
-            new Function('ui', 'getActiveCampaign', 'uploadsOf', 'charById', 'isClient', 'el', 'systemOf', 'F', 'sbApplyProposal', 'afterCharChange', 'net', 'toast', 'save', 'renderViews', 'closeReview', 'var _review = null, lastChange = null;\n' + slice('sheets.js', 'uploadreview') + '\nreturn openReview;')(
-                id => nodes[id], () => campV, (cp, id) => SYV.cleanUploads(cp.uploads).filter(u => u.charId === id), (id, cp) => cp.chars[id] || null, () => false, elV, () => null, () => null, () => ({}), () => {}, () => null, () => {}, () => {}, () => {}, () => {})('c_ftv');
-            drawnV.push({ review: nodes.uploadList.children.map(r => r.children.map(k => [k.tag, k.className, k.textContent, k.children.length])) });
-        } catch (e) { refusedV.push('threw: ' + String(e && e.stack || e).slice(0, 300)); }
-        const rowsV = drawnV.filter(d => !d.review), revV = (drawnV.find(d => d.review) || {}).review || [];
-        const chipsOkV = rowsV.every(d => d.chips.every(c => c[0] === 'span' && c[2].length === 2 && c[2][0][0] === 'small' && c[2][0][2] === 0 && c[2][1][0] === '#text' && /^ -?\d+(\.\d+)?$/.test(c[2][1][1])));
-        const notesOkV = rowsV.every(d => !d.notes || d.notes.every(n => typeof n[2] === 'string' && n[3] === 0));
-        check('free traits on the sheet (sbRowOps and sbProposal from a hostile website file, every op applied, then the sheet\'s own row name, statChips and noteBits and the Review\'s own drawing on a page that refuses markup): a qualified variant named in markup is the library copy of the trait the system\'s formula reads (PainHigh true), under the file\'s name cut to the list\'s 60 characters, as one text with no child; a row named as a hostile entry is that entry\'s copy, its name the entry\'s as text; a price a chip of a small label and one number (Base points 0, Points per level 0, as the file prices it); a bag key in markup or a prototype\'s key no change (both copies); the Review offers the copy in place of the row read before, unticked, and the other copy as a new row, their labels, words and arrows each one text; nothing written as markup, an attribute or a style, and nothing on a prototype',
-            refusedV.length === 0 && phV === true && j(rowsV.map(d => [d.copy, d.name, d.kids])) === j([[true, VN, 0], [true, FX, 0]]) && rowsV[0].chips.length === 2 && rowsV[0].chips.every(c => / 0$/.test(c[2][1][1])) && chipsOkV && notesOkV
-                && !!prV && prV.changes.length === 2 && prV.changes[0].kind === 'add' && prV.changes[0].accept === false && prV.changes[0].from === 'a row of its own' && revV.length === 2 && revV.every(r => r.every(k => k[3] === 0)) && revV[0].some(k => k[2] === T + ': ' + VN)
-                && htmlSet.length === 0 && attrs.length === 0 && nRowsV > 0 && made.slice(0, nRowsV).every(e => e.tag === '#text' || Object.keys(e.style).length === 0) && protoV() === pV0 && !HTMLV.test(cutV('\nfunction noteBits(', '\nvar _noteOpen')),
-            j([refusedV, phV, rowsV, revV, prV && prV.changes, htmlSet, attrs]));
-    }
 
     {
         // the Pages shelf opens a planner of the map at its node (1.5.4, PLANNER_ORG_DESIGN 4.1): the node's block id comes from a campaign file and

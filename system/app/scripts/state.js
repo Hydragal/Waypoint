@@ -59,19 +59,19 @@ window.addEventListener('error', function(e) {
 
   export const CATS = {
 
-    surface:  {label:'Surface · Public',     color:'#e0a54f'},
+    surface:  {label:'Streets · Public',      color:'#e0a54f'},
 
-    justice:  {label:'Justice Complex',       color:'#b98cff'},
+    civic:    {label:'Civic Hall',            color:'#b98cff'},
 
     sublevel: {label:'Sublevels',             color:'#4db3d3'},
 
-    embassy: {label:'Embassy',              color:'#d9534f'},
+    guard:    {label:'Guard Post',            color:'#d9534f'},
 
-    guild:   {label:'Guild',                color:'#9aa4b0'},
+    guild:    {label:'Guild Hall',            color:'#9aa4b0'},
 
-    exchange: {label:'Exchange · Lodging',    color:'#5cb87a'},
+    market:   {label:'Market · Lodging',      color:'#5cb87a'},
 
-    deep:     {label:'The Deep · Transfer',   color:'#3fb6a8'},
+    harbour:  {label:'Harbour · Docks',       color:'#3fb6a8'},
 
     custom:   {label:'Custom / Other',        color:'#c9c9d4'}
 

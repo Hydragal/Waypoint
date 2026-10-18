@@ -1287,7 +1287,7 @@ function senseCells(viewer, grid, blockers, lvl, lit) {
     return out;
 }
 // Lighting (L2): a board item's light — { bright, dim } radii in yards (dim, the outer edge, at least bright: equal is no dim fringe, as a
-// ShadowBase lumenrod), off: true while switched off. null when it gives none. Numbers only, clamped, read by comparison (an import can hold
+// small hand lamp), off: true while switched off. null when it gives none. Numbers only, clamped, read by comparison (an import can hold
 // anything). L4: unit, what the radii count in when not yards (ft, m or cells), and name, the preset it was copied from (text, shown escaped)
 function cleanLight(l) {
     if (!isObj(l)) return null;

@@ -3,12 +3,15 @@
    front end in system/app works unchanged.  Usage:
        node tools/dev-server.js [savesDir] [port]
    Defaults: savesDir = ./dev-saves (never your real saves), port = 3999.
-   Open http://localhost:3999 in a browser. */
+   Open http://localhost:3999 in a browser.
+   /private/ is the folder Waypoint-private beside the repository (an outside sheet reader of the owner's own, never in a commit or a release),
+   or the folder WAYPOINT_PRIVATE_DIR names: its .js and .css files only, and nothing at all where it is absent. The shell has no such route. */
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
 const appDir = path.join(__dirname, '..', 'system', 'app');
+const privateDir = path.resolve(process.env.WAYPOINT_PRIVATE_DIR || path.join(__dirname, '..', '..', 'Waypoint-private'));   // the page asks for /private/index.js once (sheets.js askReader)
 const savesDir = path.resolve(process.argv[2] || path.join(__dirname, '..', 'dev-saves'));
 const port = parseInt(process.argv[3], 10) || 3999;
 if (!fs.existsSync(savesDir)) fs.mkdirSync(savesDir, { recursive: true });
@@ -244,12 +247,16 @@ const server = http.createServer((req, res) => {
     if (pathname.startsWith('/saves/')) {
         root = savesDir;
         filePath = path.join(root, pathname.substring(7));
+    } else if (pathname.startsWith('/private/')) {   // the private folder's scripts and styles; never a file of the app's own folder in its place
+        if (!/\.(js|css)$/i.test(pathname)) { res.writeHead(404); return res.end('Not Found'); }
+        root = privateDir;
+        filePath = path.join(root, pathname.substring(9));
     } else {
         let p = pathname === '/' ? '/index.html' : pathname;
         root = appDir;
         filePath = path.join(root, p);
     }
-    // mirrors main.js: the resolved file must sit inside its root (saves/ or the app folder), whatever the parser made of the path
+    // mirrors main.js: the resolved file must sit inside its root (saves/, the private folder or the app folder), whatever the parser made of the path
     root = path.resolve(root); filePath = path.resolve(filePath);
     if (filePath !== root && !filePath.startsWith(root + path.sep)) { res.writeHead(400); return res.end('Bad path'); }
     if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {

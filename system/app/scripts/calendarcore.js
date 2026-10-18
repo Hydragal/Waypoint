@@ -34,7 +34,7 @@ function cutName(v, n) {   // plain one-line text, cut by code points
 
 // A system's calendar, cleaned (the same in the GM's view and the players'): { periods?: [{ name, days, extra? }], week?: [names],
 // first? (the weekday of day 1, a place in week), hours?, minutes?, seconds? (only when not 24, 60, 60), era? (the label after the
-// year), one? (the year day 1 falls in; absent: 1), down? (years count down: 3964, 3963 …), leap?: { every, from (a leap year,
+// year), one? (the year day 1 falls in; absent: 1), down? (years count down: 1200, 1199 …), leap?: { every, from (a leap year,
 // as the calendar numbers it), period (a place in periods), days } }. A period needs a name and 1 to 1000 days; a weekday a name.
 // A leap rule's period and the first weekday are places in the lists AS WRITTEN: one dropped before them moves them with it, and the
 // rule (or the first weekday) goes with a period (or a weekday) that is dropped. Nothing set: null (a plain count of days of 24 hours)
@@ -123,8 +123,8 @@ function periodDays(cal, year, period) {
 function yearDays(cal, year) { var sh = shape(cal), yi = typeof year === 'number' && isFinite(year) ? yearIndex(sh, year) : -1; if (!sh.ps.length || whole(yi, 0, 1e12) === null) return 0; return sh.base + (leapY(sh, yi) ? sh.lp.days : 0); }
 function dayLength(cal) { return shape(cal).dayLen; }
 
-// Words (plain text for a text node, a title or a toast; never markup): "Firstday, 4 First, 3964 BCE"; a one-day period outside the
-// month count reads by its name alone ("Thirdday, Midyear Holiday, 3964 BCE"); with no periods "Day 45"; with no weekdays no weekday
+// Words (plain text for a text node, a title or a toast; never markup): "Firstday, 4 First, 1200 BCE"; a one-day period outside the
+// month count reads by its name alone ("Thirdday, Midsummer Day, 1200 BCE"); with no periods "Day 45"; with no weekdays no weekday
 function fmtDate(cal, t) {
     var sh = shape(cal), d = dateOf(cal, t), wd = d.weekday >= 0 ? sh.week[d.weekday] + ', ' : '';
     if (!sh.ps.length) return wd + 'Day ' + d.pday;

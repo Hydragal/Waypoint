@@ -40,3 +40,8 @@ dist/
 # --- internal planning docs (markdown): local only, never committed. Non-.md assets in docs/
 #     (e.g. the README's SmartScreen image) stay tracked without a per-file exception ---
 docs/*.md
+# ...and every folder under docs/ (local research and the owner's own campaign build): never committed, on any clone
+/docs/*/
+# an outside sheet reader of the owner's own (the ShadowBase bridge): the private/ folder at the repository's root alone, kept on the
+# owner's machine, served by tools/dev-server.js only
+/private/

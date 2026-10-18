@@ -1399,7 +1399,7 @@ if (_waitSel) _waitSel.addEventListener('change', function() { setNewPlayers({ t
 var _waitSight = ui('netWaitingSight');
 if (_waitSight) _waitSight.addEventListener('change', function() { setNewPlayers({ sight: this.checked }); });
 var _makeFile = ui('netMakeFile');
-if (_makeFile) _makeFile.addEventListener('change', function() { setNewPlayers({ fromFile: this.checked }); toast(this.checked ? 'Players may start a character from a file (their own sheet download, or a ShadowBase sheet).' : 'Players make a character by hand only.'); });
+if (_makeFile) _makeFile.addEventListener('change', function() { setNewPlayers({ fromFile: this.checked }); toast(this.checked ? 'Players may start a character from a file (their own sheet download).' : 'Players make a character by hand only.'); });
 var _makeSel = ui('netMakeSelect');
 if (_makeSel) _makeSel.addEventListener('change', function() { var v = this.value === 'invite' || this.value === 'off' ? this.value : 'live'; setNewPlayers({ create: v }); toast(v === 'off' ? 'Players never make a character of their own here.' : v === 'invite' ? 'Players make a character only when you ask them (their chip \u25B8 Let them make a character).' : 'Players may make a character of their own.'); });
 
@@ -1844,6 +1844,7 @@ function applySnapshot(msg) {
     Object.values(state.appState.campaigns || {}).forEach(function(cs) { if (cs && cs.chars && typeof cs.chars === 'object') Object.keys(cs.chars).forEach(function(id) { noteHostCopy(id, cs.chars[id].values); }); });   // Stage 6: the host's copy of every character, whole, from the start (a refusal goes back to it)
     if (typeof noteHostChar === 'function') Object.values(state.appState.campaigns || {}).forEach(function(cs) { if (cs && cs.chars && typeof cs.chars === 'object') Object.keys(cs.chars).forEach(function(id) { noteHostChar(cs.chars[id]); }); });   // item 35: and its looks, on our own whole copies alone
     if (typeof styleHostKnows === 'function') styleHostKnows(msg.looks);   // item 35: a host that knows text looks says so here; an older one says nothing
+    _sheetFilesOk = msg.sheetFiles === true;   // 2026-10-18: a host that reads a sheet file made elsewhere says so here, true only
     net.stanceCamps = cleanStanceCamps(msg.stanceCamps);   // null from an older host: msg.stance governs every campaign
     net.targets = cleanTargets(msg.targets);
     net.combats = cleanCombats(msg.combats);
@@ -3208,7 +3209,11 @@ net.charEffect = function(charId, fieldId, q) {
 };
 // Stage 6 U2: a player sends their own character's sheet file to the GM as proposed changes (the host works them out on its full system
 // and library and keeps them for the GM; under the system's setting B their own row facts apply at once). done({ n, auto } | { error })
-var _uploadPending = {};
+// A sheet file made elsewhere is read only by an outside reader (systemcore registerReader: a module of the GM's own, none ships with the app):
+// a host with one says so in its snapshot (sheetFiles), which a player's app keeps (_sheetFilesOk). Without one a file is answered unread
+var _uploadPending = {}, _sheetFilesOk = false;
+function sheetFilesHere() { var S = SC(); return !!(S && typeof S.readers === 'function' && S.readers().length > 0); }
+net.sheetFilesOk = function() { return net.role === 'client' ? !!net.active && _sheetFilesOk === true : sheetFilesHere(); };
 net.charUpload = function(charId, sheet, done) {
     var S = SC(), camp = getActiveCampaign();
     if (!S || !camp || !net.active || net.role !== 'client' || net.stream) return { error: 'Not at a table.' };
@@ -5268,7 +5273,7 @@ function admitPlayer(conn, prof, provenKey) {
     if (window.wpFog) window.wpFog.invalidateVision();   // fog: this admit may follow token moves; compute a fresh per-recipient view
     var snapOk = false;
     try {
-        var snap, mkSnap = function() { snap = { type: 'snapshot', gmId: getProfile().id, key: issuedKey, appState: sanitizeAppState(state.appState, prof.id, typeof mapHeldOf === 'function' ? mapHeldOf(conn) : null), stage: land.stage, paused: net.paused, pausedSelf: !!(net.pausedPlayers && net.pausedPlayers[prof.id]), travelLocked: net.travelLocked, snap: typeof window.wpSnapOn === 'function' && window.wpSnapOn() === true, stance: net.stanceFlags(), stanceCamps: window.wpVtt ? window.wpVtt.hostCamps() : null, targets: targetsFor(prof.id), combats: combatsFor(prof.id), looks: true, notepad: notepadMsg() }; gmSignSnap(snap, conn); };   // (signed with the GM's key when this player's app sent its nonce: gmSignSnap)
+        var snap, mkSnap = function() { snap = { type: 'snapshot', gmId: getProfile().id, key: issuedKey, appState: sanitizeAppState(state.appState, prof.id, typeof mapHeldOf === 'function' ? mapHeldOf(conn) : null), stage: land.stage, paused: net.paused, pausedSelf: !!(net.pausedPlayers && net.pausedPlayers[prof.id]), travelLocked: net.travelLocked, snap: typeof window.wpSnapOn === 'function' && window.wpSnapOn() === true, stance: net.stanceFlags(), stanceCamps: window.wpVtt ? window.wpVtt.hostCamps() : null, targets: targetsFor(prof.id), combats: combatsFor(prof.id), looks: true, notepad: notepadMsg() }; if (sheetFilesHere()) snap.sheetFiles = true; gmSignSnap(snap, conn); };   // sheetFiles (2026-10-18): this host reads a sheet file made elsewhere (an outside reader of the GM's own), true only   // (signed with the GM's key when this player's app sent its nonce: gmSignSnap)
         if (typeof fogLanded === 'function') fogLanded(null, mkSnap); else mkSnap();   // fold M4: judged with every open drag at its start
         conn.send(snap); snapOk = true;
     } catch (e) { sendFailed(e, 'snapshot'); toast('Could not send the campaign to ' + (prof.name || 'the player') + ' \u2014 something in it cannot be sent (the console has the details).'); if (typeof mapForgetConn === 'function') mapForgetConn(conn.peer); }
@@ -6222,6 +6227,7 @@ function handleMessage(msg, conn) {
         var qu = Su.cleanCharUpload(msg); if (!qu) return;
         var ansU = function(o) { o.type = 'char-upload-ans'; o.rid = qu.rid; try { conn.send(o); } catch (e) { sendFailed(e); } };
         var isFileU = !!(qu.sheet && typeof qu.sheet === 'object' && qu.sheet.format === 'waypoint-character');   // Onboarding F2a: a character file (never read as a dossier)
+        var rdU = isFileU || typeof Su.readerFor !== 'function' ? null : Su.readerFor(qu.sheet);   // 2026-10-18: any other file is read by the outside reader that claims it, where one is registered
         if (net.paused || peerPaused(conn.peer)) { ansU({ reason: 'paused' }); return; }
         if (window.wpVtt && !window.wpVtt.on('sheets')) { ansU({ reason: 'off' }); return; }
         var nowU = Date.now(); if (_uploadAt[conn.peer] && nowU - _uploadAt[conn.peer] < UPLOAD_GAP_MS) { ansU({ reason: 'slow' }); return; }
@@ -6240,8 +6246,8 @@ function handleMessage(msg, conn) {
             if (!allow('charfill', { perMs: 10000, burst: 2, windowMs: 60000, table: 12 }, conn.peer)) { ansU({ reason: 'slow' }); return; }
             _uploadAt[conn.peer] = nowU;
             var viewF = SHf && SHf.playerSystem ? SHf.playerSystem(campU) : null, pfF = viewF && SHf.playerFinder ? SHf.playerFinder(campU, viewF) : null;
-            var fillF = !pfF ? null : isFileU ? (SHf.charFromJson ? SHf.charFromJson(viewF, qu.sheet, pfF.find, pfF.findKey) : null) : Su.sbFill(qu.sheet, viewF, Fu, pfF.find);
-            var rF = fillF ? Su.fillMaking(campU.system, chU, fillF, Fu, { view: viewF, lib: pfF.lib, now: nowU }) : null;
+            var fillF = !pfF ? null : isFileU ? (SHf.charFromJson ? SHf.charFromJson(viewF, qu.sheet, pfF.find, pfF.findKey) : null) : rdU ? rdU.fill(qu.sheet, viewF, Fu, pfF.find) : null;
+            var rF = fillF ? Su.fillMaking(campU.system, chU, fillF, Fu, { view: viewF, lib: pfF.lib, now: nowU, rowOp: rdU ? rdU.rowOp : null }) : null;
             if (!rF || !rF.ok) { ansU({ reason: 'unread' }); return; }
             var leftF = rF.left + (typeof fillF.lost === 'number' && isFinite(fillF.lost) ? Math.max(0, fillF.lost | 0) : 0);   // rows the file named and nothing here could place (read on the players' view: no oracle)
             chU.values = rF.values; chU.updated = nowU;
@@ -6257,11 +6263,13 @@ function handleMessage(msg, conn) {
         // [netcheck:charfill-end]
         if (isFileU) { ansU({ reason: 'file' }); return; }   // a character file fills only a character in the making (owner, 2026-09-27: in play, Import stays as it was)
         _uploadAt[conn.peer] = nowU;
-        var findU = window.wpSheets && window.wpSheets.sbFinder ? window.wpSheets.sbFinder(campU, campU.system) : null;
-        var prU = Su.sbProposal(campU.system, chU, qu.sheet, Fu, findU), autoU = 0, wroteU = false;   // wroteU: something of the campaign changed below (security 2026-10-01: an upload that changes nothing is not saved)
+        if (!rdU) { ansU({ reason: 'unread' }); return; }   // no reader here takes that file
+        var findU = window.wpSheets && window.wpSheets.gmFinder ? window.wpSheets.gmFinder(campU, campU.system) : null;
+        var prU = rdU.propose(campU.system, chU, qu.sheet, Fu, findU), autoU = 0, wroteU = false;
+        if (!prU || !Array.isArray(prU.changes)) { ansU({ reason: 'unread' }); return; }   // wroteU: something of the campaign changed below (security 2026-10-01: an upload that changes nothing is not saved)
         if (campU.system.listRules && campU.system.listRules.uploadFacts === true) {   // setting B: their own row facts at once, each as their own hand would make it (a list they cannot change, a locked switch, a row kept from them: it waits for the GM)
             var optU = { player: true, view: window.wpSheets && window.wpSheets.playerSystem ? window.wpSheets.playerSystem(campU) : null }, valsU = chU.values, doneU = {};
-            prU.changes.forEach(function(ch) { if (ch.kind !== 'fact') return; var oneU = {}; oneU[ch.id] = true; var rU = Su.sbApplyProposal(campU.system, Object.assign({}, chU, { values: valsU }), prU, oneU, Fu, optU); if (rU.done === 1) { valsU = rU.values; doneU[ch.id] = true; autoU++; } });
+            prU.changes.forEach(function(ch) { if (ch.kind !== 'fact') return; var oneU = {}; oneU[ch.id] = true; var rU = Su.applyProposal(campU.system, Object.assign({}, chU, { values: valsU }), prU, oneU, Fu, Object.assign({ rowOp: rdU.rowOp }, optU)); if (rU.done === 1) { valsU = rU.values; doneU[ch.id] = true; autoU++; } });
             if (autoU) {
                 var dU = {}; Object.keys(valsU).forEach(function(k) { if (JSON.stringify(valsU[k]) !== JSON.stringify((chU.values || {})[k])) dU[k] = valsU[k]; });
                 if (Object.keys(dU).length) { chU.values = valsU; chU.updated = nowU; wroteU = true; net.syncCharDelta(qu.charId, dU); if (window.wpSheets) window.wpSheets.charChanged(qu.charId); }
@@ -6270,7 +6278,7 @@ function handleMessage(msg, conn) {
         }
         if (prU.changes.length) {
             var upsU = (Array.isArray(campU.uploads) ? campU.uploads : []).filter(function(u) { return u && u.charId !== qu.charId; });   // a newer upload of the same character replaces the older
-            upsU.push({ id: 'up_' + nowU.toString(36) + Math.random().toString(36).slice(2, 6), charId: qu.charId, from: profU.id, name: String(profU.name || 'A player').slice(0, 60), at: nowU, changes: prU.changes });
+            upsU.push({ id: 'up_' + nowU.toString(36) + Math.random().toString(36).slice(2, 6), charId: qu.charId, from: profU.id, name: String(profU.name || 'A player').slice(0, 60), at: nowU, changes: prU.changes, reader: rdU.id });   // the reader that read it applies it
             campU.uploads = upsU.slice(-Su.LIMITS.uploads);
             var tU = (profU.name || 'A player') + ' sent a sheet update for ' + (chU.name || 'their character') + ': ' + prU.changes.length + (prU.changes.length === 1 ? ' change' : ' changes') + ' to review (the gold Review button in the header).';
             toast(tU); logEvent('char', tU);

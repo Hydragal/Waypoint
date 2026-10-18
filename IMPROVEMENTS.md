@@ -29,7 +29,7 @@ Sources are marked **[user]** (reported from ordinary use) or **[automation]** (
 
 ## 2. No zoom-to-fit / frame-content control **[automation]** — ✅ FIXED 2026-09-17
 
-**What happens.** There is no "fit all" or "frame selection" action. On a large map (e.g. the new Tide City area overview) it is impossible to see the whole thing at once; you zoom out one click at a time and still cannot frame it.
+**What happens.** There is no "fit all" or "frame selection" action. On a large map (e.g. a city's area overview) it is impossible to see the whole thing at once; you zoom out one click at a time and still cannot frame it.
 
 **Why it matters.** Any map bigger than the viewport — overview maps especially — is awkward to review or screenshot. This is the single biggest navigation gap.
 

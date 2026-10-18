@@ -14,15 +14,15 @@ var wb = document.getElementById('whiteboard');
 
 var _lastMeasureMapId = null;
 
-/* ---- token stance: elevation (yards) + posture (handbook ch. 9) ----
+/* ---- token stance: elevation (yards) + posture ----
    Two VTT features (Settings ▸ VTT features, set per campaign — camp.vtt — and on from the
    first launch) decide whether the chips draw and whether the blast template measures in 3D.
    The values stay on the token either way, so switching a feature back on restores them.
    In a session the GM's campaign settings are the ceiling for the player copy: they arrive
    with the snapshot and again whenever the GM flips one, and a player may switch a feature
    off for themselves on top. stanceOn delegates to the one gate, window.wpVtt.on (vtt.js). */
-// The ids are the website's (shadow-base.com details.posture); the 1.4.6 pre-release ids
-// prone / supine and the handbook's long names are still accepted on read.
+// The ids are the seven postures' own; the 1.4.6 pre-release ids prone / supine and the long
+// names are still accepted on read.
 var POSTURES = ['standing', 'crouching', 'sitting', 'kneeling', 'crawling', 'lying-prone', 'lying-face-up'];
 var POSTURE_LABEL = { standing: 'Standing', crouching: 'Crouching', sitting: 'Sitting', kneeling: 'Kneeling', crawling: 'Crawling', 'lying-prone': 'Lying prone (face down)', 'lying-face-up': 'Lying face up' };   // the website's labels (posture-rules.ts POSTURE_EFFECTS)
 var POSTURE_CHIP = { crouching: 'CRO', sitting: 'SIT', kneeling: 'KNL', crawling: 'CRW', 'lying-prone': 'PRN', 'lying-face-up': 'SUP' };
@@ -87,7 +87,7 @@ function stepWords(d) { return (d < 0 ? 'Down' : 'Up') + ' one yard' + (metricOn
 function boxHeight(box, yd) { if (!box) return; var s = String(ydBox(yd)); box.step = String(ydStep()); box.defaultValue = s; box.value = s; }
 // [systemcheck:lenunit-end]
 // [systemcheck:postranged-start]
-// Every posture but standing makes a smaller target: -2 to a foe's RANGED attack roll (Chapter 9, Change Posture, Target Modifier; the owner's
+// Every posture but standing makes a smaller target: -2 to a foe's RANGED attack roll (the owner's
 // rulings of 2026-09-30). Display only, no roll reads it: after the distance on a ruler that ends on the token, and a second line under its
 // posture in its chip's tooltip and its hover card, while Token posture is on (as the chip is). The figure is fixed here as it is in the
 // website's RANGED_TARGET_PENALTY (src/lib/posture-rules.ts): if the rule changes, both change together. Plain text: callers escape it
@@ -204,7 +204,7 @@ function tokenGuide(tok, am) {
     if (SC && SC.shapeStandIn) SC.shapeStandIn(p, am);
     return p.shape === 'hexagon' || p.shape === 'rect' || p.shape === 'circle' ? { shape: p.shape, w: p.w, h: p.h } : { shape: 'rect', w: 1, h: 1 };
 }
-window.wpTokenGuide = tokenGuide;   // the roster portrait and the ShadowBase import frame against it too
+window.wpTokenGuide = tokenGuide;   // the roster portrait and an outside reader's token import frame against it too
 function newOwnPicture(tok) {
     var n = window.wpNet, am = getActiveMap(); if (!ownPicOk(tok) || !am) return;
     var fi = document.createElement('input'); fi.type = 'file'; fi.accept = 'image/*';
@@ -3749,7 +3749,7 @@ window.wpFitToGrid = fitToGrid;
 
   });
 
-  /* ---- circles on the board: the Radius tool's own, and a thrown blast's area (handbook ch. 7 / ch. 11) ----
+  /* ---- circles on the board: the Radius tool's own, and a thrown blast's area ----
      A sub-mode of Measure (window.wpMeasureKind = 'blast'): click a cell to place a circle.
      The Radius tool is everyone's, to measure with (1.5.4). Its circle keeps a radius in yards
      (b.yd), typed and shown in the ruler's unit on that map, as a radius or as a diameter (b.as).
@@ -5501,18 +5501,7 @@ if(_el_addImageBtn) _el_addImageBtn.addEventListener('click', () => document.get
       import('./io.js').then(function(m) { m.save(true); render(); m.toast(ids.length + ' pictures placed in a block \u2014 they are selected, drag to move them together.'); });
   }
 
-  var _el_importCharBtn = document.getElementById('importCharBtn');
-
-  if (_el_importCharBtn) _el_importCharBtn.addEventListener('click', function() {
-      var fi = document.getElementById('sheetFileIn');
-      if (!fi) return;
-      fi.onchange = function() {
-          var f = this.files[0];
-          this.value = '';
-          import('./shadowbase.js').then(function(m) { m.importCharacterToken(f); });
-      };
-      fi.click();
-  });
+  // Import Character (#importCharBtn) is an outside sheet reader's own: its page code shows the row and wires it (it is hidden in the page)
 
   var _el_sheetViewClose = document.getElementById('sheetViewCloseBtn');
   if (_el_sheetViewClose) _el_sheetViewClose.addEventListener('click', function() {

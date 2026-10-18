@@ -474,7 +474,7 @@ function coverSetsFor(map, grid, blast) {
     return result;
 }
 // [fogcheck:heightcover-start]
-// Item 19 H1 (the owner's answer, 2026-09-30: the handbook's Ch7 rule, per system — "height clears low cover"): the map's cover sets for one
+// Item 19 H1 (the owner's answer, 2026-09-30: a rule of the system's — "height clears low cover"): the map's cover sets for one
 // attacker at height hA and one target at hT (yards). A see-over piece hH tall (1 yard where none is given) gives no cover when hA > hH (looked
 // at from above it), hides the target as a wall does (total) when hA < hT <= hH (from below), else is see-over cover as before; walls block
 // at any height. The map's own sets (coverSetsFor) untouched; no see-over piece: those very sets

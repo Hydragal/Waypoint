@@ -997,6 +997,154 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             } finally { await dg.stop(); try { fs.rmSync(savesG, { recursive: true, force: true }); } catch (e) {} }
         }
 
+        // the dev server's /private/ (2026-10-18): the folder Waypoint-private beside the repository (an outside sheet reader of the owner's own, never in
+        // a commit or a release), or the folder WAYPOINT_PRIVATE_DIR names; its .js and .css files only, nothing at all where the folder is absent, never a file of
+        // the app's own folder in its place; the shell has no such route
+        {
+            const savesP = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-devP-')), privP = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-privP-'));
+            const wP = (rel, t) => { const f = path.join(privP, rel); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, t); };
+            wP('index.js', 'export var x = 1;'); wP('style.css', 'body{}'); wP('scripts/a.js', 'export var y = 2;'); wP('notes.json', '{"secret":1}'); wP('help.html', '<p>x</p>'); wP('README.md', '# x'); wP('tools/check.js', 'x');
+            const dp = await startDev(savesP, { WAYPOINT_PRIVATE_DIR: privP }), dn = await startDev(savesP, { WAYPOINT_PRIVATE_DIR: path.join(privP, 'nothing-here') });
+            try {
+                const st = async (port, p) => { const r = await hit(port, 'GET', p), h = r.h || {}; return [r.status, String(h['content-type'] || '').split(';')[0], r.status === 200 ? r.body : '']; };
+                const ways = ['/private/index.js', '/private/style.css', '/private/scripts/a.js', '/private/tools/check.js', '/private/notes.json', '/private/help.html', '/private/README.md', '/private/', '/private/nope.js', '/private/index.js.map', '/private/..%5Cscripts%5Cnet.js', '/private/%2e%2e%5Csystem%5Capp%5Cscripts%5Cnet.js'];
+                const got = {}; for (const p of ways) got[p] = await st(dp.port, p);
+                const none = []; for (const p of ['/private/index.js', '/private/style.css', '/private/scripts/a.js']) none.push((await st(dn.port, p))[0]);
+                const mainP = fs.readFileSync(path.join(__dirname, '..', 'system', 'resources', 'app', 'main.js'), 'utf8'), devP = fs.readFileSync(path.join(__dirname, 'dev-server.js'), 'utf8').replace(/\r\n/g, '\n');
+                const W = { '/private/index.js': [200, 'application/javascript', 'export var x = 1;'], '/private/style.css': [200, 'text/css', 'body{}'], '/private/scripts/a.js': [200, 'application/javascript', 'export var y = 2;'], '/private/tools/check.js': [200, 'application/javascript', 'x'] };
+                check('the dev server\'s /private/ (the real dev server as a child process, a scratch private folder named by WAYPOINT_PRIVATE_DIR): its .js and .css files are served with their types and the page\'s policy, a script in a folder of it too; any other kind of file, the folder itself, a file that is not there and a path that walks out are not; with the folder absent nothing at all is served; the shell has no such route',
+                    dp.up && dn.up && Object.keys(W).every(p => j(got[p]) === j(W[p])) && ['/private/notes.json', '/private/help.html', '/private/README.md', '/private/', '/private/nope.js', '/private/index.js.map'].every(p => got[p][0] === 404)
+                    && ['/private/..%5Cscripts%5Cnet.js', '/private/%2e%2e%5Csystem%5Capp%5Cscripts%5Cnet.js'].every(p => got[p][0] === 400 || got[p][0] === 404) && none.every(s => s === 404)
+                    && !/\/private\//.test(mainP) && devP.split("pathname.startsWith('/private/')").length === 2
+                    && devP.includes("const privateDir = path.resolve(process.env.WAYPOINT_PRIVATE_DIR || path.join(__dirname, '..', '..', 'Waypoint-private'));")
+                    && devP.includes("    } else if (pathname.startsWith('/private/')) {   // the private folder's scripts and styles; never a file of the app's own folder in its place\n        if (!/\\.(js|css)$/i.test(pathname)) { res.writeHead(404); return res.end('Not Found'); }\n        root = privateDir;\n        filePath = path.join(root, pathname.substring(9));\n"),
+                    j([got, none]));
+            } finally { await dp.stop(); await dn.stop(); try { fs.rmSync(savesP, { recursive: true, force: true }); fs.rmSync(privP, { recursive: true, force: true }); } catch (e) {} }
+        }
+        // the release build never packs private/ (release.js privateGuard, sliced and run for real): refused while what the installer packs
+        // holds one that installer.iss does not exclude, and while the app folder holds one (the update zip packs the app folder whole). The build
+        // asks the first half of the stage's list, since the installer packs the stage alone: a private folder beside the build no longer stops it
+        {
+            const relP = fs.readFileSync(path.join(__dirname, 'release.js'), 'utf8').replace(/\r\n/g, '\n'), gA = relP.indexOf('// [servercheck:privateguard-start]'), gB = relP.indexOf('// [servercheck:privateguard-end]');
+            const tryP = (fn, d) => { try { return fn(); } catch (e) { return d; } };
+            const PG = gA > 0 && gB > gA ? tryP(() => new Function(relP.slice(gA, gB) + '\nreturn privateGuard;')(), null) : null, G = (a, b, c) => tryP(() => PG(a, b, c), 'threw');
+            const issOk = 'Source: "*"; DestDir: "{app}"; Excludes: "installer.iss,saves,saves\\*,private,private\\*,tools,tools\\*"; Flags: x', issNo = 'Source: "*"; DestDir: "{app}"; Excludes: "installer.iss,saves,saves\\*,tools,tools\\*"; Flags: x', issHalf = 'Source: "*"; DestDir: "{app}"; Excludes: "installer.iss,private,tools"; Flags: x';
+            let issReal = ''; try { issReal = fs.readFileSync(path.join(__dirname, '..', 'installer.iss'), 'utf8'); } catch (e) { issReal = ''; }
+            const realX = /^Source: "\*";[^\n]*Excludes: "([^"]*)"/m.exec(issReal), realHas = !!realX && realX[1].split(',').map(s => s.trim().toLowerCase()).filter(s => s === 'private' || s === 'private\\*').length === 2;
+            check('the release build never packs the private folder (release.js privateGuard, sliced and run for real): with no private/ beside it a build goes on; with one it is refused unless installer.iss excludes private and private\\* from the root\'s files; a private folder inside the app folder is refused always; the real installer.iss is read as it stands; the build asks it of what the stage will hold, never of the folder beside it, before the first thing a build writes',
+                typeof PG === 'function' && G(false, false, issNo) === null && G(true, false, issOk) === null && /^Not built: the private folder stands beside this build/.test(G(true, false, issNo)) && /^Not built/.test(G(true, false, issHalf)) && /^Not built/.test(G(true, false, ''))
+                && /^Not built: system\/app\/private exists/.test(G(false, true, issOk)) && /^Not built/.test(G(true, true, issOk)) && (realHas ? G(true, false, issReal) === null : /^Not built/.test(G(true, false, issReal)))
+                && relP.indexOf("const pg = privateGuard(sl.files.concat(sl.dirs).some(f => /^private(\\/|$)/i.test(f)), fs.existsSync(path.join(SYSTEM, 'app', 'private')), issP);") > 0 && relP.indexOf('const pg = privateGuard(') < relP.indexOf("const dist = path.join(ROOT, 'dist', VERSION);")
+                && relP.indexOf('const sl = stageList(ROOT);') > 0 && relP.indexOf('const sl = stageList(ROOT);') < relP.indexOf('const pg = privateGuard(') && relP.indexOf("path.join(ROOT, 'private')") < 0, j([G(true, false, issNo), realHas]));
+        }
+        // the installer is compiled from a clean copy (release.js stageList and stageCopy, sliced and run for real on scratch trees): the root's
+        // files by name and system/ whole but for five folders, byte for byte, into a stage made fresh; a link, a junction or a missing file
+        // refuses the build with nothing written; and release.js compiles the staged installer.iss, never the root's
+        {
+            const relS = fs.readFileSync(path.join(__dirname, 'release.js'), 'utf8').replace(/\r\n/g, '\n'), sA = relS.indexOf('// [servercheck:stage-start]'), sB = relS.indexOf('// [servercheck:stage-end]');
+            const tryS = (fn, d) => { try { return fn(); } catch (e) { return d; } };
+            const ST = sA > 0 && sB > sA ? tryS(() => new Function('fs', 'path', 'execFileSync', relS.slice(sA, sB) + '\nreturn { STAGE_FILES, STAGE_SKIP, stageList, stageCopy, hiddenOf };')(fs, path, require('child_process').execFileSync), null) : null;
+            const L = (r, h) => tryS(() => ST.stageList(r, h), { why: 'threw' }), C = (r, s, h) => tryS(() => ST.stageCopy(r, s, h), { why: 'threw' });
+            const base = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-stage-')), notes = [];
+            const put = (root, rel, data) => { const p = path.join(root, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, data); };
+            const tree = (root, list) => { for (const k of Object.keys(list)) put(root, k, list[k]); return root; };
+            const walk = (root, rel, out) => { out = out || []; for (const n of fs.readdirSync(rel ? path.join(root, rel) : root).sort()) { const r = rel ? rel + '/' + n : n; if (fs.lstatSync(path.join(root, r)).isDirectory()) { out.push(r + '/'); walk(root, r, out); } else out.push(r); } return out; };
+            const link = (target, at) => { try { fs.symlinkSync(target, at, 'junction'); return true; } catch (e) { return false; } };
+            const sorted = a => a.slice().sort(), bufOf = v => (Buffer.isBuffer(v) ? v : Buffer.from(v));
+            const font = Buffer.from([0, 1, 0, 0, 13, 10, 0, 255, 10, 13, 128, 0]);   // a font's bytes: NULs, a CR LF, a lone LF and a lone CR, high bytes
+            const ROOTF = { 'Waypoint.exe': Buffer.from([77, 90, 0, 144, 3, 0]), 'license.txt': 'the licence\r\n', 'README.md': 'Current release: **0.0.0**\n', 'WHATSNEW.txt': 'WAYPOINT 0.0.0\r\n', 'installer.iss': '[Setup]\r\nSetupIconFile=system\\icon.ico\r\n' };
+            const SYSF = { 'system/icon.ico': Buffer.from([0, 0, 1, 0, 13, 10]), 'system/version': '44.1.0', 'system/app/index.html': '<!doctype html>', 'system/app/assets/fonts/Some Face/SomeFace-Regular.ttf': font, 'system/app/assets/fonts/Some Face/OFL.txt': 'licence\r\n', 'system/app/scripts/deep/er/x.js': 'export const x = 1;\r\n', 'system/resources/app/main.js': '// the core\n', 'system/locales/en-US.pak': Buffer.alloc(3000, 7) };
+            const DECOYS = { 'NOTES.md': 'private notes', '.agent/worktrees/w/system/app/scripts/x.js': 'old code', 'IMPROVEMENTS.md': '# ideas\n', 'private/reader.js': 'mine', 'saves/data.json': '{}', 'dev-saves/data.json': '{}', 'docs/plan.md': '#', 'scratch/a.js': '1', 'tools/release.js': '//', 'dist/1.5.4/Waypoint_Setup.exe': 'old', '.git/HEAD': 'ref', '.github/workflows/checks.yml': 'name: x', '.gitattributes': '* text', 'Waypoint_Setup.exe': 'old installer', 'Waypoint_1.4.8_Drive_Package.zip': 'PK', 'update-signing-key.pem': 'KEY', 'unknown-root-file.txt': '?', 'Not used/x.ico': 'i', 'system/userdata/settings.json': '{"mine":1}', 'system/app.prev/index.html': 'prev', 'system/app.new/index.html': 'new', 'system/app.bad/index.html': 'bad' };
+            const ALLOWED = Object.assign({}, ROOTF, SYSF);
+            const dirsOf = keys => { const s = new Set(); for (const k of keys) { const parts = k.split('/'); for (let i = 1; i < parts.length; i++) s.add(parts.slice(0, i).join('/')); } return [...s]; };
+            try {
+                const A = tree(path.join(base, 'a'), Object.assign({}, ALLOWED, DECOYS)); fs.mkdirSync(path.join(A, 'system', 'app', 'empty'));
+                const when = new Date('2020-01-02T03:04:05Z'); fs.utimesSync(path.join(A, 'system/app/assets/fonts/Some Face/SomeFace-Regular.ttf'), when, when);
+                const listA = L(A), wantDirs = sorted(dirsOf(Object.keys(SYSF)).concat(['system/app/empty']));
+                check('the stage\'s list (release.js stageList, sliced and run for real): at the top exactly Waypoint.exe, license.txt, README.md, WHATSNEW.txt and installer.iss, and system/ whole but for system/userdata, system/app.prev, system/app.new, system/app.bad and system/app/private; nothing else of the tree (a notes file, a folder of working copies with an old copy of the app inside it, IMPROVEMENTS.md, private/, saves/, dev-saves/, docs/, scratch/, tools/, dist/, .git/, .github/, .gitattributes, an old installer, a zip, a .pem, a file nobody knows) is in it; an empty folder is, each folder after the one that holds it',
+                    !!ST && j(ST.STAGE_FILES) === j(['Waypoint.exe', 'license.txt', 'README.md', 'WHATSNEW.txt', 'installer.iss']) && j(ST.STAGE_SKIP) === j(['system/userdata', 'system/app.prev', 'system/app.new', 'system/app.bad', 'system/app/private'])
+                    && !listA.why && j(sorted(listA.files)) === j(sorted(Object.keys(ALLOWED))) && j(sorted(listA.dirs)) === j(wantDirs) && listA.dirs[0] === 'system' && listA.dirs.every((d, i) => d === 'system' || listA.dirs.slice(0, i).indexOf(d.slice(0, d.lastIndexOf('/'))) >= 0), j(listA));
+                const SA = path.join(A, 'dist', '1.5.4', 'stage'); put(SA, 'left-over.txt', 'from the last build');
+                const resA = C(A, SA), got = sorted(walk(SA)), want = sorted(Object.keys(ALLOWED).concat(wantDirs.map(d => d + '/')));
+                const same = Object.keys(ALLOWED).every(k => tryS(() => fs.readFileSync(path.join(SA, k)).equals(bufOf(ALLOWED[k])), false));
+                const fontT = tryS(() => fs.statSync(path.join(SA, 'system/app/assets/fonts/Some Face/SomeFace-Regular.ttf')).mtimeMs, 0);
+                const bytes = Object.keys(ALLOWED).reduce((n, k) => n + bufOf(ALLOWED[k]).length, 0);
+                check('the stage (release.js stageCopy, sliced and run for real into dist/<version>/stage of the scratch tree, where the build makes it): made fresh, what was there before gone; it holds exactly the list and nothing else, every file byte for byte (a font\'s NULs, CR LF and high bytes, a nested file, a CR LF text) with its own modified time; the tree it was copied from is as it was',
+                    !resA.why && resA.files === Object.keys(ALLOWED).length && resA.bytes === bytes && j(got) === j(want) && same && Math.abs(fontT - when.getTime()) < 2 && !fs.existsSync(path.join(SA, 'left-over.txt'))
+                    && Object.keys(DECOYS).every(k => fs.existsSync(path.join(A, k))) && fs.readFileSync(path.join(A, 'NOTES.md'), 'utf8') === 'private notes', j([resA, got.filter(g => want.indexOf(g) < 0), want.filter(w => got.indexOf(w) < 0), fontT]));
+                // the five folders are passed over by name in any letter case, before anything in them is read: a junction inside one, or one that is itself a junction, refuses nothing
+                const B = tree(path.join(base, 'b'), Object.assign({}, ROOTF, { 'system/icon.ico': 'i', 'system/App/index.html': 'x', 'system/UserData/settings.json': '{}', 'system/App/Private/reader.js': 'mine', 'system/app.NEW/x': 'n', 'system/App.Bad/x': 'b' }));
+                put(base, 'outside/secret.txt', 'outside the tree');
+                const jB = link(path.join(base, 'outside'), path.join(B, 'system', 'APP.PREV')) && link(path.join(base, 'outside'), path.join(B, 'system', 'UserData', 'away'));
+                const listB = L(B);
+                check('the five folders are passed over by name, in any letter case, before anything in them is read: system/UserData, system/APP.PREV, system/app.NEW, system/App.Bad and system/App/Private' + (jB ? ' (one of them a junction to a folder outside the tree, one holding a junction)' : ' (no junction could be made on this machine)') + ' leave the list as it would be without them',
+                    !listB.why && j(sorted(listB.files)) === j(sorted(Object.keys(ROOTF).concat(['system/App/index.html', 'system/icon.ico']))) && j(sorted(listB.dirs)) === j(['system', 'system/App']), j(listB));
+                if (!jB) notes.push('no junction could be made here, so the five folders were read as plain folders');
+                // a link or a junction refuses the build, naming it; the stage is not touched
+                const mk = (name, extra) => tree(path.join(base, name), Object.assign({}, ROOTF, { 'system/icon.ico': 'i', 'system/app/index.html': 'x' }, extra || {}));
+                const C1 = mk('c1'), j1 = link(path.join(base, 'outside'), path.join(C1, 'system', 'app', 'away'));
+                const S1 = path.join(base, 'stage1'); put(S1, 'left-over.txt', 'kept');
+                const l1 = L(C1), r1 = C(C1, S1);
+                const C2 = mk('c2'); fs.rmSync(path.join(C2, 'system'), { recursive: true, force: true }); const j2 = link(path.join(base, 'outside'), path.join(C2, 'system')), l2 = L(C2);
+                const C3 = mk('c3'); fs.unlinkSync(path.join(C3, 'README.md')); let j3 = false;
+                try { fs.symlinkSync(path.join(base, 'outside', 'secret.txt'), path.join(C3, 'README.md'), 'file'); j3 = true; } catch (e) { notes.push('a symbolic link to a file could not be made here (' + (e && e.code) + '): the junctions stand for it'); }
+                const l3 = L(C3);
+                check('a link or a junction refuses the build in one plain line naming it, before anything is copied: a junction inside system/app, system itself a junction' + (j3 ? ', a file of the list that is a symbolic link' : '') + ' (each to something outside the tree); the stage asked for is left as it was',
+                    j1 && j2 && /^Not built: system\/app\/away is a link or a junction\. /.test(String(l1.why)) && r1.why === l1.why && tryS(() => fs.readFileSync(path.join(S1, 'left-over.txt'), 'utf8'), '') === 'kept' && walk(S1).length === 1
+                    && /^Not built: system is a link or a junction\. /.test(String(l2.why)) && (!j3 || /^Not built: README\.md is a link or a junction\. /.test(String(l3.why))), j([j1, j2, j3, l1, r1, l2, l3]));
+                // a file of the list that is missing, or the wrong kind of thing, refuses the build, naming it; the stage is never made
+                const miss = ST ? ST.STAGE_FILES.map(f => { const t = mk('m-' + f.replace(/\W/g, '_')); tryS(() => fs.unlinkSync(path.join(t, f))); const s = path.join(base, 'ms-' + f.replace(/\W/g, '_')); return [f, C(t, s), fs.existsSync(s)]; }) : [];
+                const noSys = mk('nosys'); fs.rmSync(path.join(noSys, 'system'), { recursive: true, force: true });
+                const asDir = mk('asdir'); fs.unlinkSync(path.join(asDir, 'README.md')); fs.mkdirSync(path.join(asDir, 'README.md'));
+                const sysFile = mk('sysfile'); fs.rmSync(path.join(sysFile, 'system'), { recursive: true, force: true }); fs.writeFileSync(path.join(sysFile, 'system'), 'x');
+                check('a file of the list that is missing refuses the build in one plain line naming it, each of the five, and the stage is never made; so does a missing system folder, a folder where a file of the list should be, and a file where system should be',
+                    miss.length === 5 && miss.every(m => m[1].why === 'Not built: ' + m[0] + ' is missing, and the installer needs it.' && m[2] === false)
+                    && L(noSys).why === 'Not built: the folder system is missing, and the installer needs it.' && L(asDir).why === 'Not built: README.md is a folder where the installer needs a file.' && L(sysFile).why === 'Not built: system is a file where the installer needs a folder.', j([miss, L(noSys), L(asDir), L(sysFile)]));
+                // the stage is a folder of its own: never the tree, a folder that holds it, or one inside what is copied; a refusal removes nothing
+                const P = mk('place'), wrong = [P, path.dirname(P), path.join(P, 'system'), path.join(P, 'system', 'stage'), path.join(P, 'README.md'), path.join(P, 'installer.iss', 'x')].map(s => C(P, s));
+                check('the stage may not be the tree, a folder that holds it, system/ or a folder in it, or a file of the list: each is refused in one plain line and nothing of the tree is removed or changed',
+                    wrong.every(w => /^Not built: the stage \(.*\) may not be this folder, hold it, or lie inside what is copied\.$/.test(String(w.why))) && fs.readFileSync(path.join(P, 'README.md'), 'utf8') === ROOTF['README.md'] && fs.existsSync(path.join(P, 'system', 'app', 'index.html')) && fs.existsSync(path.join(base, 'a', 'NOTES.md')) && !fs.existsSync(path.join(P, 'system', 'stage')), j(wrong));
+                // what Windows marks hidden refuses the build, naming it: the installer leaves out what is hidden, and a copy of a hidden folder
+                // is not hidden. The reader is handed the tree and exactly what would be copied, never a path inside a folder that is passed over
+                const asked = [], lA = L(A, (r, rels) => { asked.push(r, rels.slice()); return []; });
+                const SH = path.join(base, 'stage-h'); put(SH, 'left-over.txt', 'kept');
+                const hOne = C(A, SH, () => ['system/app/assets']), hTwo = L(A, () => ['system/app/assets/fonts', 'system/app/assets']), hNull = L(A, () => null), hOdd = L(A, () => [7]), hThrow = L(A, () => { throw new Error('x'); });
+                const HID = '. The installer leaves out what is hidden, and a copy of a hidden folder is not hidden: take the mark off, or take it away.';
+                check('a file or folder marked hidden refuses the build in one plain line naming it (release.js stageList and stageCopy, with a reader of the suite\'s own): the reader is handed the tree and exactly the list\'s files and folders, nothing inside the five folders; a hidden folder is named and the stage asked for is left as it was; two are named as the first and one more; a reader that cannot read the marks, throws, or answers what is no path refuses the build too, and stageList asks hiddenOf where no reader is handed in',
+                    !lA.why && asked[0] === A && j(sorted(asked[1] || [])) === j(sorted(listA.files.concat(listA.dirs))) && !(asked[1] || []).some(p => /^system\/(userdata|app\.(prev|new|bad)|app\/private)(\/|$)/i.test(p))
+                    && hOne.why === 'Not built: system/app/assets is marked hidden' + HID && tryS(() => fs.readFileSync(path.join(SH, 'left-over.txt'), 'utf8'), '') === 'kept' && walk(SH).length === 1
+                    && hTwo.why === 'Not built: system/app/assets/fonts is marked hidden, and 1 more' + HID
+                    && hNull.why === 'Not built: the hidden marks of what would be copied could not be read.' && hOdd.why === hNull.why && hThrow.why === hNull.why
+                    && relS.indexOf("let h = null; try { h = (typeof hidden === 'function' ? hidden : hiddenOf)(root, files.concat(dirs)); } catch (e) { h = null; }") > 0 && relS.indexOf('const list = stageList(R, hidden);') > 0, j([lA, asked[1] && asked[1].length, hOne, hTwo, hNull, hOdd, hThrow]));
+                // and the real reader, on Windows where the mark is: a folder and a file marked by Windows' own attrib, a name with letters past ASCII and brackets
+                if (process.platform === 'win32' && ST) {
+                    const attrib = p => { try { require('child_process').execFileSync(path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'attrib.exe'), ['+h', p], { stdio: 'ignore', windowsHide: true }); return true; } catch (e) { return false; } };
+                    const odd = 'system/app/\u00fcn\u00ef [x]', H1 = mk('h1', { [odd + '/f.js']: '1' }), H2 = mk('h2', { 'system/app/assets/x.png': 'p' }), H3 = mk('h3', { 'system/userdata/settings.json': '{}' });
+                    const m1 = attrib(path.join(H1, odd)), m2 = attrib(path.join(H2, 'system', 'app', 'assets', 'x.png')), m3 = attrib(path.join(H3, 'system', 'userdata'));
+                    const S2 = path.join(base, 'stage-h1'); put(S2, 'left-over.txt', 'kept');
+                    const r1 = C(H1, S2), r2 = L(H2), r3 = L(H3), clean = tryS(() => ST.hiddenOf(A, listA.files.concat(listA.dirs)), null);
+                    check('the real reader of the hidden marks (release.js hiddenOf, run for real through Windows\' own PowerShell): nothing is hidden in the scratch tree; a folder whose name holds letters past ASCII and brackets, marked hidden by attrib, refuses the build by its name and leaves the stage as it was; so does a hidden file; a hidden folder that is passed over (system/userdata) refuses nothing',
+                        m1 && m2 && m3 && j(clean) === '[]' && r1.why === 'Not built: ' + odd + ' is marked hidden' + HID && tryS(() => fs.readFileSync(path.join(S2, 'left-over.txt'), 'utf8'), '') === 'kept' && walk(S2).length === 1
+                        && r2.why === 'Not built: system/app/assets/x.png is marked hidden' + HID && !r3.why && j(sorted(r3.files)) === j(sorted(Object.keys(ROOTF).concat(['system/icon.ico', 'system/app/index.html']))), j([m1, m2, m3, clean, r1, r2, r3]));
+                } else notes.push('nothing can be marked hidden on this system, so the real reader of the hidden marks was not run');
+            } finally { try { fs.rmSync(base, { recursive: true, force: true }); } catch (e) {} }
+            for (const n of notes) console.log('note      ' + n);
+            // what installer.iss reads and packs comes from the stage: its own files are in it, it packs the folder it lies in, and it puts the installer there
+            let issS = ''; try { issS = fs.readFileSync(path.join(__dirname, '..', 'installer.iss'), 'utf8').replace(/\r\n/g, '\n'); } catch (e) { issS = ''; }
+            const needs = (issS.match(/^(?:SetupIconFile|LicenseFile|InfoBeforeFile|InfoAfterFile|WizardImageFile|WizardSmallImageFile)=.+$/gm) || []).map(l => l.slice(l.indexOf('=') + 1).trim().split('\\').join('/'));
+            const inStage = rel => !!ST && (ST.STAGE_FILES.indexOf(rel) >= 0 || (/^system\//.test(rel) && !ST.STAGE_SKIP.some(s => (rel + '/').toLowerCase().indexOf(s.toLowerCase() + '/') === 0)));
+            check('every file installer.iss itself reads (its icon, its licence, the notes shown before installing) is in the stage, it packs the folder it lies in (Source: "*"), and it puts the installer in that folder (OutputDir=.), so the build takes the installer out of the stage',
+                needs.length >= 3 && needs.every(inStage) && needs.indexOf('system/icon.ico') >= 0 && needs.indexOf('license.txt') >= 0 && needs.indexOf('WHATSNEW.txt') >= 0 && /^Source: "\*"; DestDir: "\{app\}";/m.test(issS) && /^OutputDir=\.$/m.test(issS) && /^OutputBaseFilename=Waypoint_Setup$/m.test(issS), j(needs));
+            // and release.js compiles the staged copy, never the root's; every step after takes the installer from the stage
+            const iList = relS.indexOf('const sl = stageList(ROOT);'), iDist = relS.indexOf("const dist = path.join(ROOT, 'dist', VERSION);"), iZip = relS.indexOf('Compress-Archive -Force'), iStage = relS.indexOf("const STAGE = path.join(dist, 'stage');"), iCopy = relS.indexOf('const staged = stageCopy(ROOT, STAGE);');
+            const isccLines = relS.split('\n').filter(l => /ISCC/.test(l) && /execSync/.test(l)), iIscc = relS.indexOf("execSync(`\"${ISCC}\" \"${path.join(STAGE, 'installer.iss')}\"`, { stdio: 'inherit' });"), iSetup = relS.indexOf("const SETUP = path.join(STAGE, 'Waypoint_Setup.exe');");
+            const iOut = relS.indexOf("fs.copyFileSync(SETUP, path.join(dist, 'Waypoint_Setup.exe'));"), iRm = relS.indexOf('fs.rmSync(STAGE, { recursive: true, force: true });');
+            check('release.js, pinned: the stage\'s list is read before the first thing the build writes and a refusal stops it there; the stage is made after the app zip and before the installer is compiled, and a refusal stops the build; the one Inno Setup line compiles the staged installer.iss, never the root\'s; the code-signing step, the installer\'s digest and its copy into dist/<version>/ all take the staged installer; the stage is removed once the installer is out of it',
+                iList > 0 && iList < iDist && /const sl = stageList\(ROOT\);\n    if \(sl\.why\) \{ console\.error\(sl\.why\); process\.exit\(1\); \}/.test(relS) && iZip > iDist && iStage > iZip && iCopy > iStage && /const staged = stageCopy\(ROOT, STAGE\);\nif \(staged\.why\) \{ console\.error\(staged\.why\); process\.exit\(1\); \}/.test(relS)
+                && isccLines.length === 1 && iIscc > iCopy && iSetup > iIscc && !/execSync\([^\n]*ROOT, 'installer\.iss'/.test(relS) && relS.indexOf("path.join(ROOT, 'Waypoint_Setup.exe')") < 0 && /const exe = '"' \+ SETUP \+ '"';/.test(relS)
+                && /const setupSha = crypto\.createHash\('sha256'\)\.update\(fs\.readFileSync\(SETUP\)\)\.digest\('hex'\);/.test(relS) && iOut > iSetup && iRm > iOut, j([iList, iDist, iZip, iStage, iCopy, iIscc, iSetup, iOut, iRm, isccLines]));
+        }
+
         /* ---- the shell's own request handling: main.js from its LOCAL_HOSTS line to the server's timeout line, run with Electron's parts as
            recording stubs and mounted on a scratch saves folder (the window and the listen call are outside the slice: nothing of Electron runs) ---- */
         {

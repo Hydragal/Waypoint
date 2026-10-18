@@ -111,101 +111,13 @@ Character sheets
 - A level can have prerequisites of its own. A need, and the Rule,
   may begin at a level of the entry: set its From level. A player
   who raises a level is judged as when they take the entry.
-- For ShadowBase needs no second pick. Once the character's ShadowBase
-  file has been read here, by Import or by a pick, the Download menu
-  offers For ShadowBase from that file and says which file it is and
-  when it was read. Another row picks a newer file. The file is kept in
-  memory only, until you close Waypoint.
+- The ShadowBase reader is no longer part of Waypoint. Waypoint reads
+  its own character files. A sheet file made elsewhere is read only
+  where a reader of your own stands beside the app.
 - A list's column can show its special cases. In the System editor a
   column has a With stats box. Name number stats of the list there, and
   a row reads DR 15 (35 vs. energy) where such a stat has a figure. A
   column that names none looks as it did.
-- A sheet from ShadowBase brings each hit location's DR as the website
-  states it, with its typed DR, and a automaton comes with its own
-  locations. That needs a Locations list with a level, which holds the
-  DR, and the stats for it: one named stated, and one for each kind,
-  such as vsEnergy.
-- A sheet from ShadowBase reads as the website reads it now. A
-  species' racial attribute counts once, a automaton starts from the
-  attributes its parts give it, and the flat jump bonus the book
-  withdrew is gone. A automaton's trait whose part is not working, or a
-  second copy of one part's trait, comes in giving nothing. A automaton
-  whose Memory Core alone is corrupted is not crippled there.
-- For ShadowBase writes your credits onto the character's credit chip,
-  where the website reads its money, and gives the file a chip if it
-  has none. Before, the website put its old figure back. Change from a
-  bar spent comes back in bars, as the website gives it.
-- A automaton from ShadowBase comes with its hardware as the website works
-  it out: its Lifting and Striking ST, its most Power Points and the XP
-  its parts cost.
-- A token's Export JSON keeps a sheet from the website as the website
-  wrote it, but for the token's posture and elevation. It no longer
-  rewrites the sheet's languages, name or picture.
-- A sheet from ShadowBase brings more across. That is a automaton's own
-  Will, Perception, HP and Basic Move, a stored Block, the senses and
-  the Striking ST and Arm ST switches. It is also a automaton that cannot
-  run, its corrupted core's roll penalty and a part that is not
-  working. A worn piece that fits badly takes off DX and Basic Move.
-  A sheet attached to a token keeps its portrait as the website wrote
-  it.
-- A sheet from ShadowBase also reads what the website takes from a
-  row's own words. That is a weapon's skill level as the website works
-  it out, the damage of a weapon built from parts, whether a weapon
-  parries or blocks, and a row that is Destroyed. It is also a narrowed
-  Enhanced Parry, the sense an Acute Senses row sharpens and a automaton's
-  leg or foot that is Destroyed. Each comes only into a field or a list
-  stat your system has.
-- A sheet from ShadowBase brings its size as the website works it out,
-  and a automaton's size is its build's, so a automaton no longer reads SM 0.
-  A worn piece's fit comes as the website states it: a piece a whole
-  size off its wearer takes 2 DX and 1 Basic Move, and one two sizes
-  off gives nothing while worn. The Basic Lift the website shows comes
-  into a number field of your system's, and a loose part that is
-  Destroyed keeps its weight and cost, as on the website.
-- A sheet from ShadowBase reads more as the website does. A worn
-  device, an implant or an upgrade gives 1 less of each bonus when
-  Damaged and nothing when Broken. A piece's penalties count its fitted
-  mods, a automaton gets nothing from a piece it cannot wear, and a part in
-  a storage box is stowed.
-- A sheet from ShadowBase also brings a narrowed Enhanced Parry onto
-  the weapon its words name, a worn piece's weight class and the Armor
-  specialty a skill row is, each into a list stat your system has.
-- A sheet from ShadowBase reads where each weapon or armour part is,
-  as the website now states it. A part inside its weapon or suit adds
-  nothing of its own, and a part the website carries is carried and
-  priced. A part in a storage box is priced as the website prices it,
-  and a weapon or suit designed and not yet built is worth only its
-  parts. Cultural familiarity is counted from the website's own rows,
-  which go back as they came. An older file's text is read into rows
-  as the website reads it. The unfamiliar culture comes into a switch
-  and a text your system has, and For ShadowBase writes it back. A file
-  that leaves it out or empty turns it off.
-- A sheet from ShadowBase sets a switch your system has when the culture
-  its unfamiliar culture names is one of its culture rows, as the website
-  judges it. Case, spacing and the shape of an apostrophe do not count,
-  and a blank name never matches. The switch is never written back, and
-  it can be changed in play. A skill row named for one of the twelve
-  social skills sets a list stat your system has, so their rolls can
-  take the website's -3.
-- For ShadowBase writes a figure only where it changed here. A pool or
-  an elevation the website keeps and Waypoint cannot hold stays as the
-  website wrote it.
-- A sheet from ShadowBase reads the website's v1.0.4. Air Move comes into
-  a number field your system has. A height or a weight is read by its
-  feet and inches or its pounds, whichever order the file writes them
-  in, and a text field keeps the file's own words. An Indomitable row
-  with no level is level 5, the Furfolk's renamed trait is found under
-  either name, and a automaton's size is worked out in inches, as the
-  website now does.
-- A trait from ShadowBase is its library entry by its name, whatever its
-  points. A free racial trait at 0 points is that trait, so what your
-  system works out from it counts, and its price, name and level come
-  with it. A trait named with words in brackets after it is the trait
-  your system marks with the list stat named, where no entry has the
-  whole name. A trait with no levels takes its entry's changes, as
-  ShadowBase does. A GM-only entry is never matched this way. A
-  player's upload offers the library's copy in place of the row read
-  before.
 - Text style on a sheet. With Edit sheet on, click into a text or notes
   field and a bar comes up on it, as in a planner. Select words and make
   them bold, italic, underlined, struck through or coloured, or give
@@ -910,8 +822,8 @@ Sheets
 - Export for ShadowBase: the way back to the website. In a sheet's
   Download menu, pick the character's ShadowBase file (the website's
   Export JSON) and Waypoint saves a copy of it with this session written
-  in: the current Hit Points, Endurance Points and Ether Points, the
-  credits, the Ether alignment, and the token's posture and elevation.
+  in: the current Hit Points, Endurance Points and power pool, the
+  credits, the alignment, and the token's posture and elevation.
   Everything else in the file stays exactly as the website wrote it, so
   the website's Import Character takes the copy as a whole character.
   A list shows what will be written before anything is saved. Items,
@@ -969,8 +881,8 @@ Fixes
   built only when the map's box changes size.
 - A player who joins a table is told that their own campaigns are
   untouched and come back when they leave the session.
-- A sheet read from a ShadowBase file: a energyblade crystal destroyed by
-  an overload no longer adds to the character's Ether Points. The file
+- A sheet read from a ShadowBase file: a weapon's crystal destroyed by
+  an overload no longer adds to the character's power pool. The file
   still lists it as fitted, marked Destroyed; it is now passed over, as a
   destroyed part already was in the parts list.
 
@@ -2889,7 +2801,7 @@ Tokens
 - Elevation and posture. Two new switches in Settings → Table give every
   character token a height in yards (a ledge at +3, a catwalk at +5, a pit
   at −2) and a posture — standing, crouching, sitting, kneeling, crawling,
-  lying prone or lying face up (handbook ch. 9). Both show as small chips at
+  lying prone or lying face up. Both show as small chips at
   the foot of the token, in its hover card and in Properties; the token's
   right-click menu edits them too. Players set their own token's by
   right-clicking it. Both switches are on from the first launch; a table
@@ -2902,11 +2814,10 @@ Tokens
   the website's posture ids (lying-prone, lying-face-up).
 
 Blast tool
-- A new 💥 Blast tool next to Measure drops a grenade's area effect on a
-  cell: Frag 12 ft, Concussion 12 ft, Sonic 20 ft, Ion 24 ft, Plasma 30 ft,
-  or any radius in feet (÷3 = yards on the map). Every token within the
-  radius lights up with its distance in yards, so the GM applies the
-  handbook's damage ÷ (3 × distance) by hand — Waypoint never rolls.
+- A new 💥 Blast tool next to Measure drops an area effect on a cell:
+  any radius in feet (÷3 = yards on the map). Every token within the
+  radius lights up with its distance in yards, so the GM works out the
+  damage by hand — Waypoint never rolls.
   Distance is hex distance; with Token elevation on it is straight-line,
   height included (√(h² + v²)), from the blast's own height — the token in
   the landing cell, else the ground, editable in the tool's menu. Drag a
@@ -4067,7 +3978,7 @@ Character sheets (shadow-base.com)
   token: the sheet's portrait becomes the token art, name and a stats line
   fill in, and the full sheet rides attached.
 - View (inspector) opens the attached sheet read-only — attributes,
-  characteristics, traits, skills, Ether powers, and inventory at the table.
+  characteristics, traits, skills, powers, and inventory at the table.
 - Export JSON writes a site-ready file back out with the sharpest available
   portrait embedded — upload it on the site with Import Character. Tokens
   without a sheet export a starter file the site fills with defaults.
