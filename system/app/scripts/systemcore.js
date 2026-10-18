@@ -20,6 +20,7 @@ var LIMITS = Object.freeze({
     rmMsg: 200, undoMs: 10000, undoGraceMs: 15000,   // Stage 6: a bound or cursed item's message; a pickup's Undo (the host allows a little longer: the round trip)
     listCats: 20, rowNote: 200, lvlAbs: 1e6,     // Stage 6 F4b: a list's categories, a row's note, the size of a row level
     desc: 4000, lvls: 20, lvlText: 600, lvlTag: 40, rowsText: 400000,   // 1.5.4: an entry's description, the levels it describes, a level's text and the words beside it; the long text one list's rows carry to their owner in all
+    ownText: 200000,                         // 1.5.5 (155): the long text the character's own rows of one list may hold in all, as rowText counts it (stored and sent)
     listStats: 24, entryStats: 32, statAbs: 1e9,   // Stage 6 F4c1: a list's stats (12 since range penalties: a weapons list with Half and MaxRange; 24 since 1.5.4: a whole weapon line), the stats an item carries (32 since 1.5.4: a copy's own values hold every stat of its list and more), the size of a stat (a price, a weight: 99,999,999 fits)
     listCols: 12,                            // Stage 6 F5a1: a list's columns (a formula per row; 6 before 1.5.4)
     colPlus: 8,                              // 1.5.4 With: the stats a column names as adding to it in a case of their own (a DR of 15 that is 35 against energy)
@@ -1420,7 +1421,9 @@ function lvlNum(x) { if (typeof x !== 'number' && typeof x !== 'string') return 
 // itself"): an entry's long text, read in a row's details. Its description is prose with its line breaks; what each of its levels gives is
 // [{ lvl, text, tag? }], one row a level in level order, at most LIMITS.lvls: text one line, tag a few words shown beside the level (a
 // rank's name, a cost). null when nothing is left. The text lives in the library: a stored row and its snapshot never keep a copy of it
-// (cleanRowDef drops it), and an owner's inline copy of a row carries it only for an entry players may see (rowText)
+// (cleanRowDef drops it), and an owner's inline copy of a row carries it only for an entry players may see (rowText). 1.5.5 (155): a row of
+// the character's own is the one exception: it keeps a description and levels of its own (ownLong), as many as LIMITS.ownText a list
+// (ownLongOf), and they reach its owner only while the row is not GM-only (projectRows, through rowText's own gate)
 function cleanDesc(v) { if (typeof v !== 'string') return ''; var d = v.slice(0, LIMITS.desc * 2).replace(/\r\n?/g, '\n').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, ' ').slice(0, LIMITS.desc); return d.trim() ? d : ''; }
 function cleanLvls(v) {
     if (!Array.isArray(v)) return null;
@@ -1444,6 +1447,9 @@ function rowText(pd, src, room) {
     if (l) pd.lvls = l;
     return n;
 }
+function longSize(def) { if (!isObj(def)) return 0; var d = cleanDesc(def.desc), l = cleanLvls(def.lvls), n = d.length; if (l) l.forEach(function(r) { n += r.text.length + (r.tag ? r.tag.length : 0) + 8; }); return n; }   // 155: a definition's long text, as rowText counts it
+function ownLong(d, src) { if (!isObj(d) || !isObj(src)) return; delete d.desc; delete d.lvls; var t = cleanDesc(src.desc), l = cleanLvls(src.lvls); if (t) d.desc = t; if (l) d.lvls = l; }   // 155: a row of the character's own keeps its own long text as stored, whatever its vis (projectRows is the gate), as its last keys
+function ownLongOf(list, skip, def) { var n = def ? longSize(def) : 0; (Array.isArray(list) ? list : []).forEach(function(r) { if (!isObj(r) || r === skip || r.hid === 1 || typeof r.defId === 'string' || r.lnk === 1 || !isObj(r.def)) return; n += longSize(r.def); }); return n; }   // 155: the long text a list's own rows hold (a kept curse's copy not counted); skip and def: one row as it would be
 function cleanLvlSpec(v) {
     if (!isObj(v)) return null;
     var out = { label: cutText(v.label, LIMITS.label) || 'Level' }, lbs = cleanLabels(v.labels), mn = lvlNum(v.min), mx = lvlNum(v.max), st = lvlNum(v.step);
@@ -2136,7 +2142,7 @@ function cleanOvMsg(v) { var out = patchOf(v, OV_KEYS, OV_CAP); return out && Ob
 // Stage 6 F4c3: a custom op's definition patch, by the same shape rules (key: a string within 160, vis within 8; applyRowOp judges who may send
 // what — the GM's keys are kept, so that a player sending one hears "field"). A plain object, {} allowed (a new blank row); null when it is not
 // an object or a key has the wrong type
-var DEF_KEYS = ['name', 'icon', 'category', 'notes', 'key', 'stats', 'vis', 'area', 'damage', 'cost', 'rm', 'rmMsg', 'eq', 'eqMsg', 'mods', 'modsOn'], DEF_CAP = Object.freeze({ name: 240, icon: 256, category: 160, notes: 800, key: 160, vis: 8, damage: 1200, cost: 1200, rmMsg: 800, eqMsg: 800 });
+var DEF_KEYS = ['name', 'icon', 'category', 'notes', 'key', 'stats', 'vis', 'area', 'damage', 'cost', 'rm', 'rmMsg', 'eq', 'eqMsg', 'mods', 'modsOn', 'desc', 'lvls'], DEF_CAP = Object.freeze({ name: 240, icon: 256, category: 160, notes: 800, key: 160, vis: 8, damage: 1200, cost: 1200, rmMsg: 800, eqMsg: 800, desc: 16000 });   // 155: desc and lvls, a row of its own's long text
 function cleanDefPatch(v) { return patchOf(v, DEF_KEYS, DEF_CAP); }
 function patchOf(v, keys, cap) {   // the keys it knows, each null or of its type (a text within its cap); {} when none; null when malformed
     if (!isObj(v)) return null;
@@ -2153,6 +2159,11 @@ function patchOf(v, keys, cap) {   // the keys it knows, each null or of its typ
             out.mods = pm;
         }
         else if (k === 'modsOn') { if (x !== true) return null; out.modsOn = true; }
+        else if (k === 'lvls') {   // 155: what each level of a row of its own gives, by its shape only (applyCustom cleans it); a malformed one refuses the message
+            if (!Array.isArray(x) || x.length > LIMITS.lvls * 4) return null; var pv = [];
+            for (var vi = 0; vi < x.length; vi++) { var vx = x[vi]; if (!isObj(vx) || typeof vx.lvl !== 'number' || !fin(vx.lvl) || typeof vx.text !== 'string' || vx.text.length > LIMITS.lvlText * 4 || (vx.tag !== undefined && (typeof vx.tag !== 'string' || vx.tag.length > LIMITS.lvlTag * 4))) return null; var vo = { lvl: vx.lvl, text: vx.text }; if (typeof vx.tag === 'string') vo.tag = vx.tag; pv.push(vo); }
+            out.lvls = pv;
+        }
         else { if (typeof x !== 'string' || x.length > cap[k]) return null; out[k] = x; }
     }
     return out;
@@ -2204,7 +2215,7 @@ function cleanRow(e, items, spec) {   // spec (F4b): the list's options (f.list)
     if (!id || !isObj(e.def)) return null;
     var d = cleanRowDef(e.def, e.lnk !== 1); if (!d) return null;
     var cs = rowStats(e.def.stats, spec); if (cs) d.stats = cs; else delete d.stats;   // F4c1: a custom or inline copy carries its list's stats only
-    if (e.lnk === 1) rowText(d, e.def);   // 1.5.4: an owner's inline copy keeps the entry's long text, cleaned again (the host sends it for an entry players may see); a row of the character's own never has any
+    if (e.lnk === 1) rowText(d, e.def); else ownLong(d, e.def);   // 1.5.4: an owner's inline copy keeps the entry's long text, cleaned again (the host sends it for an entry players may see); 1.5.5 (155): a row of the character's own keeps its own
     var c = { id: id, qty: qty }; rowFacts(c, e, spec); c.def = d; if (e.lnk === 1) { c.lnk = 1; if (typeof e.src === 'string' && ITEM_ID.test(e.src)) { c.src = e.src; var cnR = cleanNeeds(e.needs, true); if (cnR) c.needs = cnR; var crR = cleanFormulaText(e.needsIf); if (crR) { c.needsIf = crR; var cfR = typeof e.needsFrom === 'number' ? lvlNum(e.needsFrom) : undefined; if (cfR !== undefined) c.needsFrom = cfR; } } } else { if (e.own === 1) c.own = 1; if (e.hid === 1) c.hid = 1; if (e.keptOn === 1 && c.on === true) c.keptOn = 1; } return c;   // F4c3: own (a row its owner made), never on an inline copy
 }
 // Stage 6 F4b: a row's facts, after its quantity — the level on the list's terms (as stored while the list has none), the switch, the note.
@@ -2415,7 +2426,7 @@ function ownStats(pd, src, spec) { if (spec === true) return; var st = isObj(src
 function projectRows(rows, view, lib, spec, ruleShown) {   // ruleShown (126b): the host's judge of whether a player's own app could work an entry's rule out; none: no rule travels
     if (!Array.isArray(rows)) return undefined;
     var vis = map(); (view && Array.isArray(view.items) ? view.items : []).forEach(function(it) { if (isObj(it) && typeof it.id === 'string') vis[it.id] = 1; });
-    var out = [], room = LIMITS.rowsText;   // 1.5.4: the long text this list's rows may carry in all (rows past it go without)
+    var out = [], room = LIMITS.rowsText, ownRoom = LIMITS.ownText;   // 1.5.4: the long text this list's rows may carry in all (rows past it go without); 1.5.5 (155): the rows of the character's own, a room of their own
     rows.forEach(function(r) {
         if (!isObj(r) || r.hid === 1) return;
         var rid = rowIdOf(r); if (!rid) return;
@@ -2437,7 +2448,7 @@ function projectRows(rows, view, lib, spec, ruleShown) {   // ruleShown (126b): 
             }
             out.push(io); return;
         }
-        if (r.id && isObj(r.def)) { var cd = cleanRowDef(r.def, false); if (cd) { ownStats(cd, r.def, spec); viewMods(cd, view); var co = { id: r.id, qty: r.qty }; projFacts(co, r); co.def = cd; if (r.own === 1) co.own = 1; out.push(co); } }   // F4c3: own — a row they made (theirs to change while the list takes custom rows)
+        if (r.id && isObj(r.def)) { var cd = cleanRowDef(r.def, false); if (cd) { ownStats(cd, r.def, spec); viewMods(cd, view); ownRoom -= rowText(cd, r.def, ownRoom); var co = { id: r.id, qty: r.qty }; projFacts(co, r); co.def = cd; if (r.own === 1) co.own = 1; out.push(co); } }   // F4c3: own — a row they made (theirs to change while the list takes custom rows)
     });
     return out;
 }
@@ -2508,6 +2519,7 @@ function applyRowOp(sys, char, fieldId, q, F, opts) {
             if (opts.player || !isObj(list[idx].snap)) return { ok: false, reason: 'field' };
             var wasHid = list[idx].hid === 1;
             var kr = { id: q.rowId, qty: list[idx].qty }; ['lvl', 'on', 'note', 'paid', 'keptOn'].forEach(function(k) { if (list[idx][k] !== undefined) kr[k] = list[idx][k]; }); kr.def = isObj(list[idx].ov) ? mergeOv(list[idx].snap, list[idx].ov) : list[idx].snap;   // F4b: its facts go with it (F4c1: what it cost; F4c2: its own values folded into its definition, the ov itself not kept)
+            var leK = itemDef(sys, list[idx].defId) || libFind(list[idx].defId); if (isObj(leK)) { kr.def = Object.assign({}, kr.def); ownLong(kr.def, leK); }   // 155: an entry that is still there gives the row its long text, which the row now keeps as its own
             list[idx] = kr; if (wasHid) list[idx].hid = 1;
             extra.qty = list[idx].qty;
         } else if (q.op === 'set') {   // F4b: a row's facts, all or none. A player switching off an item with an equip lock: bound — it stays on
@@ -2698,7 +2710,7 @@ function keyClash(sys, list, rid, key, spec, opts) {
 // (null clears one; stats null all), a blast in whole feet 1..3000, formulas that parse (a cost without dice; why formula), a lock bound or
 // curse (null: none; the switch's only on a list with a switch; a message only with its lock), vis all or gm. Changes list in place and fills
 // extra (the answer's row, qty; added and base for a new one); null once applied, else the refusal
-var CUSTOM_OWN = Object.freeze({ name: 1, icon: 1, category: 1, notes: 1, key: 1, stats: 1, mods: 1, modsOn: 1 });   // F6b: a player's own row may change their character, as their ad hoc effects may
+var CUSTOM_OWN = Object.freeze({ name: 1, icon: 1, category: 1, notes: 1, key: 1, stats: 1, mods: 1, modsOn: 1, desc: 1, lvls: 1 });   // 155: and its own long text   // F6b: a player's own row may change their character, as their ad hoc effects may
 function applyCustom(sys, list, q, spec, F, opts, extra, aspec, fill) {   // aspec (F5a2): the actor's own list options; fill (Onboarding F4): a file filling a character in the making
     var pl = !!opts.player, pd = q.def, rid = q.rowId, bad = { ok: false, reason: 'value' };
     var blank = function(x) { return x === null || (typeof x === 'string' && !x.trim()); }, said = function(x) { return typeof x === 'string' && !!x.trim(); };
@@ -2760,6 +2772,14 @@ function applyCustom(sys, list, q, spec, F, opts, extra, aspec, fill) {   // asp
             if (!Array.isArray(v) || v.length > LIMITS.effectMods || v.some(function(mm) { return !isObj(mm) || typeof mm.f !== 'string' || !fkC[mm.f]; })) return bad;
             var cmC = cleanItemMods(v, fkC); if (!cmC || cmC.length !== v.length) return bad;   // every one a change that field takes
             d.mods = cmC.concat(keepC).slice(0, LIMITS.effectMods);   // theirs first and whole: what they see never depends on what they do not (a hidden change gives way only when their own fill the row)
+        } else if (k === 'desc') {   // 155: a row of its own's description, prose with its line breaks, as a library entry's
+            if (blank(v)) { delete d.desc; continue; }
+            if (typeof v !== 'string') return bad;
+            var dsc = cleanDesc(v); if (dsc.trim()) d.desc = dsc; else delete d.desc;
+        } else if (k === 'lvls') {   // ... and what each of its levels gives, as a library entry's
+            if (v === null || (Array.isArray(v) && !v.length)) { delete d.lvls; continue; }
+            if (!Array.isArray(v)) return bad;
+            var lvC = cleanLvls(v); if (lvC) d.lvls = lvC; else delete d.lvls;
         } else if (k === 'modsOn') {
             if (v === null) { delete d.modsOn; continue; }
             if (v !== true || !isObj(spec.on)) return bad;   // only on a list with a switch
@@ -2781,6 +2801,7 @@ function applyCustom(sys, list, q, spec, F, opts, extra, aspec, fill) {   // asp
         } else return bad;
     }
     if ((said(pd.rmMsg) && RM_MODES[d.rm] !== 1) || (said(pd.eqMsg) && RM_MODES[d.eq] !== 1)) return bad;   // a message only with its lock (the cleaner keeps none without one)
+    if (pd.desc !== undefined || pd.lvls !== undefined) { var lnN = ownLongOf(list, rw, d); if (lnN > LIMITS.ownText && lnN > ownLongOf(list, null, null)) return { ok: false, reason: 'long' }; }   // 155: a list's own rows hold LIMITS.ownText of long text in all; a change that takes them further past it is refused, one that brings them down never
     rw.def = d; if (idx < 0 && rw.on === true && onHeld(sys, spec, list, list.indexOf(rw), pl ? (aspec || spec) : spec)) rw.on = false;   // 1.5.4 One at a time: a new row starts off while its group holds one on (read with its stats)
     extra.row = rid; extra.qty = rw.qty | 0;   // critic 9d: every answer carries its quantity (without it the pickup's Undo would come down on the first change)
     return null;

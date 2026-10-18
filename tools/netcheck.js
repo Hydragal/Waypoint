@@ -4499,6 +4499,121 @@ pendingChecks.push((async () => {
     check('F4c3 on the wire: 150 custom rows (a key, a note, a stat each) project and pack within the budget; the client sends a custom op\'s def',
         packedM === true && projM.length === 150 && J(projM).length < 200000 && /if \(q\.def !== undefined\) mI\.def = q\.def;/.test(src), J([packedM, J(projM).length]));
 })());
+// 155 (1.5.5): a row of the character's own keeps a description and By level text of its own, as a library entry does. The real char-item
+// handler (with the real delta, sliced from net.js) on one host: a player's own row stored and sent cleaned, a change past the list's room
+// refused ("long") with nothing stored, a change that brings an over-full list down taken, a GM-only row's text never on its owner's copy;
+// their own app refusing the same in its own words (the real net.charItem); the host's word in its join snapshot, and a player's app taking it
+// (rowTextKnows and net.rowTextOk, sliced and run)
+pendingChecks.push((async () => {
+    const url = f => 'file:///' + path.resolve(path.join(__dirname, '..', 'system', 'app', 'scripts', f)).split(String.fromCharCode(92)).join('/');
+    const Sx = await import(url('systemcore.js')), Fx = await import(url('formula.js')), J = JSON.stringify;
+    const ciSrc = between('// [netcheck:charitem-start]', '// [netcheck:charitem-end]', 'charitem'), dlSrc = between('// [netcheck:chardelta-start]', '// [netcheck:chardelta-end]', 'chardelta');
+    const ntSrc = (() => { const i = src.indexOf('function itemNotice('), k = src.indexOf('net.syncChars = function', i); if (i < 0 || k < 0) throw new Error('netcheck: itemNotice not found'); return src.slice(i, k); })();
+    const sysR = Sx.cleanSystem({ v: 1, name: 'R', rolls: [], fields: [{ id: 'f_kn', key: 'Knacks', label: 'Knacks', kind: 'item-list', edit: 'owner', vis: 'all', list: { custom: true, stats: [{ key: 'Rank' }] } }], items: [] }, { F: Fx, gmView: true });
+    const FULL = () => ({ desc: 'd'.repeat(4000), lvls: Array.from({ length: 20 }, (_, i) => ({ lvl: i + 1, text: 't'.repeat(600), tag: 'g'.repeat(40) })) });   // one row's long text at its largest: 16,960 as the room counts it
+    const longOf = d => !d ? 0 : (typeof d.desc === 'string' ? d.desc.length : 0) + (Array.isArray(d.lvls) ? d.lvls.reduce((n, r) => n + r.text.length + (r.tag ? r.tag.length : 0) + 8, 0) : 0);   // the suite's own count
+    const ownR = (id, def, more) => Object.assign({ id, qty: 1, own: 1, def: Object.assign({ name: 'Knack ' + id, category: '', icon: '', notes: '', vis: 'all' }, def) }, more || {});
+    const gmR = (id, def, more) => Object.assign({ id, qty: 1, def: Object.assign({ name: 'Lore ' + id, category: '', icon: '', notes: '', vis: 'all' }, def) }, more || {});
+    const mk = rows => {
+        const camp = { id: 'k', system: JSON.parse(J(sysR)), chars: { c_1: { id: 'c_1', name: 'Ana', ownerId: 'u_a', npc: false, values: { f_kn: JSON.parse(J(rows)) } }, c_2: { id: 'c_2', name: 'Bo', ownerId: 'u_b', npc: false, values: {} } } };
+        const out = { answer: [], owner: [], mate: [], saves: 0 }, all = [], box = b => m => { packCheck(m); const c = JSON.parse(J(m)); b.push(c); all.push(c); };
+        const connA = { peer: 'pA', send: box(out.answer) };
+        const net = { active: true, role: 'host', paused: false, conns: [{ peer: 'pA', open: true, send: box(out.owner) }, { peer: 'pB', open: true, send: box(out.mate) }], roster: { pA: { id: 'u_a' }, pB: { id: 'u_b' } } };
+        const win = { wpFormula: Fx, wpVtt: { on: () => true }, wpSheets: { playerSystem: c => Sx.cleanSystem(c.system, { F: Fx, gmView: false }), charChanged() {} }, wpDiceCore: null };
+        const Hh = new Function('net', 'SC', 'window', 'peerPaused', 'getActiveCampaign', 'saveRemoteSoon', 'sendFailed', 'peerProfileId', 'lim', 'toast', 'logEvent',
+            'var charLimit = lim, _charSlowSaid = {}, _charPending = {}, _charHost = {}, _rowGrace = {};\n' + dlSrc + '\n' + ntSrc + '\nreturn { handle: function(msg, conn) {\n' + ciSrc + '\n}, view: function(id, pid) { return charViewFor(id, pid); } };')(
+            net, () => Sx, win, () => false, () => camp, () => { out.saves++; }, e => { throw e; }, c => (net.roster[c.peer] ? net.roster[c.peer].id : null), { allow: () => true }, () => {}, () => {});
+        const SEND = (rid, q) => { out.answer.length = 0; out.owner.length = 0; out.mate.length = 0; const s0 = out.saves, before = J(camp.chars.c_1.values.f_kn); Hh.handle(Object.assign({ type: 'char-item', rid, charId: 'c_1', fieldId: 'f_kn', op: 'custom' }, q), connA); return { answer: out.answer.slice(), owner: out.owner.slice(), mate: out.mate.slice(), saves: out.saves - s0, same: J(camp.chars.c_1.values.f_kn) === before }; };
+        const row = id => camp.chars.c_1.values.f_kn.find(r => r.id === id) || null, sent = (d, id) => ((((d[0] || {}).values || {}).f_kn) || []).find(r => r.id === id) || null;
+        return { camp, SEND, row, sent, all, view: (id, pid) => Hh.view(id, pid) };
+    };
+    const ack = rid => J([{ type: 'char-ack', rid }]), deny = (rid, reason) => J([{ type: 'char-deny', rid, reason }]);
+
+    // (a) a row of the player's own: stored cleaned, in their delta; cleared; cut; the GM's rows theirs to leave alone; a malformed text dropped unanswered
+    const A = mk([gmR('w_gm', { name: 'Sealed', notes: 'Kept close', vis: 'gm', stats: { Rank: 4 }, desc: 'The sealed truth', lvls: [{ lvl: 1, text: 'A hidden gift' }] }),
+        gmR('w_gv', { name: 'Open', desc: 'Open lore', lvls: [{ lvl: 2, text: 'An open gift', tag: 'Second' }] })]);
+    const lv1 = [{ lvl: 1, text: 'First gift' }, { lvl: 3, text: 'Third gift', tag: 'Rank three' }];
+    const a1 = A.SEND('q1', { rowId: 'w_p1', def: { name: 'Knack', desc: 'Line one\r\nLine two\u0007end', lvls: [{ lvl: 3, text: 'Third gift', tag: 'Rank three' }, { lvl: 1, text: 'First\tgift' }, { lvl: 1, text: 'A second first' }] } });
+    const p1 = A.row('w_p1'), p1s = A.sent(a1.owner, 'w_p1'), gmS = A.sent(a1.owner, 'w_gm'), gvS = A.sent(a1.owner, 'w_gv'), copy1 = A.view('c_1', 'u_a'), copyGm = ((copy1 && copy1.values.f_kn) || []).find(r => r.id === 'w_gm') || null;
+    check('155 on the wire: a player\'s own row takes a description and By level text in one change (the real char-item handler): acked, stored as the core cleans it (its line breaks kept, a control character a space; the levels one a level, in level order, a tab a space) as the row\'s last keys, saved once, and in their delta just so; a teammate\'s copy carries nothing of the list',
+        J(a1.answer) === ack('q1') && a1.saves === 1 && !!p1 && p1.own === 1 && p1.def.name === 'Knack' && p1.def.desc === 'Line one\nLine two end' && J(p1.def.lvls) === J(lv1) && J(Object.keys(p1.def).slice(-2)) === J(['desc', 'lvls'])
+        && !!p1s && p1s.own === 1 && p1s.def.desc === 'Line one\nLine two end' && J(p1s.def.lvls) === J(lv1) && !/f_kn/.test(J(a1.mate)), J([a1.answer, a1.saves, p1, p1s]));
+    check('155 on the wire: a GM-only row of the character\'s own keeps its text on the host through a player\'s change, and its owner\'s delta and whole copy carry its name, notes and stats with none of that text (nothing sent holds it); a row the GM made that players see carries its own',
+        !!gmS && gmS.def.name === 'Sealed' && gmS.def.notes === 'Kept close' && J(gmS.def.stats) === J({ Rank: 4 }) && !('desc' in gmS.def) && !('lvls' in gmS.def)
+        && !!copyGm && copyGm.def.name === 'Sealed' && !('desc' in copyGm.def) && !('lvls' in copyGm.def) && !/sealed truth|hidden gift/i.test(J(A.all)) && !/sealed truth|hidden gift/i.test(J(copy1))
+        && A.row('w_gm').def.desc === 'The sealed truth' && J(A.row('w_gm').def.lvls) === J([{ lvl: 1, text: 'A hidden gift' }])
+        && !!gvS && gvS.def.desc === 'Open lore' && J(gvS.def.lvls) === J([{ lvl: 2, text: 'An open gift', tag: 'Second' }]), J([gmS, copyGm, gvS, A.row('w_gm')]));
+    const a2 = A.SEND('q2', { rowId: 'w_p1', def: { desc: '   ', lvls: null } }), p2 = J(A.row('w_p1').def), p2s = A.sent(a2.owner, 'w_p1');
+    const a3 = A.SEND('q3', { rowId: 'w_p1', def: { desc: 'Back again', lvls: [{ lvl: 2, text: 'Two' }] } }), p3 = J(A.row('w_p1').def);
+    const a4 = A.SEND('q4', { rowId: 'w_p1', def: { desc: null, lvls: [] } }), p4 = J(A.row('w_p1').def), p4s = A.sent(a4.owner, 'w_p1');
+    const a5 = A.SEND('q5', { rowId: 'w_p1', def: { desc: 'p'.repeat(6000), lvls: Array.from({ length: 80 }, (_, i) => ({ lvl: 80 - i, text: 'L' + (80 - i) })) } }), p5 = A.row('w_p1').def, p5s = A.sent(a5.owner, 'w_p1');
+    check('155 on the wire: a player clears their own row\'s text (a blank description and no levels, then null and an empty list), each acked with neither kept nor sent; sets it again; and a description past the core\'s length is cut to it, 80 levels kept as the first 20 in level order',
+        J(a2.answer) === ack('q2') && !/"desc"|"lvls"/.test(p2) && !!p2s && !('desc' in p2s.def) && !('lvls' in p2s.def) && J(a3.answer) === ack('q3') && JSON.parse(p3).desc === 'Back again' && J(JSON.parse(p3).lvls) === J([{ lvl: 2, text: 'Two' }])
+        && J(a4.answer) === ack('q4') && !/"desc"|"lvls"/.test(p4) && !!p4s && !('desc' in p4s.def) && !('lvls' in p4s.def)
+        && J(a5.answer) === ack('q5') && p5.desc === 'p'.repeat(4000) && J(p5.lvls.map(l => l.lvl)) === J(Array.from({ length: 20 }, (_, i) => 61 + i)) && !!p5s && p5s.def.desc.length === 4000 && p5s.def.lvls.length === 20,
+        J([a2.answer, p2, a3.answer, p3, a4.answer, p4, a5.answer, p5 && p5.lvls && p5.lvls.map(l => l.lvl)]));
+    const bad = [{ desc: 7 }, { desc: 'q'.repeat(16001) }, { lvls: 'x' }, { lvls: {} }, { lvls: Array.from({ length: 81 }, (_, i) => ({ lvl: i, text: 'x' })) }, { lvls: [{ lvl: '1', text: 'x' }] }, { lvls: [{ lvl: NaN, text: 'x' }] },
+        { lvls: [{ lvl: 1, text: 7 }] }, { lvls: [{ lvl: 1, text: 'x'.repeat(2401) }] }, { lvls: [{ lvl: 1, text: 'x', tag: 5 }] }, { lvls: [{ lvl: 1, text: 'x', tag: 'g'.repeat(161) }] }, { lvls: ['x'] }].map((d, i) => A.SEND('m' + i, { rowId: 'w_p1', def: d }));
+    const edge = [A.SEND('e1', { rowId: 'w_p1', def: { desc: 'q'.repeat(16000) } }), A.SEND('e2', { rowId: 'w_p1', def: { lvls: [{ lvl: 1, text: 'x'.repeat(2400), tag: 'g'.repeat(160) }] } })];
+    const a6 = A.SEND('q6', { rowId: 'w_gm', def: { desc: 'Mine now' } }), a7 = A.SEND('q7', { rowId: 'w_gv', def: { lvls: [{ lvl: 1, text: 'Mine now' }] } });
+    check('155 on the wire: a malformed text is dropped unanswered and changes nothing (a description that is no text or past 16,000 characters; levels that are no list, more than 80, a level that is no number, a text that is no text or past 2,400, a tag that is no text or past 160, an entry that is no object), one at each bound is taken; the GM\'s rows, a GM-only one and one players see, are refused ("field") with their text as it was',
+        bad.every(r => r.answer.length === 0 && r.owner.length === 0 && r.saves === 0 && r.same) && edge.every((r, i) => J(r.answer) === ack('e' + (i + 1)))
+        && J(a6.answer) === deny('q6', 'field') && a6.same && J(a7.answer) === deny('q7', 'field') && a7.same && A.row('w_gm').def.desc === 'The sealed truth' && A.row('w_gv').def.desc === 'Open lore',
+        J([bad.map(r => r.answer), edge.map(r => r.answer), a6.answer, a7.answer]));
+
+    // (b) the list's room: its own rows hold 200,000 characters of long text in all (a kept curse's copy not counted)
+    const B = mk(Array.from({ length: 11 }, (_, i) => ownR('w_f' + i, FULL())).concat([gmR('w_hc', Object.assign({ name: 'Clinging', rm: 'curse' }, FULL()), { hid: 1 })]));   // 11 x 16,960 = 186,560
+    const b1 = B.SEND('b1', { rowId: 'w_n1', def: FULL() }), b1row = B.row('w_n1');
+    const b2 = B.SEND('b2', { rowId: 'w_n2', def: { name: 'Short', desc: 'x'.repeat(4000) } });   // 190,560
+    const copyB = JSON.parse(J(B.view('c_1', 'u_a')));   // the owner's whole copy at this point: their own app's starting point below
+    const b3 = B.SEND('b3', { rowId: 'w_n2', def: { lvls: FULL().lvls } });
+    check('155 on the wire: a player\'s change that would take the list\'s own rows past ' + Sx.LIMITS.ownText + ' characters of long text is refused ("long") with nothing stored, sent or saved (a new row whole, and levels added to a row of theirs); one that fits is acked and stored; a kept curse\'s copy counts for nothing',
+        Sx.LIMITS.ownText === 200000 && J(b1.answer) === deny('b1', 'long') && b1.same && b1.saves === 0 && b1.owner.length === 0 && b1.mate.length === 0 && b1row === null
+        && J(b2.answer) === ack('b2') && B.row('w_n2').def.desc.length === 4000 && J(b3.answer) === deny('b3', 'long') && b3.same && b3.saves === 0 && b3.owner.length === 0 && !('lvls' in B.row('w_n2').def),
+        J([b1.answer, b1.saves, b2.answer, b3.answer]));
+    B.camp.chars.c_1.values.f_kn.push(gmR('w_g1', FULL()), gmR('w_g2', FULL()));   // the GM's own rows take it over the room: 224,480
+    const b5 = B.SEND('b5', { rowId: 'w_f0', def: { name: 'Renamed' } }), b6 = B.SEND('b6', { rowId: 'w_f1', def: { desc: 'Cut short' } });
+    const shown = ((((b6.owner[0] || {}).values || {}).f_kn) || []).filter(r => r.lnk !== 1), shownN = shown.reduce((n, r) => n + longOf(r.def), 0);
+    const b7 = B.SEND('b7', { rowId: 'w_f1', def: { desc: 'y'.repeat(4000) } }), b8 = B.SEND('b8', { rowId: 'w_f2', def: { desc: 'z'.repeat(4000) } });
+    check('155 on the wire: over the room, a change that names no long text is taken, one that brings the text down is taken (still over), one that leaves it as it was is taken, and one that takes it up again is refused ("long") with nothing stored',
+        J(b5.answer) === ack('b5') && B.row('w_f0').def.name === 'Renamed' && J(b6.answer) === ack('b6') && B.row('w_f1').def.desc === 'Cut short'
+        && J(b7.answer) === deny('b7', 'long') && b7.same && b7.saves === 0 && B.row('w_f1').def.desc === 'Cut short' && J(b8.answer) === ack('b8') && B.row('w_f2').def.desc === 'z'.repeat(4000),
+        J([b5.answer, b6.answer, b7.answer, b8.answer]));
+    check('155 on the wire: an owner\'s delta carries at most ' + Sx.LIMITS.ownText + ' characters of their character\'s own rows\' long text, in the list\'s order (rows past the room go without, the GM\'s copy keeps theirs), a room apart from the library rows\'',
+        shownN === 186569 && shownN <= Sx.LIMITS.ownText && shown.find(r => r.id === 'w_f0').def.desc.length === 4000 && shown.find(r => r.id === 'w_n2').def.desc.length === 4000
+        && ['w_g1', 'w_g2'].every(id => { const r = shown.find(x => x.id === id); return !!r && !('desc' in r.def) && !('lvls' in r.def) && B.row(id).def.desc.length === 4000; }) && !shown.some(r => r.id === 'w_hc'),
+        J([shownN, shown.map(r => [r.id, longOf(r.def)])]));
+
+    // (c) their own app: the real net.charItem over the owner's copy the host sent (190,560 of long text)
+    const cA = src.indexOf('net.charItem = function('), cZ = src.indexOf('\n};\n', cA) + 3, viewR = Sx.cleanSystem(sysR, { F: Fx, gmView: false }), sentC = [];
+    const campC = { id: 'k', system: viewR, chars: { c_1: { id: 'c_1', name: 'Ana', ownerId: 'u_a', npc: false, values: { f_kn: JSON.parse(J(copyB.values.f_kn)) } } } };
+    const netC = { active: true, role: 'client', stream: false, foreign: true, syncedPeer: 'h', myId: 'u_a', libEntry: null, conns: [{ peer: 'h', open: true, send: m => { packCheck(m); sentC.push(JSON.parse(J(m))); } }] };
+    new Function('net', 'SC', 'getActiveCampaign', 'window', '_charPending', 'charPendingDone', 'setTimeout', src.slice(cA, cZ))(netC, () => Sx, () => campC, { wpFormula: Fx, wpVtt: { on: () => true } }, {}, () => {}, () => 0);
+    const c0 = J(campC.chars.c_1.values.f_kn), cl1 = netC.charItem('c_1', 'f_kn', { op: 'custom', rowId: 'w_n9', def: FULL() }), cl1same = J(campC.chars.c_1.values.f_kn) === c0, cl1sent = sentC.length;
+    const cl2 = netC.charItem('c_1', 'f_kn', { op: 'custom', rowId: 'w_n2', def: { lvls: [{ lvl: 1, text: 'One gift' }] } });
+    check('155 their own app (the real net.charItem): a change past the room is refused at once in its own words ("This list’s own rows hold all the long text they may.") with nothing sent or kept; one that fits goes to the host as it was asked and lands on their copy',
+        longOf({ desc: '' }) === 0 && copyB.values.f_kn.filter(r => r.lnk !== 1).reduce((n, r) => n + longOf(r.def), 0) === 190560
+        && J(cl1) === J({ error: 'This list’s own rows hold all the long text they may.' }) && cl1same && cl1sent === 0
+        && cl2.ok === true && sentC.length === 1 && sentC[0].type === 'char-item' && sentC[0].op === 'custom' && J(sentC[0].def) === J({ lvls: [{ lvl: 1, text: 'One gift' }] })
+        && J(campC.chars.c_1.values.f_kn.find(r => r.id === 'w_n2').def.lvls) === J([{ lvl: 1, text: 'One gift' }]), J([cl1, cl1same, cl1sent, cl2, sentC]));
+
+    // (d) the host's word: its join snapshot says rowText, and a player's app takes it as true only (rowTextKnows and net.rowTextOk, sliced and run)
+    const rtA = src.indexOf('var _rowTextOk = false;'), rtB = rtA < 0 ? -1 : src.indexOf('net.rowTextOk = function(', rtA), rtZ = rtB < 0 ? -1 : src.indexOf('\n', rtB);
+    const rtSrc = rtA >= 0 && rtB > rtA && rtZ > rtB ? src.slice(rtA, rtZ) : 'throw new Error("the rowText lines are not found");';
+    const mkRT = role => { const n = { role }; let P = null; try { P = new Function('net', "'use strict';\n" + rtSrc + '\nreturn { knows: rowTextKnows };')(n); } catch (e) { P = null; } return { n, P };};
+    const rtWays = (() => { try {
+        const f = mkRT('client'), w0 = f.n.rowTextOk(); f.P.knows(true); const w1 = f.n.rowTextOk(); f.P.knows(undefined); const w2 = f.n.rowTextOk();
+        const odd = [undefined, null, false, 1, 'true', {}, [], 'yes'].map(v => { const t = mkRT('client'); t.P.knows(v); return t.n.rowTextOk(); });
+        const h = mkRT('host'), h0 = h.n.rowTextOk(); h.P.knows(false); const h1 = h.n.rowTextOk(), o = mkRT(null), o0 = o.n.rowTextOk(), o1 = mkRT(undefined).n.rowTextOk();
+        return [w0, w1, w2, odd, h0, h1, o0, o1];
+    } catch (e) { return String(e && e.message); } })();
+    const snA = src.indexOf('function applySnapshot(msg) {'), snZ = snA < 0 ? -1 : src.indexOf('\n}\n', snA), snCall = src.indexOf("    if (typeof rowTextKnows === 'function') rowTextKnows(msg.rowText);");
+    check('155 the host\'s word (rowTextKnows and net.rowTextOk, sliced and run): a player\'s app offers a row of its own\'s long text only once its host\'s snapshot says rowText, and only as true (a later snapshot that does not say it takes the word back); the machine that owns the campaign, and one at no table, always may; the snapshot says it beside looks, and applySnapshot takes it through typeof right after the looks, the one place that sets the word',
+        J(rtWays) === J([false, true, false, [false, false, false, false, false, false, false, false], true, true, true, true])
+        && /combats: combatsFor\(prof\.id\), looks: true, rowText: true, notepad: notepadMsg\(\) \};/.test(src)
+        && /\n    if \(typeof styleHostKnows === 'function'\) styleHostKnows\(msg\.looks\);[^\n]*\n    if \(typeof rowTextKnows === 'function'\) rowTextKnows\(msg\.rowText\);/.test(src)
+        && snA > 0 && snCall > snA && snCall < snZ && src.split('rowTextKnows(').length === 3 && src.split('_rowTextOk =').length === 3, J(rtWays));
+})());
 
 // owed review F4c3#2 (c3_): an entry only a GM-only library pack holds reads GM-only wherever the GM's machine hands it out — library.js entryFor
 // (sliced, run on a stubbed library) behind rowDef, the rows' copies and the wire's itemLib: given to a player it reaches them with no key or
@@ -12239,7 +12354,7 @@ pendingChecks.push((async () => {
             && pendSrc.includes("    if (typeof styleLay === 'function') styleLay(charId);") && chinSrc.includes("if (typeof noteHostLooks === 'function') noteHostLooks(outC);") && chinSrc.indexOf('noteHostLooks(outC)') < chinSrc.indexOf('Object.keys(outC).forEach(reapplyPending)')
             && chinSrc.includes("if (typeof noteHostChar === 'function') noteHostChar(c1); if (c1.partial || c1.ownerId !== net.myId) dropP(c1.id);") && /\n    if \(typeof styleLay === 'function'\) styleLay\(charId\);[^\n]*\n\}\nfunction noteHostCopy\(/.test(pendSrc) && chinSrc.includes("delete _charHost[msg.id]; if (typeof styleGone === 'function') styleGone(msg.id);")
             && /noteHostCopy\(id, cs\.chars\[id\]\.values\); \}\); \}\);[^\n]*\n    if \(typeof noteHostChar === 'function'\) Object\.values\(state\.appState\.campaigns \|\| \{\}\)\.forEach\(function\(cs\) \{[^\n]*noteHostChar\(cs\.chars\[id\]\);/.test(src)
-            && src.includes("if (charLimit) charLimit.reset(); if (typeof styleReset === 'function') styleReset(); }") && /noteHostChar\(cs\.chars\[id\]\); \}\); \}\);[^\n]*\n    if \(typeof styleHostKnows === 'function'\) styleHostKnows\(msg\.looks\);/.test(src) && /combats: combatsFor\(prof\.id\), looks: true, notepad: notepadMsg\(\) \}; if \(sheetFilesHere\(\)\) snap\.sheetFiles = true; gmSignSnap\(snap, conn\); \};/.test(src) && !/_styleKnown|_styleOldSaid|styleHeard/.test(src)
+            && src.includes("if (charLimit) charLimit.reset(); if (typeof styleReset === 'function') styleReset(); }") && /noteHostChar\(cs\.chars\[id\]\); \}\); \}\);[^\n]*\n    if \(typeof styleHostKnows === 'function'\) styleHostKnows\(msg\.looks\);/.test(src) && /combats: combatsFor\(prof\.id\), looks: true, rowText: true, notepad: notepadMsg\(\) \}; if \(sheetFilesHere\(\)\) snap\.sheetFiles = true; gmSignSnap\(snap, conn\); \};/.test(src) && !/_styleKnown|_styleOldSaid|styleHeard/.test(src)
             && (() => { const a0 = src.indexOf('function applySnapshot(msg) {'), a = src.indexOf('styleHostKnows(msg.looks);'), z = a < 0 ? -1 : src.indexOf('\n}\n', a), tail = a0 >= 0 && a > a0 && z > a ? src.slice(a + 26, z) : 'styleReset('; return src.split('styleHostKnows(msg.looks)').length === 2 && src.slice(a0, a).indexOf('\n}\n') < 0 && !/styleReset\(|charSessionReset\(|diceSessionReset\(|leaveSession\(|_styleHostOk|styleHostKnows\(/.test(tail); })() && src.split('net.syncCharStyle(').length === 2 && src.split('net.charStyle = function(').length === 2, j(gates));
     }
 })());

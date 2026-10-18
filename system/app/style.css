@@ -3076,6 +3076,8 @@
   .sheet-rf-back { padding: 0 5px; height: 22px; flex: none; }
   /* Stage 6 F4c3: a custom row's form (its GM only tick); the GM's mark on a player's custom row whose key a row they cannot see shares (with the marks above) */
   .sheet-rf-f input.sheet-rf-gm { flex: none; margin: 3px 0; cursor: pointer; }
+  .sheet-rf-f.sheet-rf-wide { grid-column: 1 / -1; align-items: flex-start; }
+  .sheet-rf-f textarea.sheet-rf-long { flex: 1 1 100%; width: 100%; min-width: 0; box-sizing: border-box; padding: 3px 5px; font: inherit; font-size: 12px; line-height: 1.4; resize: vertical; }
   .sys-list-card { border: 1px solid var(--edge); border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; display: flex; flex-direction: column; gap: 6px; }
   .sys-list-title { font-weight: 600; color: var(--gold); }
   .sys-list-cats { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; font-size: 12px; }

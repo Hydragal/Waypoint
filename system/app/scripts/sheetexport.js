@@ -124,6 +124,7 @@ function charFromJson(view, j, find, findKey) {
                 if (Object.keys(ov).length) out.ops.push({ f: f.id, q: { op: 'ov', rowId: id, ov: ov } });
             } else if (def) {
                 var d = { name: nm.trim() ? nm : 'Item' }; ['icon', 'category', 'notes', 'key'].forEach(function(k) { if (typeof def[k] === 'string' && def[k]) d[k] = def[k]; });
+                if (typeof def.desc === 'string' && def.desc.trim()) d.desc = def.desc; if (Array.isArray(def.lvls) && def.lvls.length) d.lvls = def.lvls;   // 1.5.5 (155): its own long text (the fill cleans it)
                 if (isObj(def.stats)) d.stats = def.stats;
                 var ms = mods(def.mods); if (ms.length) { d.mods = ms; if (def.modsOn === true) d.modsOn = true; }
                 out.ops.push({ f: f.id, q: { op: 'custom', rowId: id, def: d } });

@@ -10,6 +10,7 @@ import { picRef } from './safecore.js';
 import { showConfirm, showPrompt } from './dialogs.js';
 import { cleanFieldUnit, unitTail, heightWords, measureWords, unitWords, unitHead, listWords, unitOf, textWords, measureStore, rollNeedsOk, rollNeedsSays, timeRuleRun, droppedCounts, validPageId, LIMITS, KINDS, showsIf, rowRollNames, gmOnlyNames, applyAct, applyScope, applyRound, dueActs, combatChars, roundSecs, fxLeftNow, lastsSecs, APPLY_KINDS, TURN_UNITS, LIGHT_UNITS, RANGE_UNITS, HEIGHT_UNITS, TIME_WORDS, STORED, DEF_PROP, BAND_KINDS, IDENTITY_KINDS, LEDGER_KINDS, headerEntry, captionParts, emptySystem, uid, validKey, cleanSystem, cleanChar, validateSystem, resolveAll, hoverLines, autoLayout, applyEdit, applyStyle, cleanLooks, lookOf, lookFor, lookRule, applyEffectOp, fxText, fmtNum, budgetsOf, budgetWatch, budgetSays, needsMet, needsSays, initRoll, applyProposal, cleanUploads, sideOf, threatArc, facingCtx, stanceCtx, tokenCtx, POSTURE_IDS, POSTURE_NAMES, DEFAULT_POSTURES, postureList, postureAt, autoEffectsOn, initTie, charTokenOn, cycleThreat, valueTone, TONES, activeCharOf, playableChars, ownedTokenPlan, applyOwnerOps, migrateBindings, capExpr, cleanValue, fieldById, valueOpts, applyRowOp, rowIdOf, rowDef, orphanRows, stampRows, cleanRowDef, projectRows, STAT_KEY, PALETTE_KEYS, GLYPHS, glyphPath, headerEdits, pinTargets, pinTargetsAll, hudView, hudHasContent, resetTargets, cleanListSpec, statKey, rowStat, plusText, rowPaid, itemReach, gmDerivedNames, labelGmNames, gmEffectNames, labelNames, withRound, rangeCtx, withRange, rowLvl, rowOn, cleanItemKey, charForView, secretFieldIds, gmViewFields } from './systemcore.js';
 import { fileBase, charToJson, charFromJson, sheetToMarkdown, isCharFile } from './sheetexport.js';
+import { lvlsFromBox, lvlsToText } from './librarycore.js';
 import { cleanCalendar, fmtWhen, fmtDate, timeOf, calPreset, CAL_LIMITS } from './calendarcore.js';
 
 var ui = function(id) { return document.getElementById(id); };
@@ -1154,7 +1155,18 @@ function rolled(m, cid) {
 }
 // One refresh path for every view of a character: the sheet when it shows charId (any when null), then every HUD of it (all when null) —
 // never the body that just painted itself (skip)
+// 1.5.5 (155, found live): a press into another box of a sheet first ends the box it leaves, whose change commits and drew its view again at
+// once, taking away the very box the press was moving the focus into. While a change event inside the sheet panel or a HUD is dispatched
+// (_chgNow, counted by one capture listener and let go a tick later), its views are drawn a tick later (chgDefer), once the focus has gone
+// where the press or the key sent it: focusKeyOf then finds that box and restoreFocus puts the focus back in it
+var _chgNow = 0, _chgWait = null;
+function chgDefer(charId, skip) {
+    if (!_chgWait) { _chgWait = []; setTimeout(function() { var w = _chgWait; _chgWait = null; var all = w.some(function(x) { return x[0] == null; }); if (all) renderViews(null); else { var seen = Object.create(null); w.forEach(function(x) { var k = String(x[0]); if (seen[k]) return; seen[k] = 1; renderViews(x[0], w.filter(function(y) { return String(y[0]) === k; }).every(function(y) { return y[1] === x[1]; }) ? x[1] : undefined); }); } }, 0); }
+    _chgWait.push([charId, skip]);
+}
+if (typeof document !== 'undefined' && document && typeof document.addEventListener === 'function') document.addEventListener('change', function(e) { var t = e && e.target; if (!t || typeof t.closest !== 'function' || !t.closest('#sheetPanel, #hudLayer')) return; _chgNow++; setTimeout(function() { _chgNow--; }, 0); }, true);
 function renderViews(charId, skip) {
+    if (typeof _chgNow === 'number' && _chgNow > 0 && typeof chgDefer === 'function') { chgDefer(charId, skip); return; }   // 1.5.5: drawn once the focus has moved
     if (typeof bellFx === 'function') { try { bellFx(charId); } catch (e) { console.error(e); } }   // the bell's effects feed: what changed since this machine last looked
     var any = charId == null, held = typeof sbxHeld === 'function' ? sbxHeld : null;   // item 35: a view whose text box must stay on the page now is drawn a moment later
     if (sheetOpen && (any || sheetOpen === charId) && ui('sheetBody') !== skip) { if (held && held(ui('sheetBody'))) sbxDefer(); else renderSheet(); }
@@ -2782,6 +2794,21 @@ function customForm(entry, rd, c, f, spec, sysI, mode) {
     cs.addEventListener('change', function() { one('category', cs.value || null); }); add('Category', cs, 'category');
     text('notes', 'Notes', LIMITS.text, d.notes || '');
     text('key', 'Key', 40, d.key || '', 'A short fixed name your formulas read this row by (List.Key.lvl): a letter, then letters, digits and _ (up to 40); no other row or item of this list may have it. A GM-only row is read by its key only on a GM-only list', true);
+    var longOk = !(typeof isClient === 'function' && isClient()) || !!(typeof net === 'function' && net() && typeof net().rowTextOk === 'function' && net().rowTextOk());   // 1.5.5 (155): a row of its own's long text, where the host keeps it (an older GM's Waypoint would drop it with no word)
+    if (longOk) {
+        var area = function(k, cap, max, val, title, read) {   // a long text of its own, in a box of several lines; blank clears it
+            var a = el('textarea', 'field sheet-rf-in sheet-rf-long'); a.rows = 4; a.maxLength = max; a.value = val; keepTyped(a, partOf(k));
+            a.addEventListener('change', function() { if (hold(partOf(k), a.value)) return; took(partOf(k)); one(k, read(a.value)); });
+            add(cap, a, k, title); if (a.parentNode) a.parentNode.className += ' sheet-rf-wide'; return a;
+        };
+        area('desc', 'Description', LIMITS.desc, typeof d.desc === 'string' ? d.desc : '', 'What it does, in full. It shows in the row\u2019s details', function(v) { return v.trim() ? v : null; });
+        if (typeof lvlsFromBox === 'function' && typeof lvlsToText === 'function') area('lvls', 'By level', LIMITS.lvls * (LIMITS.lvlText + LIMITS.lvlTag + 16), lvlsToText(d.lvls), 'What each level gives, one level a line, as 2: what it gives', function(v) {
+            var lv = lvlsFromBox(v, d.lvls), lines = v.split('\n').filter(function(x) { return x.trim(); }).length;
+            if (lv.length < lines && typeof toast === 'function') toast((lines - lv.length) + ((lines - lv.length) === 1 ? ' line was' : ' lines were') + ' not read. Write each level as 2: what it gives.');
+            lv = lv.slice(0, LIMITS.lvls * 4).map(function(r) { var o = { lvl: r.lvl, text: String(r.text).slice(0, LIMITS.lvlText) }; if (typeof r.tag === 'string' && r.tag) o.tag = r.tag.slice(0, LIMITS.lvlTag); return o; });   // what the wire takes
+            return lv.length ? lv : null;
+        });
+    }
     (spec && Array.isArray(spec.stats) ? spec.stats : []).forEach(function(s) {
         if (!s || typeof s.key !== 'string' || !SK_RE.test(s.key)) return;
         var k = s.key, lk = k.toLowerCase(), mine, ds = d.stats && typeof d.stats === 'object' ? d.stats : {}, name = 's-' + k, part = partOf(name), ctl;
@@ -2836,7 +2863,7 @@ function customForm(entry, rd, c, f, spec, sysI, mode) {
         if (d.rm === 'bound' || d.rm === 'curse') text('rmMsg', 'Message on removal', LIMITS.rmMsg, d.rmMsg || '');
         if (spec && spec.on && typeof spec.on === 'object') { lockSel('eq', 'When a player switches it off', { none: 'A player may switch it off', bound: 'Bound: it stays on', curse: 'Curse on contact: you keep it on' }); if (d.eq === 'bound' || d.eq === 'curse') text('eqMsg', 'Message on switching off', LIMITS.rmMsg, d.eqMsg || ''); }
         var gv = el('input', 'sheet-rf-gm'); gv.type = 'checkbox'; gv.checked = d.vis === 'gm'; gv.addEventListener('change', function() { one('vis', gv.checked ? 'gm' : 'all'); });
-        add('GM only', gv, 'vis', 'Secret: its player still has it (its name, notes and stats), never its key, blast or formulas; they can no longer change it. On a list players can see, formulas do not read a GM-only row by its key (their sheet could not work out the same number): for a hidden thing that should count, carry a GM-only library item, or use a GM-only list');
+        add('GM only', gv, 'vis', 'Secret: its player still has it (its name, notes and stats), never its key, blast, formulas, description or levels; they can no longer change it. On a list players can see, formulas do not read a GM-only row by its key (their sheet could not work out the same number): for a hidden thing that should count, carry a GM-only library item, or use a GM-only list');
     }
     if (stRef && stRef.focus === 'name') { delete stRef.focus; setTimeout(function() { try { nb.focus(); } catch (e) {} }, 0); }   // a new row: its name first
     return form;
@@ -3757,7 +3784,7 @@ function commitItem(c, f, q) {   // Stage 6 F4a: a row op q = { op: add|remove|s
     }
     if (!canWrite()) return;
     var res = applyRowOp(sys, c, f.id, q, F(), {});
-    if (!res.ok) { toast(res.why === 'formula' ? 'Not a formula this sheet can roll.' : res.why === 'key' ? 'That key is already used in this list.' : res.why === 'badkey' ? 'Not a usable key: a letter, then letters, digits and _ (up to 40).' : res.reason === 'field' ? 'That list cannot be changed that way.' : res.reason === 'missing' ? 'That item is gone.' : 'That change is not allowed.'); renderViews(c.id); return; }   // why (F4c2, F4c3 key / badkey): the GM's own, never on the wire
+    if (!res.ok) { toast(res.why === 'formula' ? 'Not a formula this sheet can roll.' : res.why === 'key' ? 'That key is already used in this list.' : res.why === 'badkey' ? 'Not a usable key: a letter, then letters, digits and _ (up to 40).' : res.reason === 'field' ? 'That list cannot be changed that way.' : res.reason === 'long' ? 'This list\u2019s own rows hold all the long text they may.' : res.reason === 'missing' ? 'That item is gone.' : 'That change is not allowed.'); renderViews(c.id); return; }   // why (F4c2, F4c3 key / badkey): the GM's own, never on the wire
     undoFollow(res);
     var prev = c.values && Object.prototype.hasOwnProperty.call(c.values, f.id) ? clone(c.values[f.id]) : undefined;
     lastChange = { charId: c.id, fieldId: f.id, prev: prev };
@@ -4487,7 +4514,7 @@ function ownerFromToken(w) {
     giveCharacter(w.ownerId || '', c.id, { keep: w.id });   // a same-owner pick on a kept character's token makes it the one in play, with its token placed where they stand
 }
 function charGone(id) { var shown = false; if (sheetOpen === id) { closeSheet(); shown = true; } if (typeof id === 'string' && huds[id]) { closeHud(id); shown = true; } if (shown) toast('That character is no longer shared with you.'); if (window.appRender) window.appRender(); }
-function editResult(rid, ok, reason, msg, op) { if (!ok) toast(reason === 'none' ? 'Nothing to apply.' : reason === 'error' ? (msg || 'That amount could not be worked out.') : op === 'apply' && reason === 'field' ? 'That action is not on your sheet now.' : op === 'apply' && reason === 'timeout' ? 'No answer from the GM.' : reason === 'budget' ? (msg || 'That would take the character over a point budget.') : reason === 'needs' ? (msg || 'Your character does not meet what that needs.') : reason === 'stays' ? (msg || (op === 'set' ? 'It stays on.' : 'You can\u2019t get rid of it.')) : reason === 'field' && op === 'custom' ? 'Only the GM changes that row now.' : reason === 'field' && op === 'ov' ? 'Only the GM changes this copy’s stats now.' : reason === 'off' ? 'Character sheets are off here.' : reason === 'owner' ? 'That sheet is not yours.' : reason === 'field' ? 'That field cannot be edited.' : reason === 'slow' ? 'Slow down a little.' : reason === 'missing' ? 'That is no longer there.' : reason === 'timeout' ? 'No answer from the GM; the change was undone.' : reason === 'making' ? 'Finish the character first (press Done on its sheet).' : reason === 'paused' ? 'The table is paused.' : 'That value was not accepted.'); renderViews(null); }
+function editResult(rid, ok, reason, msg, op) { if (!ok) toast(reason === 'none' ? 'Nothing to apply.' : reason === 'error' ? (msg || 'That amount could not be worked out.') : op === 'apply' && reason === 'field' ? 'That action is not on your sheet now.' : op === 'apply' && reason === 'timeout' ? 'No answer from the GM.' : reason === 'budget' ? (msg || 'That would take the character over a point budget.') : reason === 'needs' ? (msg || 'Your character does not meet what that needs.') : reason === 'stays' ? (msg || (op === 'set' ? 'It stays on.' : 'You can\u2019t get rid of it.')) : reason === 'field' && op === 'custom' ? 'Only the GM changes that row now.' : reason === 'field' && op === 'ov' ? 'Only the GM changes this copy’s stats now.' : reason === 'long' ? 'This list\u2019s own rows hold all the long text they may.' : reason === 'off' ? 'Character sheets are off here.' : reason === 'owner' ? 'That sheet is not yours.' : reason === 'field' ? 'That field cannot be edited.' : reason === 'slow' ? 'Slow down a little.' : reason === 'missing' ? 'That is no longer there.' : reason === 'timeout' ? 'No answer from the GM; the change was undone.' : reason === 'making' ? 'Finish the character first (press Done on its sheet).' : reason === 'paused' ? 'The table is paused.' : 'That value was not accepted.'); renderViews(null); }
 
 /* ---------- the editor: fields, rolls, characters ---------- */
 var draft = null, dirty = false, tab = 'fields', errorsById = {}, warningsById = {}, layoutView = 'sheet';   // layoutView (HUD frame HF1): 'sheet' | 'hud'

@@ -17,6 +17,12 @@ Approvals
   Review opens the character's sheet and what waits, and × puts the
   card away. The gold Review button in the top row stays as before.
 
+Your own rows
+- A row a player makes on their sheet now has a Description and a By
+  level box on its edit form, as a library entry has. The text shows
+  in the row's details. Write one level a line, as 2: what it gives.
+  A row you make GM only keeps its text from its player.
+
 WAYPOINT 1.5.4 — What's New
 ============================
 

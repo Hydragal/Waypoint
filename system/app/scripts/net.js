@@ -1844,6 +1844,7 @@ function applySnapshot(msg) {
     Object.values(state.appState.campaigns || {}).forEach(function(cs) { if (cs && cs.chars && typeof cs.chars === 'object') Object.keys(cs.chars).forEach(function(id) { noteHostCopy(id, cs.chars[id].values); }); });   // Stage 6: the host's copy of every character, whole, from the start (a refusal goes back to it)
     if (typeof noteHostChar === 'function') Object.values(state.appState.campaigns || {}).forEach(function(cs) { if (cs && cs.chars && typeof cs.chars === 'object') Object.keys(cs.chars).forEach(function(id) { noteHostChar(cs.chars[id]); }); });   // item 35: and its looks, on our own whole copies alone
     if (typeof styleHostKnows === 'function') styleHostKnows(msg.looks);   // item 35: a host that knows text looks says so here; an older one says nothing
+    if (typeof rowTextKnows === 'function') rowTextKnows(msg.rowText);   // 155: a host that keeps a row of its own's long text says so here; an older one would drop it unanswered
     _sheetFilesOk = msg.sheetFiles === true;   // 2026-10-18: a host that reads a sheet file made elsewhere says so here, true only
     net.stanceCamps = cleanStanceCamps(msg.stanceCamps);   // null from an older host: msg.stance governs every campaign
     net.targets = cleanTargets(msg.targets);
@@ -3068,6 +3069,12 @@ net.charStyle = function(charId, fieldId, rec) {
 // May a look be set at this table at all: always on the machine that owns the campaign; at someone's table only when its host knows looks
 net.looksOk = function() { return net.role === 'client' ? _styleHostOk : true; };
 // [netcheck:charlook-end]
+// 1.5.5 (155): a row of the character's own keeps a description and By level text of its own. A host that keeps them says so in its join
+// snapshot (rowText: true, read as true only); an older one takes the change and drops the text with no word, so a player's form offers the
+// boxes only where the host said it (net.rowTextOk), and always on the machine that owns the campaign
+var _rowTextOk = false;
+function rowTextKnows(v) { _rowTextOk = v === true; }
+net.rowTextOk = function() { return net.role === 'client' ? _rowTextOk : true; };
 net.syncCharGone = function(id, only) { if (!net.active || net.role !== 'host') return; var camp = getActiveCampaign(); if (!camp) return; net.conns.forEach(function(c) { if (c.open && net.roster[c.peer] && (!only || peerProfileId(c) === only)) { try { c.send({ type: 'charGone', campId: camp.id, id: id }); } catch (e) { sendFailed(e); } } }); };   // only (Onboarding F3): one player's (a character in the making went)
 // Onboarding F3: a character's copy to its owner alone (each connection of theirs) — a character in the making is theirs only
 function sendCharTo(pid, id) {
@@ -3177,7 +3184,7 @@ net.charItem = function(charId, fieldId, q) {
     var c = (camp && camp.chars && typeof charId === 'string' && Object.prototype.hasOwnProperty.call(camp.chars, charId) ? camp.chars[charId] : null); if (!c || c.partial || c.npc || !c.ownerId || c.ownerId !== net.myId) return { error: 'That character is not yours.' };
     if (!camp.system) return { error: 'No system at this table.' };
     var res = S.applyRowOp(camp.system, c, fieldId, q, window.wpFormula, { player: true, view: camp.system, lib: net.libEntry, copy: true });   // a player's copy IS the players' view (L3b: a library entry, from what this player fetched)
-    if (!res.ok) return { error: res.why === 'key' ? 'That key is already used in this list.' : res.why === 'badkey' ? 'Not a usable key: a letter, then letters, digits and _ (up to 40).' : res.reason === 'field' ? 'That list cannot be changed that way.' : res.reason === 'missing' ? 'That item is gone.' : res.reason === 'needs' ? (res.msg || 'Your character does not meet what that needs.') : 'That change is not allowed.' };   // why (F4c3): the local answer's own (a key taken in what they can see, or not a key), never sent; needs (126b): what their own copy says the entry needs
+    if (!res.ok) return { error: res.why === 'key' ? 'That key is already used in this list.' : res.why === 'badkey' ? 'Not a usable key: a letter, then letters, digits and _ (up to 40).' : res.reason === 'field' ? 'That list cannot be changed that way.' : res.reason === 'long' ? 'This list\u2019s own rows hold all the long text they may.' : res.reason === 'missing' ? 'That item is gone.' : res.reason === 'needs' ? (res.msg || 'Your character does not meet what that needs.') : 'That change is not allowed.' };   // why (F4c3): the local answer's own (a key taken in what they can see, or not a key), never sent; needs (126b): what their own copy says the entry needs
     var rid = 'e' + Math.random().toString(36).slice(2, 10);
     var prev = c.values && Object.prototype.hasOwnProperty.call(c.values, fieldId) ? JSON.parse(JSON.stringify(c.values[fieldId])) : undefined;
     c.values = c.values || {}; c.values[fieldId] = res.value;
@@ -5290,7 +5297,7 @@ function admitPlayer(conn, prof, provenKey) {
     if (window.wpFog) window.wpFog.invalidateVision();   // fog: this admit may follow token moves; compute a fresh per-recipient view
     var snapOk = false;
     try {
-        var snap, mkSnap = function() { snap = { type: 'snapshot', gmId: getProfile().id, key: issuedKey, appState: sanitizeAppState(state.appState, prof.id, typeof mapHeldOf === 'function' ? mapHeldOf(conn) : null), stage: land.stage, paused: net.paused, pausedSelf: !!(net.pausedPlayers && net.pausedPlayers[prof.id]), travelLocked: net.travelLocked, snap: typeof window.wpSnapOn === 'function' && window.wpSnapOn() === true, stance: net.stanceFlags(), stanceCamps: window.wpVtt ? window.wpVtt.hostCamps() : null, targets: targetsFor(prof.id), combats: combatsFor(prof.id), looks: true, notepad: notepadMsg() }; if (sheetFilesHere()) snap.sheetFiles = true; gmSignSnap(snap, conn); };   // sheetFiles (2026-10-18): this host reads a sheet file made elsewhere (an outside reader of the GM's own), true only   // (signed with the GM's key when this player's app sent its nonce: gmSignSnap)
+        var snap, mkSnap = function() { snap = { type: 'snapshot', gmId: getProfile().id, key: issuedKey, appState: sanitizeAppState(state.appState, prof.id, typeof mapHeldOf === 'function' ? mapHeldOf(conn) : null), stage: land.stage, paused: net.paused, pausedSelf: !!(net.pausedPlayers && net.pausedPlayers[prof.id]), travelLocked: net.travelLocked, snap: typeof window.wpSnapOn === 'function' && window.wpSnapOn() === true, stance: net.stanceFlags(), stanceCamps: window.wpVtt ? window.wpVtt.hostCamps() : null, targets: targetsFor(prof.id), combats: combatsFor(prof.id), looks: true, rowText: true, notepad: notepadMsg() }; if (sheetFilesHere()) snap.sheetFiles = true; gmSignSnap(snap, conn); };   // sheetFiles (2026-10-18): this host reads a sheet file made elsewhere (an outside reader of the GM's own), true only   // (signed with the GM's key when this player's app sent its nonce: gmSignSnap)
         if (typeof fogLanded === 'function') fogLanded(null, mkSnap); else mkSnap();   // fold M4: judged with every open drag at its start
         conn.send(snap); snapOk = true;
     } catch (e) { sendFailed(e, 'snapshot'); toast('Could not send the campaign to ' + (prof.name || 'the player') + ' \u2014 something in it cannot be sent (the console has the details).'); if (typeof mapForgetConn === 'function') mapForgetConn(conn.peer); }
