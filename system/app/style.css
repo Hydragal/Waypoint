@@ -3266,6 +3266,7 @@
   .sheet-dial-seg { opacity: .3; }
   .sheet-dial-live .sheet-dial-seg:not(.sheet-dial-threat):hover { opacity: .55; }
   .sheet-dial-seg.sheet-dial-threat { opacity: .75; }
+  .sheet-dial-seg.sheet-dial-aim { stroke: var(--gold); stroke-width: 1.5; stroke-dasharray: 3 2; }   /* 158: a threat a target gives, not the hand's */
   .sheet-dial-seg.sheet-dial-active { opacity: 1; stroke: var(--sheet-ink, var(--ink)); stroke-width: 1.5; }
   .sheet-arc-front { fill: var(--green, #4caf50); }
   .sheet-arc-side { fill: var(--gold, #e0a54f); }

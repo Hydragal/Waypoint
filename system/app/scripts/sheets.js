@@ -8,7 +8,7 @@ import { getActiveCampaign } from './models.js';
 import { save, toast } from './io.js';
 import { picRef } from './safecore.js';
 import { showConfirm, showPrompt } from './dialogs.js';
-import { cleanFieldUnit, unitTail, heightWords, measureWords, unitWords, unitHead, listWords, unitOf, textWords, measureStore, rollNeedsOk, rollNeedsSays, timeRuleRun, droppedCounts, validPageId, LIMITS, KINDS, showsIf, rowRollNames, gmOnlyNames, applyAct, applyScope, applyRound, dueActs, combatChars, roundSecs, fxLeftNow, lastsSecs, APPLY_KINDS, TURN_UNITS, LIGHT_UNITS, RANGE_UNITS, HEIGHT_UNITS, TIME_WORDS, STORED, DEF_PROP, BAND_KINDS, IDENTITY_KINDS, LEDGER_KINDS, headerEntry, captionParts, emptySystem, uid, validKey, cleanSystem, cleanChar, validateSystem, resolveAll, hoverLines, autoLayout, applyEdit, applyStyle, cleanLooks, lookOf, lookFor, lookRule, applyEffectOp, fxText, fmtNum, budgetsOf, budgetWatch, budgetSays, needsMet, needsSays, initRoll, applyProposal, cleanUploads, sideOf, threatArc, facingCtx, stanceCtx, tokenCtx, POSTURE_IDS, POSTURE_NAMES, DEFAULT_POSTURES, postureList, postureAt, autoEffectsOn, initTie, charTokenOn, cycleThreat, valueTone, TONES, activeCharOf, playableChars, ownedTokenPlan, applyOwnerOps, migrateBindings, capExpr, cleanValue, fieldById, valueOpts, applyRowOp, rowIdOf, rowDef, orphanRows, stampRows, cleanRowDef, projectRows, STAT_KEY, PALETTE_KEYS, GLYPHS, glyphPath, headerEdits, pinTargets, pinTargetsAll, hudView, hudHasContent, resetTargets, cleanListSpec, statKey, rowStat, plusText, rowPaid, itemReach, gmDerivedNames, labelGmNames, gmEffectNames, labelNames, withRound, rangeCtx, withRange, rowLvl, rowOn, cleanItemKey, charForView, secretFieldIds, gmViewFields } from './systemcore.js';
+import { cleanFieldUnit, unitTail, heightWords, measureWords, unitWords, unitHead, listWords, unitOf, textWords, measureStore, rollNeedsOk, rollNeedsSays, timeRuleRun, droppedCounts, validPageId, LIMITS, KINDS, showsIf, rowRollNames, gmOnlyNames, applyAct, applyScope, applyRound, dueActs, combatChars, roundSecs, fxLeftNow, lastsSecs, APPLY_KINDS, TURN_UNITS, LIGHT_UNITS, RANGE_UNITS, HEIGHT_UNITS, TIME_WORDS, STORED, DEF_PROP, BAND_KINDS, IDENTITY_KINDS, LEDGER_KINDS, headerEntry, captionParts, emptySystem, uid, validKey, cleanSystem, cleanChar, validateSystem, resolveAll, hoverLines, autoLayout, applyEdit, applyStyle, cleanLooks, lookOf, lookFor, lookRule, applyEffectOp, fxText, fmtNum, budgetsOf, budgetWatch, budgetSays, needsMet, needsSays, initRoll, applyProposal, cleanUploads, sideOf, threatArc, facingCtx, facingNow, setAimSource, stanceCtx, tokenCtx, POSTURE_IDS, POSTURE_NAMES, DEFAULT_POSTURES, postureList, postureAt, autoEffectsOn, initTie, charTokenOn, cycleThreat, valueTone, TONES, activeCharOf, playableChars, ownedTokenPlan, applyOwnerOps, migrateBindings, capExpr, cleanValue, fieldById, valueOpts, applyRowOp, rowIdOf, rowDef, orphanRows, stampRows, cleanRowDef, projectRows, STAT_KEY, PALETTE_KEYS, GLYPHS, glyphPath, headerEdits, pinTargets, pinTargetsAll, hudView, hudHasContent, resetTargets, cleanListSpec, statKey, rowStat, plusText, rowPaid, itemReach, gmDerivedNames, labelGmNames, gmEffectNames, labelNames, withRound, rangeCtx, withRange, rowLvl, rowOn, cleanItemKey, charForView, secretFieldIds, gmViewFields } from './systemcore.js';
 import { fileBase, charToJson, charFromJson, sheetToMarkdown, isCharFile } from './sheetexport.js';
 import { lvlsFromBox, lvlsToText } from './librarycore.js';
 import { cleanCalendar, fmtWhen, fmtDate, timeOf, calPreset, CAL_LIMITS } from './calendarcore.js';
@@ -545,6 +545,8 @@ function facingTarget(c, camp) {
     if (inSession) return (loc && Object.prototype.hasOwnProperty.call(items, loc) && mapOk(items[loc])) ? hit(loc, items[loc], charTokenOn(items[loc], c.id, c.ownerId, { strict: true })) : null;
     return mapOk(am) ? hit(amId, am, charTokenOn(am, c.id, c.ownerId, { hidden: !pc })) : null;
 }
+// 158: what targets a token, for the facing rules, is the table's (net.js aimsOf): registered once, as systemcore asks it for every token's facing
+if (typeof setAimSource === 'function') setAimSource(function(map, tok, viewer) { var n = net(); return n && typeof n.aimsOf === 'function' ? n.aimsOf(map, tok, viewer) : null; });
 function combatOn(mapId) { var n = net(); return n && n.combatFor && typeof mapId === 'string' ? n.combatFor(mapId) : null; }   // HUD frame (HF5b): the combat on a map, while a table is up (null offline)
 // Range penalties R2 (docs/RANGE_PLAN.md 3): what RangeMod and TargetDistance read for a character's token, worked out on this screen from
 // its own copy — to its player's pointer (a player's character, whoever looks at the sheet) or the GM's own (an NPC, a character with no
@@ -555,6 +557,7 @@ function combatOn(mapId) { var n = net(); return n && n.combatFor && typeof mapI
 function rangeFor(c, mapId, map, tok, camp) {
     var n = net(); if (!c || !tok || !map || !n || !n.active || !n.targets || typeof mapId !== 'string') return null;
     var pc = !!(c.ownerId && !c.npc), pid = isClient() ? myId() : pc ? c.ownerId : myId();
+    if (!pc && !isClient() && typeof tok.id === 'string' && Object.prototype.hasOwnProperty.call(n.targets, 'tk:' + tok.id)) pid = 'tk:' + tok.id;   // 158: an NPC that targets with a pointer of its own reads the range by it, before the GM's own
     var tg = typeof pid === 'string' && Object.prototype.hasOwnProperty.call(n.targets, pid) ? n.targets[pid] : null;
     if (!tg || typeof tg !== 'object' || tg.mapId !== mapId || typeof tg.id !== 'string') return null;
     var w = Array.isArray(map.whiteboard) ? map.whiteboard.find(function(x) { return !!x && x.id === tg.id; }) : null;
@@ -569,7 +572,7 @@ function tokenCtxFor(charId, camp) { var c = charById(charId, camp), t = c ? fac
 function rangeSigOf(c, camp) { var t = c ? facingTarget(c, camp) : null, r = t ? rangeFor(c, t.mapId, t.map, t.tok, camp) : null; return r ? r.mod + '|' + r.dist + '|' + (r.hmod || 0) + '|' + (r.hdiff || 0) : ''; }   // range R2: what RangeMod and TargetDistance read for this character, so a new target or a move redraws the view (item 19 H2: HeightMod and HeightDiff too)
 function roundSigOf(c, camp) { var t = c ? facingTarget(c, camp) : null, cb = t ? combatOn(t.mapId) : null; return cb && typeof cb.round === 'number' ? String(cb.round) : ''; }   // HF5b: what CombatRound reads for this character, so a round change redraws the view
 function dialSigOf(c, camp) {
-    var fl = tokenFlags(), t = c ? facingTarget(c, camp) : null, fc = t ? facingCtx(t.map, t.tok, fl.turning) : null, st = t ? stanceCtx(t.tok, fl) : null, n = net();
+    var fl = tokenFlags(), t = c ? facingTarget(c, camp) : null, fc = t ? (typeof facingNow === 'function' ? facingNow : facingCtx)(t.map, t.tok, fl.turning) : null, st = t ? stanceCtx(t.tok, fl) : null, n = net();
     return [JSON.stringify(fl), t ? t.mapId + '|' + t.tok.id + '|' + (t.tok.ownerId || '') + '|' + (t.tok.locked ? 1 : 0) : '', fc ? fc.deg + '|' + fc.sides + '|' + fc.threats.join(',') : '', st ? st.posture + '|' + st.elevation : '', !!(n && (n.paused || n.selfPaused)), typeof unitSig === 'function' ? unitSig() : ''].join('#');   // 1.5.4: the viewer's Measurement system, which the Elevation row, a measure's metric figure and a height's half are drawn by (unitSig)
 }
 function dialSigFor(charId, camp) { var c = charById(charId, camp); return c ? dialSigOf(c, camp) : ''; }   // 1.5.4: for a sheet in a window of its own (popout.js), which redraws when it moves, and when the viewer's Measurement system changes (dialSigOf names it)
@@ -610,14 +613,14 @@ function redrawForFacing(v) {   // v: a HUD's record (HUD frame HF2a), each with
 function facingNode(c, gm) {
     var wrap = el('div', 'sheet-dial'), on = turningOn();
     if (!on) { if (!gm) { wrap.hidden = true; return wrap; } wrap.appendChild(el('div', 'sheet-dial-note', 'Token facing is off (Settings \u25b8 VTT features).')); return wrap; }
-    var t = facingTarget(c, getActiveCampaign()), fc = t ? facingCtx(t.map, t.tok, true) : null;
+    var t = facingTarget(c, getActiveCampaign()), fc = t ? facingNow(t.map, t.tok, true) : null;
     if (!fc) { wrap.appendChild(el('div', 'sheet-dial-note', t ? 'This token\u2019s facing cannot be read.' : 'No token on this map.')); return wrap; }
     var n = net(), live = _fxLive && (gm || (t.tok.ownerId === myId() && !t.tok.locked && !(n && (n.paused || n.selfPaused))));   // a token the GM locked is frozen for its player
     if (live) wrap.classList.add('sheet-dial-live');
     var N = fc.sides, step = 360 / N, half = step / 2, C0 = 66, ARC = ['front', 'side', 'rear'];
     var xy = function(deg, r) { var a = deg * Math.PI / 180; return [(C0 + r * Math.sin(a)).toFixed(2), (C0 - r * Math.cos(a)).toFixed(2)]; }, pt = function(deg, r) { return xy(deg, r).join(' '); };
     var segOf = function(b) { return sideOf(b, N); };
-    var faceSide = segOf(fc.deg), th = fc.threats, active = th.length ? segOf(th[0]) : -1, marked = {}; th.forEach(function(b) { marked[segOf(b)] = 1; });
+    var faceSide = segOf(fc.deg), th = fc.threats, own = Array.isArray(fc.own) ? fc.own : th, active = th.length ? segOf(th[0]) : -1, marked = {}, aimed = {}; th.forEach(function(b) { marked[segOf(b)] = 1; }); th.slice(0, fc.aims || 0).forEach(function(b) { aimed[segOf(b)] = 1; });   // 158: the marks a target gives come first and are not the hand's to change
     var mk = function(tag, attrs, cls) { var e = document.createElementNS(SVGNS, tag); Object.keys(attrs).forEach(function(k) { e.setAttribute(k, attrs[k]); }); if (cls) e.setAttribute('class', cls); return e; };
     var tip = function(node, text) { var tt = mk('title', {}); tt.textContent = text; node.appendChild(tt); };
     var svg = mk('svg', { viewBox: '0 0 132 132', role: 'group' }, 'sheet-dial-svg');
@@ -625,12 +628,12 @@ function facingNode(c, gm) {
         var b = i * step, a = threatArc(fc, b);
         // the outer ring: where a threat comes from, coloured by the arc it falls in against the token's facing
         var seg = mk('path', { d: 'M ' + pt(b - half + 3, 60) + ' A 60 60 0 0 1 ' + pt(b + half - 3, 60) + ' L ' + pt(b + half - 3, 44) + ' A 44 44 0 0 0 ' + pt(b - half + 3, 44) + ' Z', 'data-dk': 'seg' + i },
-            'sheet-dial-seg sheet-arc-' + ARC[a] + (marked[i] ? ' sheet-dial-threat' : '') + (i === active ? ' sheet-dial-active' : ''));
-        var what = (i === active ? 'Active threat' : marked[i] ? 'Queued threat' : 'No threat') + ' from side ' + (i + 1) + ' (' + ARC[a] + ')';
+            'sheet-dial-seg sheet-arc-' + ARC[a] + (marked[i] ? ' sheet-dial-threat' : '') + (aimed[i] ? ' sheet-dial-aim' : '') + (i === active ? ' sheet-dial-active' : ''));
+        var what = (i === active ? 'Active threat' : marked[i] ? 'Queued threat' : 'No threat') + ' from side ' + (i + 1) + ' (' + ARC[a] + ')' + (aimed[i] ? ', from a target. It goes when the target is cleared' : '');
         tip(seg, what);
-        if (live) {
+        if (live && !aimed[i]) {
             seg.setAttribute('tabindex', '0'); seg.setAttribute('role', 'button'); seg.setAttribute('aria-label', what + (i === active ? ': clear it' : marked[i] ? ': make it the active threat' : ': mark a threat here'));
-            var cyc = function() { if (window.wpSetTokenThreats) window.wpSetTokenThreats(t.mapId, t.tok.id, cycleThreat(th, b, N)); };
+            var cyc = function() { if (window.wpSetTokenThreats) window.wpSetTokenThreats(t.mapId, t.tok.id, cycleThreat(own, b, N)); };
             seg.addEventListener('click', cyc);
             seg.addEventListener('keydown', function(e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); cyc(); } });
         }

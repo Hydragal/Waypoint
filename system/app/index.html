@@ -1295,6 +1295,8 @@ Plain paragraphs are text: **bold**, *italic*, ~~strike~~, &lt;u&gt;underline&lt
                           <li><b>Combat from a token:</b> as GM, right-click a character token at your table.
                               <ul>
                                   <li><b>Target</b> is your own pointer. <b>T</b> while pointing at a token sets it too. Your NPCs&rsquo; rolls read the range to it, and whoever you target is ticked when a fight starts.</li>
+                                  <li><b>Target as</b> and a name: select one of your characters first, then right-click the token it targets. That character targets it with a pointer of its own, drawn from its token. Its rolls read the range from its own token, and the facing rules know where the attack comes from. Do it again to clear it.</li>
+                                  <li>Targeting never starts a fight by itself. Start one from this menu when you mean to.</li>
                                   <li><b>Start combat&hellip;</b> opens the roster with the tokens you picked ticked.</li>
                                   <li>While a fight runs, <b>Add to the fight</b> and <b>Remove from the fight</b> put them in or take them out without opening the roster.</li>
                               </ul>
@@ -2150,6 +2152,8 @@ Plain paragraphs are text: **bold**, *italic*, ~~strike~~, &lt;u&gt;underline&lt
                                   <li><b>Turn to face</b> turns toward the active threat. Marks stay on the map they were set on.</li>
                                   <li>Formulas can read <b>Arc</b> for the active threat: 0 front, 1 side, 2 rear. They can read <b>Arc.front</b> / <b>Arc.side</b> / <b>Arc.rear</b>. They can read <b>Threats</b> and <b>Threats.front</b> / <b>.side</b> / <b>.rear</b>, which count the marks in each arc. They can read <b>Facing</b> in degrees, where 0 is up. An example is <code>if(Arc.rear, 0, Dodge)</code>.</li>
                                   <li>Arcs count sides from the one the token faces. On a hex grid, or none, that side and the two beside it are front, the next two side and the back one rear. On a square grid the facing side is front, the two beside it side and the back one rear.</li>
+                                  <li>A target marks a threat too. When a character targets a token, a mark from where that character stands leads the dial, so Arc reads front, side or rear. It follows the attacker as it moves and goes when the target is cleared. The dial shows it apart from your own marks, and a click never changes it.</li>
+                                  <li>A player&rsquo;s roll counts only the attackers that player sees.</li>
                                   <li>With no token, no threat, or Token facing off, Arc reads front and the counts read 0. A field of your own named Arc, Threats or Facing keeps the name.</li>
                                   <li>A player turns and marks their own token, though not while paused. Another player&rsquo;s hover card reads facing as front.</li>
                               </ul>

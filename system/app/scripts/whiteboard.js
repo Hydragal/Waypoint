@@ -2448,13 +2448,14 @@ window.wpFitToGrid = fitToGrid;
   // The token a targeter acts from on a map: the picture token their mark's face shows (their character's before a pet), else any token of
   // theirs (their character's first). Cover follow-ups: the target mark's cover tag measures from this same token
   function targeterTok(pid, m) {
+      if (typeof pid === 'string' && pid.indexOf('tk:') === 0) { var tkId = pid.slice(3); return (m && m.type === 'map' ? (m.whiteboard || []) : []).find(function(w) { return !!w && w.id === tkId && w.isChar; }) || null; }   // 158: one of the GM's characters, by its own token
       var own = (m && m.type === 'map' ? (m.whiteboard || []) : []).filter(function(w) { return w.isChar && w.ownerId === pid; }), pic = function(w) { return w.type === 'image' && w.src; };
       return own.find(function(w) { return pic(w) && w.charId; }) || own.find(pic) || own.find(function(w) { return w.charId; }) || own[0] || null;
   }
   function targeterToken(pid) {
       var camp = getActiveCampaign(); if (!camp) return null;
       var am = getActiveMap();
-      var find = function(m) { var w = targeterTok(pid, m); return w && w.type === 'image' && w.src ? w : null; };   // their character before a pet
+      var find = function(m) { var w = targeterTok(pid, m); return w && w.type === 'image' && w.src ? w : null; };   // their character before a pet (158: or the GM's character itself)
       var t = find(am);
       if (!t) { var ids = Object.keys(camp.items); for (var i = 0; i < ids.length && !t; i++) t = find(camp.items[ids[i]]); }
       return t ? { src: t.src, name: t.charName || t.name || '' } : null;
@@ -8514,17 +8515,20 @@ function tableMenuParts(e, role) {
 // and start combat, or join combat"): Target (the GM's one pointer, which an NPC's rolls read the range by and which ticks its token when a
 // fight starts), Start combat with the tokens picked, and for a fight already running on this map Add to the fight / Remove from the fight.
 // Fixed words only: nothing of a token is written into the menu.
-function gmFightModel(map, items) {
+function gmFightModel(map, items, sel) {   // sel (158): the one token the GM has selected, which can target the token under the pointer
     var n = window.wpNet; if (!n || !n.active || n.role !== 'host' || window.wpStream || !map || !Array.isArray(items)) return null;
     var toks = items.filter(function(w) { return !!(w && w.isChar && !w.waiting); }); if (!toks.length) return null;
     var c = n.combats && Object.prototype.hasOwnProperty.call(n.combats, map.id) ? n.combats[map.id] : null, inIds = {};
     if (c && Array.isArray(c.rows)) c.rows.forEach(function(r) { if (r && typeof r.tokId === 'string') inIds[r.tokId] = 1; });
     var one = toks.length === 1 && items.length === 1 && !toks[0].hidden ? toks[0] : null, t = n.targets && n.myId ? n.targets[n.myId] : null;
-    return { toks: toks, running: !!c, add: toks.filter(function(w) { return inIds[w.id] !== 1 && !w.hidden; }), drop: toks.filter(function(w) { return inIds[w.id] === 1; }), target: one, mine: !!(one && t && t.id === one.id && t.mapId === map.id) };
+    var as = one && sel && typeof sel === 'object' && sel.isChar && !sel.waiting && sel.id !== one.id && (map.whiteboard || []).indexOf(sel) >= 0 ? sel : null, ta = as && n.targets ? n.targets['tk:' + as.id] : null;   // 158: Target as the selected character
+    return { toks: toks, running: !!c, add: toks.filter(function(w) { return inIds[w.id] !== 1 && !w.hidden; }), drop: toks.filter(function(w) { return inIds[w.id] === 1; }), target: one, mine: !!(one && t && t.id === one.id && t.mapId === map.id), as: as, asMine: !!(as && ta && ta.id === one.id && ta.mapId === map.id) };
 }
+function gmEsc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }   // 158: a character's name, the one word of a token this menu writes
 function gmFightHtml(m) {
     if (!m) return '';
     var h = '';
+    if (m.target && m.as) { var asN = gmEsc(String(m.as.charName || m.as.name || 'your character').slice(0, 40)); h += '<div class="menu-item cm-gm-fight" data-fight="targetas" title="' + (m.asMine ? 'Stop ' + asN + ' targeting it' : asN + ' targets it: its rolls read the range from its own token, and the facing rules know where the attack comes from') + '">' + (m.asMine ? '&#9711; ' + asN + ' stops targeting' : '&#9678; Target as ' + asN) + '</div>'; }
     if (m.target) h += '<div class="menu-item cm-gm-fight" data-fight="target" title="' + (m.mine ? 'Stop targeting it (Esc does too)' : 'Point at it as the GM: your NPCs&rsquo; rolls read the range to it, and it is ticked when you start a fight (T while pointing at a token does the same)') + '">' + (m.mine ? '&#9711; Clear target' : '&#9678; Target') + '</div>';
     if (!m.running) h += '<div class="menu-item cm-gm-fight" data-fight="start" title="Open the roster with ' + (m.toks.length === 1 ? 'this token' : 'these tokens') + ' ticked, and whoever is targeted">&#9876; Start combat&hellip;</div>';
     else {
@@ -8536,6 +8540,7 @@ function gmFightHtml(m) {
 function gmFightDo(map, m, act) {
     var n = window.wpNet; if (!m || !n || !map) return false;
     if (act === 'target') { if (!m.target || !n.setTarget) return false; n.setTarget(m.target.id, map.id, m.target.charName || m.target.name); return true; }
+    if (act === 'targetas') { if (!m.target || !m.as || !n.setTargetAs) return false; return n.setTargetAs(m.as, m.target.id, map.id, m.target.charName || m.target.name) === true; }
     if (act === 'start') { if (m.running) return false; openCombatModal(map.id, { pre: m.toks.filter(function(w) { return !w.hidden; }).map(function(w) { return w.id; }) }); return true; }
     var c = n.combats && Object.prototype.hasOwnProperty.call(n.combats, map.id) ? n.combats[map.id] : null; if (!c || !Array.isArray(c.rows) || (act !== 'add' && act !== 'drop')) return false;
     var rows = c.rows.map(function(r) { var o = { id: r.id, name: r.name, tokId: r.tokId, init: r.init, src: r.src }; if (r.rolled === 1) o.rolled = 1; if (Array.isArray(r.tb)) o.tb = r.tb; if (r.held === 1) o.held = 1; return o; }), curId = (c.rows[c.turn] || {}).id;
@@ -8636,7 +8641,8 @@ document.addEventListener('contextmenu', function(e) {
             // one character token: its sheet (and HUD) first, where a GM looks for them (they sat far down the menu)
             var sheetTop = !!(isWb && selectedIds.length === 1 && firstItem && (firstItem.isChar || firstItem.charId) && window.wpSheets);
             if (sheetTop) { html += '<div class="menu-item cm-sheet">&#128203; ' + (firstItem.charId ? 'Sheet&hellip;' : 'New character sheet&hellip;') + '</div>'; if (firstItem.charId && window.wpSheets.hudFor && window.wpSheets.hudFor(firstItem.charId)) html += '<div class="menu-item cm-hud">&#12336; HUD&hellip;</div>'; }
-            var gmF = isWb ? gmFightModel(am, selectedIds.map(function(sid) { return am.whiteboard.find(function(x) { return x.id === sid; }); }).filter(Boolean)) : null; html += gmFightHtml(gmF);   // the GM's own Target, Start combat, Add to the fight
+            var selNow = state.selWbIds && state.selWbIds.length ? state.selWbIds : (state.selWbId ? [state.selWbId] : []), selAs = isWb && selNow.length === 1 ? am.whiteboard.find(function(x) { return x.id === selNow[0]; }) : null;   // 158: the one token selected, which may target the token under the pointer
+            var gmF = isWb ? gmFightModel(am, selectedIds.map(function(sid) { return am.whiteboard.find(function(x) { return x.id === sid; }); }).filter(Boolean), selAs) : null; html += gmFightHtml(gmF);   // the GM's own Target, Start combat, Add to the fight
             
             if (isWb) {
                 if (selectedIds.length > 1) {

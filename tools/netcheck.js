@@ -4251,6 +4251,42 @@ pendingChecks.push((async () => {
     const tfA = tgKeys(Tf.N.targetsFor('u_a')), tfB = tgKeys(Tf.N.targetsFor('u_b')); Tf.conns.forEach(c => { c.sent.length = 0; }); Tf.N.broadcastTargets(); const tfOut = Tf.conns.map(c => c.sent.filter(m => m.type === 'targets').map(m => tgKeys(m.targets)));
     check('hidden pieces: on a fogged table each player\'s own copy of the pointers drops one at a hidden token for everyone (Bea\'s pointer at the hidden goblin reaches neither) and one at a creature that player does not see for them alone (Ana\'s pointer at the orc Bea cannot see); no broadcast, nothing to a waiting or closed connection',
         tfA === 'u_a' && tfB === '' && j(tfOut) === j([['u_a'], [''], [], []]) && Tf.bcast.length === 0, j([tfA, tfB, tfOut]));
+
+    // 158 (the owner by prompt, 2026-10-18: "From your selected token (Recommended)"): a pointer one of the GM's characters holds, keyed by its token,
+    // goes to no one while that token is hidden, waiting, gone or on another map, and on a fogged table to no player whose sight drops that token
+    const Ta = scen(); Ta.camp.items.m2.whiteboard.push({ id: 't_far', isChar: true, x: 0, y: 0 });
+    Ta.net.targets = { 'tk:t_gob': { id: 't_ana', mapId: 'm1', name: 'Goblin', from: 't_gob' }, 'tk:t_zz': { id: 't_ana', mapId: 'm1', name: 'Gone', from: 't_zz' }, 'tk:t_far': { id: 't_ana', mapId: 'm1', name: 'Far', from: 't_far' }, u_a: { id: 't_orc', mapId: 'm1', name: 'Ana' } };
+    const ta0 = tgKeys(Ta.N.targetsFor('u_a')); tokOf(Ta, 'm1', 't_gob').hidden = true; const ta1 = tgKeys(Ta.N.targetsFor('u_a')); tokOf(Ta, 'm1', 't_gob').hidden = false; tokOf(Ta, 'm1', 't_gob').waiting = true; const ta2 = tgKeys(Ta.N.targetsFor(null)); delete tokOf(Ta, 'm1', 't_gob').waiting;
+    const Tb = scen({ fog: true, drops: { u_b: { t_gob: 1 } } }); Tb.net.targets = { 'tk:t_gob': { id: 't_ana', mapId: 'm1', name: 'Goblin', from: 't_gob' } };
+    const tbA = tgKeys(Tb.N.targetsFor('u_a')), tbB = tgKeys(Tb.N.targetsFor('u_b')); Tb.conns.forEach(c => { c.sent.length = 0; }); Tb.N.broadcastTargets(); const tbOut = Tb.conns.map(c => c.sent.filter(m => m.type === 'targets').map(m => tgKeys(m.targets)));
+    const CT = new Function(fnSrc('function cleanTargets(', '\n}\n', 'cleanTargets') + '\n}\nreturn cleanTargets;')();
+    const ct = CT({ 'tk:a': { id: 'x', mapId: 'm', name: 'A', from: 'a' }, 'tk:b': { id: 'x', mapId: 'm', from: 'c' }, u_a: { id: 'x', mapId: 'm', from: 'a' }, ['tk:' + 'L'.repeat(78)]: { id: 'x', mapId: 'm', from: 'L'.repeat(78) }, 'tk:n': { id: 'x', mapId: 'm', from: 5 } });
+    check('158 a pointer one of the GM\'s characters holds (net.js targetTok and targetsFor, run for real): sent while its token is shown on the target\'s map; to no one while that token is hidden, waiting, gone or on another map; on a fogged table to no player whose sight drops it, each player their own copy; and a player\'s app keeps its source only where the pointer\'s key names that very token',
+        ta0 === 'tk:t_gob,u_a' && ta1 === 'u_a' && ta2 === 'u_a' && tbA === 'tk:t_gob' && tbB === '' && j(tbOut) === j([['tk:t_gob'], [''], [], []])
+        && ct['tk:a'].from === 'a' && !('from' in ct['tk:b']) && !('from' in ct.u_a) && !('tk:' + 'L'.repeat(78) in ct) && !('from' in ct['tk:n']), j([ta0, ta1, ta2, tbA, tbB, tbOut, ct]));
+    // setTargetAs (the host's alone) and what targets a token for the facing rules (aimsOf), sliced by their targetas markers and run for real
+    const taS = between('// [netcheck:targetas-start]', '// [netcheck:targetas-end]', 'targetas');
+    const mkTA = (role, o) => {
+        o = o || {}; const st = { applied: [], bc: 0, toasts: [] }, net = { active: role !== 'off', role: role === 'off' ? 'host' : role, targets: {} };
+        const N = new Function('net', 'applyTarget', 'broadcastTargets', 'toast', 'getActiveCampaign', 'fogDrop', 'mapFogged', taS + '\nreturn net;')(net,
+            (pid, name, t) => { st.applied.push([pid, name, t && JSON.parse(JSON.stringify(t))]); if (t) { net.targets[pid] = { id: t.id, mapId: t.mapId, name: name }; if (typeof t.from === 'string') net.targets[pid].from = t.from; } else delete net.targets[pid]; },
+            () => { st.bc++; }, t => st.toasts.push(t), () => o.camp || null, (c, m, pid) => (o.drops && o.drops[pid]) || null, m => !!(m && m.fog && m.fog.on === true));
+        return { N, st, net };
+    };
+    const orcT = { id: 't_orc', isChar: true, charName: 'Orc', x: 100, y: 300 }, H1 = mkTA('host');
+    const as1 = H1.N.setTargetAs(orcT, 't_ana', 'm1', 'Ana'), as1T = j(H1.net.targets), as1B = H1.st.bc, as2 = H1.N.setTargetAs(orcT, 't_ana', 'm1', 'Ana'), as2T = j(H1.net.targets);
+    const asNo = [H1.N.setTargetAs(orcT, 't_orc', 'm1'), H1.N.setTargetAs({ id: 'x'.repeat(78) }, 't_ana', 'm1'), H1.N.setTargetAs(null, 't_ana', 'm1'), H1.N.setTargetAs(orcT, 5, 'm1'), mkTA('client').N.setTargetAs(orcT, 't_ana', 'm1'), mkTA('off').N.setTargetAs(orcT, 't_ana', 'm1')];
+    const me = { id: 't_me', isChar: true, ownerId: 'u_p', x: 100, y: 100 }, hidT = { id: 't_hid', isChar: true, hidden: true, x: 400, y: 100 }, qTok = { id: 't_q', isChar: true, ownerId: 'u_q', charId: 'c_q', x: 100, y: 0 }, waitT = { id: 't_w', waiting: true, isChar: true, x: 0, y: 0 };
+    const mapA = { id: 'm1', type: 'map', fog: { on: false }, whiteboard: [me, orcT, hidT, qTok, waitT] };
+    const tgA = { 'tk:t_orc': { id: 't_me', mapId: 'm1', from: 't_orc' }, 'tk:t_hid': { id: 't_me', mapId: 'm1', from: 't_hid' }, u_q: { id: 't_me', mapId: 'm1' }, 'tk:t_me': { id: 't_me', mapId: 'm1', from: 't_me' }, 'tk:t_w': { id: 't_me', mapId: 'm1', from: 't_w' }, 'tk:t_odd': { id: 't_me', mapId: 'm1', from: 't_orc' }, u_x: { id: 't_me', mapId: 'm2' }, u_z: { id: 't_orc', mapId: 'm1' } };
+    const H2 = mkTA('host', { camp: {} }); H2.net.targets = tgA;
+    const ids = l => l.map(w => w.id).join();
+    const aimGm = ids(H2.N.aimsOf(mapA, me)), aimP = ids(H2.N.aimsOf(mapA, me, 'u_p'));
+    const mapF = Object.assign({}, mapA, { fog: { on: true } }), H3 = mkTA('host', { camp: {}, drops: { u_p: { t_orc: 1 } } }); H3.net.targets = tgA; const aimFog = ids(H3.N.aimsOf(mapF, me, 'u_p')), aimFogGm = ids(H3.N.aimsOf(mapF, me));
+    const C1 = mkTA('client'); C1.net.targets = tgA; const aimC = ids(C1.N.aimsOf(mapA, me, 'u_p')), aimOff = ids(mkTA('off').N.aimsOf(mapA, me));
+    check('158 setTargetAs and aimsOf (the targetas slice, run for real): the host keys a pointer of one of the GM\'s characters by its token, with its name and its source, sends the pointers and says so, and the same again clears it; refused for the token itself, a key too long, no token, an id that is no text, a player\'s app and no table; what targets a token is each attacker\'s own token on that map (a player\'s character, one of the GM\'s characters), never the token itself, a waiting token, a source its key does not name, another map\'s pointer or one at another token; judged for a player on the host, never an attacker the GM hid or their sight drops; for the GM every one; a player\'s app reads its own copy',
+        as1 === true && as1T === j({ 'tk:t_orc': { id: 't_ana', mapId: 'm1', name: 'Orc', from: 't_orc' } }) && as1B === 1 && as2 === true && as2T === '{}' && H1.st.bc === 2 && /Orc is targeting Ana/.test(H1.st.toasts[0]) && asNo.every(x => x === false)
+        && aimGm === 't_orc,t_hid,t_q' && aimP === 't_orc,t_q' && aimFog === 't_q' && aimFogGm === 't_orc,t_hid,t_q' && aimC === 't_orc,t_hid,t_q' && aimOff === '', j([as1T, asNo, aimGm, aimP, aimFog, aimFogGm, aimC]));
     const ioSrcM0 = fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', 'io.js'), 'utf8').replace(/\r\n/g, '\n'), undoLine = (ioSrcM0.match(/\n[^\n]*if \(hosting\) \{ window\.wpNet\.applyingRemote = true; save\(true\);[^\n]*/) || [''])[0];
     check('fold M0 (source): the GM\'s undo while hosting (io.js), saved as a remote change so the host\'s save hook returns early, calls net.syncCombatHidden itself, after the map and the other maps it undid went out',
         undoLine.length > 0 && /window\.wpNet\.sendItem\(camp\.id, item\.id\);[^\n]*wUndo\.forEach\([^\n]*broadcastItemFiltered[^\n]*\}\); if \(window\.wpNet\.syncCombatHidden\) window\.wpNet\.syncCombatHidden\(\); \}/.test(undoLine), undoLine.slice(0, 400));

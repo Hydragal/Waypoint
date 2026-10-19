@@ -43,6 +43,18 @@ Notifications
   first. Your list stays on this computer through a restart. Players
   have the bell too, for what their app told them at your table.
 
+Targeting and facing
+- Your own characters can target. Select one, then right-click the
+  token it targets: Target as and its name. It targets with a pointer
+  of its own, drawn from its token, and its rolls read the range from
+  there.
+- A target marks a threat. The token targeted gets a mark on its
+  facing dial from where the attacker stands, so the facing rules know
+  whether an attack comes from the front, the side or the rear. It goes
+  when the target is cleared. A player's roll counts only the
+  attackers that player sees.
+- Targeting never starts a fight by itself.
+
 WAYPOINT 1.5.4 — What's New
 ============================
 

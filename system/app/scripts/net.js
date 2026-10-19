@@ -4298,6 +4298,7 @@ net.syncCombatHidden = function() {
 function targetTok(camp, t) {
     var map = t && camp && camp.items && typeof t.mapId === 'string' && Object.prototype.hasOwnProperty.call(camp.items, t.mapId) ? camp.items[t.mapId] : null;   // (as combatHidden reads a map: this slice runs without own)
     var w = map && map.type === 'map' && Array.isArray(map.whiteboard) ? map.whiteboard.find(function(x) { return !!x && x.id === t.id; }) : null;
+    if (w && t && typeof t.from === 'string') { var f = map.whiteboard.find(function(x) { return !!x && x.id === t.from; }); if (!f || f.hidden || !f.isChar || f.waiting) return null; }   // 158: a pointer one of the GM's characters holds is nobody's while its token is hidden or gone: it would name a creature no one sees
     return w && !w.hidden ? { tok: w, map: map } : null;
 }
 function targetHidSigNow() { var camp = getActiveCampaign(); return Object.keys(net.targets || {}).sort().filter(function(pid) { return !targetTok(camp, net.targets[pid]); }).join(','); }
@@ -4305,7 +4306,7 @@ function targetsFor(recipientId) {
     var camp = getActiveCampaign(), fogged = anyFog(camp), out = {};
     Object.keys(net.targets || {}).forEach(function(pid) {
         var t = net.targets[pid], at = targetTok(camp, t); if (!at) return;   // hidden pieces: a pointer at a token the GM hid, or at nothing here, is nobody's
-        if (fogged && at.map.fog && at.map.fog.on === true && (fogDrop(camp, at.map, recipientId) || {})[t.id]) return;   // fog: one at a creature this player does not see
+        if (fogged && at.map.fog && at.map.fog.on === true) { var dropT = fogDrop(camp, at.map, recipientId) || {}; if (dropT[t.id] || (typeof t.from === 'string' && dropT[t.from])) return; }   // fog: one at a creature this player does not see, or from one (158)
         out[pid] = t;
     });
     return out;
@@ -4401,7 +4402,7 @@ function turnMoveStart(mapId, c) {
     var view = window.wpSheets.playerSystem(camp), t = view && view.combat && view.combat.turn; if (!t || !t.move) return;
     var chv = S.charFor(ch, view, w.ownerId, { lib: fxLib(camp.system), items: itemLib(camp.system), full: camp.system }); if (!chv) return;
     var vt = window.wpVtt, rl = function(k) { return !vt || (vt.rulesOn ? vt.rulesOn(k) : vt.on(k)); };
-    var tc = S.withRound(S.tokenCtx(map, w, { turning: rl('turning'), posture: rl('posture'), elevation: rl('elevation') }), c);
+    var tc = S.withRound(S.tokenCtx(map, w, { turning: rl('turning'), posture: rl('posture'), elevation: rl('elevation'), viewer: typeof w.ownerId === 'string' ? w.ownerId : undefined }), c);
     var r = F.evaluate(t.move, { vars: S.makeResolver(view, chv, F, tc) }); if (!r.ok || typeof r.value !== 'number' || !isFinite(r.value)) return;
     st.allow = S.moveAllowCells(Math.max(0, r.value), t.unit, S.mapCellScale(map));
     noteOwner(w.ownerId, 'Your turn: ' + cellsText(st.allow, map) + ' to move.', w.charId);
@@ -4671,12 +4672,13 @@ function cleanTargets(raw) {
         var t = raw[pid];
         if (t && typeof t.id === 'string' && t.id.length <= 80 && typeof t.mapId === 'string' && t.mapId.length <= 80 && typeof pid === 'string' && pid.length <= 80) {
             out[pid] = { id: t.id, mapId: t.mapId, name: String(t.name || 'Player').slice(0, 40) };
+            if (typeof t.from === 'string' && t.from.length <= 77 && pid === 'tk:' + t.from) out[pid].from = t.from;   // 158: one of the GM's characters, keyed by its own token
         }
     });
     return out;
 }
 function applyTarget(pid, name, t) {
-    if (t) net.targets[pid] = { id: t.id, mapId: t.mapId, name: name }; else delete net.targets[pid];
+    if (t) { net.targets[pid] = { id: t.id, mapId: t.mapId, name: name }; if (typeof t.from === 'string') net.targets[pid].from = t.from; } else delete net.targets[pid];
     render();
 }
 // Toggle my own target (client or host). itemName is only for the toast.
@@ -4696,6 +4698,41 @@ net.setTarget = function(itemId, mapId, itemName) {
     toast(next ? 'Targeting ' + (itemName || 'that token') + '. Click it again (or press Esc) to clear.' : 'Target cleared.');
 };
 net.clearMyTarget = function() { var t = net.targets[net.myId]; if (t) net.setTarget(t.id, t.mapId); };
+// [netcheck:targetas-start]
+// 158 (the owner by prompt, 2026-10-18: "From your selected token (Recommended)"): one of the GM's characters targets, with a pointer of its
+// own drawn from its token, as a player's is: keyed 'tk:' and the token's id, beside the GM's own pointer. The host's alone. Its pointer is
+// nobody's while that token is hidden or gone (targetTok), and a player whose sight drops that token is not sent it (targetsFor). Targeting
+// never starts or offers a fight (the owner: "we probably cant default to a fight when one player selects another")
+net.setTargetAs = function(from, itemId, mapId, itemName) {
+    if (!net.active || net.role !== 'host' || !from || typeof from.id !== 'string' || !from.id || from.id.length > 77 || typeof itemId !== 'string' || !itemId || itemId.length > 80 || itemId === from.id || typeof mapId !== 'string' || mapId.length > 80) return false;
+    var key = 'tk:' + from.id, cur = Object.prototype.hasOwnProperty.call(net.targets, key) ? net.targets[key] : null, who = String(from.charName || from.name || 'Your character').slice(0, 40);
+    var next = cur && cur.id === itemId && cur.mapId === mapId ? null : { id: itemId, mapId: mapId, from: from.id };
+    applyTarget(key, who, next); broadcastTargets();
+    toast(next ? who + ' is targeting ' + (itemName || 'that token') + '. Do it again to clear it.' : who + '\u2019s target is cleared.');
+    return true;
+};
+// What targets a token on a map, as the facing rules read it (systemcore setAimSource, registered by the sheet module): each attacker's own
+// token there, a player's character or one of the GM's characters, never the token itself. Judged for a viewer on the host (a player's
+// roll): only an attacker that player sees, never one the GM hid or their sight drops. With no viewer, every attacker this screen holds; on a
+// player's app their copy holds only what the host sent them
+function attackerTok(map, key, t) {
+    var wb = map && Array.isArray(map.whiteboard) ? map.whiteboard : [];
+    if (typeof t.from === 'string') return key === 'tk:' + t.from ? (wb.find(function(w) { return !!w && w.id === t.from; }) || null) : null;
+    var mine = wb.filter(function(w) { return !!w && w.isChar && !w.waiting && w.ownerId === key; });
+    return mine.find(function(w) { return !!w.charId; }) || mine[0] || null;
+}
+net.aimsOf = function(map, tok, viewer) {
+    if (!net.active || !map || typeof map.id !== 'string' || !tok || typeof tok.id !== 'string') return [];
+    var host = net.role === 'host', judged = host && typeof viewer === 'string' && !!viewer, camp = judged ? getActiveCampaign() : null, drop = null, out = [];
+    Object.keys(net.targets || {}).forEach(function(k) {
+        var t = net.targets[k]; if (!t || typeof t !== 'object' || t.id !== tok.id || t.mapId !== map.id) return;
+        var a = attackerTok(map, k, t); if (!a || a === tok || !a.isChar || a.waiting) return;
+        if (judged) { if (a.hidden) return; if (mapFogged(map)) { if (!drop) drop = fogDrop(camp, map, viewer) || {}; if (drop[a.id]) return; } }
+        out.push(a);
+    });
+    return out;
+};
+// [netcheck:targetas-end]
 // [netcheck:rangeto-start]
 // Range penalties R2 (docs/RANGE_PLAN.md 3): what RangeMod and TargetDistance read in a player's roll or apply action — from their token to
 // their own pointer's target on the map they are on: a character token their copy holds (never one the GM hid, nor on a fogged map one
@@ -6194,7 +6231,7 @@ function handleMessage(msg, conn) {
         if (!actA) { denyA('field'); return; }
         var locA = profA.location, mapA = (typeof locA === 'string' && campA.items && own(campA.items, locA)) ? campA.items[locA] : null;   // the facing and round names read their token on the map they are on, as their rolls do
         var vtA = window.wpVtt, ruleA = function(k) { return !vtA || (vtA.rulesOn ? vtA.rulesOn(k) : vtA.on(k)); };
-        var tcA = Sa.withRound(Sa.tokenCtx(mapA, Sa.charTokenOn(mapA, qa.charId, profA.id, { strict: true }), { turning: ruleA('turning'), posture: ruleA('posture'), elevation: ruleA('elevation') }), mapA && own(net.combats, locA) ? net.combats[locA] : null);
+        var tcA = Sa.withRound(Sa.tokenCtx(mapA, Sa.charTokenOn(mapA, qa.charId, profA.id, { strict: true }), { turning: ruleA('turning'), posture: ruleA('posture'), elevation: ruleA('elevation'), viewer: profA.id }), mapA && own(net.combats, locA) ? net.combats[locA] : null);
         if (typeof rangeTo === 'function' && Sa.withRange) tcA = Sa.withRange(tcA, rangeTo(campA, mapA, locA, Sa.charTokenOn(mapA, qa.charId, profA.id, { strict: true }), profA.id));   // range R2: an apply action reads the range as a roll does
         var varsA = Sa.makeResolver(viewA, chvA, Fa, tcA);
         if (qa.row) { varsA = varsA.row(qa.row.f, qa.row.r); if (!varsA) { denyA('missing'); return; } rowGmA = !!Sa.rowRollNames(campA.system, chA, qa.row.f, qa.row.r, [], Fa).gm; }   // H7b: the row's own names (a row they cannot see is gone); a row of a GM-only item keeps the card between them and the GM
@@ -6913,7 +6950,7 @@ function handleMessage(msg, conn) {
             if (!viewQ || !chvQ) { denyQ('char'); return; }
             var locQ = net.roster[conn.peer] && net.roster[conn.peer].location, mapQ = (typeof locQ === 'string' && campQ.items && own(campQ.items, locQ)) ? campQ.items[locQ] : null;   // 5h Fold 3: the facing names read the player's token on the map they are on
             var vtQ = window.wpVtt, ruleQ = function(k) { return !vtQ || (vtQ.rulesOn ? vtQ.rulesOn(k) : vtQ.on(k)); };
-            tcQ = SQ.tokenCtx(mapQ, SQ.charTokenOn(mapQ, q.charId, pidQ, { strict: true }), { turning: ruleQ('turning'), posture: ruleQ('posture'), elevation: ruleQ('elevation') });   // facing and stance from the player's own token, on the table's settings (as their sheet reads them)
+            tcQ = SQ.tokenCtx(mapQ, SQ.charTokenOn(mapQ, q.charId, pidQ, { strict: true }), { turning: ruleQ('turning'), posture: ruleQ('posture'), elevation: ruleQ('elevation'), viewer: pidQ });   // facing and stance from the player's own token, on the table's settings (as their sheet reads them)
             tcQ = SQ.withRound(tcQ, mapQ && own(net.combats, locQ) ? net.combats[locQ] : null);
             if (typeof rangeTo === 'function' && SQ.withRange) tcQ = SQ.withRange(tcQ, rangeTo(campQ, mapQ, locQ, SQ.charTokenOn(mapQ, q.charId, pidQ, { strict: true }), pidQ));   // range R2: RangeMod and TargetDistance, to their own target as their copy holds it   // HUD frame (HF5b): CombatRound reads the combat on the map they are on (the token context stays null without a token)
             chQ = srcQ; varsQ = SQ.makeResolver(viewQ, chvQ, Fq, tcQ);
