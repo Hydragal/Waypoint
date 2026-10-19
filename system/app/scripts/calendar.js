@@ -121,6 +121,7 @@ function timePassed(secs, rest, ask, live) {   // ask: always ask (a Set forward
         commitAcc(res.acc, live); return false;
     }
     pend = { secs: secs, rest: !!rest, fires: res.fires, acc: res.acc, on: on, camp: camp.id }; if (live === true) pend.live = true;
+    if (typeof window !== 'undefined' && window.wpNotices) window.wpNotices.wait('time', 'Time rules are due: ' + pendWords(sysCal()) + '.', 'time', null);   // 160: in the bell's list until it is answered
     if (live === true && !winOpen()) { refresh(); toast('Time rules are due: click the date in the header to apply or skip them.'); return true; }   // never a window opened under the GM's hands
     if (!winOpen()) openWin(); else renderWin();
     return true;
@@ -134,6 +135,8 @@ function queueStretch(secs, rest, ask, live) {
     if (last && (pendQ.length >= PEND_Q || (last.r === q.r && last.a === q.a && last.l === q.l))) { last.s += secs; return; }
     pendQ.push(q);
 }
+// 160: time rules due, as the bell's list knows them (notices.js): they wait while a list waits for the campaign on screen; Open opens the Calendar
+if (typeof window !== 'undefined') { var nkT = window.wpNoticeKinds = window.wpNoticeKinds || {}; nkT.time = { label: 'Open', still: function() { pendFor(getActiveCampaign()); return !!pend; }, run: function() { openWin(); } }; }
 function sinceWords(cal) { var s = livePend + pendQ.reduce(function(a, q) { return a + q.s; }, 0); return s > 0 ? fmtSpan(cal, s) + ' more has passed since. It is counted once you apply or skip these.' : ''; }
 function sinceSync() { var b = document.getElementById('calendarBody'), sn = b && b.querySelector ? b.querySelector('.cal-pend-since') : null; if (sn) { var sw = sinceWords(sysCal()); if (sn.textContent !== sw) sn.textContent = sw; } }
 function mapName(m) { var t = m && m.meta && typeof m.meta.title === 'string' ? m.meta.title.trim() : ''; return t || 'A map'; }
@@ -176,6 +179,7 @@ function pendPanel(body, cal) {   // 159 (the owner by prompt, 2026-10-18: "Ever
 function pendDone(apply) {
     var hadP = !!pend; pendFor(getActiveCampaign()); if (!pend) { if (hadP) renderWin(); return false; }   // a list of another campaign's is no list here
     var p = pend, cal = sysCal(); pend = null;
+    if (typeof window !== 'undefined' && window.wpNotices) window.wpNotices.done('time');   // 160
     var camp = getActiveCampaign(); if (!camp || camp.id !== p.camp) { renderWin(); return false; }
     if (apply) { var go = p.fires.filter(function(f) { return p.on[f.c] === true; }); if (go.length && window.wpSheets && window.wpSheets.runTimeRules) window.wpSheets.runTimeRules(go, spanWords(cal, p.secs, p.rest, p.live)); }
     commitAcc(p.acc);

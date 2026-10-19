@@ -136,6 +136,17 @@
      and Help fold into it: the controls stay in the page, out of sight, and a row here presses the control itself. toprow.js measures the
      row and says the answer as one word on the body */
   #moreMenu { left: auto; right: 0; min-width: 280px; overflow: visible; max-height: none; }   /* its list of kinds stands outside its own box */
+  #notesMenu { left: auto; right: 0; width: 340px; max-width: calc(100vw - 24px); }   /* 1.5.5: the bell's list (notices.js) */
+  .notes-head { display: flex; align-items: center; gap: 8px; padding: 0 2px 4px; }
+  .notes-head .rm-label { flex: 1 1 auto; }
+  .notes-list { display: flex; flex-direction: column; }
+  .notes-item { display: flex; align-items: flex-start; gap: 6px; padding: 5px 6px; border-top: 1px solid var(--edge); font-size: 12px; }
+  .notes-item.notes-wait { background: rgba(224,165,79,0.08); }
+  .notes-wait .notes-txt::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--gold); margin-right: 6px; vertical-align: 1px; }
+  .notes-txt { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+  .notes-when { display: block; color: var(--dim); font-size: 10.5px; }
+  .notes-go, .notes-x, .notes-clear { flex: 0 0 auto; padding: 1px 7px; font-size: 11.5px; }
+  .notes-none { padding: 8px 6px; color: var(--dim); font-size: 12px; }
   #moreMenuBtn { position: relative; }
   .rm-part { display: flex; flex-direction: column; }
   .rm-row[hidden] { display: none; }
@@ -1729,15 +1740,16 @@
   body.row-hidden:not(.tour-on):has(#sidebar:not(.collapsed):not([style*="none"])) header { right: calc(var(--rightw, 320px) + 12px); }   /* and clear of an open Properties panel */
   body.row-hidden:not(.tour-on) header > *:not(#mapTabs):not(#rowPills):not(#clockChip):not(#videoChip):not(.spacer):not(.header-group),
   body.row-hidden:not(.tour-on) header > .header-group > *:not(#updateBtn):not(#reviewChip):not(.hdr-group),
-  body.row-hidden:not(.tour-on) header .hdr-group:not([data-label="Table"]):not([data-label="Journal"]),
+  body.row-hidden:not(.tour-on) header .hdr-group:not([data-label="Table"]):not([data-label="Journal"]):not([data-label="Notices"]),
   body.row-hidden:not(.tour-on) header .hdr-group[data-label="Table"] > *:not(#chatBtn),
   body.row-hidden:not(.tour-on) header .hdr-group[data-label="Journal"] > *:not(#journalBtn),
   body.row-hidden:not(.tour-on) header #chatBtn:not(:has(#chatBadge:not([style*="display:none"]):not([style*="display: none"]))),
-  body.row-hidden:not(.tour-on) header #journalBtn:not(:has(#journalBadge:not([style*="display:none"]):not([style*="display: none"]))) { display: none !important; }
+  body.row-hidden:not(.tour-on) header #journalBtn:not(:has(#journalBadge:not([style*="display:none"]):not([style*="display: none"]))),
+  body.row-hidden:not(.tour-on) header #notesMenuWrap:not(:has(#notesBadge:not([style*="display:none"]):not([style*="display: none"]))) { display: none !important; }
   body.row-hidden:not(.tour-on) header #journalBtn:has(#journalBadge:not([style*="display:none"]):not([style*="display: none"])) { display: inline-flex !important; }   /* (also where the narrow row has folded it into More: an unread page must not be missed) */
-  body.row-hidden:not(.tour-on) header #rowPills, body.row-hidden:not(.tour-on) header #clockChip, body.row-hidden:not(.tour-on) header #videoChip, body.row-hidden:not(.tour-on) header #mapTabs > *, body.row-hidden:not(.tour-on) header #updateBtn, body.row-hidden:not(.tour-on) header #reviewChip, body.row-hidden:not(.tour-on) header #chatBtn, body.row-hidden:not(.tour-on) header #journalBtn { pointer-events: auto; }
-  body.row-hidden:not(.tour-on) header .map-tab, body.row-hidden:not(.tour-on) header #mapTabAdd, body.row-hidden:not(.tour-on) header #clockChip, body.row-hidden:not(.tour-on) header #chatBtn, body.row-hidden:not(.tour-on) header #journalBtn { background: var(--bg2); }
-  body.row-hidden:not(.tour-on) header #mapTabFront, body.row-hidden:not(.tour-on) header .map-tab, body.row-hidden:not(.tour-on) header #mapTabAdd, body.row-hidden:not(.tour-on) header .pill, body.row-hidden:not(.tour-on) header .hdr-clock, body.row-hidden:not(.tour-on) header #chatBtn, body.row-hidden:not(.tour-on) header #journalBtn { box-shadow: 0 1px 6px rgba(0,0,0,0.5); }
+  body.row-hidden:not(.tour-on) header #rowPills, body.row-hidden:not(.tour-on) header #clockChip, body.row-hidden:not(.tour-on) header #videoChip, body.row-hidden:not(.tour-on) header #mapTabs > *, body.row-hidden:not(.tour-on) header #updateBtn, body.row-hidden:not(.tour-on) header #reviewChip, body.row-hidden:not(.tour-on) header #chatBtn, body.row-hidden:not(.tour-on) header #journalBtn, body.row-hidden:not(.tour-on) header #notesBtn, body.row-hidden:not(.tour-on) header #notesMenu { pointer-events: auto; }
+  body.row-hidden:not(.tour-on) header .map-tab, body.row-hidden:not(.tour-on) header #mapTabAdd, body.row-hidden:not(.tour-on) header #clockChip, body.row-hidden:not(.tour-on) header #chatBtn, body.row-hidden:not(.tour-on) header #journalBtn, body.row-hidden:not(.tour-on) header #notesBtn { background: var(--bg2); }
+  body.row-hidden:not(.tour-on) header #mapTabFront, body.row-hidden:not(.tour-on) header .map-tab, body.row-hidden:not(.tour-on) header #mapTabAdd, body.row-hidden:not(.tour-on) header .pill, body.row-hidden:not(.tour-on) header .hdr-clock, body.row-hidden:not(.tour-on) header #chatBtn, body.row-hidden:not(.tour-on) header #journalBtn, body.row-hidden:not(.tour-on) header #notesBtn { box-shadow: 0 1px 6px rgba(0,0,0,0.5); }
   /* what stands at the top of a map moves down by the bar's height (26 px and a gap) while the row is hidden, so the bar touches none of it: the minimap and the zoom
      box first, then what stood on one line under the zoom box (the party strip, a player's join card and the turn strip), which keeps its distance, the party strip
      taking the zoom box's place when that is put away. A planner or a page has a toolbar of its own along its top edge: there the page starts under the bar. What is

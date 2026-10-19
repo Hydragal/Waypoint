@@ -2051,6 +2051,8 @@ export function toast(msg) {
 
     }
 
+    if (window.wpNotices && typeof window.wpNotices.add === 'function') { try { window.wpNotices.add(msg); } catch (e) {} }   // 160: every notice is kept in the bell's list as well (notices.js)
+
 }
 
 // Every module's local toast() shim delegates to window.appToast — hook it up here.

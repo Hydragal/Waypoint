@@ -16,7 +16,7 @@
    arrow keys, Home and End go through its rows, a letter goes to the next row that begins with it, Enter presses the row that has the focus,
    and Escape puts the menu away. */
 // [lookcheck:toprow-start]
-var MENUS = ['campMenu', 'moreMenu'];   // every menu of the row, by its id. Its button is the one whose aria-controls names it
+var MENUS = ['campMenu', 'moreMenu', 'notesMenu'];   // every menu of the row, by its id. Its button is the one whose aria-controls names it. notesMenu: the bell's (notices.js, 1.5.5)
 var ONE_ROW = 48;   // the row is 36 high while one line holds its controls, and 60 or more once it wraps: this stands between the two
 function menuBtn(id) { return document.querySelector('[aria-controls="' + id + '"]'); }
 function menuShown(id) { var m = document.getElementById(id); return !!m && m.hidden !== true; }
@@ -29,7 +29,7 @@ function menuSet(id, show) {
 function closeMenus(but) { var any = false; MENUS.forEach(function(id) { if (id !== but && menuShown(id)) { menuSet(id, false); any = true; } }); return any; }
 function openMenu(id) {   // one menu of the row is up at a time
     if (MENUS.indexOf(id) < 0) return false;
-    closeMenus(id); if (id === 'campMenu') campDraw(); if (id === 'moreMenu') { foldSync(); markSync(); }
+    closeMenus(id); if (id === 'campMenu') campDraw(); if (id === 'moreMenu') { foldSync(); markSync(); } if (id === 'notesMenu' && window.wpNotices && typeof window.wpNotices.draw === 'function') window.wpNotices.draw();
     return menuSet(id, true);
 }
 // A menu's rows are its buttons that are on screen, in the order they stand in: a row that is hidden takes no key and no focus
@@ -160,7 +160,7 @@ function wire() {
             var t = e.target, camp = t.closest && t.closest('[data-camp]'), press = t.closest && t.closest('[data-press]'), row = t.closest && t.closest('button, .menu-item');
             if (camp) { menuSet(id, false); b.focus(); campPick(camp.getAttribute('data-camp')); return; }   // a campaign. The focus goes back to the name first: a question the switch raises takes it from there
             if (press) { menuSet(id, false); var c = document.getElementById(press.getAttribute('data-press')); if (c) c.click(); return; }   // a row that stands for a control of the row presses that control
-            if (row && row.getAttribute('aria-haspopup') !== 'true') menuSet(id, false);   // any other row is the control itself: its own handler does the work and the menu steps aside. One that opens a list beside the menu leaves it up
+            if (row && row.getAttribute('aria-haspopup') !== 'true' && row.getAttribute('data-keep') == null) menuSet(id, false);   // any other row is the control itself: its own handler does the work and the menu steps aside. One that opens a list beside the menu leaves it up, and so does one marked data-keep (the bell's x and Clear all: 1.5.5)
         });
     });
     document.addEventListener('pointerdown', function(e) {   // a press anywhere else puts an open menu away

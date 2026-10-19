@@ -35,6 +35,14 @@ Calendar
   stands on.
 - With Rest picked, the steps say of rest.
 
+Notifications
+- A bell in the top row keeps every notice of the campaign, newest
+  first. What waits for you, such as an approval or time rules due,
+  stands on top with its own button until it is handled, and the
+  bell's number counts it. x takes a notice away, and Clear all asks
+  first. Your list stays on this computer through a restart. Players
+  have the bell too, for what their app told them at your table.
+
 WAYPOINT 1.5.4 — What's New
 ============================
 

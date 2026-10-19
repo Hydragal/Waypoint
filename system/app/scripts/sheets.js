@@ -4456,9 +4456,15 @@ function approveNote(charId, text, kind, upId) {   // upId (a review): the entry
     x.addEventListener('click', function() { apprDrop(charId); });
     row.appendChild(go); row.appendChild(x); card.appendChild(row);
     box.appendChild(card); _appr[charId] = { card: card, kind: k };
+    if (typeof window !== 'undefined' && window.wpNotices) window.wpNotices.wait('appr:' + charId, t, k, [charId, k, upK]);   // 160: and in the bell's list, until it no longer waits
     var ids = Object.keys(_appr); while (ids.length > 8) apprDrop(ids.shift());
     return card;
 }
+// 160: what waits for the GM's review, as the bell's list knows it (notices.js): a review while an upload or an ask of the character waits, its
+// sheet while a character finished in the making waits; each opens as its card does
+if (typeof window !== 'undefined') { var nkA = window.wpNoticeKinds = window.wpNoticeKinds || {};
+    nkA.review = { label: 'Review', still: function(a) { var cmp = getActiveCampaign(); return !!cmp && Array.isArray(a) && !!charById(a[0], cmp) && uploadsOf(cmp, a[0]).length > 0; }, run: function(a) { if (Array.isArray(a)) apprOpen(a[0], 'review', typeof a[2] === 'string' ? a[2] : null); } };
+    nkA.sheet = { label: 'Open', still: function(a) { var cmp = getActiveCampaign(), c = cmp && Array.isArray(a) ? charById(a[0], cmp) : null; return !!c && c.review === 1; }, run: function(a) { if (Array.isArray(a)) apprOpen(a[0], 'sheet'); } }; }
 function apprSync() { var camp = getActiveCampaign(); Object.keys(_appr).forEach(function(cid) { var a = _appr[cid], c = camp ? charById(cid, camp) : null; if (!c || isClient() || (a.kind === 'review' ? !uploadsOf(camp, cid).length : c.review !== 1)) apprDrop(cid); }); }
 // [systemcheck:approvenote-end]
 // [systemcheck:reviewchip-start]
@@ -4472,6 +4478,7 @@ function renderReviewChip() {
     chip.style.display = ups.length ? '' : 'none';
     if (!ups.length) return;
     var nEl = ui('reviewChipN'); if (nEl) nEl.textContent = String(ups.length);
+    if (typeof window !== 'undefined' && window.wpNotices) ups.forEach(function(u) { var cn = charById(u.charId, camp); if (cn) window.wpNotices.wait('appr:' + u.charId, u.ask === true ? cn.name + ' asks for a change. It waits for your review.' : 'A sheet update from ' + cn.name + ' waits for your review.', 'review', [u.charId, 'review', null], true); });   // 160: what waits after a restart, said again (the list keeps no waiting)
     chip.title = (ups.length === 1 ? 'A sheet update waits' : ups.length + ' sheet updates wait') + ' for your review: ' + ups.map(function(u) { var c = charById(u.charId, camp); return (c ? c.name : 'a character') + ' (' + u.changes.length + ')'; }).join(', ');
 }
 function reviewNext() { var up = reviewWaiting()[0]; if (!up) { renderReviewChip(); return; } openSheet(up.charId); openReview(up.charId); }

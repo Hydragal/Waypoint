@@ -4940,6 +4940,20 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             sl.length > 0 && sl.includes("card.appendChild(el('div', 'appr-text', t));") && !/innerHTML|outerHTML|insertAdjacentHTML|document\.write|\.src\s*=|href|on[a-z]+\s*=\s*['"]/.test(sl)
             && (sl.match(/setAttribute\(/g) || []).length === 3 && !/setAttribute\([^)]*\bt\b/.test(sl));
     }
+    {   // 1.5.5, backlog 160: the notifications' bell keeps every notice, and a notice may name a player or a character from the table. notices.js
+        // writes no markup at all, and its list is drawn with createElement and text nodes alone: a hostile notice run through the real draw is text
+        const nS = read('notices.js'), a = '// [lookcheck:notices-start]', z = '// [lookcheck:notices-end]', sl = nS.slice(nS.indexOf(a) + a.length, nS.indexOf(z)), HOST = '<img src=x onerror=alert(1)>';
+        const made = [], mk = t => { const e = { t, kids: [], attrs: {}, style: {}, className: '', set innerHTML(v) { throw new Error('markup'); }, appendChild(c) { this.kids.push(c); return c; }, removeChild(c) { this.kids = this.kids.filter(x => x !== c); }, get firstChild() { return this.kids[0] || null; }, setAttribute(k, v) { this.attrs[k] = String(v); }, getAttribute(k) { return this.attrs[k] == null ? null : this.attrs[k]; } }; made.push(t); return e; };
+        const list = mk('div'), doc = { createElement: mk, createTextNode: s => ({ t: '#text', data: String(s) }), getElementById: id => id === 'notesList' ? list : null, querySelectorAll: () => [] };
+        let ok = false, txt = [];
+        try {
+            const N = new Function('document', 'window', 'localStorage', 'getActiveCampaign', 'showConfirm', 'setTimeout', sl + '\nreturn { add, draw };')(doc, { wpCanPersistLocal: () => false }, { getItem: () => null, setItem() {}, removeItem() {} }, () => ({ id: 'k' }), () => {}, () => 0);
+            N.add(HOST, 1); N.draw();
+            const walk = n => (n.kids || []).forEach(k => { if (k.t === '#text') txt.push(k.data); walk(k); }); walk(list); ok = true;
+        } catch (e) { txt = [String(e)]; }
+        check('the notifications\' bell (notices.js) writes no markup: no innerHTML, outerHTML, insertAdjacentHTML or document.write in the module, and a hostile notice run through its real draw reaches the list as a text node, with only elements made by name',
+            ok && !/innerHTML|outerHTML|insertAdjacentHTML|document\.write/.test(nS) && txt.indexOf(HOST) >= 0 && made.every(t => ['div', 'span', 'button'].indexOf(t) >= 0), JSON.stringify([ok, txt.slice(0, 4), made.slice(0, 8)]));
+    }
     summed = true;
     console.log('\n' + pass + ' passed, ' + fail + ' failed.');
     if (fail) process.exit(1);
