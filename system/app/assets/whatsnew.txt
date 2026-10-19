@@ -23,6 +23,18 @@ Your own rows
   in the row's details. Write one level a line, as 2: what it gives.
   A row you make GM only keeps its text from its player.
 
+Calendar
+- Time rules now run at once by default: players' characters' rules run
+  as time passes, with no list to answer. Ask me is still there in
+  Settings for a GM who wants to say which run.
+- The steps, Move and Set in the Calendar window always work. Time you
+  move on while a list of time rules waits is counted once you apply
+  or skip it.
+- With Ask me, Apply and Skip stand at the top of the list, and
+  players' characters and NPCs are listed apart, by the map each
+  stands on.
+- With Rest picked, the steps say of rest.
+
 WAYPOINT 1.5.4 — What's New
 ============================
 

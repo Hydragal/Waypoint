@@ -417,7 +417,7 @@ function syncVttPanel() {
             if (role) role.style.display = 'none';
         }
     });
-    var trM = ui('setTimeRulesMode'); if (trM) { var tv0 = camp && camp.turnRules && typeof camp.turnRules === 'object' ? camp.turnRules.time : ''; trM.value = tv0 === 'auto' || tv0 === 'off' ? tv0 : 'confirm'; trM.disabled = !editable; }   // item 20 K5b
+    var trM = ui('setTimeRulesMode'); if (trM) { var tv0 = camp && camp.turnRules && typeof camp.turnRules === 'object' ? camp.turnRules.time : ''; trM.value = tv0 === 'confirm' || tv0 === 'off' ? tv0 : 'auto'; trM.disabled = !editable; }   // item 20 K5b; 159: Run at once is the default
     var flM = ui('setFillMode'); if (flM) { flM.value = camp && camp.turnRules && camp.turnRules.fill === 'gm' ? 'gm' : 'owner'; flM.disabled = !editable; }
     var taM = ui('setTargetAskMode'); if (taM) { taM.value = camp && camp.turnRules && typeof camp.turnRules === 'object' && camp.turnRules.targetAsk === 'off' ? 'off' : 'ask'; taM.disabled = !editable; }   // the owner's ruling of 2026-10-01
     var tmS = ui('setTimersMode'); if (tmS) { tmS.value = camp && camp.turnRules && camp.turnRules.timers === 'gm' ? 'gm' : 'owner'; tmS.disabled = !editable; }   // T5b
@@ -474,11 +474,11 @@ if (_timersSel) _timersSel.addEventListener('change', function() {
     if (window.wpSave) window.wpSave(true);
     toast(val === 'gm' ? 'Only you pause, reset or stop effect timers.' : 'A character\'s player may pause, reset or stop its effect timers too.');
 });
-var _timeRulesSel = ui('setTimeRulesMode');   // item 20 K5b: confirm (absent) | auto | off — the time rules' mode, the campaign's
+var _timeRulesSel = ui('setTimeRulesMode');   // item 20 K5b: auto (absent; the default since 1.5.5, 159) | confirm | off — the time rules' mode, the campaign's
 if (_timeRulesSel) _timeRulesSel.addEventListener('change', function() {
     var v = window.wpVtt, camp = state.appState.campaigns[state.appState.activeCampaignId]; if (!camp || (v && v.locked())) { syncPanel(); return; }
-    var val = _timeRulesSel.value === 'auto' || _timeRulesSel.value === 'off' ? _timeRulesSel.value : 'confirm', tr = Object.assign({}, camp.turnRules && typeof camp.turnRules === 'object' ? camp.turnRules : {});
-    if (val === 'confirm') delete tr.time; else tr.time = val; camp.turnRules = tr;
+    var val = _timeRulesSel.value === 'confirm' || _timeRulesSel.value === 'off' ? _timeRulesSel.value : 'auto', tr = Object.assign({}, camp.turnRules && typeof camp.turnRules === 'object' ? camp.turnRules : {});
+    if (val === 'auto') delete tr.time; else tr.time = val; camp.turnRules = tr;
     if (window.wpSave) window.wpSave(true);
     toast(val === 'auto' ? 'Time rules run at once for players\u2019 characters when time passes.' : val === 'off' ? 'No time rules run.' : 'You say which time rules run when time passes.');
 });

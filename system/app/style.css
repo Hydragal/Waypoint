@@ -2508,6 +2508,11 @@
   .cal-pend-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; cursor: pointer; }
   .cal-pend-name { font-weight: 600; }
   .cal-pend-rules { color: var(--dim); overflow-wrap: anywhere; }
+  .cal-pend-bar .cal-pend-head { flex: 1 1 auto; }   /* 159: Apply and Skip at the top of the list */
+  .cal-pend-list { display: flex; flex-direction: column; gap: 4px; max-height: 260px; overflow-y: auto; }   /* 159: a long list scrolls, the steps stay in reach */
+  .cal-pend-group { font-weight: 600; margin-top: 4px; }
+  .cal-pend-map { font-size: 11px; color: var(--dim); }
+  .cal-pend-since:empty { display: none; }
   .cal-pend-bar, .cal-kind { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
   .cal-kind-btn.cal-kind-on, .cal-live-btn.cal-kind-on { border-color: var(--gold); color: var(--gold); font-weight: 700; }
   .cal-live { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 6px; }   /* 1.5.4: Runs / Held and the speed */
