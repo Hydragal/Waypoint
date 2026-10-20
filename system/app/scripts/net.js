@@ -2072,7 +2072,8 @@ net.broadcastItemFiltered = function(campId, itemId) {
 };
 // Host: an item leaves every admitted player's copy — a deleted map or planner, a page turned GM-only.
 // The send baseline goes too, so the next send after off→on is whole. Never through broadcast(): admitted only.
-net.itemGone = function(campId, itemId) {
+// title: a deleted map's own name as it was, which the end of a fight on it names (fold 0); none says the deleted map
+net.itemGone = function(campId, itemId, title) {
     delete _lastSent[itemId];
     if (typeof sensesForgetMap === 'function') sensesForgetMap(itemId);   // Senses S0: and what anyone's copy of it was made by
     if (typeof fogForgetMap === 'function') fogForgetMap(itemId);   // fold M5: and what anyone's copy of it holds
@@ -2080,6 +2081,7 @@ net.itemGone = function(campId, itemId) {
     if (typeof mapForgetMap === 'function') mapForgetMap(itemId);   // possession: and who held it whole
     if (typeof strokeActsForget === 'function') strokeActsForget(campId, itemId);   // 127: and the count of what players did to their drawings on it
     if (!(net.active && net.role === 'host')) return;
+    if (typeof combatOver === 'function' && net.combats && Object.prototype.hasOwnProperty.call(net.combats, itemId) && combatOver(itemId, net.combats[itemId], false, title)) { broadcastCombats(); combatRefresh(); }   // fold 0 (backlog 152): a fight on a deleted map ends as End combat ends it, so the clock no longer waits for it
     var msg = { type: 'itemGone', campId: campId, itemId: itemId };
     net.conns.forEach(function(c) { if (c.open && net.roster[c.peer]) { try { c.send(msg); } catch (e) { sendFailed(e); } } });
 };
@@ -4512,6 +4514,35 @@ function fxClockStart() { if (!_fxClock && typeof setInterval === 'function') _f
 // [netcheck:fxtime-end]
 function mapTitleOf(mapId) { var camp = getActiveCampaign(); var m = camp && camp.items[mapId]; return (m && m.meta && m.meta.title) || mapId; }
 net.combatFor = function(mapId) { return net.active && net.combats[mapId] || null; };
+// Fold 0 (backlog 152, docs/FIGHT_CLOCK_DESIGN.md): a fight ends as End combat ends it, in ONE place: End (combatSet with null), the session's end
+// (combatsOverAll, from leaveSession) and a deleted map (net.itemGone). What its characters spent goes, their timed effects run again, the Calendar
+// counts its rounds (asked once a fight), the marks follow every move again and nothing of it stays seen. quiet: no notice of its own (the session's
+// end says one for every fight). The caller broadcasts. A deleted map holds no token to find its characters by: every character no fight holds
+// now loses what it spent, and the clock's own tick runs at once, which sets their effects going as it does every few seconds (combatFreed).
+// title: a deleted map's own name, which the delete hands on through net.itemGone; with none the notice and the log line say the deleted map
+function combatOver(mapId, had, quiet, title) {
+    var campO = had ? getActiveCampaign() : null, gone = !!had && !(campO && campO.items && Object.prototype.hasOwnProperty.call(campO.items, mapId)), nmO = had ? (gone ? (typeof title === 'string' && title ? title : 'the deleted map') : mapTitleOf(mapId)) : '';
+    if (had) { try { turnActsEnd(mapId, had); } catch (e) { console.error(e); } }   // T4
+    if (had) { try { fxCombatEdge(mapId, had, 'resume'); } catch (e) { console.error(e); } }   // T5a: their effects' clocks run again
+    if (had && typeof clockFightEnd === 'function') clockFightEnd();   // item 20 K5 (the owner's answer): the fight's rounds counted as active time for the time rules
+    if (had) { logEvent('table', 'Combat ended on ' + nmO + ' after ' + had.round + ' round' + (had.round === 1 ? '' : 's')); if (!quiet) toast('Combat ended on ' + nmO + '.'); }
+    delete net.combats[mapId];
+    if (had && typeof marksEnd === 'function') { try { marksEnd(mapId); } catch (e) { console.error(e); } }   // senses S4b: the marks follow every move again
+    if (typeof combatForget === 'function') combatForget(mapId);   // the fight over: nothing of it seen
+    if (gone) { try { combatFreed(campO); } catch (e) { console.error(e); } }
+    return !!had;
+}
+// Every character no fight holds is taken as one the deleted fight held. That is so while net.turnSpent holds fighters alone, as it does today: actSpend
+// counts only in a fight, and a turn's start and a fight's end take a character's count away. A count kept for a character outside every fight
+// (free rounds, fold 9 of docs/FIGHT_CLOCK_DESIGN.md) must be passed over here, or this must take only what the deleted fight held
+function combatFreed(camp) {   // a deleted map's fight is over: what the characters no fight holds now had spent goes, and the clock's tick sets their effects going
+    Object.keys(net.turnSpent || {}).forEach(function(id) { if (!charCombat(camp, id)) { delete net.turnSpent[id]; actsTell(camp, id, true); } });
+    fxClockTick();
+}
+function combatsOverAll() {   // the session's end: every fight ends as End ends it, quietly; how many ended
+    var n = 0; Object.keys(net.combats || {}).forEach(function(mid) { if (combatOver(mid, net.combats[mid], true)) n++; });
+    return n;
+}
 // host: put a combat on a map (or take it off with null)
 net.combatSet = function(mapId, combat) {
     if (net.role !== 'host') return;
@@ -4528,15 +4559,7 @@ net.combatSet = function(mapId, combat) {
         if (had && had.round !== net.combats[mapId].round && typeof clockRounds === 'function') clockRounds(net.combats[mapId].round - had.round);   // item 20 K2: a round edited in the roster moves the clock with it (a new fight moves nothing)
         if (!had) logEvent('table', 'Combat started on ' + mapTitleOf(mapId) + ': ' + combat.rows.map(function(r) { return r.name; }).join(', '));
         toast(had ? 'Combat roster updated.' : 'Combat started on ' + mapTitleOf(mapId) + ' — ' + (net.combats[mapId].rows[net.combats[mapId].turn] || net.combats[mapId].rows[0]).name + ' goes first.');
-    } else {
-        if (had) { try { turnActsEnd(mapId, had); } catch (e) { console.error(e); } }   // T4
-        if (had) { try { fxCombatEdge(mapId, had, 'resume'); } catch (e) { console.error(e); } }   // T5a: their effects' clocks run again
-        if (had && typeof clockFightEnd === 'function') clockFightEnd();   // item 20 K5 (the owner's answer): the fight's rounds counted as active time for the time rules
-        if (had) { logEvent('table', 'Combat ended on ' + mapTitleOf(mapId) + ' after ' + had.round + ' round' + (had.round === 1 ? '' : 's')); toast('Combat ended on ' + mapTitleOf(mapId) + '.'); }
-        delete net.combats[mapId];
-        if (had && typeof marksEnd === 'function') { try { marksEnd(mapId); } catch (e) { console.error(e); } }   // senses S4b: the marks follow every move again
-        if (typeof combatForget === 'function') combatForget(mapId);   // the fight over: nothing of it seen
-    }
+    } else combatOver(mapId, had);   // End: the one way a fight ends (fold 0, backlog 152), which the session's end and a deleted map share
     broadcastCombats(); combatRefresh();
     if (combat && !had) { try { fxCombatEdge(mapId, net.combats[mapId], 'bank'); } catch (e) { console.error(e); } }   // T5a: their effects' clocks stop (what ran is kept)
     if (combat && !had) turnStarted(mapId, net.combats[mapId]);   // T2b: the first turn (after the broadcast: its player's note comes last)
@@ -7728,6 +7751,7 @@ function leaveSession(silent) {
     var wasHost = net.active && net.role === 'host';
     if (typeof actForget === 'function') actForget();   // 14c: the record of their actions on their way goes with the table
     if (wasHost && typeof fogDragSweep === 'function') fogDragSweep(true);   // fold M4: every drag still open goes back where it began, while the table still hears it
+    var fightsOver = wasHost && !net.stream && typeof combatsOverAll === 'function' ? combatsOverAll() : 0;   // fold 0 (backlog 152): every fight ends as End combat ends it, quietly, while the table still hears it: its effects run again and the Calendar's clock stops waiting
     if (!silent && net.active && net.role === 'host') {
         broadcast({ type: 'end' }, null);   // give players a clean "session ended" instead of a silent drop
         forgetHostCode();                   // a deliberate end retires the code; only a crash keeps it for resume
@@ -7768,7 +7792,7 @@ function leaveSession(silent) {
         net.stageOverride = null;
         net.stageMode = null; net.stageFallback = null; net.stagePicked = {};   // the next session starts from the defaults again
         setStatus('Not in a session.');
-        toast(wasClient ? 'Left the session — restoring your own campaign.' : wasHost ? 'Session ended for everyone — the room code is retired.' : 'Left the session.');
+        toast(wasClient ? 'Left the session — restoring your own campaign.' : wasHost ? 'Session ended for everyone — the room code is retired.' + (fightsOver ? (fightsOver === 1 ? ' The fight ended too.' : ' The ' + fightsOver + ' fights ended too.') : '') : 'Left the session.');
         if (wasHost) { logEvent('session', 'Session ended'); net.applyingRemote = true; save(true); net.applyingRemote = false; }
         if ((wasClient || net.foreign) && !window.wpStream) load();   // foreign without a live link (a failed re-join) still leaves this way
     }

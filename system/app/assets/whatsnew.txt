@@ -55,6 +55,12 @@ Targeting and facing
   attackers that player sees.
 - Targeting never starts a fight by itself.
 
+Combat
+- A fight now ends as End combat ends it when you end the session or
+  delete the map it is on. Its timed effects run again at once, its
+  rounds count for the time rules, and the Calendar's clock no longer
+  waits for it.
+
 WAYPOINT 1.5.4 — What's New
 ============================
 

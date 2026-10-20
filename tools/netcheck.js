@@ -1536,7 +1536,7 @@ pendingChecks.push((async () => {
         j([bFresh, bEdge, bOld, bAhead, bText, bBare, bList]));
     check('undo count (127, the source): the gate notes in exactly three places, each through typeof so that a page with no count is as before; the count is published as three questions and a number, never as its sets; a map that is deleted takes its count with it; the count is not forgotten at a new table (a step of the GM\'s undo may be older than the session)',
         (patchSrc.match(/if \(typeof strokeNote === 'function'\) strokeNote\(msg\.campId, msg\.itemId, '(added|redrawn|erased)', /g) || []).length === 3 && (patchSrc.match(/strokeNote\(/g) || []).length === 3
-        && /net\.strokeActs = strokeActs; net\.strokeSeq = function\(\) \{ return _strokeSeq; \};/.test(actsSrc) && !/net\.[A-Za-z_]+ = _strokeActs/.test(src) && /if \(typeof strokeActsForget === 'function'\) strokeActsForget\(campId, itemId\);/.test(fnSrc('net.itemGone = function(campId, itemId) {', '\n};', 'itemGone'))
+        && /net\.strokeActs = strokeActs; net\.strokeSeq = function\(\) \{ return _strokeSeq; \};/.test(actsSrc) && !/net\.[A-Za-z_]+ = _strokeActs/.test(src) && /if \(typeof strokeActsForget === 'function'\) strokeActsForget\(campId, itemId\);/.test(fnSrc('net.itemGone = function(campId, itemId, title) {', '\n};', 'itemGone'))
         && (src.match(/_strokeActs = /g) || []).length === 1 && (src.match(/_strokeSeq = /g) || []).length === 1 && (src.match(/strokeActsForget\(/g) || []).length === 2);
 })());
 // R2 security (cluster A, #1 #3 #23): the patch path with the REAL playerStroke — a copy of the map they are on, ids that are keys, each new id once,
@@ -3576,6 +3576,96 @@ pendingChecks.push((async () => {
         j(seen) === j(['r1t0=m1:1', 'r1t1=m1:1', 'r1t2=m1:1', 'r2t0=m1:1,m1:2', 'r1t2=m1:1,m1:2,m1:1', 'r1t1=m1:1,m1:2,m1:1', 'r1t0=m1:1,m1:2,m1:1',
             'r2t0=m1:1,m1:2,m1:1,m1:2', 'r5t0=m1:1,m1:2,m1:1,m1:2,m1:5', 'none=m1:1,m1:2,m1:1,m1:2,m1:5']) && j(errs) === j(['boom']), j([seen, errs]));
 }
+
+// Fold 0 (backlog 152, docs/FIGHT_CLOCK_DESIGN.md): a fight ends as End combat ends it when the session ends (leaveSession) and when its map is
+// deleted (net.itemGone). net.js sliced and run for real on stubs: leaveSession and net.itemGone beside the combats slice and everything from
+// combatRefresh to combatStep (combatOver, combatsOverAll, turnActsEnd, fxCombatEdge and the clock's tick with the real fxTick, clockFightEnd);
+// calendar.js liveHeld with its own helpers and the real cleanClock. Before this fold the session's end dropped every fight with its effects banked
+// until the clock's next tick and the Calendar never asked, and a deleted map left its fight running, so the clock waited for it for the rest of
+// the session. The review of fold 0: a fighter still in another fight keeps what it spent (combatFreed's guard), and a deleted map's fight is named
+// by the name dialogs.js hands on
+pendingChecks.push((async () => {
+    const url = f => 'file:///' + path.resolve(path.join(__dirname, '..', 'system', 'app', 'scripts', f)).split(String.fromCharCode(92)).join('/');
+    const Sx = await import(url('systemcore.js')), Fx = await import(url('formula.js')), Cx = await import(url('calendarcore.js'));
+    const J = v => JSON.stringify(v);
+    const setS = fnSrc('function combatRefresh() {', '\nnet.combatStep = function', 'combatSet'), cbS = between('// [netcheck:combats-start]', '// [netcheck:combats-end]', 'combats');
+    const lvS = fnSrc('function leaveSession(silent) {', '\n}\n', 'leaveSession') + '\n}\n';
+    const igA = src.indexOf('net.itemGone = function(campId, itemId, title) {'), igS = src.slice(igA, src.indexOf('\n};\n', igA) + 4);
+    const pidS = (() => { const i = src.indexOf('function peerProfileId('); return src.slice(i, src.indexOf('\n', i)) + '\n'; })();
+    const calJs = fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', 'calendar.js'), 'utf8').replace(/\r\n/g, '\n');
+    const calLine = k => { const i = calJs.indexOf(k); if (i < 0 || calJs.indexOf(k, i + 1) >= 0) throw new Error('netcheck: ' + k + ' not found once in calendar.js'); return calJs.slice(i, calJs.indexOf('\n', i)); };
+    const lhA = calJs.indexOf('function liveHeld(camp) {'), lhS = calJs.slice(lhA, calJs.indexOf('\n}\n', lhA)) + '\n}\n';
+    const liveHeldOf = n => new Function('window', 'cleanClock', "'use strict';\n" + ['function net() {', 'function isPlayer() {', 'function clockOn() {', 'function clockOf(camp) {'].map(calLine).join('\n') + '\n' + lhS + '\nreturn liveHeld;')(
+        { wpNet: n, wpVtt: { on: k => k === 'calendar' } }, Cx.cleanClock);
+    const sysF = Sx.cleanSystem({ v: 1, name: 'F', fields: [{ id: 'f_fx', key: 'Effects', kind: 'effects' }], rolls: [], effects: [{ id: 'e_c', name: 'Charge', dur: '10 turns', mods: [] }], combat: { turn: { acts: [{ key: 'Action', n: 1 }] } } }, { F: Fx, gmView: true });
+    const mkW = o => {
+        o = o || {};
+        const ev = [], toasts = [], logs = [], cal = [], marks = [], loads = [];
+        const tok = (id, charId, ownerId) => ({ id, type: 'image', isChar: true, charId, ownerId: ownerId || null, x: 0, y: 0, w: 50, h: 50 });
+        const fx = id => ({ f_fx: [{ id, ref: 'e_c', on: true, t: { left: 30, at: 0 } }] });   // banked, as a fight's start leaves them
+        const camp = { id: 'k', clock: { t: 0 }, system: sysF,
+            items: { mDocks: { type: 'map', meta: { title: 'Docks' }, whiteboard: [tok('t_kael', 'c_kael', 'u_a'), tok('t_u7', 'c_u7')] }, mBridge: { type: 'map', meta: { title: 'Bridge' }, whiteboard: [tok('t_u9', 'c_u9')] }, pNote: { type: 'doc', meta: { title: 'Notes' } } },
+            chars: { c_kael: { id: 'c_kael', name: 'Kael', ownerId: 'u_a', values: fx('x_k') }, c_u7: { id: 'c_u7', name: 'Unit 7', npc: true, values: fx('x_7') }, c_u9: { id: 'c_u9', name: 'Unit 9', npc: true, values: fx('x_9') } } };
+        if (o.sela) { camp.items.mBridge.whiteboard.push(tok('t_sela', 'c_sela', 'u_a')); camp.chars.c_sela = { id: 'c_sela', name: 'Sela', ownerId: 'u_a', values: fx('x_s') }; }   // the review of fold 0: a player's character still fighting on the Bridge
+        const row = (id, name) => ({ id: 'r_' + id, name, tokId: id, init: 0, src: null });
+        const conns = [{ peer: 'pA', open: true, sent: [], send(m) { packCheck(m); this.sent.push(JSON.parse(JSON.stringify(m))); } }];
+        const net = { active: true, role: o.role || 'host', stream: !!o.stream, foreign: o.role === 'client', myId: 'u_gm', conns, roster: { pA: { id: 'u_a' } }, peer: null, paused: false,
+            combats: { mDocks: { mapId: 'mDocks', round: 3, turn: 1, rows: [row('t_kael', 'Kael'), row('t_u7', 'Unit 7')] }, mBridge: { mapId: 'mBridge', round: 1, turn: 0, rows: [row('t_u9', 'Unit 9')] } },
+            syncCharDelta: () => {}, videoStop: () => {}, libReset: () => {} };
+        if (o.sela) net.combats.mBridge.rows.push(row('t_sela', 'Sela'));
+        const win = { wpVtt: { on: k => (k === 'calendar' ? o.calendar === true : true) }, wpSheets: { charChanged: () => {} }, wpCalendar: { fightEnded: () => { cal.push(net.active); ev.push('calendar'); } } };
+        const broadcast = msg => { packCheck(msg); ev.push('broadcast:' + msg.type); conns.forEach(c => { if (c.open && net.roster[c.peer]) c.send(msg); }); };
+        const noop = () => {}, env = { net, window: win, getActiveCampaign: () => camp, SC: () => Sx, own: (ob, k) => !!ob && Object.prototype.hasOwnProperty.call(ob, k), broadcast, sendFailed: e => { throw e; }, logEvent: (k, t) => logs.push(k + ':' + t), toast: t => toasts.push(t),
+            render: noop, moveMode: () => 'refuse', saveRemoteSoon: noop, pushChat: noop, anyFog: () => false, fogDrop: () => null, marksEnd: mid => marks.push(mid), _lastSent: {},
+            forgetHostCode: noop, cancelReconnect: noop, videoOver: noop, diceSessionReset: noop, _libSpent: {}, _shareBytes: {}, _shareCount: {}, resetAssetTransfers: noop, endWaiting: noop, combatAskOpen: {}, combatAsked: {}, renderNotepad: noop,
+            setTimeout: noop, stopHeartbeat: noop, setIndicator: noop, setPausedLocal: noop, setTravelLockLocal: noop, setSelfPausedLocal: noop, bannedIds: {}, pendingJoins: [], approvalOpen: false, _unboundSaid: {}, ui: () => null, renderRoster: noop, setStatus: noop,
+            save: noop, load: () => loads.push(1), syncSessionButtons: noop };
+        const api = new Function(...Object.keys(env), "'use strict';\n" + pidS + cbS + '\n' + setS + '\n' + lvS + '\n' + igS + '\nreturn { leaveSession, combatSeen, combatSaw };')(...Object.values(env));
+        net.turnSpent.c_kael = { Action: 1 };   // Kael spent his action this turn (the slice's own line set the record empty)
+        if (o.sela) net.turnSpent.c_sela = { Action: 1 };   // and Sela spent hers in the fight on the Bridge
+        api.combatSaw('mDocks', 'u_a', 't_u7');   // and Kael's player has seen Unit 7 in this fight
+        const atOf = () => { const out = {}; Object.keys(camp.chars).forEach(id => { const t = camp.chars[id].values.f_fx[0].t; out[id] = t.at > 0 ? 'run' : 'banked'; }); return out; };
+        const acts = () => conns[0].sent.filter(m => m.type === 'acts-left').map(m => m.charId + ':' + J(m.left));
+        return { net, camp, api, ev, toasts, logs, cal, marks, loads, conns, atOf, acts, seen: () => api.combatSeen('mDocks', 'u_a', 't_u7') };
+    };
+    const runs = (W, silent) => { W.api.leaveSession(silent); return { cal: W.cal, ev: W.ev, at: W.atOf(), spent: J(W.net.turnSpent), acts: W.acts(), marks: W.marks, seen: W.seen(), combats: J(W.net.combats), toasts: W.toasts, logs: W.logs, loads: W.loads.length }; };
+    const allRun = { c_kael: 'run', c_u7: 'run', c_u9: 'run' }, allBanked = { c_kael: 'banked', c_u7: 'banked', c_u9: 'banked' }, kaelSpent = J({ c_kael: { Action: 1 } });
+    const ended = ['table:Combat ended on Docks after 3 rounds', 'table:Combat ended on Bridge after 1 round'], bye = 'Session ended for everyone — the room code is retired.';
+    const hGot = runs(mkW(), false), qGot = runs(mkW(), true), oneW = mkW(); delete oneW.net.combats.mBridge; const oGot = runs(oneW, false), noneW = mkW(); noneW.net.combats = {}; const zGot = runs(noneW, false);
+    const pGot = runs(mkW({ role: 'client' }), false), tGot = runs(mkW({ stream: true }), false);
+    check('fold 0 (run for real): the session\'s end on the host ends every fight as End combat ends it, while the table still hears it — the Calendar asked once a fight with the table still on, both before the end is said; every fighter\'s timed effects running again (Kael, Unit 7, Unit 9); what Kael spent gone and his player told; the marks\' end on each map; nothing of a fight still seen; one log line a fight; quietly: no notice of a fight, the session\'s one notice saying the fight or the fights ended too, and a silent end (a new table over it) saying nothing at all; nothing at all on a player\'s app (its copy of the fights simply goes) or in the stream window, even one that says it hosts',
+        J(hGot) === J({ cal: [true, true], ev: ['calendar', 'calendar', 'broadcast:end'], at: allRun, spent: '{}', acts: ['c_kael:null'], marks: ['mDocks', 'mBridge'], seen: false, combats: '{}', toasts: [bye + ' The 2 fights ended too.'], logs: ended.concat(['session:Session ended']), loads: 0 })
+        && J(oGot.toasts) === J([bye + ' The fight ended too.']) && J(oGot.cal) === J([true]) && J(zGot.toasts) === J([bye]) && J(zGot.cal) === '[]' && J(zGot.at) === J(allBanked)
+        && J(qGot) === J({ cal: [true, true], ev: ['calendar', 'calendar'], at: allRun, spent: '{}', acts: ['c_kael:null'], marks: ['mDocks', 'mBridge'], seen: false, combats: '{}', toasts: [], logs: ended, loads: 0 })
+        && J(pGot) === J({ cal: [], ev: [], at: allBanked, spent: kaelSpent, acts: [], marks: [], seen: true, combats: '{}', toasts: ['Left the session — restoring your own campaign.'], logs: [], loads: 1 })
+        && J(tGot) === J({ cal: [], ev: ['broadcast:end'], at: allBanked, spent: kaelSpent, acts: [], marks: [], seen: true, combats: '{}', toasts: [bye], logs: ['session:Session ended'], loads: 0 }),
+        J([hGot, oGot.toasts, zGot.toasts, qGot, pGot, tGot]));
+    // a deleted map: the GM's delete takes the map out of the campaign first, then asks net.itemGone
+    const sentOf = W => W.conns[0].sent.filter(m => m.type === 'combats' || m.type === 'itemGone').map(m => m.type === 'combats' ? 'combats:' + Object.keys(m.combats).join(',') : 'itemGone:' + m.itemId);
+    const G = mkW({ calendar: true, sela: true }), lhG = liveHeldOf(G.net), g0 = lhG(G.camp);
+    delete G.camp.items.mDocks; G.net.itemGone('k', 'mDocks', 'Docks');
+    const g1 = { lh: lhG(G.camp), combats: Object.keys(G.net.combats), cal: G.cal.slice(), toasts: G.toasts.slice(), logs: G.logs.slice(), marks: G.marks.slice(), seen: G.seen(), spent: J(G.net.turnSpent), acts: G.acts(), sent: sentOf(G), at: G.atOf() };
+    delete G.camp.items.mBridge; G.net.itemGone('k', 'mBridge'); const g2 = { lh: lhG(G.camp), combats: J(G.net.combats), cal: G.cal.length, toasts: G.toasts.slice(1), logs: G.logs.slice(1), spent: J(G.net.turnSpent), acts: G.acts(), sent: sentOf(G).slice(2) };
+    G.net.itemGone('k', 'mDocks', 'Docks'); G.net.itemGone('k', 'pNote', 'Notes'); const g3 = { cal: G.cal.length, toasts: G.toasts.length, combats: sentOf(G).filter(s => /^combats/.test(s)).length };
+    const G2 = mkW({ sela: true }); delete G2.camp.items.mDocks; G2.net.itemGone('k', 'mDocks', 'Docks'); const g4 = G2.atOf();
+    const GP = mkW({ role: 'client' }); delete GP.camp.items.mDocks; GP.net.itemGone('k', 'mDocks', 'Docks'); const g5 = { combats: Object.keys(GP.net.combats), cal: GP.cal.length, sent: GP.conns[0].sent.length, toasts: GP.toasts.length };
+    const E = mkW({ sela: true }); E.net.combatSet('mDocks', null);
+    const eGot = { combats: Object.keys(E.net.combats), cal: E.cal, toasts: E.toasts, logs: E.logs, marks: E.marks, seen: E.seen(), spent: J(E.net.turnSpent), acts: E.acts(), sent: sentOf(E), at: E.atOf() };
+    const selaSpent = J({ c_sela: { Action: 1 } }), selaBanked = { c_kael: 'banked', c_u7: 'banked', c_u9: 'banked', c_sela: 'banked' }, docksRun = { c_kael: 'run', c_u7: 'run', c_u9: 'banked', c_sela: 'banked' };
+    check('fold 0 (run for real): a fight on a deleted map ends as End combat ends it — the fight taken away and the players sent the fights left, before they are told the map is gone; the Calendar asked once; End\'s notice and log line naming the map by the name the delete hands on, and as the deleted map where none is handed on; the marks\' end; nothing of it still seen; what Kael spent gone and his player told, while what Sela spent, still fighting on the Bridge, stays and her player is told nothing until that fight ends too — so the clock no longer waits for it (calendar.js liveHeld: a fight, then still a fight on the Bridge, then running once that map goes too); a map with no token left to find its fighters by has the clock\'s own tick set their effects going at once (the Calendar off: Kael and Unit 7 run again, Unit 9 and Sela still banked in the fight on the Bridge; the Calendar on: banked, as the game clock counts them); another delete, of that map again or of a page, ends nothing; on a player\'s app a delete ends no fight; End itself as before',
+        g0 === 'fight' && J(g1) === J({ lh: 'fight', combats: ['mBridge'], cal: [true], toasts: ['Combat ended on Docks.'], logs: ['table:Combat ended on Docks after 3 rounds'], marks: ['mDocks'], seen: false, spent: selaSpent, acts: ['c_kael:null'], sent: ['combats:mBridge', 'itemGone:mDocks'], at: selaBanked })
+        && J(g2) === J({ lh: '', combats: '{}', cal: 2, toasts: ['Combat ended on the deleted map.'], logs: ['table:Combat ended on the deleted map after 1 round'], spent: '{}', acts: ['c_kael:null', 'c_sela:null'], sent: ['combats:', 'itemGone:mBridge'] }) && J(g3) === J({ cal: 2, toasts: 2, combats: 2 })
+        && J(g4) === J(docksRun) && J(g5) === J({ combats: ['mDocks', 'mBridge'], cal: 0, sent: 0, toasts: 0 })
+        && J(eGot) === J({ combats: ['mBridge'], cal: [true], toasts: ['Combat ended on Docks.'], logs: [ended[0]], marks: ['mDocks'], seen: false, spent: selaSpent, acts: ['c_kael:null'], sent: ['combats:mBridge'], at: docksRun }),
+        J([g0, g1, g2, g3, g4, g5, eGot]));
+    const dlgJs = fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', 'dialogs.js'), 'utf8');
+    check('fold 0 (source): End, the session\'s end and a deleted map end a fight in one place (combatOver); the session\'s end asks it right after its drags go back, before the end is said and while the table is still on, never in the stream window; a deleted map asks it only on an active host, before the players are told, with the name it was handed; dialogs.js\'s two deletes of an item hand on the name the item had',
+        (src.match(/combatOver\(/g) || []).length === 4 && /\} else combatOver\(mapId, had\);/.test(src) && /var fightsOver = wasHost && !net\.stream && typeof combatsOverAll === 'function' \? combatsOverAll\(\) : 0;/.test(lvS)
+        && lvS.indexOf('combatsOverAll()') > lvS.indexOf('fogDragSweep(true)') && lvS.indexOf('combatsOverAll()') < lvS.indexOf("broadcast({ type: 'end' }") && lvS.indexOf('combatsOverAll()') < lvS.indexOf('net.active = false')
+        && igS.indexOf('combatOver(itemId') > igS.indexOf("if (!(net.active && net.role === 'host')) return;") && igS.indexOf('combatOver(itemId') < igS.indexOf("type: 'itemGone'")
+        && /combatOver\(itemId, net\.combats\[itemId\], false, title\)/.test(igS) && (dlgJs.match(/window\.wpNet\.itemGone\(/g) || []).length === 3
+        && /window\.wpNet\.itemGone\(camp\.id, id, removed && removed\.meta \? removed\.meta\.title : undefined\);/.test(dlgJs) && /var goneId = camp\.activeItemId, goneIt = camp\.items\[goneId\];\r?\n\s*delete camp\.items\[goneId\];\r?\n\s*if \(window\.wpNet && window\.wpNet\.itemGone\) window\.wpNet\.itemGone\(camp\.id, goneId, goneIt && goneIt\.meta \? goneIt\.meta\.title : undefined\);/.test(dlgJs));
+})());
 
 // Turn-based combat T2: a player's End turn — the host steps only for the player whose own character token has the turn, on the map they are on,
 // for the row they saw (a stale or second press never skips the next character), turn-based combat on, not paused, rate-limited; the client

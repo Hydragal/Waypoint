@@ -651,7 +651,7 @@ if(_el_ctxRenameItem) _el_ctxRenameItem.addEventListener('click', function() {
                   });
               }
               delete camp.items[id];
-              if (window.wpNet && window.wpNet.itemGone) window.wpNet.itemGone(camp.id, id);   // hosting: the item leaves every player's copy too
+              if (window.wpNet && window.wpNet.itemGone) window.wpNet.itemGone(camp.id, id, removed && removed.meta ? removed.meta.title : undefined);   // hosting: the item leaves every player's copy too (a fight on a map ends, named as the map was)
               if (camp.activeItemId === id) { camp.activeItemId = Object.keys(camp.items)[0] || null; state.viewMode = 'data'; }
               updateSidebarNav(); render(); save(true);
               if (window.appRestoreCamera) window.appRestoreCamera();
@@ -683,9 +683,9 @@ if(_el_delItemBtn) _el_delItemBtn.addEventListener('click', function() {
 
           if(yes) takeSafetyCopy().then(function() {
 
-              var goneId = camp.activeItemId;
+              var goneId = camp.activeItemId, goneIt = camp.items[goneId];
               delete camp.items[goneId];
-              if (window.wpNet && window.wpNet.itemGone) window.wpNet.itemGone(camp.id, goneId);   // hosting: the item leaves every player's copy too
+              if (window.wpNet && window.wpNet.itemGone) window.wpNet.itemGone(camp.id, goneId, goneIt && goneIt.meta ? goneIt.meta.title : undefined);   // hosting: the item leaves every player's copy too (a fight on a map ends, named as the map was)
 
               camp.activeItemId = Object.keys(camp.items)[0];
 
