@@ -445,7 +445,7 @@ function hoverLinesForToken(w, camp, mapId) {   // mapId: the map the token stan
     if (!sys || !c) return [];
     if (c.npc && isClient()) return [];
     if (c.partial && Array.isArray(c.lines)) return c.lines.slice();   // 5h: a teammate's copy shows the host's lines (it lacks the fields their formulas read)
-    try { var midH = typeof mapId === 'string' && camp.items && Object.prototype.hasOwnProperty.call(camp.items, mapId) ? mapId : camp.activeItemId, amH = camp.items && camp.items[midH]; return hoverLines(sys, c, F(), withRange(withRound(tokenCtx(amH, w, tokenFlags()), combatOn(midH)), rangeFor(c, midH, amH, w, camp))); } catch (e) { return []; }   // 5h Fold 3 / Stage 6: this token's own facing and stance; HF5b: the combat on its map (HF5 review: the map it stands on, as its sheet reads it)
+    try { var midH = typeof mapId === 'string' && camp.items && Object.prototype.hasOwnProperty.call(camp.items, mapId) ? mapId : camp.activeItemId, amH = camp.items && camp.items[midH]; return hoverLines(sys, c, F(), withRange(withRound(tokenCtx(amH, w, tokenFlags()), combatOn(midH, w && w.id)), rangeFor(c, midH, amH, w, camp))); } catch (e) { return []; }   // 5h Fold 3 / Stage 6: this token's own facing and stance; HF5b: the combat on its map (HF5 review: the map it stands on, as its sheet reads it)
 }
 // [sinkcheck:tokenfxlist-start]
 // Conditions C1 (docs/CONDITIONS_PLAN.md): the effects a character token shows on this screen — the GM's worked out from its character, a
@@ -547,7 +547,7 @@ function facingTarget(c, camp) {
 }
 // 158: what targets a token, for the facing rules, is the table's (net.js aimsOf): registered once, as systemcore asks it for every token's facing
 if (typeof setAimSource === 'function') setAimSource(function(map, tok, viewer) { var n = net(); return n && typeof n.aimsOf === 'function' ? n.aimsOf(map, tok, viewer) : null; });
-function combatOn(mapId) { var n = net(); return n && n.combatFor && typeof mapId === 'string' ? n.combatFor(mapId) : null; }   // HUD frame (HF5b): the combat on a map, while a table is up (null offline)
+function combatOn(mapId, tokId) { var n = net(); if (!n || typeof mapId !== 'string') return null; if (typeof n.combatRoundOf === 'function') return n.active ? n.combatRoundOf(mapId, typeof tokId === 'string' ? tokId : null) : null; return n.combatFor ? n.combatFor(mapId) : null; }   // HUD frame (HF5b): the combat on a map, while a table is up (null offline); fold 2: the fight that holds the token, else the first begun on that map, as the host reads it for a roll (net.combatRoundOf: never the fight the GM plays, which only the host knows)
 // Range penalties R2 (docs/RANGE_PLAN.md 3): what RangeMod and TargetDistance read for a character's token, worked out on this screen from
 // its own copy — to its player's pointer (a player's character, whoever looks at the sheet) or the GM's own (an NPC, a character with no
 // player), while a table is up: a character token on the same map, never the token itself; for a player's character never one the GM hid,
@@ -568,9 +568,9 @@ function rangeFor(c, mapId, map, tok, camp) {
     return rc;
 }
 // [sinkcheck:rangefor-end]
-function tokenCtxFor(charId, camp) { var c = charById(charId, camp), t = c ? facingTarget(c, camp) : null; return t ? withRange(withRound(tokenCtx(t.map, t.tok, tokenFlags()), combatOn(t.mapId)), rangeFor(c, t.mapId, t.map, t.tok, camp)) : null; }   // Stage 6: { facing, stance } of the token the sheet reads; HF5b: and the round of the combat on its map
+function tokenCtxFor(charId, camp) { var c = charById(charId, camp), t = c ? facingTarget(c, camp) : null; return t ? withRange(withRound(tokenCtx(t.map, t.tok, tokenFlags()), combatOn(t.mapId, t.tok && t.tok.id)), rangeFor(c, t.mapId, t.map, t.tok, camp)) : null; }   // Stage 6: { facing, stance } of the token the sheet reads; HF5b: and the round of the combat on its map
 function rangeSigOf(c, camp) { var t = c ? facingTarget(c, camp) : null, r = t ? rangeFor(c, t.mapId, t.map, t.tok, camp) : null; return r ? r.mod + '|' + r.dist + '|' + (r.hmod || 0) + '|' + (r.hdiff || 0) : ''; }   // range R2: what RangeMod and TargetDistance read for this character, so a new target or a move redraws the view (item 19 H2: HeightMod and HeightDiff too)
-function roundSigOf(c, camp) { var t = c ? facingTarget(c, camp) : null, cb = t ? combatOn(t.mapId) : null; return cb && typeof cb.round === 'number' ? String(cb.round) : ''; }   // HF5b: what CombatRound reads for this character, so a round change redraws the view
+function roundSigOf(c, camp) { var t = c ? facingTarget(c, camp) : null, cb = t ? combatOn(t.mapId, t.tok && t.tok.id) : null; return cb && typeof cb.round === 'number' ? String(cb.round) : ''; }   // HF5b: what CombatRound reads for this character, so a round change redraws the view
 function dialSigOf(c, camp) {
     var fl = tokenFlags(), t = c ? facingTarget(c, camp) : null, fc = t ? (typeof facingNow === 'function' ? facingNow : facingCtx)(t.map, t.tok, fl.turning) : null, st = t ? stanceCtx(t.tok, fl) : null, n = net();
     return [JSON.stringify(fl), t ? t.mapId + '|' + t.tok.id + '|' + (t.tok.ownerId || '') + '|' + (t.tok.locked ? 1 : 0) : '', fc ? fc.deg + '|' + fc.sides + '|' + fc.threats.join(',') : '', st ? st.posture + '|' + st.elevation : '', !!(n && (n.paused || n.selfPaused)), typeof unitSig === 'function' ? unitSig() : ''].join('#');   // 1.5.4: the viewer's Measurement system, which the Elevation row, a measure's metric figure and a height's half are drawn by (unitSig)

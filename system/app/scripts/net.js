@@ -1156,8 +1156,7 @@ function fogSeed(conn, mapId, out) {
     var per = _fogHeld[conn.peer] || (_fogHeld[conn.peer] = Object.create(null)), was = per[mapId];
     per[mapId] = { ids: ids, lit: quickHash(JSON.stringify(out.fogLit || [])), cap: out.lightsCapped === true, mk: quickHash(JSON.stringify(out.fogMarks || [])), of: quickHash(JSON.stringify(out.fogOff || {})) };   // senses S4: its marks too; S7a: what a null area switches off
     if (!was) return true;
-    var toks = [], cmb = net.combats && own(net.combats, mapId) ? net.combats[mapId] : null;
-    if (cmb && Array.isArray(cmb.rows)) cmb.rows.forEach(function(r) { if (r && r.tokId) toks.push(r.tokId); });
+    var toks = []; fightsOn(mapId).forEach(function(fid) { net.combats[fid].rows.forEach(function(r) { if (r && r.tokId) toks.push(r.tokId); }); });   // fold 2: every fight on that map
     Object.keys(net.targets || {}).forEach(function(p) { var t = net.targets[p]; if (t && t.mapId === mapId && t.id) toks.push(t.id); });
     return toks.some(function(id) { return !was.ids[id] !== !ids[id]; });
 }
@@ -1222,7 +1221,7 @@ function hidPendOf(peer, mapId) { return typeof peer === 'string' && own(_hidPen
 function hidNamed(peer, mapId, ids) { var p = hidPendOf(peer, mapId); if (p) Object.keys(ids).forEach(function(id) { delete p[id]; }); }
 function hidForgetMap(mapId) { Object.keys(_hidPend).forEach(function(p) { delete _hidPend[p][mapId]; }); }
 // [netcheck:hidpend-end]
-function fogForgetConn(peer) { if (typeof peer === 'string') { delete _fogHeld[peer]; delete _acks[peer]; delete _hidPend[peer]; } if (typeof mapForgetConn === 'function') mapForgetConn(peer); }   // 14c: and how far its copies go; hidden pieces: and the drawings of theirs the GM hid
+function fogForgetConn(peer) { if (typeof peer === 'string') { delete _fogHeld[peer]; delete _acks[peer]; delete _hidPend[peer]; } if (typeof mapForgetConn === 'function') mapForgetConn(peer); if (typeof combatsSentForget === 'function') combatsSentForget(peer); }   // 14c: and how far its copies go; hidden pieces: and the drawings of theirs the GM hid
 function fogForgetMap(mapId) { Object.keys(_fogHeld).forEach(function(p) { delete _fogHeld[p][mapId]; }); }
 function fogForgetOne(peer, mapId) { if (typeof peer !== 'string' || typeof mapId !== 'string') return; if (own(_fogHeld, peer)) delete _fogHeld[peer][mapId]; if (own(_hidPend, peer)) delete _hidPend[peer][mapId]; }   // possession (the take-back): one connection's copy of one map is gone — what it held (fold M5) and the drawings of theirs the GM hid on it (the whole copy they get on their return notes those afresh)
 function fogForgetAll() { _fogHeld = Object.create(null); _acks = Object.create(null); _hidPend = Object.create(null); if (typeof mapForgetAll === 'function') mapForgetAll(); Object.keys(_fogPend).forEach(function(k) { clearTimeout(_fogPend[k]); }); _fogPend = Object.create(null); _fogCost = Object.create(null); if (typeof combatForget === 'function') combatForget(); }   // a new table: no fight's rows seen
@@ -1303,11 +1302,11 @@ function fogCatchUp(c, camp, m, pid, memo) {
 }
 // the turn order and the pointers to that connection, where that map has a fight or a pointer, judged with every open drag at its start
 function fogRoster(c, pid, mapId) {
-    var inFight = !!(net.combats && own(net.combats, mapId)), aimed = Object.keys(net.targets || {}).some(function(p) { var t = net.targets[p]; return !!t && t.mapId === mapId; });
+    var inFight = fightsOn(mapId).length > 0, aimed = Object.keys(net.targets || {}).some(function(p) { var t = net.targets[p]; return !!t && t.mapId === mapId; });   // fold 2: any fight on that map
     if (!inFight && !aimed) return;
     fogLanded(null, function() {
         try {
-            if (inFight) c.send({ type: 'combats', combats: combatsFor(pid) });
+            if (inFight) combatsTo(c, combatsFor(pid, connMap(c)));
             if (aimed) c.send({ type: 'targets', targets: targetsFor(pid) });
         } catch (e) { sendFailed(e); }
     });
@@ -1848,7 +1847,8 @@ function applySnapshot(msg) {
     _sheetFilesOk = msg.sheetFiles === true;   // 2026-10-18: a host that reads a sheet file made elsewhere says so here, true only
     net.stanceCamps = cleanStanceCamps(msg.stanceCamps);   // null from an older host: msg.stance governs every campaign
     net.targets = cleanTargets(msg.targets);
-    net.combats = cleanCombats(msg.combats);
+    if (typeof fightsKnow === 'function') fightsKnow(msg.fights);   // fold 2: a host whose fights have ids of their own says so here (fights: true); an older one keys them by the map
+    net.combats = typeof cleanFightsIn === 'function' ? cleanFightsIn(msg.combats) : cleanCombats(msg.combats);
     if (window.wpRenderCombatStrip) setTimeout(function() { window.wpRenderCombatStrip(); }, 0);
     if (msg.notepad && typeof msg.notepad === 'object') applyNotepad(msg.notepad);
     if (window.wpFog) window.wpFog.invalidateVision();   // a fresh snapshot may carry a changed camp.fog (sight/vision/empty-map default); bust the mask + vision caches so the client recomputes, not reuses a stale mask
@@ -2081,7 +2081,7 @@ net.itemGone = function(campId, itemId, title) {
     if (typeof mapForgetMap === 'function') mapForgetMap(itemId);   // possession: and who held it whole
     if (typeof strokeActsForget === 'function') strokeActsForget(campId, itemId);   // 127: and the count of what players did to their drawings on it
     if (!(net.active && net.role === 'host')) return;
-    if (typeof combatOver === 'function' && net.combats && Object.prototype.hasOwnProperty.call(net.combats, itemId) && combatOver(itemId, net.combats[itemId], false, title)) { broadcastCombats(); combatRefresh(); }   // fold 0 (backlog 152): a fight on a deleted map ends as End combat ends it, so the clock no longer waits for it
+    if (typeof combatOver === 'function' && typeof fightsOn === 'function' && fightsOn(itemId).filter(function(fid) { return combatOver(fid, net.combats[fid], false, title); }).length) { broadcastCombats(); combatRefresh(); }   // fold 0 (backlog 152): every fight on a deleted map ends as End combat ends it, so the clock no longer waits for it (fold 2: a map may hold two)
     var msg = { type: 'itemGone', campId: campId, itemId: itemId };
     net.conns.forEach(function(c) { if (c.open && net.roster[c.peer]) { try { c.send(msg); } catch (e) { sendFailed(e); } } });
 };
@@ -2311,13 +2311,13 @@ function sensesFire(pid, mapId) {
         return;
     }
     if (sig === _sensesSig[key]) return;   // that map went to them since, or the sight is back where it was
-    var inFight = !!(net.combats && Object.prototype.hasOwnProperty.call(net.combats, mapId)), aimed = Object.keys(net.targets || {}).some(function(p) { var t = net.targets[p]; return !!t && t.mapId === mapId; });
+    var inFight = fightsOn(mapId).length > 0, aimed = Object.keys(net.targets || {}).some(function(p) { var t = net.targets[p]; return !!t && t.mapId === mapId; });   // fold 2: any fight on that map
     var sendAll = function() {   // fold M4: the copy, the order and the pointers all judged with every open drag at its start
         net.conns.forEach(function(c) {
             var pr = c && c.open ? net.roster[c.peer] : null; if (!pr || pr.id !== pid) return;
             net.sendItem(camp.id, mapId, c);   // their own copy (fogCopyFor), which seeds what it was made by
             try {
-                if (inFight) c.send({ type: 'combats', combats: combatsFor(pid) });
+                if (inFight) combatsTo(c, combatsFor(pid, connMap(c)));
                 if (aimed) c.send({ type: 'targets', targets: targetsFor(pid) });
             } catch (e) { sendFailed(e); }
         });
@@ -3151,10 +3151,14 @@ net.charApply = function(charId, actId, label, row) {   // row (H7b): { f, r, i 
 // or null (not at a table, turn-based combat off, no combat here, someone else's turn)
 net.myTurnTok = function() {
     if (!net.active || net.role !== 'client' || net.stream || !window.wpVtt || !window.wpVtt.on('turns')) return null;
-    var camp = getActiveCampaign(), mid = camp && camp.activeItemId, cb = typeof mid === 'string' && net.combats && own(net.combats, mid) ? net.combats[mid] : null, row = cb && Array.isArray(cb.rows) ? cb.rows[cb.turn] : null;
-    if (!row || typeof row.tokId !== 'string' || !row.tokId) return null;
-    var map = camp.items && own(camp.items, mid) ? camp.items[mid] : null, w = map && Array.isArray(map.whiteboard) ? map.whiteboard.find(function(x) { return x && x.id === row.tokId; }) : null;
-    return w && w.isChar && w.ownerId && w.ownerId === net.myId ? { mapId: mid, rowId: row.id, tok: w } : null;
+    var camp = getActiveCampaign(), mid = camp && camp.activeItemId, map = typeof mid === 'string' && camp.items && own(camp.items, mid) ? camp.items[mid] : null; if (!map || !Array.isArray(map.whiteboard)) return null;
+    var hit = null;
+    fightsOn(mid).forEach(function(fid) {   // fold 2: whichever fight on that map has a token of theirs on turn
+        var cb = net.combats[fid], row = cb.rows[cb.turn]; if (hit || !row || typeof row.tokId !== 'string' || !row.tokId) return;
+        var w = map.whiteboard.find(function(x) { return x && x.id === row.tokId; });
+        if (w && w.isChar && w.ownerId && w.ownerId === net.myId) hit = { mapId: mid, fid: fid, rowId: row.id, tok: w };
+    });
+    return hit;
 };
 // the player ends their own turn: the host checks the row is still theirs and the one on turn, then steps as the GM's Next turn
 net.turnEnd = function() {
@@ -3486,6 +3490,7 @@ function hostTravel(conn, traveler, portal, fromMap, gmHand) {
     if (conn && typeof mapGive === 'function') mapGive(conn, tCamp.id, pRoom.targetMapId);   // possession: the map they arrive on, whole, before the word that they are on it
     if (conn) { try { conn.send({ type: 'stage', personal: true, stage: { campId: tCamp.id, itemId: pRoom.targetMapId, landRoomId: landRoom ? landRoom.id : null } }); } catch (e) { sendFailed(e); } }
     if (conn && typeof mapLeft === 'function') mapLeft(conn, tCamp.id);   // possession (the take-back): the map they left, once the one they arrive on has been given and they have been told they are on it
+    if (conn && typeof combatsSendTo === 'function') combatsSendTo(conn, fromMap.id);   // fold 2: the fights on the map they are on now, after the word that they are on it
     var destTitle = (tCamp.items[pRoom.targetMapId].meta || {}).title || pRoom.targetMapId;
     toast((traveler.name || 'A player') + ' traveled to ' + destTitle + '.');
     logEvent('travel', (traveler.name || 'A player') + ' traveled to ' + destTitle + (pRoom && pRoom.name ? ' via ' + pRoom.name : ''));
@@ -3813,8 +3818,7 @@ function triggerFire(conn, map, w, from) {
 // and on its turn no further than its move (move), each by the campaign's mode; a token outside the combat is free
 function turnCombatOf(camp, mapId, w) {
     if (!window.wpVtt || !window.wpVtt.on('turns')) return null;
-    var cb = own(net.combats, mapId) ? net.combats[mapId] : null;
-    return cb && Array.isArray(cb.rows) && cb.rows.some(function(r) { return r && r.tokId === w.id; }) ? cb : null;
+    var fid = w ? fightOfTok(mapId, w.id) : null; return fid ? net.combats[fid] : null;   // fold 2: the fight on that map whose order holds the token (a map may hold two)
 }
 function turnOrderCheck(camp, map, w, frW, msg, conn) {
     var cb = turnCombatOf(camp, msg.itemId, w); if (!cb) return '';
@@ -3827,7 +3831,7 @@ function turnOrderCheck(camp, map, w, frW, msg, conn) {
 // A final that moved nothing (a turn in place, a shuffle inside its own cell) counts nothing and says nothing
 function turnLimitCheck(camp, map, w, frW, msg, conn) {
     var cb = turnCombatOf(camp, msg.itemId, w); if (!cb) return '';
-    var cur = cb.rows[cb.turn], st = own(net.turnMove, msg.itemId) ? net.turnMove[msg.itemId] : null;
+    var cur = cb.rows[cb.turn], st = own(net.turnMove, cb.id) ? net.turnMove[cb.id] : null;   // fold 2: the move of that fight's turn
     if (!cur || cur.tokId !== w.id || !st || st.tokId !== w.id || st.rowId !== cur.id || typeof st.allow !== 'number') return '';   // no limit this turn
     var mm = moveMode(camp, 'move'); if (mm === 'off') return '';
     var sys = camp && camp.system, dg = sys && sys.combat && sys.combat.turn ? sys.combat.turn.diag : '';
@@ -3842,14 +3846,14 @@ function moveRefused(camp, map, mapId, w, fx, fy, tx, ty) {
     if (moveMode(camp, 'walls') === 'refuse' && window.wpFog && window.wpFog.moveBlocked && window.wpFog.moveBlocked(map, w, fx, fy, tx, ty)) return 'A wall is in the way: your token goes back.';
     var cb = turnCombatOf(camp, mapId, w); if (!cb) return '';
     var cur = cb.rows[cb.turn]; if (!cur || cur.tokId !== w.id) return moveMode(camp, 'order') === 'refuse' ? 'It is not your turn: your token goes back.' : '';
-    var st = own(net.turnMove, mapId) ? net.turnMove[mapId] : null; if (!st || st.tokId !== w.id || st.rowId !== cur.id || typeof st.allow !== 'number' || moveMode(camp, 'move') !== 'refuse') return '';
+    var st = own(net.turnMove, cb.id) ? net.turnMove[cb.id] : null; if (!st || st.tokId !== w.id || st.rowId !== cur.id || typeof st.allow !== 'number' || moveMode(camp, 'move') !== 'refuse') return '';
     var sys = camp && camp.system, dg = sys && sys.combat && sys.combat.turn ? sys.combat.turn.diag : '', mvR = {}, d = window.wpFog && window.wpFog.moveCells ? window.wpFog.moveCells(map, w, fx, fy, tx, ty, dg, mvR) : 0;
     return d > 0 && st.moved + d > st.allow + 0.05 ? thatIsText(d, mvR.len, map) + '; you have ' + cellsText(Math.max(0, st.allow - st.moved), map) + ' left.' : '';
 }
 // T3b: a move that lands through a map copy (its drag's final pos was lost) still counts against the turn's move; its note, or ''
 function moveCounted(camp, map, mapId, w, fx, fy, tx, ty) {
     var cb = turnCombatOf(camp, mapId, w); if (!cb) return '';
-    var cur = cb.rows[cb.turn], st = own(net.turnMove, mapId) ? net.turnMove[mapId] : null; if (!cur || cur.tokId !== w.id || !st || st.tokId !== w.id || st.rowId !== cur.id || typeof st.allow !== 'number') return '';
+    var cur = cb.rows[cb.turn], st = own(net.turnMove, cb.id) ? net.turnMove[cb.id] : null; if (!cur || cur.tokId !== w.id || !st || st.tokId !== w.id || st.rowId !== cur.id || typeof st.allow !== 'number') return '';
     var sys = camp && camp.system, dg = sys && sys.combat && sys.combat.turn ? sys.combat.turn.diag : '', mvC = {}, d = window.wpFog && window.wpFog.moveCells ? window.wpFog.moveCells(map, w, fx, fy, tx, ty, dg, mvC) : 0;
     if (!(d > 0)) return '';   // nothing moved (a turn in place, a shuffle inside its own cell): nothing to count, nothing to say
     st.moved += d;
@@ -4208,16 +4212,34 @@ net.notepadInput = function(text) {   // the pad changed under the GM's hand: it
 })();
 
 /* ---------- combat / turn order ----------
-   One combat per map: net.combats[mapId] = { mapId, round, turn, rows: [{ id, name, tokId, init, src }] }.
-   The host owns it; clients get it in the snapshot and in 'combats' messages. Ends with the session. */
+   Fights by id (1.5.5, backlog 152, docs/FIGHT_CLOCK_DESIGN.md fold 2): net.combats[fid] = { id, mapId, round, turn, rows: [{ id, name, tokId,
+   init, src }], side?, rr?, n }, so one map may hold two fights. fid is 'f_' and 8 of a-z0-9; n, the order the fights began in, is the host's own.
+   The host owns them; a player's app holds the fights on the map it is on, from the snapshot and the 'combats' messages. Ends with the session. */
 net.combats = {};
 var combatAsked = {};   // mapId|tokId -> true: the "start combat?" question for a targeted NPC is asked once per session
 var combatAskOpen = Object.create(null);   // profile id -> true while a Start-combat offer of theirs is open (security 2026-10-01): one at a time per player — a further target meanwhile asks nothing and marks nothing, so that offer is still owed
 // [netcheck:combats-start]
-function cleanCombats(c) {
-    var out = {}; if (!c || typeof c !== 'object') return out;
-    Object.keys(c).slice(0, 40).forEach(function(mapId) {
-        var k = c[mapId]; if (!k || typeof k !== 'object' || !Array.isArray(k.rows)) return;
+function cleanCombats(c) {   // an older host's shape, keyed by the map: a newer player at an older host reads it exactly as before. Into an object with
+    // no prototype (fold 2), so a hostile host's "__proto__" key is a key like any other and never this object's prototype
+    var out = Object.create(null); if (!c || typeof c !== 'object') return out;
+    Object.keys(c).slice(0, 40).forEach(function(mapId) { var f = cleanFightBody(c[mapId], String(mapId).slice(0, 80)); if (f) out[f.mapId] = f; });
+    return out;
+}
+// Fold 2 (backlog 152): fights by their own ids. A host that keys them so says it in its snapshot (fights: true, read as true only), and a player's
+// app then reads every copy by id: an id 'f_' and 8 of a-z0-9, its map's id of 80 at most, its rows as an older host's are read, 40 fights at most
+var FIGHT_ID = /^f_[a-z0-9]{8}$/, _fightsOk = false;
+function fightsKnow(v) { _fightsOk = v === true; }
+function cleanFights(c) {
+    var out = Object.create(null); if (!c || typeof c !== 'object') return out;
+    Object.keys(c).slice(0, 40).forEach(function(id) {
+        var k = c[id]; if (!FIGHT_ID.test(id) || !k || typeof k !== 'object' || typeof k.mapId !== 'string' || !k.mapId || k.mapId.length > 80) return;
+        var f = cleanFightBody(k, k.mapId); if (f) out[id] = Object.assign({ id: id }, f);
+    });
+    return out;
+}
+function cleanFightsIn(c) { return _fightsOk ? cleanFights(c) : cleanCombats(c); }   // a player's app: the host's fights by the shape its snapshot said
+function cleanFightBody(k, mapId) {   // one fight's order, cleaned: { mapId, round, turn, rows, side? }, or null where it holds no row
+    if (!k || typeof k !== 'object' || !Array.isArray(k.rows)) return null;
         var rows = k.rows.slice(0, 60).map(function(r) {
             if (!r || typeof r !== 'object') return null;
             var o = { id: String(r.id || '').slice(0, 40), name: String(r.name || '').slice(0, 60), tokId: r.tokId ? String(r.tokId).slice(0, 80) : null, init: Math.max(-1e6, Math.min(1e6, Number(r.init) || 0)), src: typeof r.src === 'string' && r.src.length <= 400 ? r.src : null };
@@ -4226,11 +4248,10 @@ function cleanCombats(c) {
             if (Array.isArray(r.tb)) { var tb = r.tb.slice(0, 3).map(function(v) { return Array.isArray(v) ? v.slice(0, 8).filter(function(n) { return typeof n === 'number' && isFinite(n); }).map(function(n) { return Math.max(-1e6, Math.min(1e6, n)); }) : null; }); if (tb.some(function(v) { return v && v.length; })) o.tb = tb; }   // initiative O2: its tie rolls, each step's in order, kept so a later sort never shuffles; the host's own
             return o;
         }).filter(Boolean);
-        if (!rows.length) return;
-        out[String(mapId).slice(0, 80)] = { mapId: String(mapId).slice(0, 80), round: Math.max(1, Math.min(9999, Number(k.round) || 1)), turn: Math.max(0, Math.min(rows.length - 1, Number(k.turn) || 0)), rows: rows };
-        if (k.side === 'pc' || k.side === 'rest') out[String(mapId).slice(0, 80)].side = k.side;   // initiative O4: the side going first this round (shown to the table)
-    });
-    return out;
+    if (!rows.length) return null;
+    var f = { mapId: mapId, round: Math.max(1, Math.min(9999, Number(k.round) || 1)), turn: Math.max(0, Math.min(rows.length - 1, Number(k.turn) || 0)), rows: rows };
+    if (k.side === 'pc' || k.side === 'rest') f.side = k.side;   // initiative O4: the side going first this round (shown to the table)
+    return f;
 }
 // [netcheck:notepad-start]
 function applyNotepad(m) {
@@ -4257,27 +4278,52 @@ function applyNotepad(m) {
 function combatRowOut(r, i, unseen) { if (unseen) return { id: 'h' + i, name: 'Hidden', tokId: null, src: null }; var o = { id: r.id, name: r.name, tokId: r.tokId, src: r.src }; if (r.held === 1) o.held = 1; return o; }   // initiative O3: a seen row's hold too (an unseen one tells nothing)
 // The owner's ruling of 2026-10-01 ("if they've already seen the character, there's no reason to exclude it from the turn order unless it's
 // left the fight"): a row a player was once sent whole in this fight keeps its name for them when its token is hidden or out of their sight;
-// only a creature they have never seen in it reads Hidden. The host's memory per fight (the map's id) and player (a profile id; '*' = everyone
-// at the table, an unfogged broadcast): the token ids sent whole. Forgotten when the fight ends or a new one starts there, and at a new table
+// only a creature they have never seen in it reads Hidden. The host's memory per fight (its own id, fold 2) and player (a profile id; '*' = everyone
+// at the table): the token ids sent whole. Forgotten when the fight ends, and at a new table: a new fight has an id of its own, so nothing is seen in it
 var _combatSeen = Object.create(null);
 function combatSeenKey(pid) { return typeof pid === 'string' && pid ? pid : '*'; }
-function combatSeen(mapId, pid, tokId) { var m = _combatSeen[mapId]; if (!m || typeof tokId !== 'string') return false; var k = combatSeenKey(pid); return !!((m[k] && m[k][tokId] === 1) || (m['*'] && m['*'][tokId] === 1)); }
-function combatSaw(mapId, pid, tokId) { if (typeof mapId !== 'string' || typeof tokId !== 'string') return; var m = _combatSeen[mapId] || (_combatSeen[mapId] = Object.create(null)), k = combatSeenKey(pid), s = m[k] || (m[k] = Object.create(null)); s[tokId] = 1; }
-function combatForget(mapId) { if (mapId === undefined) _combatSeen = Object.create(null); else delete _combatSeen[mapId]; }
-function combatsFor(recipientId) {
-    var camp = getActiveCampaign(), fogged = anyFog(camp), out = {};
-    Object.keys(net.combats || {}).forEach(function(mapId) {
-        var cmb = net.combats[mapId], map = fogged && camp && camp.items[mapId];
-        var drop = map && map.type === 'map' && map.fog && map.fog.on === true ? (fogDrop(camp, map, recipientId) || {}) : null, hid = combatHidden(camp, mapId);
-        out[mapId] = { mapId: cmb.mapId, round: cmb.round, turn: cmb.turn, rows: (cmb.rows || []).map(function(r, i) {
+function combatSeen(fid, pid, tokId) { var m = typeof fid === 'string' ? _combatSeen[fid] : null; if (!m || typeof tokId !== 'string') return false; var k = combatSeenKey(pid); return !!((m[k] && m[k][tokId] === 1) || (m['*'] && m['*'][tokId] === 1)); }
+function combatSaw(fid, pid, tokId) { if (typeof fid !== 'string' || typeof tokId !== 'string') return; var m = _combatSeen[fid] || (_combatSeen[fid] = Object.create(null)), k = combatSeenKey(pid), s = m[k] || (m[k] = Object.create(null)); s[tokId] = 1; }
+function combatForget(fid) { if (fid === undefined) { _combatSeen = Object.create(null); _combatsSent = Object.create(null); } else delete _combatSeen[fid]; }   // a new table: nothing seen, and nothing sent (fold 2's review)
+// Fold 2 (backlog 152): a player is sent only the fights on the map they are on (mapId: their roster location), each under its own id. Before it every
+// player was sent every fight on every map, whole on a map with no fog. Never a fight's n, rr or a row's number (combatRowOut)
+function combatsFor(recipientId, mapId) {
+    var camp = getActiveCampaign(), out = {}; if (typeof mapId !== 'string' || !mapId) return out;
+    var map = anyFog(camp) && camp && camp.items && Object.prototype.hasOwnProperty.call(camp.items, mapId) ? camp.items[mapId] : null;
+    var drop = map && map.type === 'map' && map.fog && map.fog.on === true ? (fogDrop(camp, map, recipientId) || {}) : null, hid = combatHidden(camp, mapId);
+    fightsOn(mapId).forEach(function(fid) {
+        var cmb = net.combats[fid];
+        out[fid] = { id: fid, mapId: cmb.mapId, round: cmb.round, turn: cmb.turn, rows: cmb.rows.map(function(r, i) {
             var unseen = !!(r.tokId && ((drop && drop[r.tokId]) || hid[r.tokId]));
-            if (unseen && combatSeen(mapId, recipientId, r.tokId)) unseen = false;   // seen in this fight already: the name stays
-            if (!unseen && r.tokId) combatSaw(mapId, recipientId, r.tokId);
+            if (unseen && combatSeen(fid, recipientId, r.tokId)) unseen = false;   // seen in this fight already: the name stays
+            if (!unseen && r.tokId) combatSaw(fid, recipientId, r.tokId);
             return combatRowOut(r, i, unseen);
         }) };
-        if (cmb.side === 'pc' || cmb.side === 'rest') out[mapId].side = cmb.side;   // initiative O4: which side goes first this round (never its rolls: those are their cards)
+        if (cmb.side === 'pc' || cmb.side === 'rest') out[fid].side = cmb.side;   // initiative O4: which side goes first this round (never its rolls: those are their cards)
     });
     return out;
+}
+// Fold 2's review: what each connection was last sent of the fights (the text of its copy). Every send of the fights goes through combatsTo, which
+// records it; the broadcast alone holds back a copy the connection holds already (fresh), so a fight that moves on another map sends a player
+// nothing at all. Before, everyone was sent a copy at every step of any fight, and an empty one told a player that a fight ran elsewhere and
+// how fast. The host's own, never sent: seeded by the join snapshot, forgotten with the connection (fogForgetConn) and at a new table (combatForget)
+var _combatsSent = Object.create(null);
+function combatsTo(c, combats, fresh) {
+    var sig = JSON.stringify(combats), peer = c && typeof c.peer === 'string' ? c.peer : null;
+    if (fresh === true && peer !== null && _combatsSent[peer] === sig) return false;
+    c.send({ type: 'combats', combats: combats }); if (peer !== null) _combatsSent[peer] = sig;
+    return true;
+}
+function combatsSentSeed(c, combats) { if (c && typeof c.peer === 'string') _combatsSent[c.peer] = JSON.stringify(combats && typeof combats === 'object' ? combats : {}); }   // the join snapshot's copy
+function combatsSentForget(peer) { if (typeof peer === 'string') delete _combatsSent[peer]; }
+function connMap(c) { var pr = c && typeof c.peer === 'string' && net.roster && Object.prototype.hasOwnProperty.call(net.roster, c.peer) ? net.roster[c.peer] : null; return pr && typeof pr.location === 'string' ? pr.location : null; }   // the map a connection's player is on
+// Fold 2: one connection is sent the fights on the map it is on now, after the word that moved it there (a travel, a stage), where the map it left
+// (was) or the one it is on holds a fight; judged with every open drag at its start
+function combatsSendTo(c, was) {
+    var pr = c && c.open && typeof c.peer === 'string' && net.roster && Object.prototype.hasOwnProperty.call(net.roster, c.peer) ? net.roster[c.peer] : null, loc = connMap(c); if (!pr) return;
+    if (!fightsOn(loc).length && !(typeof was === 'string' && was !== loc && fightsOn(was).length)) return;
+    var go = function() { try { combatsTo(c, combatsFor(pr.id, loc)); } catch (e) { sendFailed(e); } };
+    if (anyFog(getActiveCampaign()) && typeof fogLanded === 'function') fogLanded(null, go); else go();
 }
 // Fold M0: the tokens the GM has hidden on a combat's map, fogged or not: a hidden token is not on any player's copy, so its row is
 // nameless too (the GM may hide a creature after the fight began). The GM's own strip reads net.combats, never this
@@ -4289,7 +4335,7 @@ function combatHidden(camp, mapId) {
 // ...and when the GM hides or shows a token of a running fight, the players' rows follow at once (a save: their strip was sent whole)
 // (what the table was last sent, recorded by every send of the rows to the table: broadcastCombats)
 var _combatHidSig = '';
-function combatHidSigNow() { var camp = getActiveCampaign(); return Object.keys(net.combats || {}).sort().map(function(mapId) { var hid = combatHidden(camp, mapId); return mapId + ':' + ((net.combats[mapId] || {}).rows || []).map(function(r) { return r && r.tokId && hid[r.tokId] ? 1 : 0; }).join(''); }).join('|'); }
+function combatHidSigNow() { var camp = getActiveCampaign(); return Object.keys(net.combats || {}).sort().map(function(fid) { var cb = net.combats[fid] || {}, hid = combatHidden(camp, cb.mapId); return fid + ':' + (cb.rows || []).map(function(r) { return r && r.tokId && hid[r.tokId] ? 1 : 0; }).join(''); }).join('|'); }   // fold 2: per fight, each on its own map
 var _targetHidSig = '';
 net.syncCombatHidden = function() {
     if (!net.active || net.role !== 'host') return;
@@ -4316,9 +4362,8 @@ function targetsFor(recipientId) {
 function broadcastCombats() {
     var camp = getActiveCampaign();
     _combatHidSig = combatHidSigNow();   // fold M0: which rows the table now holds redacted for a hidden token
-    if (!anyFog(camp)) { broadcast({ type: 'combats', combats: combatsFor(null) }, null); return; }
-    var sendAll = function() { net.conns.forEach(function(c) { var pr = net.roster[c.peer]; if (!pr || !c.open) return; try { c.send({ type: 'combats', combats: combatsFor(pr.id) }); } catch (e) { sendFailed(e); } }); };
-    if (typeof fogLanded === 'function') fogLanded(null, sendAll); else sendAll();   // fold M4: judged with every open drag at its start
+    var sendAll = function() { net.conns.forEach(function(c) { var pr = net.roster && Object.prototype.hasOwnProperty.call(net.roster, c.peer) ? net.roster[c.peer] : null; if (!pr || !c.open) return; try { combatsTo(c, combatsFor(pr.id, pr.location), true); } catch (e) { sendFailed(e); } }); };   // fold 2: per connection always, each the fights on the map it is on, and nothing where its copy is as it was (fold 2's review)
+    if (anyFog(camp) && typeof fogLanded === 'function') fogLanded(null, sendAll); else sendAll();   // fold M4: judged with every open drag at its start
 }
 function broadcastTargets() {
     var camp = getActiveCampaign();
@@ -4358,7 +4403,7 @@ function marksTurn(mapId, c) {   // a token's turn began: its player's marks
 }
 function marksRound(mapId, c) {   // a new round: the marks of each player with no token in the fight
     var camp = getActiveCampaign(), m = marksMap(camp, mapId); if (!m || !marksStrict(camp)) return;
-    var inFight = Object.create(null); (c && Array.isArray(c.rows) ? c.rows : []).forEach(function(r) { var p = marksRowOwner(m, r); if (p) inFight[p] = 1; });
+    var inFight = Object.create(null); fightsOn(mapId).forEach(function(fid) { net.combats[fid].rows.forEach(function(r) { var p = marksRowOwner(m, r); if (p) inFight[p] = 1; }); });   // fold 2: a token in any fight on that map
     marksRefresh(marksOwners(m).filter(function(p) { return inFight[p] !== 1; }), mapId);
 }
 function marksStart(mapId) {   // a fight began: everyone's marks, held from now
@@ -4373,11 +4418,10 @@ function marksEnd(mapId) {   // a fight ended: the marks follow every move again
     var memo = Object.create(null);
     fogLanded(mapId, function() { net.conns.forEach(function(c) { var pr = c && c.open ? net.roster[c.peer] : null; if (pr && typeof pr.id === 'string') fogCatchUp(c, camp, m, pr.id, memo); }); });
 }
-function marksOwnMoved(mapId, toks, pid) {   // a player dropped tokens of theirs: their marks, when one of them is on its turn
-    var camp = getActiveCampaign(), m = marksMap(camp, mapId), c = net.combats && typeof mapId === 'string' && own(net.combats, mapId) ? net.combats[mapId] : null;
-    if (!m || !c || !Array.isArray(c.rows) || !marksStrict(camp)) return;
-    var row = c.rows[c.turn]; if (!row || typeof row.tokId !== 'string') return;
-    if (toks.some(function(w) { return !!w && w.id === row.tokId && w.ownerId === pid; })) marksRefresh([pid], mapId);
+function marksOwnMoved(mapId, toks, pid) {   // a player dropped tokens of theirs: their marks, when one of them is on its turn in a fight on that map (fold 2: any of its fights)
+    var camp = getActiveCampaign(), m = marksMap(camp, mapId); if (!m || !marksStrict(camp) || !Array.isArray(toks)) return;
+    var onTurn = fightsOn(mapId).some(function(fid) { var c = net.combats[fid], row = c.rows[c.turn]; return !!row && typeof row.tokId === 'string' && toks.some(function(w) { return !!w && w.id === row.tokId && w.ownerId === pid; }); });
+    if (onTurn) marksRefresh([pid], mapId);
 }
 // [netcheck:marksheld-end]
 function combatRefresh() { render(); if (window.wpRenderCombatStrip) window.wpRenderCombatStrip(); }
@@ -4394,11 +4438,12 @@ function turnStarted(mapId, c) { try { if (window.wpSheets && window.wpSheets.tu
 // it has gone; its player hears how far. Turn-based combat on, a player's token only (the GM is never limited)
 net.turnMove = {};
 function turnMoveStart(mapId, c) {
-    delete net.turnMove[mapId];
+    var fidM = c && typeof c.id === 'string' ? c.id : null; if (fidM) delete net.turnMove[fidM];   // fold 2: per fight (its id), a map may hold two
     var row = c && Array.isArray(c.rows) ? c.rows[c.turn] : null; if (!row || typeof row.tokId !== 'string' || !window.wpVtt || !window.wpVtt.on('turns')) return;
     var camp = getActiveCampaign(), map = camp && camp.items && own(camp.items, mapId) ? camp.items[mapId] : null;
     var w = map && Array.isArray(map.whiteboard) ? map.whiteboard.find(function(x) { return x && x.id === row.tokId; }) : null; if (!w || !w.isChar || !w.ownerId) return;
-    var st = { rowId: row.id, tokId: w.id, moved: 0, allow: null }; net.turnMove[mapId] = st;
+    if (!fidM) return;
+    var st = { rowId: row.id, tokId: w.id, moved: 0, allow: null }; net.turnMove[fidM] = st;
     var S = SC(), F = window.wpFormula, ch = camp.chars && typeof w.charId === 'string' && own(camp.chars, w.charId) ? camp.chars[w.charId] : null;
     if (!S || !F || !camp.system || !ch || ch.npc || ch.ownerId !== w.ownerId || !window.wpSheets) return;
     var view = window.wpSheets.playerSystem(camp), t = view && view.combat && view.combat.turn; if (!t || !t.move) return;
@@ -4419,10 +4464,10 @@ function noteOwner(pid, text, cid) { net.conns.forEach(function(c) { if (c.open 
 net.turnSpent = {};   // charId -> { actKey: spent since its last turn began }
 function actsOf(camp) { var t = camp && camp.system && camp.system.combat && camp.system.combat.turn; return t && Array.isArray(t.acts) ? t.acts : []; }
 function actsCombat(camp, charId, pr) {
-    if (!window.wpVtt || !window.wpVtt.on('turns') || !pr || typeof pr.location !== 'string' || !own(net.combats, pr.location)) return null;
-    var cb = net.combats[pr.location], map = camp && camp.items && own(camp.items, pr.location) ? camp.items[pr.location] : null, S = SC();
-    var tok = S && map ? S.charTokenOn(map, charId, pr.id, { strict: true }) : null;
-    return tok && Array.isArray(cb.rows) && cb.rows.some(function(r) { return r && r.tokId === tok.id; }) ? cb : null;
+    if (!window.wpVtt || !window.wpVtt.on('turns') || !pr || typeof pr.location !== 'string') return null;
+    var map = camp && camp.items && own(camp.items, pr.location) ? camp.items[pr.location] : null, S = SC();
+    var tok = S && map ? S.charTokenOn(map, charId, pr.id, { strict: true }) : null, fidA = tok ? fightOfTok(pr.location, tok.id) : null;   // fold 2: the fight that holds that token
+    return fidA ? net.combats[fidA] : null;
 }
 function actsTell(camp, charId, cleared) {   // what is left, to each connection of the character's player
     var ch = camp && camp.chars && own(camp.chars, charId) ? camp.chars[charId] : null; if (!ch || !ch.ownerId || ch.npc) return;
@@ -4460,12 +4505,8 @@ function turnActsEnd(mapId, had) {   // a combat ended: its characters' counts g
 // the GM's own, hosting or alone). What runs out comes off, with a line for its player and the GM. Item 20 K4 (the owner's answer): with the
 // Calendar on, time outside a fight runs by the game clock instead — the check only stops a clock still running (what ran is kept), and each
 // move of the game clock on (never back) takes that much from every timed effect outside a fight (net.fxGameTime); switched off, they run again
-function charCombat(camp, charId) {   // the combat a character's token is in, and its map id — or null
-    var hit = null; if (!camp || !camp.items) return null;
-    Object.keys(net.combats || {}).forEach(function(mid) { if (hit || !own(camp.items, mid)) return; var cb = net.combats[mid], mp = camp.items[mid];
-        if (!cb || !Array.isArray(cb.rows) || !mp || !Array.isArray(mp.whiteboard)) return;
-        if (cb.rows.some(function(r) { return r && r.tokId && mp.whiteboard.some(function(w) { return w && w.id === r.tokId && w.charId === charId; }); })) hit = { mapId: mid, combat: cb }; });
-    return hit;
+function charCombat(camp, charId) {   // the combat a character's token is in, and its map id — or null; fold 2: as the one judge says (net.orderOf)
+    var fid = orderOfIn(camp, charId); return fid ? { mapId: net.combats[fid].mapId, combat: net.combats[fid] } : null;
 }
 net.charInCombat = function(charId) { return !!(net.active && charCombat(getActiveCampaign(), charId)); };
 function fxApply(camp, ch, kind, now, secs) {   // one tick of one character: its lists stored and sent, what ran out told (secs: the game clock's move, K4)
@@ -4513,22 +4554,23 @@ var _fxClock = null;
 function fxClockStart() { if (!_fxClock && typeof setInterval === 'function') _fxClock = setInterval(function() { try { fxClockTick(); } catch (e) {} }, 5000); }
 // [netcheck:fxtime-end]
 function mapTitleOf(mapId) { var camp = getActiveCampaign(); var m = camp && camp.items[mapId]; return (m && m.meta && m.meta.title) || mapId; }
-net.combatFor = function(mapId) { return net.active && net.combats[mapId] || null; };
 // Fold 0 (backlog 152, docs/FIGHT_CLOCK_DESIGN.md): a fight ends as End combat ends it, in ONE place: End (combatSet with null), the session's end
 // (combatsOverAll, from leaveSession) and a deleted map (net.itemGone). What its characters spent goes, their timed effects run again, the Calendar
 // counts its rounds (asked once a fight), the marks follow every move again and nothing of it stays seen. quiet: no notice of its own (the session's
 // end says one for every fight). The caller broadcasts. A deleted map holds no token to find its characters by: every character no fight holds
 // now loses what it spent, and the clock's own tick runs at once, which sets their effects going as it does every few seconds (combatFreed).
 // title: a deleted map's own name, which the delete hands on through net.itemGone; with none the notice and the log line say the deleted map
-function combatOver(mapId, had, quiet, title) {
+function combatOver(fid, had, quiet, title) {   // fold 2: by the fight's own id; its map is the fight's
+    var mapId = had && typeof had.mapId === 'string' ? had.mapId : '';
     var campO = had ? getActiveCampaign() : null, gone = !!had && !(campO && campO.items && Object.prototype.hasOwnProperty.call(campO.items, mapId)), nmO = had ? (gone ? (typeof title === 'string' && title ? title : 'the deleted map') : mapTitleOf(mapId)) : '';
     if (had) { try { turnActsEnd(mapId, had); } catch (e) { console.error(e); } }   // T4
     if (had) { try { fxCombatEdge(mapId, had, 'resume'); } catch (e) { console.error(e); } }   // T5a: their effects' clocks run again
     if (had && typeof clockFightEnd === 'function') clockFightEnd();   // item 20 K5 (the owner's answer): the fight's rounds counted as active time for the time rules
     if (had) { logEvent('table', 'Combat ended on ' + nmO + ' after ' + had.round + ' round' + (had.round === 1 ? '' : 's')); if (!quiet) toast('Combat ended on ' + nmO + '.'); }
-    delete net.combats[mapId];
-    if (had && typeof marksEnd === 'function') { try { marksEnd(mapId); } catch (e) { console.error(e); } }   // senses S4b: the marks follow every move again
-    if (typeof combatForget === 'function') combatForget(mapId);   // the fight over: nothing of it seen
+    if (typeof fid === 'string') { delete net.combats[fid]; if (net.turnMove) delete net.turnMove[fid]; }   // fold 2: by its id, and its turn's move with it
+    if (had && net.fightOn === fid) net.fightOn = fightIds()[0] || null;   // fold 2: the Active fight ended: the first begun of those left is played
+    if (had && typeof marksEnd === 'function' && !fightsOn(mapId).length) { try { marksEnd(mapId); } catch (e) { console.error(e); } }   // senses S4b: the marks follow every move again, once the map's last fight is over (fold 2)
+    if (typeof fid === 'string' && typeof combatForget === 'function') combatForget(fid);   // the fight over: nothing of it seen
     if (gone) { try { combatFreed(campO); } catch (e) { console.error(e); } }
     return !!had;
 }
@@ -4540,30 +4582,12 @@ function combatFreed(camp) {   // a deleted map's fight is over: what the charac
     fxClockTick();
 }
 function combatsOverAll() {   // the session's end: every fight ends as End ends it, quietly; how many ended
-    var n = 0; Object.keys(net.combats || {}).forEach(function(mid) { if (combatOver(mid, net.combats[mid], true)) n++; });
+    var n = 0; fightIds().forEach(function(fid) { if (combatOver(fid, net.combats[fid], true)) n++; });   // fold 2: each fight by its own id
     return n;
 }
-// host: put a combat on a map (or take it off with null)
-net.combatSet = function(mapId, combat) {
-    if (net.role !== 'host') return;
-    var had = net.combats[mapId];
-    if (combat) {
-        if (!had && typeof combatForget === 'function') combatForget(mapId);   // a new fight: what players saw in the last one there is no longer seen
-        combat.mapId = mapId;
-        net.combats[mapId] = cleanCombats({ m: combat }).m; net.combats[mapId].mapId = mapId;
-        if (!had && typeof marksStart === 'function') { try { marksStart(mapId); } catch (e) { console.error(e); } }   // senses S4b: everyone's marks held from the fight's start
-        if (had && typeof had.rr === 'number') net.combats[mapId].rr = had.rr;   // initiative O4: the last round the fight rolled for, and this round's side, kept through a roster edit
-        if (had && (had.side === 'pc' || had.side === 'rest')) net.combats[mapId].side = had.side;
-        if (typeof combatSides === 'function') combatSides(mapId, net.combats[mapId], !had);   // ...and each side together (a new fight rolls the sides first)
-        if (!had || had.round !== net.combats[mapId].round) roundChanged(mapId, net.combats[mapId]);   // G10: the first round (a roster edit keeps its round)
-        if (had && had.round !== net.combats[mapId].round && typeof clockRounds === 'function') clockRounds(net.combats[mapId].round - had.round);   // item 20 K2: a round edited in the roster moves the clock with it (a new fight moves nothing)
-        if (!had) logEvent('table', 'Combat started on ' + mapTitleOf(mapId) + ': ' + combat.rows.map(function(r) { return r.name; }).join(', '));
-        toast(had ? 'Combat roster updated.' : 'Combat started on ' + mapTitleOf(mapId) + ' — ' + (net.combats[mapId].rows[net.combats[mapId].turn] || net.combats[mapId].rows[0]).name + ' goes first.');
-    } else combatOver(mapId, had);   // End: the one way a fight ends (fold 0, backlog 152), which the session's end and a deleted map share
-    broadcastCombats(); combatRefresh();
-    if (combat && !had) { try { fxCombatEdge(mapId, net.combats[mapId], 'bank'); } catch (e) { console.error(e); } }   // T5a: their effects' clocks stop (what ran is kept)
-    if (combat && !had) turnStarted(mapId, net.combats[mapId]);   // T2b: the first turn (after the broadcast: its player's note comes last)
-};
+// host: put a combat on a map (or take it off with null). Fold 2: the old name, a thin wrapper for the strip's fight on that map (fightAt): a roster
+// edit or the end of that one, a new fight where the map holds none (fightSet, in the orders slice, is the one place a fight starts, changes or ends)
+net.combatSet = function(mapId, combat) { var cur = fightAt(mapId); return fightSet(cur, combat ? Object.assign({}, combat, { mapId: mapId }) : null); };
 // [netcheck:initfight-start]
 // Initiative & turn order O1 (the owner's answer, "Into the fight, once"): a player's own roll of the system's initiative roll — the host
 // rebuilt it from the entry (roll-req's act path) — sets their row's number in the combat on the map they are on, if the row has none yet
@@ -4571,8 +4595,10 @@ net.combatSet = function(mapId, combat) {
 // combat there, or no row of their character's token: nothing. Everyone gets the new order (never a number); the GM is told the number
 function initIntoFight(camp, mapId, charId, pid, value) {
     if (net.role !== 'host' || typeof mapId !== 'string' || typeof charId !== 'string' || typeof pid !== 'string' || !pid || typeof value !== 'number' || !isFinite(value)) return false;
-    var c = own(net.combats, mapId) ? net.combats[mapId] : null, map = camp && camp.items && own(camp.items, mapId) ? camp.items[mapId] : null; if (!c || !Array.isArray(c.rows) || !map || !Array.isArray(map.whiteboard)) return false;
+    var map = camp && camp.items && own(camp.items, mapId) ? camp.items[mapId] : null; if (!map || !Array.isArray(map.whiteboard)) return false;
     var mine = {}; map.whiteboard.forEach(function(w) { if (w && w.isChar && w.charId === charId && w.ownerId === pid && typeof w.id === 'string') mine[w.id] = 1; });
+    var fidI = null; Object.keys(mine).forEach(function(t) { if (fidI === null) fidI = fightOfTok(mapId, t); });   // fold 2: the fight on that map that holds a token of theirs
+    var c = fidI ? net.combats[fidI] : null; if (!c || !Array.isArray(c.rows)) return false;
     var row = c.rows.find(function(r) { return r && typeof r.tokId === 'string' && mine[r.tokId] === 1; }); if (!row || row.rolled === 1) return false;
     var cur = c.rows[c.turn], S = SC();
     row.init = Math.max(-1e6, Math.min(1e6, Math.round(value * 100) / 100)); row.rolled = 1; delete row.tb;   // a new number: its old roll-offs go
@@ -4641,10 +4667,90 @@ function combatNewRound(mapId, c) {   // combatStep at a new round, once per rou
     combatSideOrder(camp, mapId, c); c.turn = 0;
 }
 // [netcheck:initround-end]
-net.combatStep = function(mapId, dir) {
+net.combatStep = function(mapId, dir) { return fightStep(fightAt(mapId), dir); };   // fold 2: the old name, for the strip's fight on that map
+// [netcheck:turnhold-start]
+// Initiative O3 (the owner's answer, "After the current turn"): the character whose turn it is holds it — play moves on as with Next turn and
+// its row waits, held; later in the round, when its owner or the GM presses Act, the held row goes right after whoever is acting and keeps
+// that place (it acts next). A hold not used by the round's end is lost (combatStep), and the character acts in its usual place
+net.combatHold = function(mapId) { return fightHold(fightAt(mapId)); };   // fold 2: the old names, for the strip's fight on that map (fightHold, fightAct)
+net.combatAct = function(mapId, rowId) { return fightAct(fightAt(mapId), rowId); };
+// [netcheck:turnhold-end]
+net.combatEnd = function(mapId) { return fightEnd(fightAt(mapId)); };   // fold 2: the old name, for the strip's fight on that map
+// [netcheck:orders-start]
+/* Fold 2 (backlog 152, docs/FIGHT_CLOCK_DESIGN.md section 4): the fights by id, outside the cut of the old names. A map may hold two fights, so a
+   reader asks for the fight that holds the token or the character (fightOfTok, net.orderOf), or for every fight on the map (fightsOn). Which order
+   a character is in is judged in ONE place, net.orderOf, by combatChars' rule: a character token (isChar) of a character of the campaign, a hidden
+   token counted too. The API by id: fightSet starts, changes and ends a fight; fightStep, fightHold and fightAct play it; fightEnd asks first; and
+   fightPlay makes a fight the one played (net.fightOn: a new fight, or the one the GM plays; when it ends, the first begun of those left). The old
+   names (net.combatSet, combatStep, combatHold, combatAct, combatEnd) stay as thin wrappers for the strip's fight on a map (fightAt). Time is
+   unchanged here: each fight still moves the clock by its rounds, as before (fold 4 gives each fight its own time) */
+var _fightN = 0;   // the order the fights began in: this session's count
+net.fightOn = null;   // the fight played (its id), or null: the host's own, never sent
+function fightIds() {   // every fight's id, in the order begun (on a player's app, in the order its host sent them)
+    var cs = net.combats && typeof net.combats === 'object' ? net.combats : null; if (!cs) return [];
+    return Object.keys(cs).filter(function(k) { var c = cs[k]; return !!c && typeof c === 'object' && typeof c.mapId === 'string' && Array.isArray(c.rows); })
+        .map(function(k, i) { return { k: k, i: i, n: typeof cs[k].n === 'number' ? cs[k].n : Infinity }; })
+        .sort(function(a, b) { return (a.n - b.n) || (a.i - b.i); }).map(function(x) { return x.k; });
+}
+function fightsOn(mapId) { return typeof mapId === 'string' && mapId ? fightIds().filter(function(k) { return net.combats[k].mapId === mapId; }) : []; }   // the fights on a map, in the order begun
+function fightOfTok(mapId, tokId) {   // the fight on that map whose order holds that token, else null: a token is in one fight at most
+    if (typeof tokId !== 'string' || !tokId) return null;
+    var hit = null; fightsOn(mapId).forEach(function(k) { if (hit === null && net.combats[k].rows.some(function(r) { return !!r && r.tokId === tokId; })) hit = k; });
+    return hit;
+}
+function fightAt(mapId) { var ids = fightsOn(mapId); return ids.length ? (ids.indexOf(net.fightOn) >= 0 ? net.fightOn : ids[0]) : null; }   // the strip's fight on a map: the one played, else the first begun
+function orderById(id) { var cs = net.combats; return typeof id === 'string' && cs && typeof cs === 'object' && Object.prototype.hasOwnProperty.call(cs, id) && cs[id] && typeof cs[id] === 'object' && Array.isArray(cs[id].rows) ? cs[id] : null; }
+function orderOfIn(camp, charId) {   // the one judge: the id of the fight a character is in (the first begun whose order holds a token of it), else null
+    if (!camp || !camp.items || !camp.chars || typeof charId !== 'string' || !charId || !Object.prototype.hasOwnProperty.call(camp.chars, charId)) return null;
+    var hit = null;
+    fightIds().forEach(function(k) {
+        if (hit !== null) return; var cb = net.combats[k], mp = Object.prototype.hasOwnProperty.call(camp.items, cb.mapId) ? camp.items[cb.mapId] : null; if (!mp || !Array.isArray(mp.whiteboard)) return;
+        if (cb.rows.some(function(r) { return !!r && typeof r.tokId === 'string' && !!r.tokId && mp.whiteboard.some(function(w) { return !!w && w.id === r.tokId && !!w.isChar && w.charId === charId; }); })) hit = k;   // combatChars' rule: a character token of that character, hidden or not, its isChar read as combatChars reads it (any word that is true, as a file may write 1)
+    });
+    return hit;
+}
+net.orderOf = function(charId) { return orderOfIn(getActiveCampaign(), charId); };
+net.combatFor = function(mapId) { return net.active ? orderById(fightAt(mapId)) : null; };   // the fight played on that map, else the first begun there (HUD frame HF5b, the marks)
+net.combatOfTok = function(mapId, tokId) { return orderById(fightOfTok(mapId, tokId)); };   // the fight on that map that holds that token
+// Fold 2's review: the fight whose round CombatRound reads for a token on a map, worked out alike on the host and on a player's app: the fight that
+// holds the token, else the first begun there. Never net.fightOn, the host's own and never sent: a token in no fight on a map of two fights read
+// one round on its player's own sheet and another in the host's roll. A player's app holds its fights in the order its host began them
+net.combatRoundOf = function(mapId, tokId) { return orderById(fightOfTok(mapId, tokId) || fightsOn(mapId)[0] || null); };
+net.fightsOn = fightsOn;
+function newFightId() { var id; do { id = 'f_'; while (id.length < 10) id += 'abcdefghijklmnopqrstuvwxyz0123456789'.charAt(Math.floor(Math.random() * 36)); } while (orderById(id)); return id; }   // as a dated note's id is made
+// host: a fight started (fid null: a new one on combat.mapId), its roster changed (a roster edit keeps its round and its side), or ended (combat null).
+// The fight's id, or null
+function fightSet(fid, combat) {
+    if (net.role !== 'host') return null;
+    var had = orderById(fid), mapId = had ? had.mapId : (combat && typeof combat === 'object' && typeof combat.mapId === 'string' && combat.mapId ? combat.mapId : null), f = null;
+    if (combat && mapId) {
+        f = cleanFightBody(combat, mapId); if (!f) return null;
+        var heldBy = Object.create(null); fightsOn(mapId).forEach(function(k) { if (k !== fid) net.combats[k].rows.forEach(function(r) { if (r && typeof r.tokId === 'string') heldBy[r.tokId] = 1; }); });
+        f.rows = f.rows.filter(function(r) { return !(typeof r.tokId === 'string' && heldBy[r.tokId] === 1); }); if (!f.rows.length) return null;   // a token is in one fight at most: a row whose token another fight on that map holds stays out
+        f.turn = Math.min(f.turn, f.rows.length - 1);
+        var first = !had && !fightsOn(mapId).length;   // the map's first fight: the marks are held from now
+        if (!had) fid = newFightId();
+        f = Object.assign({ id: fid }, f); f.n = had && typeof had.n === 'number' ? had.n : ++_fightN;
+        net.combats[fid] = f;
+        if (first && typeof marksStart === 'function') { try { marksStart(mapId); } catch (e) { console.error(e); } }   // senses S4b: everyone's marks held from the fight's start
+        if (had && typeof had.rr === 'number') f.rr = had.rr;   // initiative O4: the last round the fight rolled for, and this round's side, kept through a roster edit
+        if (had && (had.side === 'pc' || had.side === 'rest')) f.side = had.side;
+        if (typeof combatSides === 'function') combatSides(mapId, f, !had);   // ...and each side together (a new fight rolls the sides first)
+        if (!had || had.round !== f.round) roundChanged(mapId, f);   // G10: the first round (a roster edit keeps its round)
+        if (had && had.round !== f.round && typeof clockRounds === 'function') clockRounds(f.round - had.round);   // item 20 K2: a round edited in the roster moves the clock with it (a new fight moves nothing)
+        if (!had) { net.fightOn = fid; logEvent('table', 'Combat started on ' + mapTitleOf(mapId) + ': ' + f.rows.map(function(r) { return r.name; }).join(', ')); }   // a new fight is the one played
+        toast(had ? 'Combat roster updated.' : 'Combat started on ' + mapTitleOf(mapId) + ' — ' + (f.rows[f.turn] || f.rows[0]).name + ' goes first.');
+    } else if (!combat) combatOver(fid, had);   // End: the one way a fight ends (fold 0), which the session's end and a deleted map share
+    else return null;
+    broadcastCombats(); combatRefresh();
+    if (f && !had) { try { fxCombatEdge(mapId, f, 'bank'); } catch (e) { console.error(e); } }   // T5a: their effects' clocks stop (what ran is kept)
+    if (f && !had) turnStarted(mapId, f);   // T2b: the first turn (after the broadcast: its player's note comes last)
+    return f ? fid : null;
+}
+function fightStep(fid, dir) {   // host: that fight's next turn (dir 1) or the one before (dir -1)
     if (net.role !== 'host') return;
-    var c = net.combats[mapId]; if (!c || !c.rows.length) return;
-    var t = c.turn + (dir < 0 ? -1 : 1), r0 = c.round, t0 = c.turn;
+    var c = orderById(fid); if (!c || !c.rows.length) return;
+    var mapId = c.mapId, t = c.turn + (dir < 0 ? -1 : 1), r0 = c.round, t0 = c.turn;
     if (t >= c.rows.length) { t = 0; c.round += 1; }
     else if (t < 0) { if (c.round > 1) { c.round -= 1; t = c.rows.length - 1; } else t = 0; }
     c.turn = t;
@@ -4652,38 +4758,58 @@ net.combatStep = function(mapId, dir) {
     if (c.rows[t]) delete c.rows[t].held;   // ...and a row whose turn it is holds nothing
     if (c.round > r0 && typeof combatNewRound === 'function') { combatNewRound(mapId, c); t = c.turn; }   // initiative O4: a new round's order (rolled again, by side), the first time the fight reaches it
     if (c.round !== r0) roundChanged(mapId, c);   // G10
-    if (c.round !== r0 && typeof clockRounds === 'function') clockRounds(c.round - r0);   // item 20 K2: a round moves the clock on by its length (a step back, back)
+    if (c.round !== r0 && typeof clockRounds === 'function') clockRounds(c.round - r0);   // item 20 K2: a round moves the clock on by its length (a step back, back); fold 2: each fight still does
     toast((c.rows[t].name || 'Someone') + "'s turn" + (t === 0 && dir > 0 ? ' — round ' + c.round : '') + '.');
     broadcastCombats(); combatRefresh();
     if (c.round !== r0 || c.turn !== t0) turnStarted(mapId, c);   // T2b: whoever's turn it now is (nothing when a step back at the first turn moves nothing), after the broadcast
-};
-// [netcheck:turnhold-start]
-// Initiative O3 (the owner's answer, "After the current turn"): the character whose turn it is holds it — play moves on as with Next turn and
-// its row waits, held; later in the round, when its owner or the GM presses Act, the held row goes right after whoever is acting and keeps
-// that place (it acts next). A hold not used by the round's end is lost (combatStep), and the character acts in its usual place
-net.combatHold = function(mapId) {
+}
+// Initiative O3 (the owner's answer, "After the current turn"): the character whose turn it is holds it — play moves on as with Next turn and its row
+// waits, held; later in the round, when its owner or the GM presses Act, the held row goes right after whoever is acting and keeps that place (it
+// acts next). A hold not used by the round's end is lost (fightStep), and the character acts in its usual place
+function fightHold(fid) {
     if (net.role !== 'host') return false;
-    var c = own(net.combats, mapId) ? net.combats[mapId] : null, row = c && Array.isArray(c.rows) ? c.rows[c.turn] : null; if (!row) return false;
-    row.held = 1; toast((row.name || 'Someone') + ' holds their turn.'); logEvent('table', (row.name || 'Someone') + ' held their turn on ' + mapTitleOf(mapId));
-    net.combatStep(mapId, 1);   // play moves on (it broadcasts); a hold on the round's last turn is lost at once, as combatStep clears holds at a new round
+    var c = orderById(fid), row = c ? c.rows[c.turn] : null; if (!row) return false;
+    row.held = 1; toast((row.name || 'Someone') + ' holds their turn.'); logEvent('table', (row.name || 'Someone') + ' held their turn on ' + mapTitleOf(c.mapId));
+    fightStep(fid, 1);   // play moves on (it broadcasts); a hold on the round's last turn is lost at once, as fightStep clears holds at a new round
     return true;
-};
-net.combatAct = function(mapId, rowId) {
+}
+function fightAct(fid, rowId) {
     if (net.role !== 'host') return false;
-    var c = own(net.combats, mapId) ? net.combats[mapId] : null; if (!c || !Array.isArray(c.rows) || typeof rowId !== 'string') return false;
+    var c = orderById(fid); if (!c || typeof rowId !== 'string') return false;
     var i = c.rows.findIndex(function(r) { return r && r.id === rowId; }); if (i < 0 || i === c.turn || c.rows[i].held !== 1) return false;
     var row = c.rows.splice(i, 1)[0], t = c.turn - (i < c.turn ? 1 : 0); delete row.held;
     c.rows.splice(t + 1, 0, row); c.turn = t;
-    toast((row.name || 'Someone') + ' acts next.'); logEvent('table', (row.name || 'Someone') + ' acted from a hold on ' + mapTitleOf(mapId));
+    toast((row.name || 'Someone') + ' acts next.'); logEvent('table', (row.name || 'Someone') + ' acted from a hold on ' + mapTitleOf(c.mapId));
     broadcastCombats(); combatRefresh();
     return true;
-};
-// [netcheck:turnhold-end]
-net.combatEnd = function(mapId) {
-    if (net.role !== 'host' || !net.combats[mapId]) return;
-    var c = net.combats[mapId];
-    showConfirm('End combat on ' + mapTitleOf(mapId) + '? Round ' + c.round + ', ' + c.rows.length + ' in the order. The ring and the turn strip go for everyone.', function(yes) { if (yes) net.combatSet(mapId, null); });
-};
+}
+function fightEnd(fid) {   // host: End combat, asked first; a map's other fight goes on
+    var c = net.role === 'host' ? orderById(fid) : null; if (!c) return;
+    var restE = fightsOn(c.mapId).length - 1;   // the other fights on that map, which go on
+    showConfirm('End combat on ' + mapTitleOf(c.mapId) + '? Round ' + c.round + ', ' + c.rows.length + ' in the order. ' + (restE > 1 ? 'The other ' + restE + ' fights there go on.' : restE === 1 ? 'The other fight there goes on.' : 'The ring and the turn strip go for everyone.'), function(yes) { if (yes) fightSet(fid, null); });
+}
+function fightPlay(fid) {   // host: that fight is the one played (the fight tracker's press, fold 8 of the design)
+    if (net.role !== 'host' || !orderById(fid)) return false;
+    if (net.fightOn !== fid) { net.fightOn = fid; combatRefresh(); }
+    return true;
+}
+net.fightSet = fightSet; net.fightStep = fightStep; net.fightHold = fightHold; net.fightAct = fightAct; net.fightEnd = fightEnd; net.fightPlay = fightPlay;
+// A player's app: the toasts of a new copy of the fights follow the fight that holds a token of theirs on the map on screen, else the first fight
+// there. A turn or a round that moved in it is said, and "Combat is over." when the fight they followed is gone
+function fightMineKey(cs, camp, mid) {
+    if (!cs || typeof cs !== 'object' || !camp || typeof mid !== 'string') return null;
+    var map = camp.items && Object.prototype.hasOwnProperty.call(camp.items, mid) ? camp.items[mid] : null, mine = Object.create(null), first = null, hit = null;
+    (map && Array.isArray(map.whiteboard) ? map.whiteboard : []).forEach(function(w) { if (w && w.isChar && w.ownerId && w.ownerId === net.myId && typeof w.id === 'string') mine[w.id] = 1; });
+    Object.keys(cs).forEach(function(k) { var c = cs[k]; if (!c || c.mapId !== mid || !Array.isArray(c.rows)) return; if (first === null) first = k; if (hit === null && c.rows.some(function(r) { return !!r && typeof r.tokId === 'string' && mine[r.tokId] === 1; })) hit = k; });
+    return hit !== null ? hit : first;
+}
+function combatToasts(before, after) {
+    var camp = getActiveCampaign(), mid = camp && camp.activeItemId, kB = fightMineKey(before, camp, mid), kA = fightMineKey(after, camp, mid);
+    var cA = kA !== null ? after[kA] : null, cB = kA !== null && before && Object.prototype.hasOwnProperty.call(before, kA) ? before[kA] : null;
+    if (cA && (!cB || cB.turn !== cA.turn || cB.round !== cA.round)) toast((cB ? '' : 'Combat! ') + (cA.rows[cA.turn] || {}).name + "'s turn" + (cA.round > 1 && cA.turn === 0 ? ' — round ' + cA.round : '') + '.');
+    else if (kB !== null && !Object.prototype.hasOwnProperty.call(after, kB)) toast('Combat is over.');
+}
+// [netcheck:orders-end]
 function targetersOf(itemId, mapId) {
     return Object.keys(net.targets).filter(function(pid) { var t = net.targets[pid]; return t && t.id === itemId && t.mapId === mapId; })
         .map(function(pid) { return { id: pid, name: net.targets[pid].name || 'Player', hue: playerHue(pid) }; });
@@ -4818,7 +4944,7 @@ net.tokUnseen = function(mapId, tokId) {
             var p = net.roster[peer]; if (!p || typeof p.id !== 'string' || asked[p.id]) return false;
             if (!(net.conns || []).some(function(c) { return c && c.peer === peer && c.open; })) return false;
             asked[p.id] = 1;
-            if (typeof combatSeen === 'function' && combatSeen(mapId, p.id, tokId)) return false;
+            if (typeof combatSeen === 'function' && combatSeen(fightOfTok(mapId, tokId), p.id, tokId)) return false;   // fold 2: seen in the fight that holds it
             if (!w || w.hidden) return true;
             var drop = fogDrop(camp, map, p.id); return !!(drop && drop[tokId]);
         });
@@ -5357,11 +5483,12 @@ function admitPlayer(conn, prof, provenKey) {
     if (window.wpFog) window.wpFog.invalidateVision();   // fog: this admit may follow token moves; compute a fresh per-recipient view
     var snapOk = false;
     try {
-        var snap, mkSnap = function() { snap = { type: 'snapshot', gmId: getProfile().id, key: issuedKey, appState: sanitizeAppState(state.appState, prof.id, typeof mapHeldOf === 'function' ? mapHeldOf(conn) : null), stage: land.stage, paused: net.paused, pausedSelf: !!(net.pausedPlayers && net.pausedPlayers[prof.id]), travelLocked: net.travelLocked, snap: typeof window.wpSnapOn === 'function' && window.wpSnapOn() === true, stance: net.stanceFlags(), stanceCamps: window.wpVtt ? window.wpVtt.hostCamps() : null, targets: targetsFor(prof.id), combats: combatsFor(prof.id), looks: true, rowText: true, notepad: notepadMsg() }; if (sheetFilesHere()) snap.sheetFiles = true; gmSignSnap(snap, conn); };   // sheetFiles (2026-10-18): this host reads a sheet file made elsewhere (an outside reader of the GM's own), true only   // (signed with the GM's key when this player's app sent its nonce: gmSignSnap)
+        var snap, mkSnap = function() { snap = { type: 'snapshot', gmId: getProfile().id, key: issuedKey, appState: sanitizeAppState(state.appState, prof.id, typeof mapHeldOf === 'function' ? mapHeldOf(conn) : null), stage: land.stage, paused: net.paused, pausedSelf: !!(net.pausedPlayers && net.pausedPlayers[prof.id]), travelLocked: net.travelLocked, snap: typeof window.wpSnapOn === 'function' && window.wpSnapOn() === true, stance: net.stanceFlags(), stanceCamps: window.wpVtt ? window.wpVtt.hostCamps() : null, targets: targetsFor(prof.id), combats: combatsFor(prof.id, prof.location), fights: true, looks: true, rowText: true, notepad: notepadMsg() }; if (sheetFilesHere()) snap.sheetFiles = true; gmSignSnap(snap, conn); };   // sheetFiles (2026-10-18): this host reads a sheet file made elsewhere (an outside reader of the GM's own), true only   // (signed with the GM's key when this player's app sent its nonce: gmSignSnap)
         if (typeof fogLanded === 'function') fogLanded(null, mkSnap); else mkSnap();   // fold M4: judged with every open drag at its start
         conn.send(snap); snapOk = true;
     } catch (e) { sendFailed(e, 'snapshot'); toast('Could not send the campaign to ' + (prof.name || 'the player') + ' \u2014 something in it cannot be sent (the console has the details).'); if (typeof mapForgetConn === 'function') mapForgetConn(conn.peer); }
     if (snapOk && typeof fogSeedSnapshot === 'function') fogSeedSnapshot(conn, snap);   // fold M5: what each of its fogged maps holds
+    if (snapOk && typeof combatsSentSeed === 'function') combatsSentSeed(conn, snap.combats);   // fold 2's review: the fights it holds now
     if (snapOk && typeof hidNoteAll === 'function') hidNoteAll();   // hidden pieces: the drawings of theirs the GM hid, which this copy lacks
     if (window.wpVtt) net._lastStanceSig = window.wpVtt.hostSig();   // the snapshot carried the ceiling: no re-send on the next save
     var sm = net.soundsMessage(); if (sm) { try { conn.send(sm); } catch (e) { sendFailed(e); } net._lastSoundSig = soundSig(sm); }   // the hosted campaign's sounds, to this peer only
@@ -6001,7 +6128,7 @@ function handleMessage(msg, conn) {
         // a player squaring up to one of the GM's characters: offer to start combat there (once per character per session) — unless the campaign
         // says to do nothing (the owner's ruling of 2026-10-01: camp.turnRules.targetAsk 'off'; absent: ask; Settings, the Turn-based combat row);
         // never for a token the GM hid. The GM answers the offer by its buttons alone: Enter does not say Yes to it (a key pressed for something else)
-        if (msg.id && !own(net.combats, msg.mapId) && !combatAsked[msg.mapId + '|' + msg.id] && !own(combatAskOpen, tp.id)) {
+        if (msg.id && !fightsOn(msg.mapId).length && !combatAsked[msg.mapId + '|' + msg.id] && !own(combatAskOpen, tp.id)) {
             var campT = getActiveCampaign(), mapT = campT && campT.items && own(campT.items, msg.mapId) ? campT.items[msg.mapId] : null;
             var askT = !(campT && campT.turnRules && typeof campT.turnRules === 'object' && campT.turnRules.targetAsk === 'off');
             var tokT = askT && mapT && mapT.type === 'map' ? (mapT.whiteboard || []).find(function(w) { return w && w.id === msg.id; }) : null;
@@ -6035,11 +6162,9 @@ function handleMessage(msg, conn) {
         // [netcheck:notepadmsg-end]
     } else if (msg.type === 'combats' && net.role === 'client') {
         if (!fromHost(conn)) return;
-        var before = net.combats, after = cleanCombats(msg.combats);
+        var before = net.combats, after = typeof cleanFightsIn === 'function' ? cleanFightsIn(msg.combats) : cleanCombats(msg.combats);   // fold 2: by the shape the host's snapshot said
         net.combats = after;
-        var camC = getActiveCampaign(), mineC = camC && after[camC.activeItemId], mineB = camC && before[camC.activeItemId];
-        if (mineC && (!mineB || mineB.turn !== mineC.turn || mineB.round !== mineC.round)) toast((mineB ? '' : 'Combat! ') + (mineC.rows[mineC.turn] || {}).name + "'s turn" + (mineC.round > 1 && mineC.turn === 0 ? ' — round ' + mineC.round : '') + '.');
-        else if (mineB && !mineC) toast('Combat is over.');
+        if (typeof combatToasts === 'function') combatToasts(before, after);   // fold 2: the toasts follow the fight that holds their token on the map on screen
         combatRefresh();
     } else if (msg.type === 'targets' && net.role === 'client') {
         if (!fromHost(conn)) return;
@@ -6254,7 +6379,7 @@ function handleMessage(msg, conn) {
         if (!actA) { denyA('field'); return; }
         var locA = profA.location, mapA = (typeof locA === 'string' && campA.items && own(campA.items, locA)) ? campA.items[locA] : null;   // the facing and round names read their token on the map they are on, as their rolls do
         var vtA = window.wpVtt, ruleA = function(k) { return !vtA || (vtA.rulesOn ? vtA.rulesOn(k) : vtA.on(k)); };
-        var tcA = Sa.withRound(Sa.tokenCtx(mapA, Sa.charTokenOn(mapA, qa.charId, profA.id, { strict: true }), { turning: ruleA('turning'), posture: ruleA('posture'), elevation: ruleA('elevation'), viewer: profA.id }), mapA && own(net.combats, locA) ? net.combats[locA] : null);
+        var tkA = mapA ? Sa.charTokenOn(mapA, qa.charId, profA.id, { strict: true }) : null, tcA = Sa.withRound(Sa.tokenCtx(mapA, tkA, { turning: ruleA('turning'), posture: ruleA('posture'), elevation: ruleA('elevation'), viewer: profA.id }), mapA ? net.combatRoundOf(locA, tkA && tkA.id) : null);   // fold 2: the fight that holds their token, else the first begun on that map, as their own sheet reads it (net.combatRoundOf)
         if (typeof rangeTo === 'function' && Sa.withRange) tcA = Sa.withRange(tcA, rangeTo(campA, mapA, locA, Sa.charTokenOn(mapA, qa.charId, profA.id, { strict: true }), profA.id));   // range R2: an apply action reads the range as a roll does
         var varsA = Sa.makeResolver(viewA, chvA, Fa, tcA);
         if (qa.row) { varsA = varsA.row(qa.row.f, qa.row.r); if (!varsA) { denyA('missing'); return; } rowGmA = !!Sa.rowRollNames(campA.system, chA, qa.row.f, qa.row.r, [], Fa).gm; }   // H7b: the row's own names (a row they cannot see is gone); a row of a GM-only item keeps the card between them and the GM
@@ -6278,13 +6403,14 @@ function handleMessage(msg, conn) {
         if (!window.wpVtt || !window.wpVtt.on('turns')) return;
         var prH = net.roster[conn.peer]; if (!prH || typeof msg.mapId !== 'string' || msg.mapId !== prH.location || typeof msg.row !== 'string') return;
         if (!allow('turnhold', { perMs: 400, burst: 4, windowMs: 4000, table: 400 }, conn.peer)) return;
-        var cbH = own(net.combats, msg.mapId) ? net.combats[msg.mapId] : null, rowH = cbH && Array.isArray(cbH.rows) ? cbH.rows.find(function(r) { return r && r.id === msg.row; }) : null;
+        var fidH = null; fightsOn(msg.mapId).forEach(function(fid) { if (fidH === null && net.combats[fid].rows.some(function(r) { return !!r && r.id === msg.row; })) fidH = fid; });   // fold 2: the fight on that map whose order holds the row
+        var cbH = fidH ? net.combats[fidH] : null, rowH = cbH ? cbH.rows.find(function(r) { return r && r.id === msg.row; }) : null;
         if (!rowH || typeof rowH.tokId !== 'string') return;
         var campH = getActiveCampaign(), mapH = campH && campH.items && own(campH.items, msg.mapId) ? campH.items[msg.mapId] : null;
         var tokH = mapH && mapH.type === 'map' && Array.isArray(mapH.whiteboard) ? mapH.whiteboard.find(function(w) { return w && w.id === rowH.tokId; }) : null;
         if (!tokH || !tokH.isChar || !tokH.ownerId || tokH.ownerId !== prH.id) return;
-        if (msg.type === 'turn-hold') { if (cbH.rows[cbH.turn] === rowH) net.combatHold(msg.mapId); }
-        else net.combatAct(msg.mapId, rowH.id);
+        if (msg.type === 'turn-hold') { if (cbH.rows[cbH.turn] === rowH) fightHold(fidH); }
+        else fightAct(fidH, rowH.id);
         // [netcheck:turnholdmsg-end]
     } else if (msg.type === 'turn-end' && net.role === 'host') {
         // [netcheck:turnend-start]
@@ -6295,12 +6421,13 @@ function handleMessage(msg, conn) {
         if (!window.wpVtt || !window.wpVtt.on('turns')) return;
         var prT = net.roster[conn.peer]; if (!prT || typeof msg.mapId !== 'string' || msg.mapId !== prT.location || typeof msg.row !== 'string') return;
         if (!allow('turnend', { perMs: 400, burst: 4, windowMs: 4000, table: 400 }, conn.peer)) return;
-        var cbT = own(net.combats, msg.mapId) ? net.combats[msg.mapId] : null, rowT = cbT && Array.isArray(cbT.rows) ? cbT.rows[cbT.turn] : null;
+        var fidT = null; fightsOn(msg.mapId).forEach(function(fid) { var cb = net.combats[fid], r = cb.rows[cb.turn]; if (fidT === null && r && r.id === msg.row) fidT = fid; });   // fold 2: the fight on that map whose row on turn it is
+        var cbT = fidT ? net.combats[fidT] : null, rowT = cbT ? cbT.rows[cbT.turn] : null;
         if (!rowT || rowT.id !== msg.row || typeof rowT.tokId !== 'string') return;
         var campT = getActiveCampaign(), mapT = campT && campT.items && own(campT.items, msg.mapId) ? campT.items[msg.mapId] : null;
         var tokT = mapT && mapT.type === 'map' && Array.isArray(mapT.whiteboard) ? mapT.whiteboard.find(function(w) { return w && w.id === rowT.tokId; }) : null;
         if (!tokT || !tokT.isChar || !tokT.ownerId || tokT.ownerId !== prT.id) return;
-        net.combatStep(msg.mapId, 1);
+        fightStep(fidT, 1);
         // [netcheck:turnend-end]
     } else if (msg.type === 'char-upload' && net.role === 'host') {
         // [netcheck:charupload-start]
@@ -6974,7 +7101,7 @@ function handleMessage(msg, conn) {
             var locQ = net.roster[conn.peer] && net.roster[conn.peer].location, mapQ = (typeof locQ === 'string' && campQ.items && own(campQ.items, locQ)) ? campQ.items[locQ] : null;   // 5h Fold 3: the facing names read the player's token on the map they are on
             var vtQ = window.wpVtt, ruleQ = function(k) { return !vtQ || (vtQ.rulesOn ? vtQ.rulesOn(k) : vtQ.on(k)); };
             tcQ = SQ.tokenCtx(mapQ, SQ.charTokenOn(mapQ, q.charId, pidQ, { strict: true }), { turning: ruleQ('turning'), posture: ruleQ('posture'), elevation: ruleQ('elevation'), viewer: pidQ });   // facing and stance from the player's own token, on the table's settings (as their sheet reads them)
-            tcQ = SQ.withRound(tcQ, mapQ && own(net.combats, locQ) ? net.combats[locQ] : null);
+            tcQ = SQ.withRound(tcQ, mapQ ? net.combatRoundOf(locQ, (SQ.charTokenOn(mapQ, q.charId, pidQ, { strict: true }) || {}).id) : null);   // fold 2: the fight that holds their token, else the first begun on that map, as their own sheet reads it (net.combatRoundOf)
             if (typeof rangeTo === 'function' && SQ.withRange) tcQ = SQ.withRange(tcQ, rangeTo(campQ, mapQ, locQ, SQ.charTokenOn(mapQ, q.charId, pidQ, { strict: true }), pidQ));   // range R2: RangeMod and TargetDistance, to their own target as their copy holds it   // HUD frame (HF5b): CombatRound reads the combat on the map they are on (the token context stays null without a token)
             chQ = srcQ; varsQ = SQ.makeResolver(viewQ, chvQ, Fq, tcQ);
             if (q.row) {   // Stage 6 F5b: a roll on one of their rows — its names through their own view; a row of a GM-only item keeps the roll between them and the GM
@@ -7343,6 +7470,7 @@ function wireConn(conn) {
                 videoOver(); if (window.wpVideo && window.wpVideo.tableLeft) window.wpVideo.tableLeft();   // item 21 V2: and a video the GM was showing
                 stopHeartbeat(); setIndicator(null);
                 net.roster = Object.create(null); net.away = Object.create(null);   // the old table's players never carry into this machine's own campaign
+                net.combats = {};   // fold 0's live check: and its fights (the strip, the pill and the Calendar would read the GM's fights on this machine's own campaign)
                 net.notepad = { on: false, text: '' }; if (typeof padReset === 'function') padReset(); setTimeout(renderNotepad, 0);   // and the GM's table notepad goes with the table, as leaveSession has it: on this way out it ran no leaveSession, so the pad stayed up with its words and no button to close it
                 renderRoster();
                 load();   // the 'end' handler already told the player what happened
@@ -7774,7 +7902,7 @@ function leaveSession(silent) {
     if (window.wpMusic && window.wpMusic.tableLeft) window.wpMusic.tableLeft(wasClient);
     if (window.wpFx) window.wpFx.tableLeft();
     endWaiting(wasHost);   // Onboarding F1a: waiting tokens live only while the session runs (the end's save writes them away)
-    net.targets = {}; combatAskOpen = Object.create(null);
+    net.targets = {}; combatAskOpen = Object.create(null); net.fightOn = null;   // fold 2: no fight is played once the table is over
     net.combats = {}; combatAsked = {};
     net.notepad = { on: false, text: '' }; if (typeof padReset === 'function') padReset(); setTimeout(renderNotepad, 0);
     if (window.wpRenderCombatStrip) setTimeout(function() { window.wpRenderCombatStrip(); }, 0);
@@ -8635,10 +8763,11 @@ function stageConn(c, stage, personal) {
     var p = own(net.roster, c.peer) ? net.roster[c.peer] : null;
     if (!p) return null;
     if (personal) p.detached = net.stageMode === 'last';   // a summon ends a detour; under "Player's last location" nobody is attached to the GM's browsing, so they stay where they were brought (the owner's ruling of 2026-10-04)
-    p.location = stage.itemId; ensurePlayerToken(p.id, stage.itemId);
+    var wasLoc = p.location; p.location = stage.itemId; ensurePlayerToken(p.id, stage.itemId);
     if (typeof mapGive === 'function') mapGive(c, stage.campId, stage.itemId);   // possession: the map they arrive on, whole, before the word that they are on it
     if (c.open) { try { c.send(personal ? { type: 'stage', stage: stage, personal: true } : { type: 'stage', stage: stage }); } catch (e) { sendFailed(e); } }
     if (typeof mapLeft === 'function') mapLeft(c, stage.campId);   // possession (the take-back): every map this connection held and its player is no longer on, once the new one has been given and the stage word sent
+    if (typeof combatsSendTo === 'function') combatsSendTo(c, wasLoc);   // fold 2: the fights on the map they are on now, after the stage word
     if (c.open && net.sendFxArrival) net.sendFxArrival(c, stage.itemId);
     return p;
 }

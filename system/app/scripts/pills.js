@@ -58,7 +58,7 @@ function pillsState(w, am, view, fogBtn) {
     var ros = st.hosting && net.roster ? net.roster : {};
     st.players = Object.keys(ros).filter(function(k) { return !!ros[k] && typeof ros[k].id === 'string'; }).length;
     st.paused = st.hosting && net.paused === true;
-    var c = st.hosting && isMap && net.combats && Object.prototype.hasOwnProperty.call(net.combats, am.id) ? net.combats[am.id] : null;
+    var c = !st.hosting || !isMap ? null : typeof w.wpStripFight === 'function' ? w.wpStripFight(am.id) : (typeof net.combatFor === 'function' ? net.combatFor(am.id) : null);   // fold 2 (backlog 152): the fight the strip shows on this map
     if (c && Array.isArray(c.rows)) { var cur = c.rows[c.turn]; st.round = c.round; st.turn = cur && typeof cur.name === 'string' ? cur.name : ''; }
     st.preview = fog && typeof fog.preview === 'function' ? fog.preview() : 'off';
     if (typeof st.preview === 'string' && st.preview !== 'off' && st.preview !== 'party') Object.keys(ros).forEach(function(k) { if (ros[k] && ros[k].id === st.preview && typeof ros[k].name === 'string') st.previewName = ros[k].name; });

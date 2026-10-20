@@ -22,6 +22,9 @@ let pass = 0, fail = 0;
 function check(name, ok, detail) { if (ok) { pass++; console.log('ok       ', name); } else { fail++; console.log('FAIL     ', name, detail !== undefined ? '-> ' + String(detail).slice(0, 900) : ''); } }
 
 const ix = read('index.html'), css = read('style.css'), wbSrc = read('scripts/whiteboard.js'), mainSrc = read('scripts/main.js'), setSrc = read('scripts/settings.js'), tourSrc = read('scripts/tutorial.js');
+// fold 2 (backlog 152): net.js's orders slice (fightsOn, combatFor, the API by id), loaded onto a stand-in for net so the board's readers ask the
+// real one; and the board's fightsHere line
+const ordersOf = s => { const a = s.indexOf('// [netcheck:orders-start]'), z = s.indexOf('// [netcheck:orders-end]'); return a >= 0 && z > a ? s.slice(a, z) : ''; };
 const sliceOf = (src, name) => { const A = '// [lookcheck:' + name + '-start]', Z = '// [lookcheck:' + name + '-end]', a = src.indexOf(A), z = src.indexOf(Z); return a >= 0 && z > a && count(src, A) === 1 && count(src, Z) === 1 ? src.slice(a + A.length, z) : ''; };
 
 /* ---------- the inventory: every control around the play map, by its id, as it stood on 2026-10-06 before the look work ---------- */
@@ -1488,7 +1491,7 @@ const swSrc = sliceOf(setSrc, 'viewswitch'), cornerSrc = sliceOf(mainSrc, 'corne
     check('the pills, as the page has them: one box in the top row, after the clock and a player\'s video and before the row\'s buttons, that holds five pills, each a button put away in the page: Fog, which wears the very drawing of the toolbar\'s fog button, Table with a green dot, Paused, filled, with two upright bars, Round, outlined, with a die showing five, and Viewing as, outlined, with the eye the fog\'s Reveal brush wears; the bars and the die are the drawings the owner passed on the sheet of thirteen; each says in its tooltip what a press does, and none holds a word that a script has yet to give it but Paused; the module is loaded after the map tabs\'',
         count(ix, BOX) === 1 && FOG.length > 40 && EYE.length > 40 && FOG !== EYE && count(ix, '<script type="module" src="scripts/maptabs.js"></script>\n<script type="module" src="scripts/pills.js"></script>\n') === 1 && count(ix, '<button class="pill') === 5);
     const load = () => { try { return new Function(pSlice + '\nreturn { PILLS: PILLS, pillCut: pillCut, pillCount: pillCount, pillsModel: pillsModel, pillsDraw: pillsDraw, pillsState: pillsState, pillPress: pillPress };')(); } catch (e) { return { err: String(e) }; } };
-    const T = load(); let err = T.err || '', mod = '', cut = '', drew = '', stt = '', prs = '';
+    const T = load(); let err = T.err || '', mod = '', cut = '', drew = '', stt = '', prs = '', two = '';
     const NONE = { fogPill: null, tablePill: null, pausedPill: null, roundPill: null, viewPill: null };
     if (!err) try {
         const M = st => { const m = T.pillsModel(st); return Object.keys(m).filter(k => m[k]).map(k => k + ':' + m[k].text + (m[k].on === true ? '+' : m[k].on === false ? '-' : '') + '|' + m[k].tip); };
@@ -1512,15 +1515,20 @@ const swSrc = sliceOf(setSrc, 'viewswitch'), cornerSrc = sliceOf(mainSrc, 'corne
         drew = J([n1, s1, w1, n2, J(w2) === J(w1), n3, s3, n4, s4, n5, T.pillsDraw({ getElementById: () => null }, m1)]);
         // the state, read from what the other modules hold
         const btn = on => ({ classList: { contains: c => c === 'fog-on' && on } }), map = { type: 'map', id: 'm1' }, ros = { a: { id: 'u_1', name: 'Mira' }, b: { id: 'u_2', name: 'Bren' }, c: null, d: { name: 'no id' } };
-        const hostW = { wpNet: { active: true, role: 'host', roster: ros, paused: true, combats: { m1: { round: 4, turn: 1, rows: [{ name: 'Orc' }, { name: 'Bren' }] } } }, wpFog: { preview: () => 'u_2' }, wpVtt: { on: f => f === 'fog' } };
+        const ordP = ordersOf(read('scripts/net.js')), withOrders = n => { new Function('net', 'getActiveCampaign', ordP)(n, () => null); return n; };   // fold 2: net.js's own combatFor on each stand-in
+        const hostW = { wpNet: withOrders({ active: true, role: 'host', roster: ros, paused: true, combats: { m1: { mapId: 'm1', round: 4, turn: 1, rows: [{ name: 'Orc' }, { name: 'Bren' }] } } }), wpFog: { preview: () => 'u_2' }, wpVtt: { on: f => f === 'fog' } };
         const S = (w, am, view, b) => { const s = T.pillsState(w, am, view, b); return [s.gm, s.play, s.fog || '', s.hosting, s.players, s.paused, s.round || 0, s.turn || '', s.preview, s.previewName || ''].join(','); };
         const inh = Object.create({ m1: { round: 9, turn: 0, rows: [{ name: 'Inherited' }] } });
         stt = J([S(hostW, map, 'visual', btn(true)), S(hostW, map, 'data', btn(false)), S(hostW, { type: 'planner', id: 'p1' }, 'visual', btn(true)), S(hostW, null, 'visual', null),
             S({ wpNet: { active: true, role: 'client', roster: ros, paused: true, combats: hostW.wpNet.combats } }, map, 'visual', btn(true)), S({ wpNet: { foreign: true } }, map, 'visual', btn(true)), S({}, map, 'visual', btn(true)),
             S({ wpNet: { active: false, role: 'host', roster: ros, paused: true, combats: hostW.wpNet.combats }, wpVtt: { on: () => false }, wpFog: { preview: () => 'party' } }, map, 'visual', btn(true)),
-            S({ wpNet: { active: true, role: 'host', roster: ros, combats: inh }, wpFog: { preview: () => 'u_9' }, wpVtt: { on: () => true } }, map, 'visual', btn(false)),
-            S({ wpNet: { active: true, role: 'host', combats: { m1: { round: 2, turn: 5, rows: [{ name: 'Orc' }] }, }, paused: 1 }, wpFog: {} }, map, 'visual', btn(true)),
-            S({ wpNet: { active: true, role: 'host', combats: { m1: { round: 2, turn: 0, rows: 'x' } } } }, map, 'visual', btn(true))]);
+            S({ wpNet: withOrders({ active: true, role: 'host', roster: ros, combats: inh }), wpFog: { preview: () => 'u_9' }, wpVtt: { on: () => true } }, map, 'visual', btn(false)),
+            S({ wpNet: withOrders({ active: true, role: 'host', combats: { m1: { mapId: 'm1', round: 2, turn: 5, rows: [{ name: 'Orc' }] }, }, paused: 1 }), wpFog: {} }, map, 'visual', btn(true)),
+            S({ wpNet: withOrders({ active: true, role: 'host', combats: { m1: { mapId: 'm1', round: 2, turn: 0, rows: 'x' } } }) }, map, 'visual', btn(true))]);
+        // fold 2: two fights on the map. The pill says the fight the strip shows on this screen (whiteboard.js's window.wpStripFight), else net.js's combatFor
+        const twoN = () => withOrders({ active: true, role: 'host', roster: ros, combats: { f_dock0001: { id: 'f_dock0001', mapId: 'm1', round: 2, turn: 0, n: 1, rows: [{ name: 'Kael' }] }, f_dock0002: { id: 'f_dock0002', mapId: 'm1', round: 5, turn: 0, n: 2, rows: [{ name: 'Sela' }] } } });
+        const twoA = twoN(), twoB = twoN();
+        two = J([S({ wpNet: twoA, wpStripFight: id => (id === 'm1' ? twoA.combats.f_dock0002 : null) }, map, 'visual', btn(true)), S({ wpNet: twoB }, map, 'visual', btn(true)), S({ wpNet: twoB, wpStripFight: () => null }, map, 'visual', btn(true))]);
         // a press: the control that owns the thing is pressed, once, and nothing where it is not there
         const mkW = () => { const log = [], sel = { value: 'u_1' }, fm = { on: false, classList: { contains: c => c === 'show' && fm.on } };
             const d = { getElementById: id => (id === 'fogPreview' ? sel : id === 'fogMenu' ? fm : id === 'gone' ? null : { click: () => { log.push('click ' + id); } }) };
@@ -1544,9 +1552,11 @@ const swSrc = sliceOf(setSrc, 'viewswitch'), cornerSrc = sliceOf(mainSrc, 'corne
     check('the pills drawn (pillsDraw, on a page that refuses markup): a pill is shown with its words as text and its tooltip, or put away; a hostile name is text on the pill and in its tooltip; Fog\'s edge is gold only while fog is on, and Paused stays filled; drawn again with nothing changed, no word is written again; a pill that has nothing more to say is put away with its words left as they were; on a player\'s screen every pill is put away; a page that lacks a pill draws the others, and one that has none draws nothing',
         !err && drew === J([4, ['Fog on|Fog is on for this map. Opens the fog options.|pill.on', 'Table · 3|You are hosting. 3 players are connected. Opens Multiplayer.|pill.on', 'Paused|The table is paused. Press to resume it.|pill.hot', 'Viewing as ' + HOSTP + '|The fog is drawn as ' + HOSTP + ' sees it. Press to end the preview.|pill.on'],
             [1, 1, 0, 1], 4, true, 2, ['Fog off|Fog is off for this map. Opens the fog options.|pill', 'Table · 3|You are hosting. 3 players are connected. Opens Multiplayer.|pill.on', '', ''], 0, ['', '', '', ''], 0, 0]), err || drew);
-    check('the state the pills read (pillsState, run for real): the GM\'s own screen and never a player\'s app or someone else\'s table; the play map only while a map is on screen in the play view; the fog\'s state from the toolbar\'s own fog button, and none while the Fog of war feature is off; hosting only while a table is open and this app hosts it, with the players on its roster that have an id, the pause only as true, the fight of the map on screen by the map\'s own id and never one the list only inherits, the row on turn\'s name or none; the preview as the fog module says it, with the player\'s name from the roster',
+    check('the state the pills read (pillsState, run for real): the GM\'s own screen and never a player\'s app or someone else\'s table; the play map only while a map is on screen in the play view; the fog\'s state from the toolbar\'s own fog button, and none while the Fog of war feature is off; hosting only while a table is open and this app hosts it, with the players on its roster that have an id, the pause only as true, the fight of the map on screen as net.js\'s own combatFor answers it (fold 2: a fight by its own id, naming its map) and never one the list only inherits, the row on turn\'s name or none; the preview as the fog module says it, with the player\'s name from the roster',
         !err && stt === J(['true,true,on,true,2,true,4,Bren,u_2,Bren', 'true,false,off,true,2,true,4,Bren,u_2,Bren', 'true,false,on,true,2,true,0,,u_2,Bren', 'true,false,,true,2,true,0,,u_2,Bren', 'false,true,,false,0,false,0,,off,', 'false,true,,false,0,false,0,,off,', 'true,true,,false,0,false,0,,off,',
             'true,true,,false,0,false,0,,party,', 'true,true,off,true,2,false,0,,u_9,', 'true,true,,true,0,false,2,,off,', 'true,true,,true,0,false,0,,off,']), err || stt);
+    check('fold 2 (backlog 152, pillsState run for real over net.js\'s own orders slice): on a map that holds two fights the Round pill says the fight the strip shows on this screen (window.wpStripFight), the second here; with no strip to ask, the fight net.js\'s combatFor answers, the first begun; a strip that shows none says no round',
+        !err && two === J(['true,true,,true,2,false,5,Sela,off,', 'true,true,,true,2,false,2,Kael,off,', 'true,true,,true,2,false,0,,off,']), err || two);
     check('what a press on a pill does (pillPress, run for real): Fog presses the toolbar\'s fog button, and presses nothing while the fog options are already up, so it opens them and never closes them; Table presses the Multiplayer button; Paused presses the pause button only while the table is paused, never a press that would pause a table that runs; Round opens the turn order of the map on screen; Viewing as ends the preview through the fog module and sets the fog menu\'s own list to Off; an id that is no pill does nothing, and neither does a pill whose control or module is not there',
         !err && prs === J([['fogModeBtn', 'netBtn', 'sessionPauseBtn', 'combat', 'preview', '', ''], ['click fogModeBtn', 'click netBtn', 'click sessionPauseBtn', 'combat m1 {}', 'preview off'], 'off', 'open', '', true, ['', '', '', '', '', '', '', 'preview'], ['preview off']]), err || prs);
     // ---- the two chips that were in the row before the pills: a player's video and Review, in their passed drawings and the pills' look ----
@@ -2171,6 +2181,9 @@ const swSrc = sliceOf(setSrc, 'viewswitch'), cornerSrc = sliceOf(mainSrc, 'corne
             ['flex', 'First?', [QC, QO]], ['flex', 'Second?', [QC, QALT, QN]], ['none', 'Second?', [QC, QO]], [['flex', 'Odd?', [QC, QO]], 0], [6, 60, 60],
             ['flex', 'Which?', [QC, QALT, QN]], ['none', 'Which?', [QC, QO]],
             [['A', 'alt'], ['B', true], ['C', false], ['D', true], ['E1', true], ['E2', 'alt'], ['G', false], ['F', false]]]), dqerr || dq);
+    check('a question with a second answer (fold 2 of backlog 152, found live: Add to which fight, whose answers are a round and a name each): its box is as wide as a long question\'s and its buttons wrap inside it, where they stood out of a box 300 px wide; a question with one answer keeps its width',
+        count(css, '\n  #customConfirm > div:has(#customConfirmAlt) { width: min(88vw, 560px) !important; box-sizing: border-box; }\n  #customConfirm div:has(> #customConfirmAlt) { flex-wrap: wrap; }\n') === 1
+        && count(ix, 'justify-content:center;">\n    <div style="background:var(--panel2); padding:20px; border:1px solid var(--gold); border-radius:8px; width: 300px;">\n        <h3 id="customConfirmTitle"') === 1);
     check('the Characters section, said: Help names it right after the entry on the panel\'s lists, and both release notes carry it after the rail\'s note',
         count(ix, 'that list&rsquo;s tools: add one, fold or unfold its tree, and <b>search</b> it.</li>\n                          ' + CHELP + '\n') === 1 && [rootRead('WHATSNEW.txt'), read('assets/whatsnew.txt')].every(t => count(t, "  map with that section alone, or the pin to keep it open.\n" + CNOTE) === 1));
 }
@@ -2183,7 +2196,8 @@ const swSrc = sliceOf(setSrc, 'viewswitch'), cornerSrc = sliceOf(mainSrc, 'corne
     const fSl = sliceOf(wbSrc, 'combatfind');
     const cutWb = (a, z) => { const i = wbSrc.indexOf(a), k = wbSrc.indexOf(z, i + 1); return i >= 0 && k > i && count(wbSrc, a) === 1 ? wbSrc.slice(i, k) : ''; };
     const stripSrc = cutWb('function renderCombatStrip() {', '\nwindow.wpRenderCombatStrip = renderCombatStrip;'), stripWire = cutWb('(function wireCombatStrip() {', '\n// [lookcheck:combatfind-start]');
-    const modalSrc = cutWb('function renderCombatModal() {', '\nfunction openCombatModal('), modalWire = cutWb('(function wireCombatModal() {', '\nfunction renderCombatStrip() {');
+    const modalSrc = cutWb('function renderCombatModal() {', '\nfunction openCombatModal('), modalWire = cutWb('(function wireCombatModal() {', '\n// [lookcheck:stripfight-start]');
+    const fhLine = (() => { const i = wbSrc.indexOf('function fightsHere('); return i < 0 ? '' : wbSrc.slice(i, wbSrc.indexOf('\n', i)); })(), sfSl = sliceOf(wbSrc, 'stripfight'), ordW = ordersOf(read('scripts/net.js'));   // fold 2: the strip's fight on a map
     const escSrc = (/\n  (function esc\(s\)\{return [^\n]*\})\n/.exec(read('scripts/inspector.js')) || [])[1] || '';
     let cf = {}, cferr = '';
     try {
@@ -2197,8 +2211,9 @@ const swSrc = sliceOf(setSrc, 'viewswitch'), cornerSrc = sliceOf(mainSrc, 'corne
             const log = [], toasts = [], sent = [], timers = [];
             const map = { id: 'm1', type: 'map', meta: { title: 'Keep' }, whiteboard: o.toks || TOKS() };
             const camp = { activeItemId: 'm1', items: { m1: map, m2: { id: 'm2', type: 'map', meta: { title: 'Yard' }, whiteboard: [] } } };
-            const net = { active: o.active !== false, role: o.role || 'host', myId: 'u_a', stream: !!o.netStream, combats: { m1: { mapId: 'm1', round: 2, turn: o.turn || 0, rows: o.rows || ROWS() } }, send: m => sent.push(m), myTurnTok: () => null,
-                combatStep: (id, d) => log.push('step ' + id + ' ' + d), combatEnd: id => log.push('end ' + id), combatHold: id => log.push('hold ' + id), combatAct: (id, r) => log.push('act ' + id + ' ' + r) };
+            const net = { active: o.active !== false, role: o.role || 'host', myId: 'u_a', stream: !!o.netStream, combats: { m1: { mapId: 'm1', round: 2, turn: o.turn || 0, rows: o.rows || ROWS() } }, send: m => sent.push(m), myTurnTok: () => null };
+            new Function('net', 'getActiveCampaign', ordW)(net, () => camp);   // fold 2: net.js's own fightsOn; the strip's buttons ask a fight by its id, recorded
+            Object.assign(net, { fightStep: (id, d) => log.push('step ' + id + ' ' + d), fightEnd: id => log.push('end ' + id), fightHold: id => log.push('hold ' + id), fightAct: (id, r) => log.push('act ' + id + ' ' + r) });
             const fx = { receive: f => log.push('receive ' + JSON.stringify(f)), play: f => { log.push('PLAY'); sent.push(f); } };
             const win = { wpNet: net, wpFx: o.noFx ? undefined : fx, wpFxCore: FX, wpVtt: { on: k => !(k === 'fx' && o.fxOff) } };
             if (o.stream) win.wpStream = true;
@@ -2208,7 +2223,7 @@ const swSrc = sliceOf(setSrc, 'viewswitch'), cornerSrc = sliceOf(mainSrc, 'corne
             (o.toks || map.whiteboard).forEach(w => { if (!o.noEl) st.wbEls[w.id] = node(w.id); });
             const doc = { getElementById: id => (Object.prototype.hasOwnProperty.call(els, id) ? els[id] : null) };
             const api = new Function('document', 'window', 'state', 'getActiveMap', 'getActiveCampaign', 'toast', 'resolveImg', 'setTimeout', 'clearTimeout', 'openCombatModal', 'draft',
-                escSrc + '\nvar combatDraft = draft;\n' + fSl + '\n' + stripSrc + '\n' + stripWire + '\n' + modalSrc + '\n' + modalWire
+                escSrc + '\nvar combatDraft = draft;\n' + fhLine + '\n' + sfSl + '\n' + fSl + '\n' + stripSrc + '\n' + stripWire + '\n' + modalSrc + '\n' + modalWire
                 + '\nreturn { findWho: findWho, findTok: findTok, findOf: findOf, findName: findName, findScroll: findScroll, findPing: findPing, combatFind: combatFind, rosterPeek: rosterPeek, rosterUnpeek: rosterUnpeek, renderCombatStrip: renderCombatStrip, renderCombatModal: renderCombatModal, FIND_MS: FIND_MS, draft: function(d) { if (d !== undefined) combatDraft = d; return combatDraft; } };')(
                 doc, win, st, () => camp.items[camp.activeItemId], () => camp, t => toasts.push(t), s => 'img:' + s, (f, ms) => { timers.push({ f, ms }); return timers.length; }, k => log.push('clear ' + k), id => log.push('roster ' + id), o.draft || null);
             const ev = t => ({ target: t, stopped: 0, stopPropagation() { this.stopped++; }, preventDefault() {} });
@@ -2308,7 +2323,7 @@ const swSrc = sliceOf(setSrc, 'viewswitch'), cornerSrc = sliceOf(mainSrc, 'corne
         !cferr && J(cf.roster) === J([['<button type="button" class="combat-find" data-tok="t_ana" data-tip="Find Ana on the map" aria-label="Find Ana on the map">Ana</button>', '<button type="button" class="combat-find" data-tok="t_orc" data-tip="Find Orc on the map" aria-label="Find Orc on the map">Orc</button>'], 0, 0, true, 'flex'])
         && J(cf.rosterWire) === J([[true, [1800], 2660, [[RING(3060, 4050, 120)], []]], false, true, [false, ['clear 2']], [false, 2, [[], [NOGM]]], [false, [[], []], 3]]), cferr || J([cf.roster, cf.rosterWire]));
     const FIND_GM = "A hold not used by the end of the round is lost, and they act in their usual place next round.</li>\n                                  <li>Click a name on the turn strip, or in the roster, to find its token. Your screen moves to it and marks it for a moment. Nobody else&rsquo;s screen moves. The roster fades while the mark shows, so you see the map under it.</li>\n";
-    const FIND_PL = "                          <li><b>In a fight</b>, the turn strip at the top of the map shows whose turn it is and who is next. Click a name there to find that token. Your screen moves to it and marks it for a moment. A name whose token you cannot see is plain text.</li>\n                      </ul>\n                      <h4>What you'll see</h4>\n";
+    const FIND_PL = "                          <li><b>In a fight</b>, the turn strip at the top of the map shows whose turn it is and who is next. Click a name there to find that token. Your screen moves to it and marks it for a moment. A name whose token you cannot see is plain text. If two fights run on your map, the strip shows the one your token is in, with a button such as <b>1 of 2</b>. Press it to see the other. You only see the fights on the map you are on.</li>\n                      </ul>\n                      <h4>What you'll see</h4>\n";   // fold 2 (backlog 152): the line goes on to say the strip's switch
     const FIND_NOTE = "  the notepad stays plain text.\n- A name on the turn strip, or in the combat roster, finds its token.\n  Click it and your screen moves to the token and marks it for a\n  moment. Nobody else's screen moves. The roster fades while the mark\n  shows, so you see the map under it. A player finds only a token\n  they can see.\n";
     const plPane = (() => { const a = ix.indexOf('<div class="help-pane" data-pane="mp-player"'), z = ix.indexOf('<div class="help-pane" data-pane="', a + 10); return a > 0 ? ix.slice(a, z > a ? z : ix.length) : ''; })();
     check('Find on the map from a fight, as it is wired and said: the strip draws whose turn it is, who is next and who holds through the one name writer and the roster its rows\' names, each press goes to the one finder, the finder never plays, saves or sends anything, the roster takes a press on itself to bring it back, the styles are there, and Help says it to the GM under Combat after Hold and to players in What you can do, and both release notes carry it',
@@ -2818,7 +2833,9 @@ const swSrc = sliceOf(setSrc, 'viewswitch'), cornerSrc = sliceOf(mainSrc, 'corne
         let html = '', writes = 0; const stripEl = { style: {}, dataset: {}, get innerHTML() { return html; }, set innerHTML(v) { html = v; writes++; } };
         const net = { active: true, role: 'host', myId: 'u_g', combats: { m1: { mapId: 'm1', round: 1, turn: 0, rows: [{ id: 'r1', name: 'Ana', tokId: 't1' }, { id: 'r2', name: 'Orc', tokId: 't2' }] } }, myTurnTok: () => null };
         const map = { id: 'm1', type: 'map', whiteboard: [{ id: 't1', isChar: true, x: 0, y: 0, w: 50, h: 50 }, { id: 't2', isChar: true, x: 100, y: 0, w: 50, h: 50 }] };
-        const draw = new Function('document', 'window', 'state', 'getActiveMap', 'getActiveCampaign', 'toast', 'resolveImg', 'setTimeout', 'clearTimeout', 'openCombatModal', escSrc + '\n' + fSl + '\n' + stripSrc + '\nreturn renderCombatStrip;')(
+        new Function('net', 'getActiveCampaign', ordersOf(read('scripts/net.js')))(net, () => ({ items: { m1: map } }));   // fold 2: net.js's own fightsOn
+        const fhD = (() => { const i = wbSrc.indexOf('function fightsHere('); return i < 0 ? '' : wbSrc.slice(i, wbSrc.indexOf('\n', i)); })();
+        const draw = new Function('document', 'window', 'state', 'getActiveMap', 'getActiveCampaign', 'toast', 'resolveImg', 'setTimeout', 'clearTimeout', 'openCombatModal', escSrc + '\n' + fhD + '\n' + sliceOf(wbSrc, 'stripfight') + '\n' + fSl + '\n' + stripSrc + '\nreturn renderCombatStrip;')(
             { getElementById: id => (id === 'combatStrip' ? stripEl : null) }, { wpNet: net }, { viewMode: 'visual', zoomLevel: 1, wbEls: {} }, () => map, () => ({ items: { m1: map } }), () => {}, s => s, () => 0, () => {}, () => {});
         draw(); draws.push([writes, /data-act="next"/.test(html)]);
         html = html.replace(/ title="Next turn"/, ' data-tip="Next turn"');   // what a hover does to the page's own markup
@@ -2831,6 +2848,60 @@ const swSrc = sliceOf(setSrc, 'viewswitch'), cornerSrc = sliceOf(mainSrc, 'corne
         awaySrc.length > 200 && J(away) === J([['', 'w1', 0], ['', 'w1', 0], ['', 'w1', 0], ['', null, 1], ['', null, 1]])
         && drawErr === '' && J(draws) === J([[1, true], [1, true], [2, true], [3, '', 'none'], [4, true, 'flex']]),
         J([away, drawErr, draws]));
+
+    // fold 2 (backlog 152, docs/FIGHT_CLOCK_DESIGN.md section 12): two fights on one map. The turn strip shows one, with a "1 of 2" switch of this
+    // screen's own, and its buttons act on the fight it shows; the table's own right-click menu offers Start another fight here beside the fight the
+    // strip shows (whiteboard.js: the stripfight slice, the strip and its wiring, and tableMenuParts, run for real over net.js's own orders slice)
+    let tf = {}, tfErr = '';
+    try {
+        const cutF = (a, z) => { const i = wbSrc.indexOf(a), k = wbSrc.indexOf(z, i + 1); return i >= 0 && k > i && count(wbSrc, a) === 1 ? wbSrc.slice(i, k) : ''; };
+        const stripF = cutF('function renderCombatStrip() {', '\nwindow.wpRenderCombatStrip = renderCombatStrip;'), wireF = cutF('(function wireCombatStrip() {', '\n// [lookcheck:combatfind-start]'), menuF = cutF('function tableMenuParts(e, role) {', '\n// [systemcheck:gmfight-start]');
+        const fhF = (() => { const i = wbSrc.indexOf('function fightsHere('); return i < 0 ? '' : wbSrc.slice(i, wbSrc.indexOf('\n', i)); })(), escF = (/\n  (function esc\(s\)\{return [^\n]*\})\n/.exec(read('scripts/inspector.js')) || [])[1] || '', ordF = ordersOf(read('scripts/net.js'));
+        const world = o => {
+            o = o || {}; const log = [];
+            const map = { id: 'mDocks', type: 'map', meta: { title: 'Docks' }, whiteboard: [{ id: 't_kael', isChar: true, ownerId: 'u_a', x: 0, y: 0, w: 50, h: 50 }, { id: 't_u7', isChar: true, x: 100, y: 0, w: 50, h: 50 }, { id: 't_sela', isChar: true, ownerId: 'u_b', x: 200, y: 0, w: 50, h: 50 }] };
+            const camp = { id: 'k', activeItemId: 'mDocks', items: { mDocks: map }, players: {} };
+            const net = { active: true, role: o.role || 'host', myId: o.me || 'u_gm', combats: {}, myTurnTok: () => null, notepad: { on: false }, targets: {} };
+            if (!o.none) net.combats.f_dock0001 = { id: 'f_dock0001', mapId: 'mDocks', round: 2, turn: 0, n: 1, rows: [{ id: 'rt_kael', name: 'Kael', tokId: 't_kael' }, { id: 'rt_u7', name: 'Unit 7', tokId: 't_u7' }] };
+            if (!o.none && !o.one) net.combats.f_dock0002 = { id: 'f_dock0002', mapId: 'mDocks', round: 5, turn: 0, n: 2, rows: [{ id: 'rt_sela', name: 'Sela', tokId: 't_sela' }] };
+            new Function('net', 'getActiveCampaign', ordF)(net, () => camp);
+            Object.assign(net, { fightStep: (id, d) => log.push('step ' + id + ' ' + d), fightEnd: id => log.push('end ' + id), fightHold: id => log.push('hold ' + id), fightAct: (id, r) => log.push('act ' + id + ' ' + r) });
+            let html = ''; const strip = { style: {}, dataset: {}, on: {}, get innerHTML() { return html; }, set innerHTML(v) { html = v; }, addEventListener(t, f) { (this.on[t] = this.on[t] || []).push(f); } };
+            const api = new Function('document', 'window', 'state', 'getActiveMap', 'getActiveCampaign', 'toast', 'resolveImg', 'setTimeout', 'clearTimeout', 'openCombatModal', 'castMenuHtml',
+                escF + '\n' + fhF + '\n' + sliceOf(wbSrc, 'stripfight') + '\n' + sliceOf(wbSrc, 'combatfind') + '\n' + stripF + '\n' + wireF + '\n' + menuF + '\nreturn { draw: renderCombatStrip, menu: tableMenuParts };')(
+                { getElementById: id => (id === 'combatStrip' ? strip : null) }, { wpNet: net }, { viewMode: 'visual', zoomLevel: 1, wbEls: {} }, () => map, () => camp, () => {}, s => s, () => 0, () => {}, (mid, op) => log.push('roster ' + mid + ' ' + J(op)), () => '');
+            const press = act => { const b = { dataset: { act } }; (strip.on.click || []).forEach(f => f({ target: { closest: s => (s === '.combat-strip-btn' ? b : null) }, stopPropagation() {} })); };
+            const sw = () => (/data-act="switch"[^>]*>([^<]*)<\/button>/.exec(html) || [])[1] || null, cur = () => ((/class="combat-strip-cur"[^>]*>(.*?)<\/span>/.exec(html) || [])[1] || '').replace(/<[^>]*>/g, '') || null;
+            const menu = () => { const parts = api.menu({ clientX: 0, clientY: 0 }, 'host'), items = {}, mk = act => ({ dataset: { act }, addEventListener(t, f) { this.fn = f; } });
+                ['combat-new', 'combat-next', 'combat-edit', 'combat-end'].forEach(a => { items[a] = mk(a); });
+                parts.wire({ style: {}, querySelectorAll: s => (s === '.cm-session' ? Object.values(items) : []) });
+                return { html: parts.html, fire: a => items[a].fn({ stopPropagation() {} }) }; };
+            api.draw(); return { api, net, log, html: () => html, press, sw, cur, menu };
+        };
+        const G = world(); tf.gm = [G.sw(), G.cur()]; G.press('next'); G.press('switch'); tf.gm.push(G.sw(), G.cur()); G.press('next'); G.press('edit'); G.press('end');
+        const m2 = G.menu(); tf.menu2 = [m2.html.includes('data-act="combat-new"'), m2.html.includes('Start another fight here'), /data-act="combat-next" title="Round 5 — Sela is up"/.test(m2.html)]; m2.fire('combat-next'); m2.fire('combat-new'); m2.fire('combat-edit');
+        G.press('switch'); tf.gm.push(G.sw(), G.cur()); tf.log = G.log.slice();
+        const P = world({ role: 'client', me: 'u_b' }); tf.sela = [P.sw(), P.cur()]; P.press('switch'); tf.sela.push(P.sw(), P.cur(), P.log.length);
+        const K = world({ role: 'client', me: 'u_a' }); tf.kael = [K.sw(), K.cur()];
+        const O = world({ one: true }); tf.one = [O.sw(), O.cur(), O.menu().html.includes('Start another fight here')];
+        const Z = world({ none: true }), zm = Z.menu(); tf.none = [Z.html(), zm.html.includes('data-act="combat"'), zm.html.includes('Start another fight here')];
+    } catch (e) { tfErr = String(e && e.stack || e); }
+    check('fold 2 (backlog 152, whiteboard.js run for real over net.js\'s own orders slice): two fights on one map — the GM\'s turn strip shows the first begun with a "1 of 2" switch, and its buttons act on the fight it shows by its id; the switch shows the next fight on this screen alone and steps, the roster and End then act on that one; the right-click menu says the fight the strip shows and offers Start another fight here, which opens a fresh roster; a player\'s strip shows the fight that holds their own token first; one fight on a map shows no switch and the menu still offers another; with no fight the strip is put away and the menu offers Start Combat alone',
+        tfErr === '' && J(tf.gm) === J(['1 of 2', 'Kael', '2 of 2', 'Sela', '1 of 2', 'Kael']) && J(tf.menu2) === J([true, true, true])
+        && J(tf.log) === J(['step f_dock0001 1', 'step f_dock0002 1', 'roster mDocks {"fid":"f_dock0002"}', 'end f_dock0002', 'step f_dock0002 1', 'roster mDocks {"fresh":true}', 'roster mDocks {}'])
+        && J(tf.sela) === J(['2 of 2', 'Sela', '1 of 2', 'Kael', 0]) && J(tf.kael) === J(['1 of 2', 'Kael']) && J(tf.one) === J([null, 'Kael', true]) && J(tf.none) === J(['', true, false]), tfErr || J(tf));
+
+    // fold 2's review: the board's ring on a token whose turn it is (whiteboard.js onTurnHere, run for real over net.js's own orders slice) goes on a token
+    // on turn in ANY fight on the map; the board asks it for every token
+    let ot = null, otErr = '';
+    try {
+        const OT = new Function(sliceOf(wbSrc, 'onturn') + '\nreturn onTurnHere;')();
+        const netO = { active: true, role: 'host', combats: { f_dock0001: { id: 'f_dock0001', mapId: 'mDocks', round: 1, turn: 1, rows: [{ id: 'rt_kael', tokId: 't_kael' }, { id: 'rt_u7', tokId: 't_u7' }] }, f_dock0002: { id: 'f_dock0002', mapId: 'mDocks', round: 1, turn: 0, rows: [{ id: 'rt_sela', tokId: 't_sela' }] }, f_quay0001: { id: 'f_quay0001', mapId: 'mQuay', round: 1, turn: 0, rows: [{ id: 'rt_u9', tokId: 't_u9' }] } } };
+        new Function('net', 'getActiveCampaign', ordersOf(read('scripts/net.js')))(netO, () => null);
+        ot = [OT(netO, 'mDocks', 't_sela'), OT(netO, 'mDocks', 't_u7'), OT(netO, 'mDocks', 't_kael'), OT(netO, 'mDocks', 't_u9'), OT(netO, 'mQuay', 't_u9'), OT(netO, 'mDocks', 't_crate'), OT(netO, 'mDocks', null), OT(Object.assign({}, netO, { active: false }), 'mDocks', 't_sela'), OT(null, 'mDocks', 't_sela')];
+    } catch (e) { otErr = String(e && e.stack || e); }
+    check('fold 2\'s review (whiteboard.js onTurnHere, run for real over net.js\'s own orders slice): the board\'s ring goes on a token whose turn it is in ANY fight on the map — Sela on turn in the second fight on the Docks, Unit 7 in the first — and on none off its turn, on turn in a fight on another map, in no fight, or with no table up; the board asks it for every token',
+        otErr === '' && J(ot) === J([true, true, false, false, true, false, false, false, false]) && /el\.classList\.toggle\('wb-turn', onTurnHere\(window\.wpNet, activeMap\.id, item\.id\)\);/.test(wbSrc), otErr || J(ot));
 
     // 3. a new text box's stand-in words are selected when it is entered, so what is typed takes their place: the caret stood before them, and a
     // box typed into at once kept them ("GateDouble click to edit text")

@@ -22,6 +22,10 @@ const chatSrc = between('// [netcheck:chat-start]', '// [netcheck:chat-end]', 'c
 const rosterSrc = between('// [netcheck:roster-start]', '// [netcheck:roster-end]', 'roster');
 const rosterCleanSrc = between('// [netcheck:rosterclean-start]', '// [netcheck:rosterclean-end]', 'rosterclean');
 const awaySrc = between('// [netcheck:away-start]', '// [netcheck:away-end]', 'away');
+// fold 2 (backlog 152): fights by id. Every reader of a fight asks the orders slice (fightsOn, fightOfTok, the one judge orderOfIn, the API by id), so
+// every harness that runs one loads it: none passes on an old path
+const ordersSrc = between('// [netcheck:orders-start]', '// [netcheck:orders-end]', 'orders');
+const fightIn = (cs, mapId) => { if (!cs || typeof cs !== 'object') return undefined; const k = Object.keys(cs).find(x => !!cs[x] && cs[x].mapId === mapId); return k === undefined ? undefined : cs[k]; };   // a fight by its map, in a copy keyed by the fights' own ids
 
 let pass = 0, fail = 0;
 // PeerJS 1.5.2's default serializer is BinaryPack (inside the bundled library file, assets/vendor/peerjs.min.js, which this suite does not load): its pack() reads value.constructor for every
@@ -1665,13 +1669,13 @@ pendingChecks.push((async () => {
         const camp = { id: 'k', turnRules: o.rules === undefined ? {} : o.rules, items: { m1: { id: 'm1', type: 'map', meta: { title: 'Keep' }, whiteboard: [{ id: 'orc', isChar: true, charName: 'Orc' }, { id: 'ghost', isChar: true, charName: 'Ghost', hidden: true }, { id: 'pc', isChar: true, charName: 'Bo', ownerId: 'u_b' }, { id: 'box', type: 'rect' }, null] }, d1: { id: 'd1', type: 'doc', whiteboard: [{ id: 'orc', isChar: true }] } } };
         const net = { role: 'host', roster: { pA: { id: 'u_a', name: 'Ana' } }, combats: o.combats || {} };
         try {
-            new Function('msg', 'conn', 'net', 'allow', 'applyTarget', 'broadcastTargets', 'combatAsked', 'combatAskOpen', 'getActiveCampaign', 'showConfirm', 'mapTitleOf', 'window', 'own', taSrc)(
+            new Function('msg', 'conn', 'net', 'allow', 'applyTarget', 'broadcastTargets', 'combatAsked', 'combatAskOpen', 'getActiveCampaign', 'showConfirm', 'mapTitleOf', 'window', 'own', ordersSrc + '\n' + taSrc)(
                 Object.assign({ type: 'target', id: 'orc', mapId: 'm1' }, msg || {}), { peer: o.peer || 'pA' }, net, () => !o.slow, (pid, name, t) => out.applied.push([pid, name, t]), () => { out.bcast++; }, asked, Object.create(null), () => (o.noCamp ? null : camp),
                 (title, cb, opts) => { out.asks.push([title, opts]); if (o.yes !== undefined) cb(o.yes); }, id => 'Keep', { wpOpenCombat: (mid, oo) => out.opened.push([mid, oo]) }, H.own);
         } catch (e) { out.threw = e.message; }
         out.asked = Object.keys(asked); return out; };
     const t1 = runTa({}, { yes: true }), t2 = runTa({}, { asked: { 'm1|orc': true } }), tOff = runTa({}, { rules: { targetAsk: 'off' } }), tOn = runTa({}, { rules: { targetAsk: 'ask' } }), tJunk = runTa({}, { rules: 'off' });
-    const tHid = runTa({ id: 'ghost' }), tPc = runTa({ id: 'pc' }), tBox = runTa({ id: 'box' }), tFight = runTa({}, { combats: { m1: { rows: [] } } }), tClear = runTa({ id: null }), tDoc = runTa({ mapId: 'd1' }), tProto = runTa({ mapId: '__proto__' }), tNone = runTa({ id: 'nope' });
+    const tHid = runTa({ id: 'ghost' }), tPc = runTa({ id: 'pc' }), tBox = runTa({ id: 'box' }), tFight = runTa({}, { combats: { f_aaaaaaaa: { id: 'f_aaaaaaaa', mapId: 'm1', rows: [] } } }), tClear = runTa({ id: null }), tDoc = runTa({ mapId: 'd1' }), tProto = runTa({ mapId: '__proto__' }), tNone = runTa({ id: 'nope' });
     const tNo = runTa({}, { yes: false }), tSlow = runTa({}, { slow: true }), tStranger = runTa({}, { peer: 'pZ' }), tLong = runTa({ id: 'x'.repeat(81) }), tNoCamp = runTa({}, { noCamp: true });
     const ptr = [['u_a', 'Ana', { id: 'orc', mapId: 'm1' }]], quiet = r => r.applied.length === 1 && r.applied[0][0] === 'u_a' && !!r.applied[0][2] && r.bcast === 1 && r.asks.length === 0 && r.opened.length === 0 && r.threw === '';
     check('targeting (host, the target branch run for real): a player\'s pointer at one of the GM\'s characters is applied and sent as before and the GM is asked once to start combat there, the question answered by its buttons alone (noEnter) — Yes opens the roster with that character pre-ticked for that player, No opens nothing; asked once per character per session',
@@ -1840,7 +1844,7 @@ pendingChecks.push((async () => {
     const tvSrc = between('// [netcheck:travelmsg-start]', '// [netcheck:travelmsg-end]', 'travelmsg');
     const trSrcT = fnSrc('function hostTravel(conn, traveler, portal, fromMap, gmHand) {', '\n// The portal item under a token\'s center', 'hostTravel');
     const fsSrc = fnSrc('function freeSpotNear(', '\n}\n', 'freeSpotNear') + '\n}\n', soSrc = fnSrc('function stepOffPortal(', '\n}\n', 'stepOffPortal') + '\n}\n', puSrcT = fnSrc('function portalUnder(item, map) {', '\n}\n', 'portalUnder') + '\n}\n';
-    const tcSrc = fnSrc('function turnCombatOf(', '\n}\n', 'turnCombatOf') + '\n}\n' + lineOf('function moveMode(') + '\n';
+    const tcSrc = fnSrc('function turnCombatOf(', '\n}\n', 'turnCombatOf') + '\n}\n' + lineOf('function moveMode(') + '\n' + ordersSrc + '\n';
     const tdSrcT = fnSrc('net.tokenDropped = function(item, map, gmHand) {', '\n};\n', 'tokenDropped') + '\n};\n';
     const runTravel = (o) => {   // o: at (the token's place), locked, combat ('mine' | 'theirs': whose turn), order (the campaign's rule), turns (the feature), drop (through net.tokenDropped instead of the message)
         o = o || {};
@@ -1882,7 +1886,7 @@ pendingChecks.push((async () => {
     const trSrcL = fnSrc('function hostTravel(conn, traveler, portal, fromMap, gmHand) {', '\n// The portal item under a token\'s center', 'hostTravel');
     const barSrcL = between('// [netcheck:travelbar-start]', '// [netcheck:travelbar-end]', 'travelbar');
     const fsL = fnSrc('function freeSpotNear(', '\n}\n', 'freeSpotNear') + '\n}\n', soL = fnSrc('function stepOffPortal(', '\n}\n', 'stepOffPortal') + '\n}\n', puL = fnSrc('function portalUnder(item, map) {', '\n}\n', 'portalUnder') + '\n}\n';
-    const tcL = fnSrc('function turnCombatOf(', '\n}\n', 'turnCombatOf') + '\n}\n' + lineOf('function moveMode(') + '\n';
+    const tcL = fnSrc('function turnCombatOf(', '\n}\n', 'turnCombatOf') + '\n}\n' + lineOf('function moveMode(') + '\n' + ordersSrc + '\n';
     const tdL = fnSrc('net.tokenDropped = function(item, map, gmHand) {', '\n};\n', 'tokenDropped') + '\n};\n';
     const npL = fnSrc('function npcTravel(item, map) {', '\n// [netcheck:pos-start]', 'npcTravel'), ofL = fnSrc('function offlinePlayerTravel(item, map) {', '\n// An NPC token dropped on a portal', 'offlinePlayerTravel');
     const DENY = j({ type: 'travelDenied', reason: 'portal' }), TRAP = 'P stepped on a hidden trap tile that is locked for players: nothing happened, and they were told nothing.';
@@ -2363,14 +2367,14 @@ pendingChecks.push((async () => {
 pendingChecks.push((async () => {
     const url = f => 'file:///' + path.resolve(path.join(__dirname, '..', 'system', 'app', 'scripts', f)).split(String.fromCharCode(92)).join('/');
     const Sx = await import(url('systemcore.js')), Fx = await import(url('formula.js')), Dx = await import(url('dicecore.js'));
-    const rqSrc = between('// [netcheck:rollreq-start]', '// [netcheck:rollreq-end]', 'rollreq');
+    const rqSrc = (ordersSrc + '\n' + between('// [netcheck:rollreq-start]', '// [netcheck:rollreq-end]', 'rollreq'));
     const helpers = ['function own(', 'function peerProfileId(', 'function fxLib(', 'function itemLib(', 'function diceFrom('].map(k => { const i = src.indexOf(k); if (i < 0) throw new Error('netcheck: ' + k + ' not found'); return src.slice(i, src.indexOf('\n', i)); }).join('\n') + '\n';
     const gmSys = Sx.cleanSystem(JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'hud-d20.json'), 'utf8')), { F: Fx, gmView: true });
     const run = o => {
         o = o || {};
         const tok = { id: 't1', isChar: true, charId: 'c_a', ownerId: 'u_a', x: 0, y: 0 };
         const camp = { id: 'k', activeItemId: 'm1', system: gmSys, chars: { c_a: { id: 'c_a', name: 'Ana', ownerId: 'u_a', npc: false, values: { f_str: 14, f_level: 5 } } }, items: { m1: { type: 'map', whiteboard: o.noToken ? [] : [tok] }, m2: { type: 'map', whiteboard: [] } } };
-        const net = { role: 'host', paused: false, roster: { pA: { id: 'u_a', name: 'Pat', location: o.loc || 'm1' } }, combats: o.combats !== undefined ? o.combats : { m1: { mapId: 'm1', round: 3, turn: 0, rows: [] } } };
+        const net = { active: true, role: 'host', paused: false, roster: { pA: { id: 'u_a', name: 'Pat', location: o.loc || 'm1' } }, combats: o.combats !== undefined ? o.combats : { m1: { mapId: 'm1', round: 3, turn: 0, rows: [] } } };   // fold 2: at a table (net.combatFor answers there)
         const out = { table: [], sent: [], pushed: [] };
         const conn = { peer: 'pA', send(m) { packCheck(m); out.sent.push(JSON.parse(JSON.stringify(m))); } };
         const win = { wpFormula: Fx, wpSheets: { playerSystem: c => Sx.cleanSystem(c.system, { F: Fx, gmView: false }) }, wpVtt: { on: () => true, rulesOn: () => true } };
@@ -2396,8 +2400,8 @@ pendingChecks.push((async () => {
 pendingChecks.push((async () => {
     const url = f => 'file:///' + path.resolve(path.join(__dirname, '..', 'system', 'app', 'scripts', f)).split(String.fromCharCode(92)).join('/');
     const Sx = await import(url('systemcore.js')), Fx = await import(url('formula.js')), Dx = await import(url('dicecore.js'));
-    const rtSrc = between('// [netcheck:rangeto-start]', '// [netcheck:rangeto-end]', 'rangeto'), rqSrc = between('// [netcheck:rollreq-start]', '// [netcheck:rollreq-end]', 'rollreq');
-    const apSrc = between('// [netcheck:charapply-start]', '// [netcheck:charapply-end]', 'charapply'), paSrc = between('// [netcheck:postapply-start]', '// [netcheck:postapply-end]', 'postapply'), dlSrc = between('// [netcheck:chardelta-start]', '// [netcheck:chardelta-end]', 'chardelta');
+    const rtSrc = between('// [netcheck:rangeto-start]', '// [netcheck:rangeto-end]', 'rangeto'), rqSrc = (ordersSrc + '\n' + between('// [netcheck:rollreq-start]', '// [netcheck:rollreq-end]', 'rollreq'));
+    const apSrc = (ordersSrc + '\n' + between('// [netcheck:charapply-start]', '// [netcheck:charapply-end]', 'charapply')), paSrc = between('// [netcheck:postapply-start]', '// [netcheck:postapply-end]', 'postapply'), dlSrc = between('// [netcheck:chardelta-start]', '// [netcheck:chardelta-end]', 'chardelta');
     const lineOf = k => { const i = src.indexOf(k); if (i < 0) throw new Error('netcheck: ' + k + ' not found'); return src.slice(i, src.indexOf('\n', i)); };
     const helpers = ['function own(', 'function peerProfileId(', 'function fxLib(', 'function itemLib(', 'function diceFrom(', 'function fogDrop('].map(lineOf).join('\n') + '\n';
     const STEPS = [{ to: 2, mod: 0 }, { to: 5, mod: -2 }, { to: 10, mod: -4 }];
@@ -2485,17 +2489,18 @@ pendingChecks.push((async () => {
         const map = { id: 'm1', type: 'map', fog: { on: true }, whiteboard: [{ id: 't_g', isChar: true, charId: 'c_g', x: 300, y: 0 }, { id: 't_h', isChar: true, charId: 'c_h', hidden: true, x: 0, y: 0 }, { id: 't_a', isChar: true, charId: 'c_a', ownerId: 'u_a', x: 0, y: 0 }] };
         const camp = { id: 'k', items: { m1: map, m2: { id: 'm2', type: 'map', whiteboard: [] } } };
         const conns = (o.conns || [['pA', true], ['pB', true]]).map(c => ({ peer: c[0], open: c[1] }));
-        const net = { active: true, role: 'host', targets: {}, conns, roster: o.roster || { pA: { id: 'u_a', name: 'Pat', location: 'm1' }, pB: { id: 'u_b', name: 'Bo', location: o.locB || 'm1' } } };
+        const net = { active: true, role: 'host', targets: {}, conns, roster: o.roster || { pA: { id: 'u_a', name: 'Pat', location: 'm1' }, pB: { id: 'u_b', name: 'Bo', location: o.locB || 'm1' } },
+            combats: { f_keep0001: { id: 'f_keep0001', mapId: 'm1', round: 1, turn: 0, rows: [{ id: 'r_t_g', tokId: 't_g' }] } } };   // fold 2: the fight on m1 that holds the Goblin, under its own id
         const fogDropF = (c, m, pid) => { asked.push(pid); const d = (o.drop || {})[pid]; return d || null; };
         const fogLandedF = (mapId, fn) => { landed.push(mapId); return fn(); };
-        new Function('net', 'getActiveCampaign', 'own', 'fogDrop', 'combatSeen', 'fogLanded', 'SC', 'window', rtSrc)(net, () => camp, H.own, fogDropF, o.seen || undefined, o.noLand ? undefined : fogLandedF, () => Sx, { wpVtt: { on: () => true } });
+        new Function('net', 'getActiveCampaign', 'own', 'fogDrop', 'combatSeen', 'fogLanded', 'SC', 'window', ordersSrc + '\n' + rtSrc)(net, () => camp, H.own, fogDropF, o.seen || undefined, o.noLand ? undefined : fogLandedF, () => Sx, { wpVtt: { on: () => true } });
         return { got: net.tokUnseen(o.mapId || 'm1', o.tokId === undefined ? 't_g' : o.tokId), asked, landed };
     };
     const uSeen = unseen(), uDropB = unseen({ drop: { u_b: { t_g: 1 } } }), uDropA = unseen({ drop: { u_a: { t_g: 1 } } }), uOther = unseen({ drop: { u_b: { t_a: 1 } } }), uElse = unseen({ drop: { u_b: { t_g: 1 } }, locB: 'm2' });
     const uShut = unseen({ drop: { u_b: { t_g: 1 } }, conns: [['pA', true], ['pB', false]] }), uWait = unseen({ drop: { u_b: { t_g: 1 } }, roster: { pA: { id: 'u_a', location: 'm1' } } }), uHid = unseen({ tokId: 't_h' }), uGone = unseen({ tokId: 't_zz' });
-    const uSaw = unseen({ drop: { u_b: { t_g: 1 } }, seen: (mapId, pid, tokId) => mapId === 'm1' && pid === 'u_b' && tokId === 't_g' }), uSawA = unseen({ drop: { u_b: { t_g: 1 } }, seen: (mapId, pid) => pid === 'u_a' }), uNone = unseen({ conns: [] });
+    const uSaw = unseen({ drop: { u_b: { t_g: 1 } }, seen: (fid, pid, tokId) => fid === 'f_keep0001' && pid === 'u_b' && tokId === 't_g' }), uSawA = unseen({ drop: { u_b: { t_g: 1 } }, seen: (mapId, pid) => pid === 'u_a' }), uNone = unseen({ conns: [] });
     const uBad = [unseen({ mapId: 'm9' }), unseen({ mapId: 5 }), unseen({ tokId: 5 }), unseen({ mapId: 'constructor' })], uNoLand = unseen({ drop: { u_b: { t_g: 1 } }, noLand: true });
-    check('secrets net.tokUnseen (run for real): true while an admitted, connected player\'s fogged copy drops the token (any player\'s, on that map or elsewhere), for a token the GM hid and for one that is gone; false when every connected player sees it, when a copy drops another token only, when the only player who cannot see it saw it in this fight (combatSeen), is not connected, is only waiting, or no one is at the table; a map that is none, a bad id or a prototype name read false; judged with every open drag at its start (fogLanded on that map), each player asked once',
+    check('secrets net.tokUnseen (run for real): true while an admitted, connected player\'s fogged copy drops the token (any player\'s, on that map or elsewhere), for a token the GM hid and for one that is gone; false when every connected player sees it, when a copy drops another token only, when the only player who cannot see it saw it in this fight (combatSeen, asked by the id of the fight that holds it: fold 2), is not connected, is only waiting, or no one is at the table; a map that is none, a bad id or a prototype name read false; judged with every open drag at its start (fogLanded on that map), each player asked once',
         uSeen.got === false && j(uSeen.asked) === j(['u_a', 'u_b']) && j(uSeen.landed) === j(['m1']) && uDropB.got === true && uDropA.got === true && uOther.got === false && uElse.got === true
         && uShut.got === false && uWait.got === false && uHid.got === true && uGone.got === true && uSaw.got === false && uSawA.got === true && uNone.got === false && uBad.every(u => u.got === false && u.landed.length === 0) && uNoLand.got === true,
         j([uSeen, uDropB, uDropA, uOther, uElse, uShut, uWait, uHid, uGone, uSaw, uSawA, uNone, uBad.map(u => u.got)]));
@@ -2531,7 +2536,7 @@ pendingChecks.push((async () => {
 pendingChecks.push((async () => {
     const url = f => 'file:///' + path.resolve(path.join(__dirname, '..', 'system', 'app', 'scripts', f)).split(String.fromCharCode(92)).join('/');
     const Sx = await import(url('systemcore.js')), Fx = await import(url('formula.js')), Dx = await import(url('dicecore.js'));
-    const rtSrc = between('// [netcheck:rangeto-start]', '// [netcheck:rangeto-end]', 'rangeto'), rqSrc = between('// [netcheck:rollreq-start]', '// [netcheck:rollreq-end]', 'rollreq'), drSrc = between('// [netcheck:diceroll-start]', '// [netcheck:diceroll-end]', 'diceroll');
+    const rtSrc = between('// [netcheck:rangeto-start]', '// [netcheck:rangeto-end]', 'rangeto'), rqSrc = (ordersSrc + '\n' + between('// [netcheck:rollreq-start]', '// [netcheck:rollreq-end]', 'rollreq')), drSrc = between('// [netcheck:diceroll-start]', '// [netcheck:diceroll-end]', 'diceroll');
     const lineOf = k => { const i = src.indexOf(k); if (i < 0) throw new Error('netcheck: ' + k + ' not found'); return src.slice(i, src.indexOf('\n', i)); };
     const helpers = ['function own(', 'function peerProfileId(', 'function fxLib(', 'function itemLib(', 'function diceFrom(', 'function fogDrop('].map(lineOf).join('\n') + '\n';
     const sysR3 = Sx.cleanSystem({ v: 1, name: 'R3', fields: [{ id: 'f_atk', key: 'Atk', kind: 'formula', formula: '10 + RangeMod', vis: 'all' }, { id: 'f_a', key: 'A', kind: 'number', def: 4, vis: 'all' }], rolls: [],
@@ -2586,7 +2591,7 @@ pendingChecks.push((async () => {
 pendingChecks.push((async () => {
     const url = f => 'file:///' + path.resolve(path.join(__dirname, '..', 'system', 'app', 'scripts', f)).split(String.fromCharCode(92)).join('/');
     const Sx = await import(url('systemcore.js')), Fx = await import(url('formula.js')), Dx = await import(url('dicecore.js'));
-    const drSrc = between('// [netcheck:diceroll-start]', '// [netcheck:diceroll-end]', 'diceroll'), rqSrc = between('// [netcheck:rollreq-start]', '// [netcheck:rollreq-end]', 'rollreq');
+    const drSrc = between('// [netcheck:diceroll-start]', '// [netcheck:diceroll-end]', 'diceroll'), rqSrc = (ordersSrc + '\n' + between('// [netcheck:rollreq-start]', '// [netcheck:rollreq-end]', 'rollreq'));
     const line = k => { const i = src.indexOf(k); if (i < 0) throw new Error('netcheck: ' + k + ' not found'); return src.slice(i, src.indexOf('\n', i)); };
     const helpers = ['function own(', 'function peerProfileId(', 'function fxLib(', 'function itemLib(', 'function diceFrom('].map(line).join('\n') + '\n';
     const sysD = Sx.cleanSystem({ v: 1, name: 'D', rolls: [], fields: [
@@ -2878,7 +2883,7 @@ pendingChecks.push((async () => {
 pendingChecks.push((async () => {
     const url = f => 'file:///' + path.resolve(path.join(__dirname, '..', 'system', 'app', 'scripts', f)).split(String.fromCharCode(92)).join('/');
     const Sx = await import(url('systemcore.js')), Fx = await import(url('formula.js')), Dx = await import(url('dicecore.js'));
-    const apSrc = between('// [netcheck:charapply-start]', '// [netcheck:charapply-end]', 'charapply'), paSrc = between('// [netcheck:postapply-start]', '// [netcheck:postapply-end]', 'postapply');
+    const apSrc = (ordersSrc + '\n' + between('// [netcheck:charapply-start]', '// [netcheck:charapply-end]', 'charapply')), paSrc = between('// [netcheck:postapply-start]', '// [netcheck:postapply-end]', 'postapply');
     const dlSrc = between('// [netcheck:chardelta-start]', '// [netcheck:chardelta-end]', 'chardelta'), aiSrc = between('// [netcheck:applyin-start]', '// [netcheck:applyin-end]', 'applyin');
     const sysA = Sx.cleanSystem({ v: 1, name: 'A', fields: [
         { id: 'f_g', key: 'GMFig', kind: 'number', def: 4, vis: 'gm' },
@@ -2969,7 +2974,7 @@ pendingChecks.push((async () => {
 pendingChecks.push((async () => {
     const url = f => 'file:///' + path.resolve(path.join(__dirname, '..', 'system', 'app', 'scripts', f)).split(String.fromCharCode(92)).join('/');
     const Sx = await import(url('systemcore.js')), Fx = await import(url('formula.js')), Dx = await import(url('dicecore.js'));
-    const apSrc = between('// [netcheck:charapply-start]', '// [netcheck:charapply-end]', 'charapply'), paSrc = between('// [netcheck:postapply-start]', '// [netcheck:postapply-end]', 'postapply');
+    const apSrc = (ordersSrc + '\n' + between('// [netcheck:charapply-start]', '// [netcheck:charapply-end]', 'charapply')), paSrc = between('// [netcheck:postapply-start]', '// [netcheck:postapply-end]', 'postapply');
     const dlSrc = between('// [netcheck:chardelta-start]', '// [netcheck:chardelta-end]', 'chardelta');
     const sysL = Sx.cleanSystem({ v: 1, name: 'L', rolls: [], fields: [
         { id: 'f_g', key: 'GMFig', kind: 'number', def: 3, vis: 'gm' },
@@ -3030,7 +3035,7 @@ pendingChecks.push((async () => {
     const src2 = fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', 'net.js'), 'utf8').replace(/\r\n/g, '\n');
     const line = k => { const i = src2.indexOf(k); if (i < 0) throw new Error('netcheck: ' + k + ' not found'); return src2.slice(i, src2.indexOf('\n', i)); };
     const helpers = ['function own(', 'function peerProfileId(', 'function fxLib(', 'function itemLib(', 'function diceFrom('].map(line).join('\n') + '\n';
-    const rqSrc = between('// [netcheck:rollreq-start]', '// [netcheck:rollreq-end]', 'rollreq'), drSrc = between('// [netcheck:diceroll-start]', '// [netcheck:diceroll-end]', 'diceroll');
+    const rqSrc = (ordersSrc + '\n' + between('// [netcheck:rollreq-start]', '// [netcheck:rollreq-end]', 'rollreq')), drSrc = between('// [netcheck:diceroll-start]', '// [netcheck:diceroll-end]', 'diceroll');
     const sysT = Sx.cleanSystem({ v: 1, name: 'T', fields: [
         { id: 'f_hits', key: 'Hits', kind: 'number', def: 0, min: 0, max: 9, edit: 'gm' }, { id: 'f_fp', key: 'FP', kind: 'resource', maxFormula: '10', min: 0, def: 'max' }, { id: 'f_g', key: 'GMFig', kind: 'number', def: 1, vis: 'gm' }],
         rolls: [
@@ -3095,7 +3100,7 @@ pendingChecks.push((async () => {
     const src3 = fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', 'net.js'), 'utf8').replace(/\r\n/g, '\n');
     const line = k => { const i = src3.indexOf(k); if (i < 0) throw new Error('netcheck: ' + k + ' not found'); return src3.slice(i, src3.indexOf('\n', i)); };
     const helpers = ['function own(', 'function peerProfileId(', 'function fxLib(', 'function itemLib(', 'function diceFrom('].map(line).join('\n') + '\n';
-    const rqSrc = between('// [netcheck:rollreq-start]', '// [netcheck:rollreq-end]', 'rollreq'), drSrc = between('// [netcheck:diceroll-start]', '// [netcheck:diceroll-end]', 'diceroll');
+    const rqSrc = (ordersSrc + '\n' + between('// [netcheck:rollreq-start]', '// [netcheck:rollreq-end]', 'rollreq')), drSrc = between('// [netcheck:diceroll-start]', '// [netcheck:diceroll-end]', 'diceroll');
     const sysW = Sx.cleanSystem({ v: 1, name: 'W', rolls: [], fields: [
         { id: 'f_wp', key: 'Weapons', kind: 'item-list', edit: 'owner', list: { stats: [{ key: 'Shots' }], counters: [{ key: 'Charges', def: 3, max: 'Row.Shots' }, { key: 'Hits' }],
             rolls: [{ label: 'Fire', formula: '3d6 <= 30', needs: 'Row.Charges >= 1', needsText: 'Out of charges', then: [{ c: 'Charges', formula: '1' }, { c: 'Hits', formula: '1', add: true, when: 'hit' }] }, { label: 'Damage', formula: '2d6', needs: 'Row.Hits > 0', needsText: 'No hit pending', then: [{ c: 'Hits', formula: '0', set: true }] }] } }],
@@ -3145,7 +3150,7 @@ pendingChecks.push((async () => {
             net, () => Dx, () => Sx, { wpFormula: Fx, wpVtt: { on: () => true } }, () => ({ id: 'k', system: sysW, chars: {} }), () => ({ id: 'u_a', name: 'Pat' }), () => {}, () => null, e => { throw e; }, () => {}, () => {}, () => {}, () => {}, () => 0)('3d6 <= (30) + 1', o); return sent; };
     const cwI = runCW({ charId: 'c_a', row: { f: 'f_wp', r: 'w_1', i: 0 }, mod: 1 });
     check('R2b the player\'s request (net.diceRoll, run for real): a list roll with consequences or needs sends the row\'s index and its modifier', cwI.length === 1 && j(cwI[0].row) === j({ f: 'f_wp', r: 'w_1', i: 0 }) && cwI[0].mod === 1 && Dx.cleanRollReq(cwI[0]) !== null, j(cwI));
-    const apSrcW = between('// [netcheck:charapply-start]', '// [netcheck:charapply-end]', 'charapply'), paSrcW = between('// [netcheck:postapply-start]', '// [netcheck:postapply-end]', 'postapply'), dlSrcW = between('// [netcheck:chardelta-start]', '// [netcheck:chardelta-end]', 'chardelta');
+    const apSrcW = (ordersSrc + '\n' + between('// [netcheck:charapply-start]', '// [netcheck:charapply-end]', 'charapply')), paSrcW = between('// [netcheck:postapply-start]', '// [netcheck:postapply-end]', 'postapply'), dlSrcW = between('// [netcheck:chardelta-start]', '// [netcheck:chardelta-end]', 'chardelta');
     const sysWA = Sx.cleanSystem({ v: 1, name: 'WA', rolls: [], fields: [{ id: 'f_wp', key: 'Weapons', kind: 'item-list', edit: 'owner', list: { stats: [{ key: 'Shots' }], counters: [{ key: 'Charges', def: 3, max: 'Row.Shots' }], rolls: [{ label: 'Reload', apply: [{ c: 'Charges', formula: 'Row.Shots', set: true }] }] } }], items: [{ id: 'i_bl', name: 'Blaster', stats: { Shots: 5 } }] }, { F: Fx, gmView: true });
     const campWA = { id: 'k', system: sysWA, items: {}, chars: { c_a: { id: 'c_a', name: 'Ana', ownerId: 'u_a', npc: false, values: { f_wp: [{ id: 'w_1', defId: 'i_bl', qty: 1, ct: { Charges: 1 } }] } } } }, outWA = { sent: [], chat: [] };
     const connWA = { peer: 'pA', open: true, send: m => { packCheck(m); outWA.sent.push(JSON.parse(JSON.stringify(m))); } }, netWA = { active: true, role: 'host', paused: false, combats: {}, conns: [connWA], roster: { pA: { id: 'u_a', name: 'Pat' } } };
@@ -3164,8 +3169,8 @@ pendingChecks.push((async () => {
     const Sx = await import(url('systemcore.js')), Fx = await import(url('formula.js')), Dx = await import(url('dicecore.js')), J = JSON.stringify;
     const line = k => { const i = src.indexOf(k); if (i < 0) throw new Error('netcheck: ' + k + ' not found'); return src.slice(i, src.indexOf('\n', i)); };
     const helpers = ['function own(', 'function peerProfileId(', 'function fxLib(', 'function itemLib(', 'function diceFrom('].map(line).join('\n') + '\n';
-    const rqSrc = between('// [netcheck:rollreq-start]', '// [netcheck:rollreq-end]', 'rollreq'), drSrc = between('// [netcheck:diceroll-start]', '// [netcheck:diceroll-end]', 'diceroll');
-    const apSrc = between('// [netcheck:charapply-start]', '// [netcheck:charapply-end]', 'charapply'), paSrc = between('// [netcheck:postapply-start]', '// [netcheck:postapply-end]', 'postapply'), dlSrc = between('// [netcheck:chardelta-start]', '// [netcheck:chardelta-end]', 'chardelta');
+    const rqSrc = (ordersSrc + '\n' + between('// [netcheck:rollreq-start]', '// [netcheck:rollreq-end]', 'rollreq')), drSrc = between('// [netcheck:diceroll-start]', '// [netcheck:diceroll-end]', 'diceroll');
+    const apSrc = (ordersSrc + '\n' + between('// [netcheck:charapply-start]', '// [netcheck:charapply-end]', 'charapply')), paSrc = between('// [netcheck:postapply-start]', '// [netcheck:postapply-end]', 'postapply'), dlSrc = between('// [netcheck:chardelta-start]', '// [netcheck:chardelta-end]', 'chardelta');
     const ciSrc = between('// [netcheck:charitem-start]', '// [netcheck:charitem-end]', 'charitem'), ntSrc = (() => { const i = src.indexOf('function itemNotice('), k = src.indexOf('net.syncChars = function', i); if (i < 0 || k < 0) throw new Error('netcheck: itemNotice not found'); return src.slice(i, k); })();
     const sysN = Sx.cleanSystem({ v: 1, name: 'N', fields: [{ id: 'f_st', key: 'Stunned', kind: 'toggle', edit: 'owner' }, { id: 'f_bl', key: 'Bleeding', kind: 'number', def: 0 }, { id: 'f_hp', key: 'HP', kind: 'number', def: 10 }, { id: 'f_g', key: 'GSecret', kind: 'number', def: 0, vis: 'gm' }],
         rolls: [{ id: 'r_dodge', label: 'Dodge', formula: '3d6 <= 10', needs: 'not(Stunned)', needsText: 'Not while stunned' }, { id: 'r_g', label: 'G', formula: '3d6 <= 30', needs: 'GSecret > 0', needsText: 'Secret' },
@@ -3200,6 +3205,20 @@ pendingChecks.push((async () => {
     const aNo = runA({ f_bl: 0 }), aYes = runA({ f_bl: 2 });
     check('fold 2 (A) a player\'s apply action that needs something (char-apply, run for real): refused with the reason a list roll gets and its words while it is not met, nothing moved, stored or carded; pressed once it is met, it moves its values on the host\'s copy',
         J(aNo.sent) === J([{ type: 'char-deny', rid: 'a1', reason: 'error', msg: 'Not bleeding' }]) && J(aNo.vals) === J({ f_bl: 0 }) && aNo.chat.length === 0 && aYes.sent.some(m => m.type === 'char-ack') && aYes.vals.f_hp === 8, J([aNo, aYes.sent.map(m => m.type), aYes.vals]));
+    // fold 2's review: an apply action reads CombatRound from the fight that holds the player's token, two fights on one map in rounds 2 and 7, and the
+    // first begun there for a token in neither, though the GM plays the second (char-apply run for real, net.combatRoundOf, as the player's own sheet)
+    const sysR2 = Sx.cleanSystem({ v: 1, name: 'R2', fields: [{ id: 'f_hp', key: 'HP', kind: 'number', def: 10 }], rolls: [{ id: 'r_charge', label: 'Charge', apply: [{ f: 'f_hp', formula: '1' }], needs: 'CombatRound >= 5', needsText: 'Not before round 5' }] }, { F: Fx, gmView: true });
+    const runAR = (charId, ownerId, peer, tokId) => { const out = { sent: [] };
+        const camp = { id: 'k', system: sysR2, chars: { [charId]: { id: charId, name: 'X', ownerId, npc: false, values: {} } }, items: { mDocks: { type: 'map', whiteboard: [{ id: tokId, isChar: true, charId, ownerId, x: 0, y: 0 }] } } };
+        const conn = { peer, open: true, send: m => { packCheck(m); out.sent.push(JSON.parse(J(m))); } };
+        const net = { active: true, role: 'host', paused: false, conns: [conn], roster: { [peer]: { id: ownerId, name: 'P', location: 'mDocks' } }, combats: { f_dock0001: { id: 'f_dock0001', mapId: 'mDocks', round: 2, turn: 0, rows: [{ id: 'rt_kael', tokId: 't_kael' }] }, f_dock0002: { id: 'f_dock0002', mapId: 'mDocks', round: 7, turn: 0, rows: [{ id: 'rt_sela', tokId: 't_sela' }] } } };
+        new Function('msg', 'conn', 'net', 'SC', 'window', 'peerPaused', 'getActiveCampaign', 'saveRemoteSoon', 'sendFailed', 'peerProfileId', 'lim', 'own', 'diceFrom', 'sendTable', 'pushChat', 'logEvent', 'applyLine', 'var charLimit = lim, _charSlowSaid = {}, _charPending = {}, _charHost = {}, _rowGrace = {};\n' + dlSrc + '\n' + paSrc + '\n' + apSrc.split(ordersSrc).join(ordersSrc + "\nnet.fightOn = 'f_dock0002';   // the GM plays the second fight (set after the slice, which starts with none)\n"))(
+            { type: 'char-apply', rid: 'a1', charId, act: 'r_charge', label: 'Charge' }, conn, net, () => Sx, { wpFormula: Fx, wpVtt: { on: () => true, rulesOn: () => true }, wpSheets: { playerSystem: c => Sx.cleanSystem(c.system, { F: Fx, gmView: false }), charChanged() {} } }, () => false, () => camp, () => {}, e => { throw e; }, c => (net.roster[c.peer] ? net.roster[c.peer].id : null), { allow: () => true },
+            (ob, k) => !!ob && Object.prototype.hasOwnProperty.call(ob, k), (p, gm) => ({ id: p.id, name: p.name, gm: !!gm }), () => {}, () => {}, () => {}, r => Dx.applyText(r));
+        return out.sent.some(m => m.type === 'char-ack') ? 'ack' : ((out.sent.find(m => m.type === 'char-deny') || {}).msg || 'none'); };
+    const ar = [runAR('c_kael', 'u_a', 'pA', 't_kael'), runAR('c_sela', 'u_b', 'pB', 't_sela'), runAR('c_rook', 'u_c', 'pC', 't_rook')];
+    check('fold 2\'s review (char-apply, run for real): an apply action that needs round 5 reads CombatRound from the fight that holds the player\'s token, two fights on one map in rounds 2 and 7 — refused for Kael in the first, pressed for Sela in the second — and the first begun there for a token in neither, though the GM plays the second, as the player\'s own sheet reads it (net.combatRoundOf)',
+        J(ar) === J(['Not before round 5', 'ack', 'Not before round 5']), J(ar));
     // (B) a switch-on on a One at a time list, through the host's real char-item branch, the real delta and the GM's notice
     const sysB = Sx.cleanSystem({ v: 1, name: 'B', rolls: [], fields: [{ id: 'f_ar', key: 'Armour', label: 'Armour', kind: 'item-list', edit: 'owner', vis: 'all', list: { on: { label: 'Worn', per: 'Loc' }, stats: [{ key: 'Loc', kind: 'pick', opts: [{ label: 'Torso', name: 'HP' }, { label: 'Arm', name: 'HP' }] }] } }],
         items: [{ id: 'i_pl', name: 'Plate', stats: { Loc: 'Torso' }, eq: 'bound', eqMsg: 'It is fused' }, { id: 'i_ma', name: 'Mail', stats: { Loc: 'Torso' } }, { id: 'i_br', name: 'Bracer', stats: { Loc: 'Arm' } }, { id: 'i_he', name: 'Helm', stats: { Loc: 'Torso' }, eq: 'curse', eqMsg: 'It clings' }] }, { F: Fx, gmView: true });
@@ -3261,11 +3280,11 @@ pendingChecks.push((async () => {
     // (A) the host judges a player's system roll with the round of the fight on their map (roll-req, run for real)
     const line = k => { const i = src.indexOf(k); if (i < 0) throw new Error('netcheck: ' + k + ' not found'); return src.slice(i, src.indexOf('\n', i)); };
     const helpers = ['function own(', 'function peerProfileId(', 'function fxLib(', 'function itemLib(', 'function diceFrom('].map(line).join('\n') + '\n';
-    const rqSrc = between('// [netcheck:rollreq-start]', '// [netcheck:rollreq-end]', 'rollreq');
+    const rqSrc = (ordersSrc + '\n' + between('// [netcheck:rollreq-start]', '// [netcheck:rollreq-end]', 'rollreq'));
     const sysR = Sx.cleanSystem({ v: 1, name: 'R', fields: [{ id: 'f_hp', key: 'HP', kind: 'number', def: 10 }], rolls: [{ id: 'r_rally', label: 'Rally', formula: '3d6 <= 10', needs: 'CombatRound >= 2', needsText: 'Not before round 2' }] }, { F: Fx, gmView: true });
     const runRd = round => { const out = { table: [], sent: [] };
         const camp = { id: 'k', activeItemId: 'm1', system: sysR, chars: { c_a: { id: 'c_a', name: 'Ana', ownerId: 'u_a', npc: false, values: {} } }, items: { m1: { type: 'map', whiteboard: [{ id: 't1', isChar: true, charId: 'c_a', ownerId: 'u_a', x: 0, y: 0, width: 50, height: 50 }] } } };
-        const net = { role: 'host', paused: false, roster: { pA: { id: 'u_a', name: 'Pat', location: 'm1' } }, combats: round ? { m1: { round: round, turn: 0, rows: [{ tokId: 't1' }] } } : {}, syncCharDelta() {} };
+        const net = { role: 'host', paused: false, roster: { pA: { id: 'u_a', name: 'Pat', location: 'm1' } }, combats: round ? { m1: { mapId: 'm1', round: round, turn: 0, rows: [{ tokId: 't1' }] } } : {}, syncCharDelta() {} };   // fold 2: a fight names its map
         const conn = { peer: 'pA', send(m) { packCheck(m); out.sent.push(JSON.parse(J(m))); } };
         const win = { wpFormula: Fx, wpSheets: { playerSystem: c => Sx.cleanSystem(c.system, { F: Fx, gmView: false }), charChanged() {} }, wpVtt: { on: () => true, rulesOn: () => true } };
         new Function('msg', 'conn', 'net', 'DC', 'SC', 'window', 'getActiveCampaign', 'peerPaused', 'sendFailed', 'sendTable', 'pushRoll', 'logEvent', 'saveRemoteSoon', 'var diceLimit = null, _diceSlowSaid = {};\n' + helpers + rqSrc)(
@@ -3286,7 +3305,7 @@ pendingChecks.push((async () => {
     const Sx = await import(url('systemcore.js')), Fx = await import(url('formula.js')), Dx = await import(url('dicecore.js')), J = JSON.stringify;
     const line = k => { const i = src.indexOf(k); if (i < 0) throw new Error('netcheck: ' + k + ' not found'); return src.slice(i, src.indexOf('\n', i)); };
     const helpers = ['function own(', 'function peerProfileId(', 'function fxLib(', 'function itemLib(', 'function diceFrom('].map(line).join('\n') + '\n';
-    const rqSrc = between('// [netcheck:rollreq-start]', '// [netcheck:rollreq-end]', 'rollreq'), drSrc = between('// [netcheck:diceroll-start]', '// [netcheck:diceroll-end]', 'diceroll');
+    const rqSrc = (ordersSrc + '\n' + between('// [netcheck:rollreq-start]', '// [netcheck:rollreq-end]', 'rollreq')), drSrc = between('// [netcheck:diceroll-start]', '// [netcheck:diceroll-end]', 'diceroll');
     const ciSrc = between('// [netcheck:charitem-start]', '// [netcheck:charitem-end]', 'charitem'), dlSrc = between('// [netcheck:chardelta-start]', '// [netcheck:chardelta-end]', 'chardelta');
     const ntSrc = (() => { const i = src.indexOf('function itemNotice('), k = src.indexOf('net.syncChars = function', i); if (i < 0 || k < 0) throw new Error('netcheck: itemNotice not found'); return src.slice(i, k); })();
     // (4) needs that hold a die: the host never rolls it, so they are never met, on a player's roll and on the GM's own (24 tries each)
@@ -3379,7 +3398,7 @@ pendingChecks.push((async () => {
     const src4 = fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', 'net.js'), 'utf8').replace(/\r\n/g, '\n');
     const line = k => { const i = src4.indexOf(k); if (i < 0) throw new Error('netcheck: ' + k + ' not found'); return src4.slice(i, src4.indexOf('\n', i)); };
     const helpers = ['function own(', 'function peerProfileId(', 'function fxLib(', 'function itemLib(', 'function diceFrom('].map(line).join('\n') + '\n';
-    const rqSrc = between('// [netcheck:rollreq-start]', '// [netcheck:rollreq-end]', 'rollreq'), drSrc = between('// [netcheck:diceroll-start]', '// [netcheck:diceroll-end]', 'diceroll');
+    const rqSrc = (ordersSrc + '\n' + between('// [netcheck:rollreq-start]', '// [netcheck:rollreq-end]', 'rollreq')), drSrc = between('// [netcheck:diceroll-start]', '// [netcheck:diceroll-end]', 'diceroll');
     const sysM = Sx.cleanSystem({ v: 1, name: 'M', fields: [{ id: 'f_j', key: 'Jam', kind: 'number', def: 0 }, { id: 'f_h', key: 'Hits', kind: 'number', def: 0 }, { id: 'f_g', key: 'GMFig', kind: 'number', def: 3, vis: 'gm' }],
         rolls: [{ id: 'r_a', label: 'A', formula: '3d6 <= 30', malf: '3', then: [{ f: 'f_j', formula: '1', add: true, when: 'malf' }, { f: 'f_h', formula: '1', add: true, when: 'hit' }] },
             { id: 'r_b', label: 'B', formula: '3d6 <= 30', malf: '19', then: [{ f: 'f_j', formula: '1', add: true, when: 'malf' }, { f: 'f_h', formula: '1', add: true, when: 'hit' }] },
@@ -3415,7 +3434,7 @@ pendingChecks.push((async () => {
     const src4 = fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', 'net.js'), 'utf8').replace(/\r\n/g, '\n');
     const line = k => { const i = src4.indexOf(k); if (i < 0) throw new Error('netcheck: ' + k + ' not found'); return src4.slice(i, src4.indexOf('\n', i)); };
     const helpers = ['function own(', 'function peerProfileId(', 'function fxLib(', 'function itemLib(', 'function diceFrom('].map(line).join('\n') + '\n';
-    const rqSrc = between('// [netcheck:rollreq-start]', '// [netcheck:rollreq-end]', 'rollreq'), drSrc = between('// [netcheck:diceroll-start]', '// [netcheck:diceroll-end]', 'diceroll');
+    const rqSrc = (ordersSrc + '\n' + between('// [netcheck:rollreq-start]', '// [netcheck:rollreq-end]', 'rollreq')), drSrc = between('// [netcheck:diceroll-start]', '// [netcheck:diceroll-end]', 'diceroll');
     const sysD = Sx.cleanSystem({ v: 1, name: 'D', fields: [{ id: 'f_w', key: 'Weapons', label: 'Weapons', kind: 'item-list', vis: 'all', list: { rolls: [{ label: 'Hit', formula: 'd6', dmg: true }, { label: 'Aim', formula: 'd20' }] } }],
         rolls: [{ id: 'r_d', label: 'Dmg', formula: '2d6', dmg: true }, { id: 'r_p', label: 'Plain', formula: 'd20' }] }, { F: Fx, gmView: true });
     const chD = () => ({ c_a: { id: 'c_a', name: 'Ana', ownerId: 'u_a', npc: false, values: { f_w: [{ id: 'w_1', own: 1, qty: 1, def: { name: 'Axe' } }] } } });
@@ -3481,7 +3500,7 @@ pendingChecks.push((async () => {
     const b5_src = fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', 'net.js'), 'utf8').replace(/\r\n/g, '\n');
     const b5_line = k => { const i = b5_src.indexOf(k); if (i < 0) throw new Error('netcheck: ' + k + ' not found'); return b5_src.slice(i, b5_src.indexOf('\n', i)); };
     const b5_helpers = ['function own(', 'function peerProfileId(', 'function fxLib(', 'function itemLib(', 'function diceFrom('].map(b5_line).join('\n') + '\n';
-    const b5_dr = between('// [netcheck:diceroll-start]', '// [netcheck:diceroll-end]', 'diceroll'), b5_rq = between('// [netcheck:rollreq-start]', '// [netcheck:rollreq-end]', 'rollreq');
+    const b5_dr = between('// [netcheck:diceroll-start]', '// [netcheck:diceroll-end]', 'diceroll'), b5_rq = (ordersSrc + '\n' + between('// [netcheck:rollreq-start]', '// [netcheck:rollreq-end]', 'rollreq'));
     const b5_runGM = (sys, ch, expr, o) => { const out = { table: [], pushed: [], toasts: [] };
         const camp = { id: 'k', system: sys, chars: { [ch.id]: JSON.parse(JSON.stringify(ch)) } };
         const net = { active: true, role: 'host', stream: false, conns: [], roster: {}, syncCharDelta() {} };
@@ -3557,10 +3576,10 @@ pendingChecks.push((async () => {
     const calls = [], errs = [], hook = { throws: false };
     const netG = { role: 'host', active: true, combats: {} }, campG = { items: { m1: { type: 'map', meta: { title: 'Keep' } } } };
     const win = { wpSheets: { roundHook: (mapId, c) => { calls.push(mapId + ':' + c.round); if (hook.throws) throw new Error('boom'); } } };
-    new Function('net', 'window', 'getActiveCampaign', 'broadcastCombats', 'logEvent', 'toast', 'render', 'console', 'showConfirm', ccSrcG + '\n' + setSrcG + '\n' + stepSrcG)(
+    new Function('net', 'window', 'getActiveCampaign', 'broadcastCombats', 'logEvent', 'toast', 'render', 'console', 'showConfirm', ccSrcG + '\n' + setSrcG + '\n' + stepSrcG + '\n' + ordersSrc)(
         netG, win, () => campG, () => {}, () => {}, () => {}, () => {}, { error: e => errs.push(String(e && e.message)) }, () => {});
     const rw = n => Array.from({ length: n }, (_, i) => ({ id: 'r' + i, name: 'N' + i, tokId: 't' + i, init: 0, src: null }));
-    const st = () => netG.combats.m1 ? 'r' + netG.combats.m1.round + 't' + netG.combats.m1.turn : 'none';
+    const st = () => fightIn(netG.combats, 'm1') ? 'r' + fightIn(netG.combats, 'm1').round + 't' + fightIn(netG.combats, 'm1').turn : 'none';
     const seen = [];
     netG.combatSet('m1', { round: 1, turn: 0, rows: rw(2) }); seen.push(st() + '=' + calls.join());
     netG.combatSet('m1', { round: 1, turn: 1, rows: rw(3) }); seen.push(st() + '=' + calls.join());
@@ -3609,7 +3628,7 @@ pendingChecks.push((async () => {
         if (o.sela) { camp.items.mBridge.whiteboard.push(tok('t_sela', 'c_sela', 'u_a')); camp.chars.c_sela = { id: 'c_sela', name: 'Sela', ownerId: 'u_a', values: fx('x_s') }; }   // the review of fold 0: a player's character still fighting on the Bridge
         const row = (id, name) => ({ id: 'r_' + id, name, tokId: id, init: 0, src: null });
         const conns = [{ peer: 'pA', open: true, sent: [], send(m) { packCheck(m); this.sent.push(JSON.parse(JSON.stringify(m))); } }];
-        const net = { active: true, role: o.role || 'host', stream: !!o.stream, foreign: o.role === 'client', myId: 'u_gm', conns, roster: { pA: { id: 'u_a' } }, peer: null, paused: false,
+        const net = { active: true, role: o.role || 'host', stream: !!o.stream, foreign: o.role === 'client', myId: 'u_gm', conns, roster: { pA: { id: 'u_a', location: 'mBridge' } }, peer: null, paused: false,
             combats: { mDocks: { mapId: 'mDocks', round: 3, turn: 1, rows: [row('t_kael', 'Kael'), row('t_u7', 'Unit 7')] }, mBridge: { mapId: 'mBridge', round: 1, turn: 0, rows: [row('t_u9', 'Unit 9')] } },
             syncCharDelta: () => {}, videoStop: () => {}, libReset: () => {} };
         if (o.sela) net.combats.mBridge.rows.push(row('t_sela', 'Sela'));
@@ -3620,7 +3639,7 @@ pendingChecks.push((async () => {
             forgetHostCode: noop, cancelReconnect: noop, videoOver: noop, diceSessionReset: noop, _libSpent: {}, _shareBytes: {}, _shareCount: {}, resetAssetTransfers: noop, endWaiting: noop, combatAskOpen: {}, combatAsked: {}, renderNotepad: noop,
             setTimeout: noop, stopHeartbeat: noop, setIndicator: noop, setPausedLocal: noop, setTravelLockLocal: noop, setSelfPausedLocal: noop, bannedIds: {}, pendingJoins: [], approvalOpen: false, _unboundSaid: {}, ui: () => null, renderRoster: noop, setStatus: noop,
             save: noop, load: () => loads.push(1), syncSessionButtons: noop };
-        const api = new Function(...Object.keys(env), "'use strict';\n" + pidS + cbS + '\n' + setS + '\n' + lvS + '\n' + igS + '\nreturn { leaveSession, combatSeen, combatSaw };')(...Object.values(env));
+        const api = new Function(...Object.keys(env), "'use strict';\n" + pidS + cbS + '\n' + setS + '\n' + ordersSrc + '\n' + lvS + '\n' + igS + '\nreturn { leaveSession, combatSeen, combatSaw };')(...Object.values(env));
         net.turnSpent.c_kael = { Action: 1 };   // Kael spent his action this turn (the slice's own line set the record empty)
         if (o.sela) net.turnSpent.c_sela = { Action: 1 };   // and Sela spent hers in the fight on the Bridge
         api.combatSaw('mDocks', 'u_a', 't_u7');   // and Kael's player has seen Unit 7 in this fight
@@ -3660,10 +3679,10 @@ pendingChecks.push((async () => {
         J([g0, g1, g2, g3, g4, g5, eGot]));
     const dlgJs = fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', 'dialogs.js'), 'utf8');
     check('fold 0 (source): End, the session\'s end and a deleted map end a fight in one place (combatOver); the session\'s end asks it right after its drags go back, before the end is said and while the table is still on, never in the stream window; a deleted map asks it only on an active host, before the players are told, with the name it was handed; dialogs.js\'s two deletes of an item hand on the name the item had',
-        (src.match(/combatOver\(/g) || []).length === 4 && /\} else combatOver\(mapId, had\);/.test(src) && /var fightsOver = wasHost && !net\.stream && typeof combatsOverAll === 'function' \? combatsOverAll\(\) : 0;/.test(lvS)
+        (src.match(/combatOver\(/g) || []).length === 4 && /\} else if \(!combat\) combatOver\(fid, had\);/.test(src) && /var fightsOver = wasHost && !net\.stream && typeof combatsOverAll === 'function' \? combatsOverAll\(\) : 0;/.test(lvS)
         && lvS.indexOf('combatsOverAll()') > lvS.indexOf('fogDragSweep(true)') && lvS.indexOf('combatsOverAll()') < lvS.indexOf("broadcast({ type: 'end' }") && lvS.indexOf('combatsOverAll()') < lvS.indexOf('net.active = false')
-        && igS.indexOf('combatOver(itemId') > igS.indexOf("if (!(net.active && net.role === 'host')) return;") && igS.indexOf('combatOver(itemId') < igS.indexOf("type: 'itemGone'")
-        && /combatOver\(itemId, net\.combats\[itemId\], false, title\)/.test(igS) && (dlgJs.match(/window\.wpNet\.itemGone\(/g) || []).length === 3
+        && igS.indexOf('combatOver(fid') > igS.indexOf("if (!(net.active && net.role === 'host')) return;") && igS.indexOf('combatOver(fid') < igS.indexOf("type: 'itemGone'")
+        && /fightsOn\(itemId\)\.filter\(function\(fid\) \{ return combatOver\(fid, net\.combats\[fid\], false, title\); \}\)/.test(igS) && (dlgJs.match(/window\.wpNet\.itemGone\(/g) || []).length === 3
         && /window\.wpNet\.itemGone\(camp\.id, id, removed && removed\.meta \? removed\.meta\.title : undefined\);/.test(dlgJs) && /var goneId = camp\.activeItemId, goneIt = camp\.items\[goneId\];\r?\n\s*delete camp\.items\[goneId\];\r?\n\s*if \(window\.wpNet && window\.wpNet\.itemGone\) window\.wpNet\.itemGone\(camp\.id, goneId, goneIt && goneIt\.meta \? goneIt\.meta\.title : undefined\);/.test(dlgJs));
 })());
 
@@ -3675,7 +3694,7 @@ pendingChecks.push((async () => {
         const ifSrc = between('// [netcheck:initfight-start]', '// [netcheck:initfight-end]', 'initfight'), J = JSON.stringify;
         const mkIF = () => { const out = { bc: 0, rf: 0, toasts: [], logs: [] }, net = { role: 'host', combats: { m1: { mapId: 'm1', round: 2, turn: 1, rows: [{ id: 'r_a', name: 'Ana', tokId: 't_a', init: 18, src: null, rolled: 1 }, { id: 'r_g', name: 'Goblin', tokId: 't_g', init: 12, src: null, rolled: 1 }, { id: 'r_b', name: 'Bo', tokId: 't_b', init: 0, src: null }, { id: 'c_t', name: 'Trap', tokId: null, init: 5, src: null }] } } };
             const camp = { items: { m1: { type: 'map', whiteboard: [{ id: 't_a', isChar: true, charId: 'c_ana', ownerId: 'u_a' }, { id: 't_g', isChar: true, charId: 'c_gob' }, { id: 't_b', isChar: true, charId: 'c_bo', ownerId: 'u_b' }] }, m2: { type: 'map', whiteboard: [] } } };
-            out.fn = new Function('net', 'own', 'SC', 'toast', 'logEvent', 'mapTitleOf', 'broadcastCombats', 'combatRefresh', "'use strict';\n" + ifSrc + '\nreturn initIntoFight;')(net, H.own, () => ({ orderByInit: rows => rows.map((r, i) => ({ r, i })).sort((a, b) => (b.r.init - a.r.init) || (a.i - b.i)).map(x => x.r) }), t => out.toasts.push(t), (k, t) => out.logs.push(t), () => 'Hall', () => out.bc++, () => out.rf++);
+            out.fn = new Function('net', 'own', 'SC', 'toast', 'logEvent', 'mapTitleOf', 'broadcastCombats', 'combatRefresh', "'use strict';\n" + ordersSrc + '\n' + ifSrc + '\nreturn initIntoFight;')(net, H.own, () => ({ orderByInit: rows => rows.map((r, i) => ({ r, i })).sort((a, b) => (b.r.init - a.r.init) || (a.i - b.i)).map(x => x.r) }), t => out.toasts.push(t), (k, t) => out.logs.push(t), () => 'Hall', () => out.bc++, () => out.rf++);
             return Object.assign(out, { net, camp }); };
         const W1 = mkIF(), got1 = W1.fn(W1.camp, 'm1', 'c_bo', 'u_b', 14.256), rows1 = W1.net.combats.m1.rows.map(r => r.id), turn1 = W1.net.combats.m1.turn, bo1 = W1.net.combats.m1.rows.find(r => r.id === 'r_b');
         const again = W1.fn(W1.camp, 'm1', 'c_bo', 'u_b', 30), rows1b = W1.net.combats.m1.rows.map(r => r.id);
@@ -3685,12 +3704,12 @@ pendingChecks.push((async () => {
             got1 === true && J(rows1) === J(['r_a', 'r_b', 'r_g', 'c_t']) && turn1 === 2 && bo1.init === 14.26 && bo1.rolled === 1 && W1.bc === 1 && W1.rf === 1 && J(W1.toasts) === J(['Bo rolled initiative: 14.26, now 2 of 4.']) && W1.logs.length === 1
             && again === false && J(rows1b) === J(rows1) && W1.bc === 1 && none.every(x => x === false) && W2.bc === 0 && J(W2.net.combats.m1.rows.map(r => r.init)) === J([18, 12, 0, 5]) && cl3 === false, J([rows1, turn1, bo1, W1.toasts, none]));
         const W4 = mkIF(); W4.camp.chars = { c_bo: { id: 'c_bo' }, c_gob: { id: 'c_gob' } }; W4.camp.system = { id: 'sys' }; let tieArgs = null, tieSeen = null;
-        const fn4 = new Function('net', 'own', 'SC', 'toast', 'logEvent', 'mapTitleOf', 'broadcastCombats', 'combatRefresh', 'window', "'use strict';\n" + ifSrc + '\nreturn initIntoFight;')(W4.net, H.own, () => ({ initTie: (sys, F, charOf) => { tieArgs = [sys, F, charOf]; return { steps: [{ roll: false }] }; }, orderByInit: (rows, tie) => { tieSeen = tie; return rows; } }), () => {}, () => {}, () => 'Hall', () => {}, () => {}, { wpFormula: 'F!' });
+        const fn4 = new Function('net', 'own', 'SC', 'toast', 'logEvent', 'mapTitleOf', 'broadcastCombats', 'combatRefresh', 'window', "'use strict';\n" + ordersSrc + '\n' + ifSrc + '\nreturn initIntoFight;')(W4.net, H.own, () => ({ initTie: (sys, F, charOf) => { tieArgs = [sys, F, charOf]; return { steps: [{ roll: false }] }; }, orderByInit: (rows, tie) => { tieSeen = tie; return rows; } }), () => {}, () => {}, () => 'Hall', () => {}, () => {}, { wpFormula: 'F!' });
         W4.net.combats.m1.rows[2].tb = [null, [4]]; fn4(W4.camp, 'm1', 'c_bo', 'u_b', 9);
         check('initiative O2 (host, run for real): a player\'s roll re-sorts with the system\'s tie steps — worked out on the host\'s system with its engine, each row\'s character found by its token on that map (none for a row with no token or a token with no character) — and their new number drops the row\'s old roll-offs; the host keeps roll-offs, never sent',
             !!tieArgs && tieArgs[0] === W4.camp.system && tieArgs[1] === 'F!' && tieArgs[2]({ tokId: 't_b' }) === W4.camp.chars.c_bo && tieArgs[2]({ tokId: 't_g' }) === W4.camp.chars.c_gob && tieArgs[2]({ tokId: 't_a' }) === null && tieArgs[2]({ tokId: null }) === null && j(tieSeen) === j({ steps: [{ roll: false }] }) && !('tb' in W4.net.combats.m1.rows.find(r => r.id === 'r_b'))
             && /if \(Array\.isArray\(r\.tb\)\) \{ var tb = r\.tb\.slice\(0, 3\)/.test(src), JSON.stringify(tieArgs && tieArgs.slice(0, 2)));
-        const rrSrc = between('// [netcheck:rollreq-start]', '// [netcheck:rollreq-end]', 'rollreq');
+        const rrSrc = (ordersSrc + '\n' + between('// [netcheck:rollreq-start]', '// [netcheck:rollreq-end]', 'rollreq'));
         check('initiative O1 (source): the roll request takes a player\'s own initiative roll into the fight after the roll goes out — only when the entry it was rebuilt from is the system\'s initiative roll; players never get a row\'s number or its rolled mark (combatRowOut)',
             rrSrc.includes("if (actQ && actQ.init === true && typeof initIntoFight === 'function') initIntoFight(campQ, locQ, q.charId, pidQ, resQ.value);") && rrSrc.indexOf('initIntoFight(campQ') > rrSrc.indexOf("else { sendTable(recQ, null);")
             && src.includes("function combatRowOut(r, i, unseen) { if (unseen) return { id: 'h' + i, name: 'Hidden', tokId: null, src: null }; var o = { id: r.id, name: r.name, tokId: r.tokId, src: r.src }; if (r.held === 1) o.held = 1; return o; }") && /if \(r\.rolled === 1 \|\| r\.rolled === true\) o\.rolled = 1;/.test(src));
@@ -3700,10 +3719,10 @@ pendingChecks.push((async () => {
         o = o || {}; const steps = [];
         const map = { type: 'map', whiteboard: [{ id: 't_pat', isChar: true, charId: 'c_p', ownerId: 'u_a' }, { id: 't_orc', isChar: true, charId: 'c_o' }, { id: 't_sam', isChar: true, charId: 'c_s', ownerId: 'u_b' }, { id: 't_box', isChar: false, ownerId: 'u_a' }] };
         const camp = { items: { m1: map, m2: { type: 'map', whiteboard: [] } } };
-        const net = { role: 'host', paused: !!o.paused, roster: { pA: { id: 'u_a', location: o.loc || 'm1' } }, combats: { m1: { round: 1, turn: o.turn === undefined ? 1 : o.turn, rows: [{ id: 'r_orc', tokId: 't_orc' }, { id: 'r_pat', tokId: 't_pat' }, { id: 'r_sam', tokId: 't_sam' }, { id: 'r_box', tokId: 't_box' }, { id: 'r_trap', tokId: null }] } }, combatStep: (m, d) => steps.push(m + ':' + d) };
+        const net = { role: 'host', paused: !!o.paused, roster: { pA: { id: 'u_a', location: o.loc || 'm1' } }, combats: { m1: { mapId: 'm1', round: 1, turn: o.turn === undefined ? 1 : o.turn, rows: [{ id: 'r_orc', tokId: 't_orc' }, { id: 'r_pat', tokId: 't_pat' }, { id: 'r_sam', tokId: 't_sam' }, { id: 'r_box', tokId: 't_box' }, { id: 'r_trap', tokId: null }] } } };
         const own = (ob, k) => !!ob && Object.prototype.hasOwnProperty.call(ob, k);
-        new Function('msg', 'conn', 'net', 'window', 'getActiveCampaign', 'peerPaused', 'allow', 'own', teSrc)(Object.assign({ type: 'turn-end' }, msg), { peer: 'pA' }, net,
-            { wpVtt: { on: k => k === 'turns' ? o.turns !== false : true } }, () => camp, () => !!o.peerPaused, () => o.slow !== true, own);
+        new Function('msg', 'conn', 'net', 'window', 'getActiveCampaign', 'peerPaused', 'allow', 'own', 'toast', 'broadcastCombats', 'combatRefresh', 'roundChanged', 'turnStarted', ordersSrc + '\n' + teSrc)(Object.assign({ type: 'turn-end' }, msg), { peer: 'pA' }, net,
+            { wpVtt: { on: k => k === 'turns' ? o.turns !== false : true } }, () => camp, () => !!o.peerPaused, () => o.slow !== true, own, () => {}, () => {}, () => {}, () => {}, (m) => steps.push(m + ':1'));
         return steps;
     };
     const ok = { mapId: 'm1', row: 'r_pat' };
@@ -3716,7 +3735,7 @@ pendingChecks.push((async () => {
         const wbAll = fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', 'whiteboard.js'), 'utf8').replace(/\r\n/g, '\n');
         const hsSrc = fnSrc('net.combatStep = function', '// [netcheck:turnhold-start]', 'combatStep') + between('// [netcheck:turnhold-start]', '// [netcheck:turnhold-end]', 'turnhold');
         const mkH = (turn, role) => { const out = { bc: 0, toasts: [], starts: 0 }, net = { role: role || 'host', combats: { m1: { mapId: 'm1', round: 1, turn: turn, rows: ['A', 'B', 'C', 'D'].map(x => ({ id: x, name: x, tokId: 't' + x, init: 0, src: null })) } } };
-            new Function('net', 'own', 'toast', 'logEvent', 'mapTitleOf', 'broadcastCombats', 'combatRefresh', 'roundChanged', 'turnStarted', "'use strict';\n" + hsSrc)(net, H.own, t => out.toasts.push(t), () => {}, () => 'Hall', () => out.bc++, () => {}, () => {}, () => out.starts++);
+            new Function('net', 'own', 'toast', 'logEvent', 'mapTitleOf', 'broadcastCombats', 'combatRefresh', 'roundChanged', 'turnStarted', "'use strict';\n" + hsSrc + '\n' + ordersSrc)(net, H.own, t => out.toasts.push(t), () => {}, () => 'Hall', () => out.bc++, () => {}, () => {}, () => out.starts++);
             return Object.assign(out, { net, c: net.combats.m1, ids: () => net.combats.m1.rows.map(r => r.id + (r.held ? '*' : '')) }); };
         const H1 = mkH(1); H1.net.combatHold('m1'); const h1a = [H1.ids(), H1.c.turn, H1.c.round]; H1.net.combatStep('m1', 1); const h1b = [H1.ids(), H1.c.turn];
         const act1 = H1.net.combatAct('m1', 'B'), h1c = [H1.ids(), H1.c.turn, H1.c.rows[H1.c.turn].id]; H1.net.combatStep('m1', 1); const h1d = [H1.c.rows[H1.c.turn].id, H1.c.round];
@@ -3731,16 +3750,17 @@ pendingChecks.push((async () => {
         const hmSrc = between('// [netcheck:turnholdmsg-start]', '// [netcheck:turnholdmsg-end]', 'turnholdmsg');
         const runHM = (msg, o) => { o = o || {}; const calls = [];
             const map = { type: 'map', whiteboard: [{ id: 't_pat', isChar: true, charId: 'c_p', ownerId: 'u_a' }, { id: 't_orc', isChar: true, charId: 'c_o' }, { id: 't_sam', isChar: true, charId: 'c_s', ownerId: 'u_b' }] };
-            const net = { role: 'host', paused: !!o.paused, roster: { pA: { id: 'u_a', location: o.loc || 'm1' } }, combats: { m1: { round: 1, turn: o.turn === undefined ? 1 : o.turn, rows: [{ id: 'r_orc', tokId: 't_orc' }, { id: 'r_pat', tokId: 't_pat', held: o.held ? 1 : undefined }, { id: 'r_sam', tokId: 't_sam' }, { id: 'r_trap', tokId: null }] } }, combatHold: m => calls.push('hold:' + m), combatAct: (m, r) => calls.push('act:' + m + ':' + r) };
-            new Function('msg', 'conn', 'net', 'window', 'getActiveCampaign', 'peerPaused', 'allow', 'own', hmSrc)(msg, { peer: 'pA' }, net, { wpVtt: { on: k => k === 'turns' ? o.turns !== false : true } }, () => ({ items: { m1: map, m2: { type: 'map', whiteboard: [] } } }), () => !!o.peerPaused, () => o.slow !== true, H.own);
+            const net = { role: 'host', paused: !!o.paused, roster: { pA: { id: 'u_a', location: o.loc || 'm1' } }, combats: { m1: { mapId: 'm1', round: 1, turn: o.turn === undefined ? 1 : o.turn, rows: [{ id: 'r_orc', tokId: 't_orc' }, { id: 'r_pat', tokId: 't_pat', held: o.held ? 1 : undefined }, { id: 'r_sam', tokId: 't_sam' }, { id: 'r_trap', tokId: null }] } } };
+            new Function('msg', 'conn', 'net', 'window', 'getActiveCampaign', 'peerPaused', 'allow', 'own', 'toast', 'logEvent', 'mapTitleOf', 'broadcastCombats', 'combatRefresh', 'roundChanged', 'turnStarted', ordersSrc + '\n' + hmSrc)(msg, { peer: 'pA' }, net, { wpVtt: { on: k => k === 'turns' ? o.turns !== false : true } }, () => ({ items: { m1: map, m2: { type: 'map', whiteboard: [] } } }), () => !!o.peerPaused, () => o.slow !== true, H.own,
+                () => {}, (k, t) => calls.push(t), m => 'Hall', () => {}, () => {}, () => {}, () => {});
             return calls; };
         const hOk = { type: 'turn-hold', mapId: 'm1', row: 'r_pat' }, aOk = { type: 'turn-act', mapId: 'm1', row: 'r_pat' };
         check('initiative O3 (net.js, run for real): a player holds their own turn (their row on turn) and acts from their own row, each as the GM\'s own hold or act; nothing for a row not on turn (a hold), another\'s or a GM\'s token, a row with no token, another map than theirs, turn-based combat off, a paused table or player, past the rate',
-            j(runHM(hOk)) === j(['hold:m1']) && j(runHM(aOk, { turn: 0, held: true })) === j(['act:m1:r_pat']) && [runHM(hOk, { turn: 0 }), runHM({ type: 'turn-hold', mapId: 'm1', row: 'r_sam' }, { turn: 2 }), runHM({ type: 'turn-act', mapId: 'm1', row: 'r_orc' }, { turn: 2 }), runHM({ type: 'turn-act', mapId: 'm1', row: 'r_trap' }),
+            j(runHM(hOk)) === j(['Someone held their turn on Hall']) && j(runHM(aOk, { turn: 0, held: true })) === j(['Someone acted from a hold on Hall']) && [runHM(hOk, { turn: 0 }), runHM({ type: 'turn-hold', mapId: 'm1', row: 'r_sam' }, { turn: 2 }), runHM({ type: 'turn-act', mapId: 'm1', row: 'r_orc' }, { turn: 2 }), runHM({ type: 'turn-act', mapId: 'm1', row: 'r_trap' }),
                 runHM({ type: 'turn-hold', mapId: 'm2', row: 'r_pat' }), runHM(hOk, { loc: 'm2' }), runHM(hOk, { turns: false }), runHM(hOk, { paused: true }), runHM(hOk, { peerPaused: true }), runHM(hOk, { slow: true }), runHM({ type: 'turn-hold', mapId: 'm1', row: 5 })].every(s => s.length === 0));
         check('initiative O3 (source): the table sees a seen row held (combatRowOut, never an unseen one\'s), the cleaner keeps the mark; a player\'s app sends its hold and its act; the strip draws Hold for the GM and the player on turn, a held row with Act for the GM and its own player, and presses them',
             src.includes("var o = { id: r.id, name: r.name, tokId: r.tokId, src: r.src }; if (r.held === 1) o.held = 1; return o; }") && src.includes("if (r.held === 1 || r.held === true) o.held = 1;") && src.includes("net.conns[0].send({ type: 'turn-hold', mapId: t.mapId, row: t.rowId });") && src.includes("net.conns[0].send({ type: 'turn-act', mapId: mid, row: rowId });")
-            && /\(host \|\| mine \? '<button class="combat-strip-btn" data-act="hold"/.test(wbAll) && wbAll.includes("(host || (typeof r.tokId === 'string' && myTokIds[r.tokId] === 1) ? '<button class=\"combat-strip-btn\" data-act=\"act\" data-row=\"' + esc(r.id) + '\"") && wbAll.includes("else if (b.dataset.act === 'hold') n.combatHold(am.id);") && wbAll.includes("n.turnAct ? n.turnAct(String(b.dataset.row || '')) : null"));
+            && /\(host \|\| mine \? '<button class="combat-strip-btn" data-act="hold"/.test(wbAll) && wbAll.includes("(host || (typeof r.tokId === 'string' && myTokIds[r.tokId] === 1) ? '<button class=\"combat-strip-btn\" data-act=\"act\" data-row=\"' + esc(r.id) + '\"") && wbAll.includes("else if (b.dataset.act === 'hold') n.fightHold(fidB);") && wbAll.includes("n.turnAct ? n.turnAct(String(b.dataset.row || '')) : null"));
     }
     // initiative O4: rolled again every round and side initiative — combatSet, combatStep and initIntoFight with the initround slice, run for
     // real on the real systemcore (its sideFirst, orderBySide, orderByInit)
@@ -3753,9 +3773,9 @@ pendingChecks.push((async () => {
             const camp = { system: { combat: { initiative: ir } }, chars: { c_a: { id: 'c_a' }, c_b: { id: 'c_b' }, c_g: { id: 'c_g' } }, items: { m1: { type: 'map', meta: { title: 'Hall' }, whiteboard: [{ id: 't_a', isChar: true, charId: 'c_a', ownerId: 'u_a' }, { id: 't_g', isChar: true, charId: 'c_g' }, { id: 't_b', isChar: true, charId: 'c_b', ownerId: 'u_b' }, { id: 't_x', isChar: false, charId: 'c_a', ownerId: 'u_a' }] } } };
             const net = { role: 'host', active: true, combats: {}, diceRoll: (expr, d) => { out.labels.push(expr + '|' + d.label); if (o.diceErr) return { error: o.diceErr }; return { ok: true, value: out.dice.length ? out.dice.shift() : 1 }; } };
             const win = { wpFormula: Fx, wpSheets: { rollInit: (id, oI) => { out.calls.push(id); out.privs.push(!!(oI && oI.priv === true)); if (o.rollErr) return { error: o.rollErr }; if (o.held && Object.prototype.hasOwnProperty.call(o.held, id)) return { held: true, error: o.held[id] }; const s = out.seqs[id]; return { ok: true, value: s && s.length ? s.shift() : 0 }; } } };
-            const api = new Function('net', 'window', 'getActiveCampaign', 'broadcastCombats', 'logEvent', 'toast', 'render', 'console', 'showConfirm', 'own', 'SC', ccO + '\n' + setO + '\n' + stepO + '\nreturn { initIntoFight: initIntoFight, cleanCombats: cleanCombats };')(
+            const api = new Function('net', 'window', 'getActiveCampaign', 'broadcastCombats', 'logEvent', 'toast', 'render', 'console', 'showConfirm', 'own', 'SC', ccO + '\n' + setO + '\n' + stepO + '\n' + ordersSrc + '\nreturn { initIntoFight: initIntoFight, cleanCombats: cleanCombats };')(
                 net, win, () => camp, () => {}, (k, t) => out.logs.push(t), t => out.toasts.push(t), () => {}, { error: e => out.errs.push(String(e && e.message)) }, () => {}, H.own, () => Sx);
-            return Object.assign(out, { net, camp, api, c: () => net.combats.m1, ids: () => net.combats.m1.rows.map(r => r.id), cur: () => net.combats.m1.rows[net.combats.m1.turn].id }); };
+            return Object.assign(out, { net, camp, api, c: () => fightIn(net.combats, 'm1'), ids: () => fightIn(net.combats, 'm1').rows.map(r => r.id), cur: () => fightIn(net.combats, 'm1').rows[fightIn(net.combats, 'm1').turn].id }); };
         const rowsO = () => [{ id: 'r_a', name: 'Ana', tokId: 't_a', init: 15, src: null, tb: [[3]] }, { id: 'r_g', name: 'Gob', tokId: 't_g', init: 10, src: null }, { id: 'r_c', name: 'Trap', tokId: null, init: 12, src: null }, { id: 'r_x', name: 'Box', tokId: 't_x', init: 1, src: null }];
         const stepN = (W, n, d) => { for (let i = 0; i < n; i++) W.net.combatStep('m1', d || 1); };
         // every: a new round rolls every row with a character again (never a row with no token or a token that is no character), once per round reached
@@ -3809,7 +3829,7 @@ pendingChecks.push((async () => {
             && Sp.c().side === 'pc' && Sp.labels.length === 0 && Sr.c().side === 'rest' && Sr.labels.length === 0 && Sn.c().side === 'rest' && Sn.labels.length === 0 && sy0 === 'pc' && !('side' in Sy.c()) && so0 === 'pc' && !('side' in So.c()) && So.labels.length === 2 && j(So.ids()) === j(['r_a', 'r_g', 'r_b', 'r_c']), j([si, Sf.ids(), Sf.toasts, So.ids(), So.labels]));
         const clO = Si.api.cleanCombats({ m: { round: 1, turn: 0, rows: [{ id: 'a', name: 'A' }], side: 'pc', rr: 4 }, n: { round: 1, turn: 0, rows: [{ id: 'b', name: 'B' }], side: 'constructor' } });
         check('initiative O4 on the wire: the cleaner keeps a combat\'s side as the players\' or the rest\'s only (never its last rolled round, the host\'s own); the table\'s copy (combatsFor) names this round\'s side, never its rolls; the host rolls the sides by its own diceRoll',
-            clO.m.side === 'pc' && !('rr' in clO.m) && !('side' in clO.n) && src.includes("if (cmb.side === 'pc' || cmb.side === 'rest') out[mapId].side = cmb.side;") && src.includes("if (k.side === 'pc' || k.side === 'rest') out[String(mapId).slice(0, 80)].side = k.side;")
+            clO.m.side === 'pc' && !('rr' in clO.m) && !('side' in clO.n) && src.includes("if (cmb.side === 'pc' || cmb.side === 'rest') out[fid].side = cmb.side;") && src.includes("if (k.side === 'pc' || k.side === 'rest') f.side = k.side;")
             && /if \(c\.round > r0 && typeof combatNewRound === 'function'\) \{ combatNewRound\(mapId, c\); t = c\.turn; \}/.test(src) && src.includes("if (typeof combatSideOrder === 'function') combatSideOrder(camp, mapId, c);") && src.includes("var r = net.diceRoll(ir.side, { label: label[side] + (k ? ' (again)' : '') });"), j(clO));
     })());
     // the client's side: whose turn it is on the map in view, and the message it sends
@@ -3817,8 +3837,8 @@ pendingChecks.push((async () => {
     const cl = o => {
         o = o || {}; const sent = [];
         const camp = { activeItemId: o.mid || 'm1', items: { m1: { type: 'map', whiteboard: [{ id: 't_pat', isChar: true, charId: 'c_p', ownerId: 'u_a' }, { id: 't_orc', isChar: true }] } } };
-        const net = { active: true, role: o.role || 'client', stream: false, myId: 'u_a', foreign: true, syncedPeer: 'gm', conns: [{ peer: 'gm', open: o.open !== false, send: m => sent.push(m) }], combats: { m1: { round: 1, turn: o.turn === undefined ? 1 : o.turn, rows: [{ id: 'r_orc', tokId: 't_orc' }, { id: 'r_pat', tokId: 't_pat' }] } } };
-        new Function('net', 'window', 'getActiveCampaign', 'own', mtSrc + '\n' + teCl)(net, { wpVtt: { on: k => k === 'turns' ? o.turns !== false : true } }, () => camp, (ob, k) => !!ob && Object.prototype.hasOwnProperty.call(ob, k));
+        const net = { active: true, role: o.role || 'client', stream: false, myId: 'u_a', foreign: true, syncedPeer: 'gm', conns: [{ peer: 'gm', open: o.open !== false, send: m => sent.push(m) }], combats: { m1: { mapId: 'm1', round: 1, turn: o.turn === undefined ? 1 : o.turn, rows: [{ id: 'r_orc', tokId: 't_orc' }, { id: 'r_pat', tokId: 't_pat' }] } } };
+        new Function('net', 'window', 'getActiveCampaign', 'own', ordersSrc + '\n' + mtSrc + '\n' + teCl)(net, { wpVtt: { on: k => k === 'turns' ? o.turns !== false : true } }, () => camp, (ob, k) => !!ob && Object.prototype.hasOwnProperty.call(ob, k));
         return { tok: net.myTurnTok(), end: net.turnEnd(), sent: sent };
     };
     const cOn = cl(), cOff = [cl({ turn: 0 }), cl({ turns: false }), cl({ role: 'host' }), cl({ mid: 'm9' })], cShut = cl({ open: false });
@@ -3856,7 +3876,7 @@ pendingChecks.push((async () => {
         && [runDI(dueOk, { peer: 'other' }), runDI(dueOk, { stream: true }), runDI(Object.assign({}, dueOk, { act: 'f_hp' })), runDI(Object.assign({}, dueOk, { theirs: 1 }))].every(c => c.length === 0), j(di1));
     const setSrcT = fnSrc('function combatRefresh() {', '\nnet.combatStep = function', 'combatSet'), stepSrcT = fnSrc('net.combatStep = function', '\nnet.combatEnd = function', 'combatStep'), ccSrcT = fnSrc('function cleanCombats(c) {', '\nfunction applyNotepad(', 'cleanCombats');
     const callsT = [], netT = { role: 'host', active: true, combats: {} };
-    new Function('net', 'window', 'getActiveCampaign', 'broadcastCombats', 'logEvent', 'toast', 'render', 'console', 'showConfirm', ccSrcT + '\n' + setSrcT + '\n' + stepSrcT)(
+    new Function('net', 'window', 'getActiveCampaign', 'broadcastCombats', 'logEvent', 'toast', 'render', 'console', 'showConfirm', ccSrcT + '\n' + setSrcT + '\n' + stepSrcT + '\n' + ordersSrc)(
         netT, { wpSheets: { roundHook: (m, c) => callsT.push('R' + c.round), turnHook: (m, c) => callsT.push('T' + c.round + '.' + c.turn) } }, () => ({ items: { m1: { type: 'map', meta: { title: 'K' } } } }), () => {}, () => {}, () => {}, () => {}, { error: () => {} }, () => {});
     const rwT = n => Array.from({ length: n }, (_, i) => ({ id: 'r' + i, name: 'N' + i, tokId: 't' + i, init: 0, src: null }));
     netT.combatSet('m1', { round: 1, turn: 0, rows: rwT(2) }); netT.combatSet('m1', { round: 1, turn: 1, rows: rwT(3) }); netT.combatStep('m1', 1); netT.combatStep('m1', 1); netT.combatStep('m1', -1); netT.combatStep('m1', -1); netT.combatStep('m1', -1); netT.combatStep('m1', -1);
@@ -3956,12 +3976,12 @@ pendingChecks.push((async () => {
         const map = { type: 'map', meta: { gridType: 'square' }, whiteboard: [pat, orc, free] };
         const camp = { id: 'c1', items: { m1: map }, system: o.system || sysT, turnRules: o.rules || {}, chars: { c_p: { id: 'c_p', name: 'Pat', ownerId: 'u_a', values: {} }, c_o: { id: 'c_o', name: 'Orc', npc: true, values: {} } } };
         const out = { bcast: [], notes: [], toasts: [], sent: [], bells: [] }, conn = { peer: 'pA', open: true, send: m => out.sent.push(m) }, conn2 = { peer: 'pA2', open: true, send: m => out.sent.push(Object.assign({ to: 'pA2' }, m)) };
-        const net = { role: 'host', paused: false, roster: { pA: { id: 'u_a', location: 'm1' }, pA2: { id: 'u_a', location: 'm1' } }, conns: [conn, conn2], tokenDropped() {}, combats: { m1: { round: 1, turn: o.turn === undefined ? 1 : o.turn, rows: [{ id: 'r_o', tokId: 't_o' }, { id: 'r_p', tokId: 't_p' }] } } };
+        const net = { role: 'host', paused: false, roster: { pA: { id: 'u_a', location: 'm1' }, pA2: { id: 'u_a', location: 'm1' } }, conns: [conn, conn2], tokenDropped() {}, combats: { f_keep0001: { id: 'f_keep0001', mapId: 'm1', round: 1, turn: o.turn === undefined ? 1 : o.turn, rows: [{ id: 'r_o', tokId: 't_o' }, { id: 'r_p', tokId: 't_p' }] } } };   // fold 2: a fight under its own id, on its map (fold 2's review: an id that is not its map's, so a turn's move keyed by the map is told apart)
         const win = { wpVtt: { on: k => k === 'turns' ? o.turns !== false : true, campaignOn: () => true }, wpFog: { moveBlocked: (mp, w, fx, fy, tx, ty) => tx >= 1000, moveCells: o.moveCells || ((mp, w, fx, fy, tx, ty) => Math.max(Math.abs(tx - fx), Math.abs(ty - fy)) / 50) }, wpSheets: { playerSystem: c => Sx.cleanSystem(c.system, { F: Fx, gmView: false }) }, wpFormula: Fx };
         const api = new Function('state', 'net', 'window', 'peerPaused', 'allow', 'checkRoomHandouts', 'applyPosToDom', 'broadcastPos', 'toast', 'saveRemoteSoon', 'sendFailed', 'setTimeout', 'playerStroke', 'SC', 'getActiveCampaign', 'bellOut',
-            clT + ownKeySrc + helpT + posT + '\n' + patT + '\n' + tmT + '\nreturn { pos: function(m, c) { return handlePos(m, c); }, patch: function(m) { return applyClientItemFiltered(m, { id: "u_a" }); }, start: turnMoveStart };')(
+            clT + ownKeySrc + helpT + posT + '\n' + patT + '\n' + tmT + '\n' + ordersSrc + '\nreturn { pos: function(m, c) { return handlePos(m, c); }, patch: function(m) { return applyClientItemFiltered(m, { id: "u_a" }); }, start: turnMoveStart };')(
             { appState: { campaigns: { c1: camp } } }, net, win, () => false, () => true, () => {}, () => {}, (m, ex) => out.bcast.push([m.wbId, m.x, m.y, ex === null ? 'all' : 'others']), t => out.toasts.push(t), () => {}, e => { throw e; }, f => f(), () => null, () => Sx, () => camp, (cid, note) => out.bells.push([cid, note.title, note.text]));
-        if (o.allow !== undefined) net.turnMove = { m1: { rowId: 'r_p', tokId: 't_p', moved: o.moved || 0, allow: o.allow } };
+        if (o.allow !== undefined) net.turnMove = { f_keep0001: { rowId: 'r_p', tokId: 't_p', moved: o.moved || 0, allow: o.allow } };
         const P = (wb, x, y, fin) => api.pos({ type: 'pos', campId: 'c1', itemId: 'm1', wbId: wb, x, y, final: !!fin }, conn);
         const C = (wb, x, y) => { const copy = JSON.parse(JSON.stringify(map.whiteboard)); copy.find(w => w.id === wb).x = x; copy.find(w => w.id === wb).y = y; api.patch({ type: 'item', campId: 'c1', itemId: 'm1', item: { type: 'map', whiteboard: copy } }); };
         out.notes = () => out.sent.filter(m => m.type === 'turn-note').map(m => (m.to ? m.to + ':' : '') + m.text);
@@ -3973,16 +3993,16 @@ pendingChecks.push((async () => {
         wtW.x === 0 && wtW.y === 200 && wt2W.x === 300, j([wtW, wt2W, wt.out.notes()]));
     // the pos path: within the move, past it (refuse), the copy that follows a refused drop, a lost final (the copy closes it), warn, off
     const a = mkT({ allow: 4 }); a.P('t_p', 50, 0); a.P('t_p', 100, 0, true); a.C('t_p', 100, 0);
-    const aMoved = a.net.turnMove.m1.moved, aNotes = a.out.notes();
+    const aMoved = a.net.turnMove.f_keep0001.moved, aNotes = a.out.notes();
     a.P('t_p', 150, 0); a.P('t_p', 250, 0, true); a.C('t_p', 250, 0);
     check('T3b the move limit (host, run for real): a drop within the move goes through and counts from where its drag began, with a note of what is left; one past it is not applied mid-drag, goes back for everyone with a note, and the map copy that repeats it moves nothing and says nothing more',
-        aMoved === 2 && j(aNotes) === j(['Moved 2 squares (10 ft); 2 squares (10 ft) left.']) && a.net.turnMove.m1.moved === 2 && a.pat.x === 100
+        aMoved === 2 && j(aNotes) === j(['Moved 2 squares (10 ft); 2 squares (10 ft) left.']) && a.net.turnMove.f_keep0001.moved === 2 && a.pat.x === 100
         && j(a.out.notes().slice(1)) === j(['That is 3 squares (15 ft); you have 2 squares (10 ft) left.']) && a.out.bcast.filter(b => b[3] === 'all').length === 2 && a.out.bcast.filter(b => b[3] === 'all').every(b => b[1] === 100), j([aMoved, a.out.notes(), a.out.bcast]));
     const b = mkT({ allow: 4 }); b.P('t_p', 50, 0); b.C('t_p', 250, 0);
     const b2 = mkT({ allow: 4 }); b2.P('t_p', 50, 0); b2.C('t_p', 150, 0);
     check('T3b a drag whose final pos was lost: the map copy after it closes it — past the move, the token goes back to where the drag began for everyone, with a note to each of the player\'s connections; within it, the whole drag counts (from its start, not the last mid-drag place), with its note',
         b.pat.x === 0 && b.out.bcast.some(x => x[1] === 0 && x[3] === 'all') && j(b.out.notes()) === j(['That is 5 squares (25 ft); you have 4 squares (20 ft) left.', 'pA2:That is 5 squares (25 ft); you have 4 squares (20 ft) left.'])
-        && b2.pat.x === 150 && b2.net.turnMove.m1.moved === 3 && j(b2.out.notes()) === j(['Moved 3 squares (15 ft); 1 square (5 ft) left.', 'pA2:Moved 3 squares (15 ft); 1 square (5 ft) left.']), j([b.out.notes(), b2.out.notes(), b2.net.turnMove]));
+        && b2.pat.x === 150 && b2.net.turnMove.f_keep0001.moved === 3 && j(b2.out.notes()) === j(['Moved 3 squares (15 ft); 1 square (5 ft) left.', 'pA2:Moved 3 squares (15 ft); 1 square (5 ft) left.']), j([b.out.notes(), b2.out.notes(), b2.net.turnMove]));
     // difficult terrain T2: the fog tells the move's own length beside its cost (moveCells' out.len); here a move ending past x 100 costs double
     const terrMc = (mp, tw, fx, fy, tx, ty, dg, outL) => { const l = Math.max(Math.abs(tx - fx), Math.abs(ty - fy)) / 50; if (outL) outL.len = l; return tx > 100 ? l * 2 : l; };
     const tA = mkT({ allow: 4, moveCells: terrMc }); tA.P('t_p', 150, 0, true);
@@ -3992,9 +4012,9 @@ pendingChecks.push((async () => {
     const tD = mkT({ allow: 4, moveCells: terrMc }); tD.P('t_p', 50, 0); tD.C('t_p', 150, 0);
     check('terrain T2 the move limit counts a move\'s cost (host, run for real): a drop that difficult terrain makes cost past the move goes back, its note naming the cost; one within counts its cost, its note naming both the length and the cost; plain ground as before; the map copy that closes a drag alike, refused or counted, to each of the player\'s connections',
         tA.pat.x === 0 && j(tA.out.notes()) === j(['That costs 6 squares (30 ft) with difficult terrain; you have 4 squares (20 ft) left.'])
-        && tB.pat.x === 150 && tB.net.turnMove.m1.moved === 6 && j(tB.out.notes()) === j(['Moved 3 squares (15 ft), costing 6 squares (30 ft) with difficult terrain; 2 squares (10 ft) left.'])
-        && tN.net.turnMove.m1.moved === 2 && j(tN.out.notes()) === j(['Moved 2 squares (10 ft); 6 squares (30 ft) left.'])
-        && tC.pat.x === 150 && tC.net.turnMove.m1.moved === 6 && j(tC.out.notes()) === j(['Moved 3 squares (15 ft), costing 6 squares (30 ft) with difficult terrain; 2 squares (10 ft) left.', 'pA2:Moved 3 squares (15 ft), costing 6 squares (30 ft) with difficult terrain; 2 squares (10 ft) left.'])
+        && tB.pat.x === 150 && tB.net.turnMove.f_keep0001.moved === 6 && j(tB.out.notes()) === j(['Moved 3 squares (15 ft), costing 6 squares (30 ft) with difficult terrain; 2 squares (10 ft) left.'])
+        && tN.net.turnMove.f_keep0001.moved === 2 && j(tN.out.notes()) === j(['Moved 2 squares (10 ft); 6 squares (30 ft) left.'])
+        && tC.pat.x === 150 && tC.net.turnMove.f_keep0001.moved === 6 && j(tC.out.notes()) === j(['Moved 3 squares (15 ft), costing 6 squares (30 ft) with difficult terrain; 2 squares (10 ft) left.', 'pA2:Moved 3 squares (15 ft), costing 6 squares (30 ft) with difficult terrain; 2 squares (10 ft) left.'])
         && tD.pat.x === 0 && j(tD.out.notes()) === j(['That costs 6 squares (30 ft) with difficult terrain; you have 4 squares (20 ft) left.', 'pA2:That costs 6 squares (30 ft) with difficult terrain; you have 4 squares (20 ft) left.']),
         j([tA.out.notes(), tB.out.notes(), tN.out.notes(), tC.out.notes(), tD.out.notes()]));
     // whole cells (owner, 2026-10-01): the real moveCells (fog.js, sliced, over the real fogcore and systemcore) in the real pos gate and patch
@@ -4009,15 +4029,15 @@ pendingChecks.push((async () => {
     const g5 = offAt({ allow: 4, rules: { move: 'warn' }, moved: 9 }, 0, 0); g5.P('t_p', 0, 0, true);          // already past its move (Warn), turning in place: nothing more is said
     const g6 = offAt({ allow: 4, moved: 9 }, 10, 10); g6.P('t_p', 12, 14, true); g6.P('t_p', 12, 14); g6.C('t_p', 16, 18);   // Refuse, already past its move: a shuffle in its cell is no move to refuse
     check('whole cells in the move limit (host, the real moveCells in the real pos gate and patch path): a token standing off the grid that moves straight down two squares is told "Moved 2 squares", and so is the map copy that closes a lost final (each of the player\'s connections); six squares past a move of four goes back where it stood, off the grid as it was; a shuffle inside its own cell, a turn in place and a copy of the same count nothing and say nothing, even for a token already past its move, which is not sent back for a move of nothing either',
-        g1.net.turnMove.m1.moved === 2 && j(g1.out.notes()) === j(['Moved 2 squares (10 ft); 2 squares (10 ft) left.'])
-        && g2.net.turnMove.m1.moved === 2 && j(g2.out.notes()) === j(['Moved 2 squares (10 ft); 2 squares (10 ft) left.', 'pA2:Moved 2 squares (10 ft); 2 squares (10 ft) left.'])
-        && g3.pat.x === 100 && g3.pat.y === 321.7 && g3.net.turnMove.m1.moved === 0 && j(g3.out.notes()) === j(['That is 6 squares (30 ft); you have 4 squares (20 ft) left.'])
-        && g4.net.turnMove.m1.moved === 0 && j(g4.out.notes()) === '[]' && g4.out.toasts.length === 0 && g5.net.turnMove.m1.moved === 9 && j(g5.out.notes()) === '[]' && g5.out.toasts.length === 0 && g5.out.bells.length === 0
-        && g6.pat.x === 16 && g6.pat.y === 18 && g6.net.turnMove.m1.moved === 9 && j(g6.out.notes()) === '[]',
+        g1.net.turnMove.f_keep0001.moved === 2 && j(g1.out.notes()) === j(['Moved 2 squares (10 ft); 2 squares (10 ft) left.'])
+        && g2.net.turnMove.f_keep0001.moved === 2 && j(g2.out.notes()) === j(['Moved 2 squares (10 ft); 2 squares (10 ft) left.', 'pA2:Moved 2 squares (10 ft); 2 squares (10 ft) left.'])
+        && g3.pat.x === 100 && g3.pat.y === 321.7 && g3.net.turnMove.f_keep0001.moved === 0 && j(g3.out.notes()) === j(['That is 6 squares (30 ft); you have 4 squares (20 ft) left.'])
+        && g4.net.turnMove.f_keep0001.moved === 0 && j(g4.out.notes()) === '[]' && g4.out.toasts.length === 0 && g5.net.turnMove.f_keep0001.moved === 9 && j(g5.out.notes()) === '[]' && g5.out.toasts.length === 0 && g5.out.bells.length === 0
+        && g6.pat.x === 16 && g6.pat.y === 18 && g6.net.turnMove.f_keep0001.moved === 9 && j(g6.out.notes()) === '[]',
         j([g1.out.notes(), g2.out.notes(), g3.out.notes(), [g3.pat.x, g3.pat.y], g4.out.notes(), g5.out.notes(), g5.out.toasts]));
     const w = mkT({ allow: 4, rules: { move: 'warn' } }); w.P('t_p', 300, 0, true);
     const bo = mkT({ turn: 0, rules: { order: 'warn' } }); bo.P('t_p', 50, 0, true); const br = mkT({ turn: 0 }); br.P('t_p', 50, 0, true);
-    const bp = mkT({ allow: 4 }); bp.P('t_p', 50, 0); bp.C('t_p', 250, 0); const bs = mkT(); bs.api.start('m1', bs.net.combats.m1);
+    const bp = mkT({ allow: 4 }); bp.P('t_p', 50, 0); bp.C('t_p', 250, 0); const bs = mkT(); bs.api.start('m1', bs.net.combats.f_keep0001);
     check('The bell (Bell-b): every turn note of the move gates names the token\'s character — Your turn, a counted or refused move, out of turn, and the map copy\'s note to each of the player\'s connections; Warn past the move or out of turn also notes it in the GM\'s bell; a refusal does not',
         [w, bo, br, bp, bs].every(x => { const tn = x.out.sent.filter(m => m.type === 'turn-note'); return tn.length > 0 && tn.every(m => m.charId === 'c_p'); }) && bp.out.sent.filter(m => m.type === 'turn-note').length === 2
         && j(w.out.bells) === j([['c_p', 'Turn', 'Moved 2 squares (10 ft) past the move.']]) && j(bo.out.bells) === j([['c_p', 'Turn', 'Moved out of turn.']]) && !br.out.bells.length && !bp.out.bells.length, j([w.out.bells, bo.out.bells, bs.out.sent]));
@@ -4025,7 +4045,7 @@ pendingChecks.push((async () => {
     const g = mkT({ allow: 4 }); g.P('t_f', 400, 500, true);
     const nt = mkT({ allow: 4, turns: false }); nt.P('t_p', 300, 0, true);
     check('T3b the move limit\'s modes: warn lets it past with a note to the player and the GM; off neither stops nor counts nor notes; a token outside the combat and a table without turn-based combat are free',
-        w.pat.x === 300 && j(w.out.notes()) === j(['That went 2 squares (10 ft) past your move.']) && w.out.toasts.length === 1 && f.pat.x === 300 && !f.out.notes().length && f.net.turnMove.m1.moved === 0
+        w.pat.x === 300 && j(w.out.notes()) === j(['That went 2 squares (10 ft) past your move.']) && w.out.toasts.length === 1 && f.pat.x === 300 && !f.out.notes().length && f.net.turnMove.f_keep0001.moved === 0
         && g.free.x === 400 && !g.out.notes().length && nt.pat.x === 300 && !nt.out.notes().length, j([w.out.notes(), w.out.toasts, f.out.notes()]));
     // out of turn
     const o1 = mkT({ turn: 0 }); o1.P('t_p', 50, 0); o1.P('t_p', 100, 0, true); o1.C('t_p', 100, 0);
@@ -4037,16 +4057,23 @@ pendingChecks.push((async () => {
     const b3 = mkT({ allow: 4 }); b3.P('t_p', 50, 0); b3.C('t_p', 150, 0); b3.P('t_p', 200, 0, true);
     check('T3b out of turn: a token in the combat moves only on its turn — refused, not applied mid-drag and put back with one note (its map copy after moves nothing); a copy alone is refused too; warn lets it with notes to them and the GM; off lets it be. A map copy alone crossing a wall is put back with its note; a copy closes its drag, so the next drag begins where it landed',
         o1.pat.x === 0 && j(o1.out.notes()) === j(['It is not your turn: your token goes back.']) && o4.pat.x === 0 && o4.out.notes().length === 2 && o5mid === 0
-        && wl.pat.x === 0 && /A wall is in the way/.test(wl.out.notes()[0] || '') && b3.pat.x === 200 && b3.net.turnMove.m1.moved === 4
+        && wl.pat.x === 0 && /A wall is in the way/.test(wl.out.notes()[0] || '') && b3.pat.x === 200 && b3.net.turnMove.f_keep0001.moved === 4
         && o2.pat.x === 100 && j(o2.out.notes()) === j(['You moved out of turn.']) && o2.out.toasts.length === 1 && o3.pat.x === 100 && !o3.out.notes().length, j([o1.out.notes(), o4.out.notes(), o2.out.notes()]));
     // the turn's start: the allowance through the player's view
-    const s1 = mkT(); s1.api.start('m1', s1.net.combats.m1);
-    const s2 = mkT(); s2.api.start('m1', Object.assign({}, s2.net.combats.m1, { turn: 0 }));
-    const s3 = mkT({ system: Sx.cleanSystem(Object.assign({}, sysT, { combat: { turn: { move: 'GMFig * 30', unit: 'ft' } } }), { F: Fx, gmView: true }) }); s3.api.start('m1', s3.net.combats.m1);
-    const s4 = mkT({ turns: false }); s4.api.start('m1', s4.net.combats.m1);
+    const s1 = mkT(); s1.api.start('m1', s1.net.combats.f_keep0001);
+    const s2 = mkT(); s2.api.start('m1', Object.assign({}, s2.net.combats.f_keep0001, { turn: 0 }));
+    const s3 = mkT({ system: Sx.cleanSystem(Object.assign({}, sysT, { combat: { turn: { move: 'GMFig * 30', unit: 'ft' } } }), { F: Fx, gmView: true }) }); s3.api.start('m1', s3.net.combats.f_keep0001);
+    const s4 = mkT({ turns: false }); s4.api.start('m1', s4.net.combats.f_keep0001);
     check('T3b the turn\'s start (turnMoveStart, run for real): the player\'s token gets its system\'s Move per turn as the map\'s cells (Speed 30 ft on 5 ft squares: 6) and each of its player\'s connections hears it; an NPC\'s token has no state; a move reading a GM-only value, or turn-based combat off, sets no limit',
-        j(s1.net.turnMove.m1) === j({ rowId: 'r_p', tokId: 't_p', moved: 0, allow: 6 }) && j(s1.out.notes()) === j(['Your turn: 6 squares (30 ft) to move.', 'pA2:Your turn: 6 squares (30 ft) to move.'])
-        && !('m1' in s2.net.turnMove) && s3.net.turnMove.m1.allow === null && !s3.out.notes().length && !('m1' in s4.net.turnMove), j([s1.net.turnMove, s1.out.notes(), s2.net.turnMove, s3.net.turnMove]));
+        j(s1.net.turnMove.f_keep0001) === j({ rowId: 'r_p', tokId: 't_p', moved: 0, allow: 6 }) && j(s1.out.notes()) === j(['Your turn: 6 squares (30 ft) to move.', 'pA2:Your turn: 6 squares (30 ft) to move.'])
+        && !('f_keep0001' in s2.net.turnMove) && s3.net.turnMove.f_keep0001.allow === null && !s3.out.notes().length && !('f_keep0001' in s4.net.turnMove), j([s1.net.turnMove, s1.out.notes(), s2.net.turnMove, s3.net.turnMove]));
+    // fold 2's review: each fight keeps its own turn's move (net.turnMove by the fight's id). Pat moves 2 of his 4 squares in the first fight on the
+    // map; a turn starting in a second fight there (his other token's) leaves his allowance and what he moved as they were, and his next move counts on
+    const tw = mkT({ allow: 4 }); tw.P('t_p', 50, 0); tw.P('t_p', 100, 0, true);
+    tw.net.combats.f_keep0002 = { id: 'f_keep0002', mapId: 'm1', round: 1, turn: 0, rows: [{ id: 'r_f', tokId: 't_f' }] }; tw.api.start('m1', tw.net.combats.f_keep0002);
+    const twA = j(tw.net.turnMove.f_keep0001), twB = j(tw.net.turnMove.f_keep0002); tw.P('t_p', 150, 0, true); const twA2 = tw.net.turnMove.f_keep0001 && tw.net.turnMove.f_keep0001.moved;
+    check('fold 2\'s review (turnMoveStart and the pos gate, run for real): each fight keeps its own turn\'s move, by its own id — a turn starting in a second fight on the map leaves the first fight\'s allowance and what was moved in it as they were, and the next move there counts on from them',
+        twA === j({ rowId: 'r_p', tokId: 't_p', moved: 2, allow: 4 }) && twB === j({ rowId: 'r_f', tokId: 't_f', moved: 0, allow: null }) && twA2 === 3 && !('m1' in tw.net.turnMove), j([twA, twB, twA2, tw.net.turnMove]));
 })());
 
 // Turn-based combat T4 (D4, D5): the actions a turn allows — the host's spend (net.js, run for real), the refill at a turn's start and the clearing
@@ -4061,8 +4088,8 @@ pendingChecks.push((async () => {
         const map = { type: 'map', whiteboard: [{ id: 't_p', isChar: true, charId: 'c_p', ownerId: 'u_a' }, { id: 't_o', isChar: true, charId: 'c_o' }, { id: 't_q', isChar: true, charId: 'c_q', ownerId: 'u_a' }] };
         const camp = { id: 'c1', items: { m1: map }, turnRules: o.rules || {}, system: { combat: { turn: { acts: o.acts || [{ key: 'Action', n: 1 }, { key: 'Bonus', label: 'Bonus action', n: 2 }] } } }, chars: { c_p: { id: 'c_p', name: 'Pat', ownerId: 'u_a' }, c_o: { id: 'c_o', name: 'Orc', npc: true }, c_q: { id: 'c_q', name: 'Quin', ownerId: 'u_a' } } };
         const out = { sent: [], toasts: [], bells: [] }, mk = p => ({ peer: p, open: true, send: m => out.sent.push(Object.assign({ to: p }, m)) }), conns = [mk('pA'), mk('pA2'), mk('pB')];
-        const net = { role: 'host', conns, roster: { pA: { id: 'u_a', location: 'm1' }, pA2: { id: 'u_a', location: 'm1' }, pB: { id: 'u_b', location: 'm1' } }, combats: { m1: { round: 1, turn: 1, rows: [{ id: 'r_o', tokId: 't_o' }, { id: 'r_p', tokId: 't_p' }] } } };
-        const api = new Function('net', 'window', 'SC', 'getActiveCampaign', 'own', 'toast', 'sendFailed', 'applyPosToDom', 'broadcastPos', 'bellOut', pidA + posA + '\n' + taA + '\nreturn { spend: actSpend, start: turnActsStart, end: turnActsEnd };')(
+        const net = { role: 'host', conns, roster: { pA: { id: 'u_a', location: 'm1' }, pA2: { id: 'u_a', location: 'm1' }, pB: { id: 'u_b', location: 'm1' } }, combats: { m1: { mapId: 'm1', round: 1, turn: 1, rows: [{ id: 'r_o', tokId: 't_o' }, { id: 'r_p', tokId: 't_p' }] } } };
+        const api = new Function('net', 'window', 'SC', 'getActiveCampaign', 'own', 'toast', 'sendFailed', 'applyPosToDom', 'broadcastPos', 'bellOut', pidA + posA + '\n' + taA + '\n' + ordersSrc + '\nreturn { spend: actSpend, start: turnActsStart, end: turnActsEnd };')(
             net, { wpVtt: { on: k => k === 'turns' ? o.turns !== false : true } }, () => Sx, () => camp, (ob, k) => !!ob && Object.prototype.hasOwnProperty.call(ob, k), t => out.toasts.push(t), e => { throw e; }, () => {}, () => {}, (cid, note) => out.bells.push([cid, note.title, note.text]));
         const sp = (cost, ch) => api.spend(camp, ch || 'c_p', net.roster.pA, cost, conns[0], 'Pat');
         out.notes = () => out.sent.filter(m => m.type === 'turn-note').map(m => m.text);
@@ -4117,11 +4144,11 @@ pendingChecks.push((async () => {
             c_r: { id: 'c_r', name: 'Rex', npc: true, values: { f_fx: [{ id: 'x_3', ref: 'e_q', on: true, t: { left: 10, at: 1000 } }] } } } };
         const out = { deltas: [], changed: [], chat: [], saves: 0 }, mk = p => ({ peer: p, open: true, sent: [], send(m) { this.sent.push(m); } }), conns = [mk('pA'), mk('pB')];
         const net = { active: true, role: o.role || 'host', stream: false, myId: 'u_gm', conns, roster: { pA: { id: 'u_a' }, pB: { id: 'u_b' } }, combats: o.combats || {}, syncCharDelta: (id, d) => out.deltas.push([id, JSON.parse(JSON.stringify(d))]) };
-        const api = new Function('net', 'window', 'SC', 'getActiveCampaign', 'own', 'saveRemoteSoon', 'pushChat', 'sendFailed', pidF + ftS + '\nreturn { apply: fxApply, turn: turnFxStart, edge: fxCombatEdge, clock: fxClockTick, inCombat: net.charInCombat };')(
+        const api = new Function('net', 'window', 'SC', 'getActiveCampaign', 'own', 'saveRemoteSoon', 'pushChat', 'sendFailed', pidF + ftS + '\n' + ordersSrc + '\nreturn { apply: fxApply, turn: turnFxStart, edge: fxCombatEdge, clock: fxClockTick, inCombat: net.charInCombat };')(
             net, { wpVtt: { on: k => (k === 'sheets' ? o.sheets !== false : k === 'calendar' ? o.calendar === true : true) }, wpSheets: { charChanged: id => out.changed.push(id) } }, () => Sx, () => camp, (ob, k) => !!ob && Object.prototype.hasOwnProperty.call(ob, k), () => out.saves++, m => out.chat.push(m), e => { throw e; });
         return { out, net, camp, api, conns };
     };
-    const cb = { round: 1, turn: 0, rows: [{ id: 'r_p', tokId: 't_p' }] };
+    const cb = { mapId: 'm1', round: 1, turn: 0, rows: [{ id: 'r_p', tokId: 't_p' }] };
     {   // item 20 K4: the Calendar on — the tick only stops a running clock; the game clock's move (net.fxGameTime) runs every timed effect outside a fight
         const g = mkF({ calendar: true, combats: { m1: cb } }), now0 = Date.now(); g.camp.chars.c_q.values.f_fx[0].t = { left: 10, at: now0 - 2000 }; g.camp.chars.c_r.values.f_fx[0].t = { left: 30, at: 0, p: 1 };
         g.api.clock(); const gq1 = JSON.parse(JSON.stringify(g.camp.chars.c_q.values.f_fx[0].t)), gd1 = g.out.deltas.length; g.api.clock(); const gd2 = g.out.deltas.length;
@@ -4152,7 +4179,7 @@ pendingChecks.push((async () => {
     const T = src.replace(/\r\n/g, '\n');
     check('T5a the wiring (source): a player\'s added effect starts its timer on the host with the host\'s clock and whether they are in a combat; turnStarted takes a round; a combat\'s start banks and its end resumes; the clock starts with the first render',
         /view: window\.wpSheets \? window\.wpSheets\.playerSystem\(campX\) : null, now: Date\.now\(\), inCombat: !!\(net\.charInCombat && net\.charInCombat\(qx\.charId\)\), timersGm: !!\(campX\.turnRules && campX\.turnRules\.timers === 'gm'\) \}\);/.test(T) && /try \{ turnFxStart\(mapId, c\); \} catch \(e\)/.test(T)
-        && /if \(combat && !had\) \{ try \{ fxCombatEdge\(mapId, net\.combats\[mapId\], 'bank'\); \}/.test(T) && /if \(had\) \{ try \{ fxCombatEdge\(mapId, had, 'resume'\); \}/.test(T) && /function renderWhere\(\) \{\n\s*if \(typeof fxClockStart === 'function'\) fxClockStart\(\);/.test(T));
+        && /if \(f && !had\) \{ try \{ fxCombatEdge\(mapId, f, 'bank'\); \}/.test(T) && /if \(had\) \{ try \{ fxCombatEdge\(mapId, had, 'resume'\); \}/.test(T) && /function renderWhere\(\) \{\n\s*if \(typeof fxClockStart === 'function'\) fxClockStart\(\);/.test(T));
 })());
 
 // The combat roster on the wire (1.5.0): players get the order, never a number. A row's initiative can be the total of a roll the GM alone
@@ -4166,6 +4193,7 @@ pendingChecks.push((async () => {
     const wb = fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', 'whiteboard.js'), 'utf8').replace(/\r\n/g, '\n');
     const wbCut = (a, b, label) => { const i = wb.indexOf(a), k = wb.indexOf(b, i + 1); if (i < 0 || k < 0 || wb.indexOf(a, i + 1) >= 0) throw new Error('netcheck: ' + label + ' not found once in whiteboard.js'); return wb.slice(i, k); };
     const sortSrc = wbCut('function combatSortByInit(rows) {', '\nfunction renderCombatModal() {', 'combatSortByInit'), wireSrc = wbCut('(function wireCombatModal() {', '\nfunction renderCombatStrip() {', 'wireCombatModal');
+    const fhSrc = wbCut('function fightsHere(', '\n', 'fightsHere');   // fold 2: the fights on a map, which the strip's stripShow asks after a Start
     const fe = () => ({ on: {}, style: {}, value: '', addEventListener(t, f) { this.on[t] = f; }, querySelectorAll: () => [] });
     // o.fog: m1 is fogged; o.drops: { profileId: { tokId: 1 } } — what fogDropIds hides from whom (null when nothing, as it does);
     // o.rolled: what the sheet's rollInit gave (net.diceRoll's own shape: { ok, value, priv }, or { error })
@@ -4173,12 +4201,13 @@ pendingChecks.push((async () => {
         o = o || {};
         const tok = (id, ownerId) => ({ id, isChar: true, ownerId: ownerId || null, x: 0, y: 0 });
         const camp = { id: 'k', activeItemId: 'm1', items: { m1: { type: 'map', meta: { title: 'Keep' }, fog: o.fog ? { on: true } : { on: false }, whiteboard: [tok('t_ana', 'u_a'), tok('t_orc'), tok('t_gob'), tok('t_x')] }, m2: { type: 'map', meta: { title: 'Yard' }, whiteboard: [] } } };
-        const conns = [mkConn('pA'), mkConn('pB'), mkConn('pWait'), mkConn('pShut', false)];
-        const net = { active: true, role: 'host', conns, roster: { pA: { id: 'u_a' }, pB: { id: 'u_b' }, pShut: { id: 'u_s' } }, combats: {} };
+        const conns = [mkConn('pA'), mkConn('pB'), mkConn('pWait'), mkConn('pShut', false)].concat(o.m2 ? [mkConn('pM')] : []);   // o.m2: a fifth player, on the Yard
+        const net = { active: true, role: 'host', conns, roster: { pA: { id: 'u_a', location: 'm1' }, pB: { id: 'u_b', location: 'm1' }, pShut: { id: 'u_s', location: 'm1' } }, combats: {} };
+        if (o.m2) net.roster.pM = { id: 'u_m', location: 'm2' };
         const out = { toasts: [], rolls: [], bcast: [], net, conns };
         const win = { wpFog: { fogDropIds: (pid, c, map) => (o.drops && map === c.items.m1 && o.drops[pid]) || null }, wpVtt: { on: k => k === 'fog' } };
         const broadcast = (msg, except) => { packCheck(msg); out.bcast.push(JSON.parse(JSON.stringify(msg))); conns.forEach(c => { if (c !== except && c.open && net.roster[c.peer]) c.send(msg); }); };   // admitted peers only, as the real one on a host
-        const N = new Function('net', 'getActiveCampaign', 'window', 'broadcast', 'sendFailed', 'logEvent', 'toast', 'render', 'renderNotepad', fogSrc + '\n' + cbSrc + '\n' + setSrc + '\nreturn { cleanCombats, combatsFor, broadcastCombats, targetsFor, broadcastTargets };')(
+        const N = new Function('net', 'getActiveCampaign', 'window', 'broadcast', 'sendFailed', 'logEvent', 'toast', 'render', 'renderNotepad', fogSrc + '\n' + cbSrc + '\n' + setSrc + '\n' + ordersSrc + '\nreturn { cleanCombats, cleanFights, combatsFor, broadcastCombats, targetsFor, broadcastTargets };')(
             net, () => camp, win, broadcast, e => { throw e; }, () => {}, t => out.toasts.push(t), () => {}, () => {});
         out.N = N; out.camp = camp;
         const els = {}; ['combatModal', 'combatRows', 'combatAddBtn', 'combatAddName', 'combatCancelBtn', 'combatCloseBtn', 'combatStartBtn'].forEach(id => { els[id] = fe(); });
@@ -4189,16 +4218,19 @@ pendingChecks.push((async () => {
             { id: 'c_trap', name: 'Trap', tokId: null, init: 5, src: null, on: true, custom: true },
             { id: 'r_t_x', name: 'Bystander', tokId: 't_x', init: 3, src: null, on: false, charId: null }] };
         const sheets = { rollInit: cid => { out.rolls.push(cid); return o.rolled !== undefined ? o.rolled : { ok: true, value: 23, priv: true }; } };
-        const W = new Function('document', 'window', 'toast', 'renderCombatModal', 'draft', 'var combatDraft = draft;\n' + sortSrc + '\n' + wireSrc + '\nreturn { draft: function() { return combatDraft; } };')(
-            { getElementById: id => els[id] || null }, { wpSheets: sheets, wpNet: net }, t => out.toasts.push(t), () => {}, draft);
+        const W = new Function('document', 'window', 'toast', 'renderCombatModal', 'draft', 'getActiveCampaign', 'var combatDraft = draft;\n' + fhSrc + '\n' + sortSrc + '\n' + wireSrc + '\nreturn { draft: function(d) { if (d !== undefined) combatDraft = d; return combatDraft; }, strip: function(mapId) { return stripFightId(mapId); }, sw: function(mapId) { return stripSwitch(mapId); } };')(
+            { getElementById: id => els[id] || null }, { wpSheets: sheets, wpNet: net }, t => out.toasts.push(t), () => {}, draft, () => camp);
         const at = (sel, i) => ({ target: { closest: s => s === '.combat-row' ? { dataset: { i: String(i) } } : s === sel ? {} : null } });
         out.rollRow = name => { const i = W.draft().rows.findIndex(r => r.name === name); els.combatRows.on.click(at('.combat-roll', i)); };
         out.start = () => els.combatStartBtn.on.click({});
+        out.stripOf = mapId => W.strip(mapId);   // fold 2: the fight this screen's strip shows on that map
+        out.stripSw = mapId => W.sw(mapId);
+        out.fresh = (name, id) => W.draft({ mapId: 'm1', fresh: true, rows: [{ id, name, tokId: null, init: 1, src: null, on: true, custom: true }] });   // a roster opened as Start another fight here, with one row of its own
         out.draftRows = () => W.draft() && W.draft().rows.map(r => r.name + ':' + r.init);
         out.last = c => { const m = c.sent.filter(x => x.type === 'combats'); m.forEach(packCheck); return m.length ? JSON.parse(JSON.stringify(m[m.length - 1])) : null; };
         return out;
     };
-    const rowsOf = m => m && m.combats && m.combats.m1 ? m.combats.m1.rows : null;
+    const rowsOf = (m, mapId) => { const fr = m && fightIn(m.combats, mapId || 'm1'); return fr ? fr.rows : null; };   // fold 2: the fight on that map, under its own id
     const full = (id, name, tokId, src) => ({ id, name, tokId, src });
     const order = [full('r_t_gob', 'Goblin', 't_gob', 'gob.png'), full('r_t_orc', 'Orc', 't_orc', 'orc.png'), full('c_trap', 'Trap', null, null), full('r_t_ana', 'Ana', 't_ana', 'ana.png')];
 
@@ -4207,34 +4239,66 @@ pendingChecks.push((async () => {
     a.rollRow('Goblin');
     const aDraft = a.draftRows();
     a.start();
-    const aHost = a.net.combats.m1, aMsg = a.last(a.conns[0]), aMsgB = a.last(a.conns[1]);
+    const aHost = fightIn(a.net.combats, 'm1'), aFid = aHost.id, aMsg = a.last(a.conns[0]), aMsgB = a.last(a.conns[1]);
+    const oneFight = (fid, mapId, round, turn, rows) => ({ [fid]: { id: fid, mapId, round, turn, rows } });
     check('combat roster (whiteboard + net.js, run for real): a private initiative roll still sets the order — its total fills the row and the roster sorts by it — and the host keeps every number for the GM\'s roster',
         j(a.rolls) === '["c_g"]' && j(aDraft) === j(['Goblin:23', 'Orc:12', 'Trap:5', 'Bystander:3', 'Ana:0']) && aHost.rows.map(r => r.name + ':' + r.init).join() === 'Goblin:23,Orc:12,Trap:5,Ana:0' && aHost.turn === 0 && aHost.round === 1,
         j([a.rolls, aDraft, aHost]));
-    check('combat roster (no fog): players get the order, the names, the tokens and the pictures, never a number — one broadcast, the same for each admitted player; a waiting or closed connection gets nothing',
-        j(aMsg) === j({ type: 'combats', combats: { m1: { mapId: 'm1', round: 1, turn: 0, rows: order } } }) && j(aMsgB) === j(aMsg) && a.bcast.length === 1 && j(a.bcast[0]) === j(aMsg)
-        && a.conns[2].sent.length === 0 && a.conns[3].sent.length === 0 && j(a.bcast).indexOf('init') < 0 && j(a.bcast).indexOf('23') < 0, j([aMsg, a.bcast.length, a.conns[2].sent]));
-    const snapA = a.N.combatsFor('u_a');
+    check('combat roster (no fog): players get the order, the names, the tokens and the pictures, never a number — fold 2: under the fight\'s own id, each admitted player on that map their own copy, the same for each, never a broadcast; a waiting or closed connection gets nothing',
+        /^f_[a-z0-9]{8}$/.test(aFid) && j(aMsg) === j({ type: 'combats', combats: oneFight(aFid, 'm1', 1, 0, order) }) && j(aMsgB) === j(aMsg) && a.bcast.length === 0
+        && a.conns[2].sent.length === 0 && a.conns[3].sent.length === 0 && j(aMsg).indexOf('init') < 0 && j(aMsg).indexOf('23') < 0, j([aMsg, a.bcast.length, a.conns[2].sent]));
+    const snapA = a.N.combatsFor('u_a', 'm1');
     check('combat roster: the join snapshot\'s combats (combatsFor, per player) carry no number either, and building them leaves the host\'s own rows as they were',
         j(snapA) === j(aMsg.combats) && aHost.rows[0].init === 23 && aHost.rows[0].src === 'gob.png' && aHost.rows.every(r => 'init' in r), j([snapA, aHost.rows[0]]));
-    const cl = a.N.cleanCombats(aMsg.combats);
-    check('combat roster (a player\'s machine): the host\'s rows without a number clean to 0 each, keeping the order, the turn and the round (nothing on a player\'s side reads it)',
-        cl.m1.rows.map(r => r.name + ':' + r.init).join() === 'Goblin:0,Orc:0,Trap:0,Ana:0' && cl.m1.turn === 0 && cl.m1.round === 1 && cl.m1.mapId === 'm1', j(cl));
+    const cl = a.N.cleanFights(aMsg.combats), clF = cl[aFid];
+    check('combat roster (a player\'s machine, fold 2: by the fight\'s own id): the host\'s rows without a number clean to 0 each, keeping the order, the turn, the round, the map and the id (nothing on a player\'s side reads the number)',
+        !!clF && clF.rows.map(r => r.name + ':' + r.init).join() === 'Goblin:0,Orc:0,Trap:0,Ana:0' && clF.turn === 0 && clF.round === 1 && clF.mapId === 'm1' && clF.id === aFid && Object.keys(cl).length === 1, j(cl));
+    {   // fold 2 (backlog 152), found live: the GM switched the strip to the first fight on a map, started another there, and the strip still showed the first
+        const Sp = scen(); Sp.rollRow('Goblin'); Sp.start(); const sp1 = fightIn(Sp.net.combats, 'm1').id, spGot = [Sp.stripOf('m1') === sp1];
+        Sp.fresh('Bell', 'c_bell'); Sp.start(); const sp2 = Sp.net.fightsOn('m1')[1]; spGot.push(!!sp2 && sp2 !== sp1, Sp.stripOf('m1') === sp2);
+        spGot.push(Sp.stripSw('m1') === sp1, Sp.stripOf('m1') === sp1);
+        Sp.fresh('Gong', 'c_gong'); Sp.start(); const sp3 = Sp.net.fightsOn('m1')[2]; spGot.push(!!sp3 && sp3 !== sp2, Sp.stripOf('m1') === sp3);
+        Sp.stripSw('m1'); spGot.push(Sp.stripOf('m1') === sp1);
+        check('fold 2 (backlog 152, whiteboard.js\'s roster and strip run for real over net.js): a fight the GM starts from the roster is the one this screen\'s strip shows, beside a fight the strip\'s switch had picked on that map, and the switch still goes on from there',
+            j(spGot) === j([true, true, true, true, true, true, true, true]), j([spGot, Sp.net.fightsOn('m1')]));
+    }
 
+    {   // fold 2's review: a token already in another fight on the map is offered in a new roster with no tick (whiteboard.js combatRowsFor, renderCombatModal,
+        // openCombatModal and the roster's own change and Start handlers, run for real over net.js): its box greyed with the reason and its row tagged with
+        // the fight it is in; a tick on it does nothing, and Start leaves it out
+        const Bz = scen(); Bz.rollRow('Goblin'); Bz.start();   // the first fight on the Keep: the Goblin, the Orc, the Trap and Ana
+        const rowsS = wbCut('function combatRowsFor(mapId, opts) {', '\nfunction combatSortByInit(rows) {', 'combatRowsFor'), rendS = wbCut('function renderCombatModal() {', '\nfunction openCombatModal(', 'renderCombatModal'), openS = wbCut('function openCombatModal(mapId, opts) {', '\nwindow.wpOpenCombat = openCombatModal;', 'openCombatModal');
+        const findS = wbCut('// [lookcheck:combatfind-start]', '// [lookcheck:combatfind-end]', 'combatfind'), escS = (/\n  (function esc\(s\)\{return [^\n]*\})\n/.exec(fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', 'inspector.js'), 'utf8').replace(/\r\n/g, '\n')) || [])[1] || '';
+        const elsB = {}; ['combatModal', 'combatRows', 'combatAddBtn', 'combatAddName', 'combatCancelBtn', 'combatCloseBtn', 'combatStartBtn', 'combatMapName', 'combatRollAllBtn'].forEach(id => { elsB[id] = fe(); });
+        const RB = new Function('document', 'window', 'toast', 'getActiveCampaign', 'getActiveMap', 'state', 'resolveImg', 'setTimeout', 'clearTimeout', 'var combatDraft = null;\n' + escS + '\n' + fhSrc + '\n' + findS + '\n' + rowsS + '\n' + sortSrc + '\n' + rendS + '\n' + openS + '\n' + wireSrc + '\nreturn { open: openCombatModal, draft: function() { return combatDraft; } };')(
+            { getElementById: id => elsB[id] || null }, { wpNet: Bz.net, wpSheets: { hasInitRoll: () => false } }, t => Bz.toasts.push(t), () => Bz.camp, () => Bz.camp.items.m1, { viewMode: 'visual' }, s => s, () => 0, () => {});
+        RB.open('m1', { fresh: true });
+        const busyOf = () => RB.draft().rows.map(r => r.tokId + ':' + (r.busy ? 'busy' : '') + ':' + (r.on ? 'on' : '')), rowHtml = i => String(elsB.combatRows.innerHTML || '').split('<div class="combat-row').find(h => h.indexOf(' data-i="' + i + '"') >= 0) || '';
+        const busy0 = busyOf(), title0 = elsB.combatMapName.textContent, rowsH = RB.draft().rows.map((r, i) => [/ disabled /.test(rowHtml(i)), rowHtml(i).indexOf('in another fight on Keep') >= 0]);
+        const tick = (i, on) => elsB.combatRows.on.change({ target: { checked: on, classList: { contains: c => c === 'combat-on' }, closest: sel => (sel === '.combat-row' ? { dataset: { i: String(i) } } : null) } });
+        tick(0, true); tick(3, true); const busy1 = busyOf();
+        elsB.combatStartBtn.on.click({}); const fB2 = Bz.net.fightsOn('m1')[1], rowsB2 = fB2 ? Bz.net.combats[fB2].rows.map(r => r.tokId) : null;
+        check('fold 2\'s review (whiteboard.js\'s roster run for real over net.js): Start another fight on a map that holds one offers its tokens with no tick — Ana, the Orc and the Goblin each with a greyed box and the tag of the fight they are in, the Bystander as any token — and its title says it is another fight; a tick on Ana does nothing while the Bystander\'s takes, and Start makes a fight of the Bystander alone',
+            j(busy0) === j(['t_ana:busy:', 't_orc:busy:', 't_gob:busy:', 't_x::']) && title0 === 'Keep, another fight' && j(rowsH) === j([[true, true], [true, true], [true, true], [false, false]])
+            && j(busy1) === j(['t_ana:busy:', 't_orc:busy:', 't_gob:busy:', 't_x::on']) && j(rowsB2) === j(['t_x']), j([busy0, title0, rowsH, busy1, rowsB2]));
+    }
     // fog: a player who cannot see the Goblin gets a Hidden row with nothing of it (no name, token, picture, or the row id that carries its
     // token's); one who sees everything gets the plain order; a combat on an unfogged map at the same table has no number either
     const f = scen({ fog: true, drops: { u_a: { t_gob: 1 } } });
     f.rollRow('Goblin'); f.start();
     f.net.combatSet('m2', { mapId: 'm2', round: 2, turn: 1, rows: [{ id: 'c_tur', name: 'Turret', tokId: null, init: 9, src: null }, { id: 'c_gat', name: 'Gate', tokId: null, init: 4, src: null }] });
-    const fA = f.last(f.conns[0]), fB = f.last(f.conns[1]);
+    const fA = f.last(f.conns[0]), fB = f.last(f.conns[1]), fYard = fightIn(f.net.combats, 'm2'), fYardOut = f.N.combatsFor('u_a', 'm2');
     const hid = { id: 'h0', name: 'Hidden', tokId: null, src: null };
     check('combat roster (fog): an unseen creature\'s row is Hidden whole — no name, token, picture or token-bearing id — in its place in the order; nor is there a number on any row, on the fogged map or an unfogged one',
-        j(rowsOf(fA)) === j([hid].concat(order.slice(1))) && j(fA.combats.m2) === j({ mapId: 'm2', round: 2, turn: 1, rows: [full('c_tur', 'Turret', null, null), full('c_gat', 'Gate', null, null)] })
-        && j(fA).indexOf('gob') < 0 && j(fA).indexOf('Goblin') < 0 && j(fA).indexOf('init') < 0, j(fA));
+        j(rowsOf(fA)) === j([hid].concat(order.slice(1))) && j(fYardOut) === j(oneFight(fYard.id, 'm2', 2, 1, [full('c_tur', 'Turret', null, null), full('c_gat', 'Gate', null, null)]))
+        && j(fA).indexOf('gob') < 0 && j(fA).indexOf('Goblin') < 0 && j(fA).indexOf('init') < 0, j([fA, fYardOut]));
+    check('fold 2 (backlog 152, run for real): a player is sent only the fights on the map they are on — Ana, on the Keep, gets the Keep\'s fight and nothing of the fight on the Yard (its turret, its gate, its round); every player was sent every fight on every map before',
+        Object.keys(fA.combats).length === 1 && fightIn(fA.combats, 'm2') === undefined && Object.keys(fB.combats).length === 1 && fightIn(fB.combats, 'm2') === undefined && j(fA).indexOf('Turret') < 0 && j(fB).indexOf('Gate') < 0
+        && Object.keys(f.net.combats).length === 2 && !!fYard && fYard.id !== fightIn(f.net.combats, 'm1').id, j([fA, fB]));
     check('combat roster (fog): each admitted player gets their own copy (the one who sees the Goblin, the plain order); nothing goes to a waiting or closed connection; the host keeps the Goblin whole with its 23',
         j(rowsOf(fB)) === j(order) && j(fB).indexOf('init') < 0 && f.bcast.length === 0 && f.conns[2].sent.length === 0 && f.conns[3].sent.length === 0
-        && f.net.combats.m1.rows[0].name === 'Goblin' && f.net.combats.m1.rows[0].init === 23 && f.net.combats.m1.rows[0].tokId === 't_gob', j([fB, f.net.combats.m1.rows[0]]));
-    const fSnap = f.N.combatsFor('u_a'), fSnapB = f.N.combatsFor('u_b');
+        && fightIn(f.net.combats, 'm1').rows[0].name === 'Goblin' && fightIn(f.net.combats, 'm1').rows[0].init === 23 && fightIn(f.net.combats, 'm1').rows[0].tokId === 't_gob', j([fB, fightIn(f.net.combats, 'm1').rows[0]]));
+    const fSnap = f.N.combatsFor('u_a', 'm1'), fSnapB = f.N.combatsFor('u_b', 'm1');
     check('combat roster (fog): the join snapshot for each player matches what the broadcast sent them', j(fSnap) === j(fA.combats) && j(fSnapB) === j(fB.combats), j([fSnap, fSnapB]));
 
     // the Roll button: a refusal toasts and changes nothing; an answer with no number (a request still waiting) changes nothing
@@ -4243,10 +4307,11 @@ pendingChecks.push((async () => {
     check('combat roster: a refused initiative roll toasts its reason and leaves the order; one with no number yet leaves it too',
         j(e1.toasts) === j(['Dice are off for this campaign (Settings > VTT features).']) && j(e1.draftRows()) === j(['Orc:12', 'Ana:0', 'Goblin:8', 'Trap:5', 'Bystander:3']) && j(e2.draftRows()) === j(e1.draftRows()) && e2.toasts.length === 0,
         j([e1.toasts, e1.draftRows(), e2.draftRows()]));
-    check('combat roster (source): a roll\'s answer is net.diceRoll\'s own ({ ok, value, priv }) through the sheet\'s rollInit; combats go to players only through combatsFor (the broadcast, the join snapshot, the one player whose sight moved and, fold M7, a copy caught up in place), never net.combats as it is',
-        /return \{ ok: true, value: res\.value, priv: !!rec\.priv \};/.test(src) && (src.match(/type: 'combats'/g) || []).length === 4 && (between('// [netcheck:fogmove-start]', '// [netcheck:fogmove-end]', 'fogmove').match(/type: 'combats'/g) || []).length === 1
-        && (src.match(/if \(inFight\) c\.send\(\{ type: 'combats', combats: combatsFor\(pid\) \}\);/g) || []).length === 2 && /combats: combatsFor\(prof\.id\)/.test(src) && !/combats: net\.combats/.test(src)
-        && /broadcast\(\{ type: 'combats', combats: combatsFor\(null\) \}, null\)/.test(src) && /c\.send\(\{ type: 'combats', combats: combatsFor\(pr\.id\) \}\)/.test(src));
+    check('combat roster (source): a roll\'s answer is net.diceRoll\'s own ({ ok, value, priv }) through the sheet\'s rollInit; combats go to players only through combatsFor (the broadcast, the join snapshot, the one player whose sight moved and, fold M7, a copy caught up in place), never net.combats as it is; fold 2\'s review: each send through combatsTo, the one place a message of the fights is made, and the broadcast alone holds back a copy the connection holds already',
+        /return \{ ok: true, value: res\.value, priv: !!rec\.priv \};/.test(src) && (src.match(/type: 'combats'/g) || []).length === 1 && /function combatsTo\(c, combats, fresh\) \{[^]*?c\.send\(\{ type: 'combats', combats: combats \}\);/.test(cbSrc)
+        && (between('// [netcheck:fogmove-start]', '// [netcheck:fogmove-end]', 'fogmove').match(/combatsTo\(c, combatsFor\(pid, connMap\(c\)\)\)/g) || []).length === 1
+        && (src.match(/if \(inFight\) combatsTo\(c, combatsFor\(pid, connMap\(c\)\)\);/g) || []).length === 2 && /combats: combatsFor\(prof\.id, prof\.location\), fights: true,/.test(src) && !/combats: net\.combats/.test(src)
+        && !/broadcast\(\{ type: 'combats'/.test(src) && /combatsTo\(c, combatsFor\(pr\.id, pr\.location\), true\)/.test(src) && /combatsTo\(c, combatsFor\(pr\.id, loc\)\)/.test(src) && (src.match(/combatsTo\(/g) || []).length === 5 && (src.match(/combatsTo\([^;\n]*, true\)/g) || []).length === 1);
 
     // Fold M0 (a security fix): a token the GM hides after the fight began leaves every player's copy, so its row goes out Hidden too, on
     // a table without fog as on a fogged one (combatHidden, run for real in combatsFor and broadcastCombats); the host keeps the row whole. m2
@@ -4255,76 +4320,87 @@ pendingChecks.push((async () => {
     const tokOf = (s, mapId, id) => s.camp.items[mapId].whiteboard.find(w => w.id === id);
     const hidRow = i => ({ id: 'h' + i, name: 'Hidden', tokId: null, src: null });
     const hideWorld = o => {
-        const s = scen(o); s.rollRow('Goblin'); s.start(); s.net.combats.m1.round = 3; s.net.combats.m1.turn = 1;
+        const s = scen(Object.assign({ m2: true }, o)); s.rollRow('Goblin'); s.start(); fightIn(s.net.combats, 'm1').round = 3; fightIn(s.net.combats, 'm1').turn = 1;
         s.camp.items.m1.whiteboard.push({ id: 'null', hidden: true, x: 0, y: 0 });
         s.camp.items.m2.whiteboard.push({ id: 't_orc', isChar: true, hidden: true, x: 0, y: 0 });
-        s.net.combats.m2 = { mapId: 'm2', round: 2, turn: 2, rows: [{ id: 'r_g2', name: 'Goblin2', tokId: 't_gob', init: 6, src: 'g2.png' }, { id: 'r_o2', name: 'Orc2', tokId: 't_orc', init: 4, src: 'o2.png' }, { id: 'c_gate', name: 'Gate', tokId: null, init: 2, src: null }] };
+        s.net.combats.f_yard0001 = { id: 'f_yard0001', mapId: 'm2', round: 2, turn: 2, rows: [{ id: 'r_g2', name: 'Goblin2', tokId: 't_gob', init: 6, src: 'g2.png' }, { id: 'r_o2', name: 'Orc2', tokId: 't_orc', init: 4, src: 'o2.png' }, { id: 'c_gate', name: 'Gate', tokId: null, init: 2, src: null }] };
         tokOf(s, 'm1', 't_gob').hidden = true; return s;
     };
-    const m2Out = hid1 => ({ mapId: 'm2', round: 2, turn: 2, rows: [full('r_g2', 'Goblin2', 't_gob', 'g2.png'), hid1 ? hidRow(1) : full('r_o2', 'Orc2', 't_orc', 'o2.png'), full('c_gate', 'Gate', null, null)] });
-    const U = hideWorld(), ub0 = U.bcast.length; U.N.broadcastCombats();
-    const uA = U.last(U.conns[0]), uB = U.last(U.conns[1]), uSnap = [U.N.combatsFor('u_a'), U.N.combatsFor(null)], uHost = U.net.combats.m1.rows[0];
-    check('fold M0 and the owner\'s ruling of 2026-10-01: on a table without fog a token the GM hid after the fight began keeps its row by name for the table that saw it go out whole at the start (broadcastCombats, run for real), the order, the count, the round and the turn intact; a creature hidden before any copy of its fight went out (m2\'s Orc2, its fight set up while it was hidden) goes out as a Hidden row — no name, token, picture or token-bearing id, in its place; a hidden token on another map than the combat\'s hides nothing',
-        j(uA) === j({ type: 'combats', combats: { m1: { mapId: 'm1', round: 3, turn: 1, rows: order }, m2: m2Out(true) } })
-        && j(rowsOf(uA)).indexOf('Goblin') >= 0 && j(uA.combats.m2).indexOf('Orc2') < 0 && j(uA.combats.m2).indexOf('o2.png') < 0 && j(uA.combats.m2).indexOf('t_orc') < 0, j(uA));
-    check('fold M0: without fog that is still one broadcast, the same for each admitted player, nothing to a waiting or closed connection; the join snapshot (combatsFor) says the same; the host keeps the hidden token\'s row whole with its number',
-        U.bcast.length === ub0 + 1 && j(uB) === j(uA) && j(U.bcast[U.bcast.length - 1]) === j(uA) && U.conns[2].sent.length === 0 && U.conns[3].sent.length === 0
+    const m2Out = hid1 => ({ f_yard0001: { id: 'f_yard0001', mapId: 'm2', round: 2, turn: 2, rows: [full('r_g2', 'Goblin2', 't_gob', 'g2.png'), hid1 ? hidRow(1) : full('r_o2', 'Orc2', 't_orc', 'o2.png'), full('c_gate', 'Gate', null, null)] } });
+    const U = hideWorld(), ub0 = U.bcast.length, uFid = fightIn(U.net.combats, 'm1').id; U.N.broadcastCombats();
+    const uA = U.last(U.conns[0]), uB = U.last(U.conns[1]), uM = U.last(U.conns[4]), uSnap = [U.N.combatsFor('u_a', 'm1'), U.N.combatsFor('u_b', 'm1')], uHost = fightIn(U.net.combats, 'm1').rows[0];
+    check('fold M0 and the owner\'s ruling of 2026-10-01: on a table without fog a token the GM hid after the fight began keeps its row by name for the table that saw it go out whole at the start (broadcastCombats, run for real), the order, the count, the round and the turn intact; a creature hidden before any copy of its fight went out (the Yard\'s Orc2, its fight set up while it was hidden) goes out as a Hidden row to the player on the Yard — no name, token, picture or token-bearing id, in its place; a hidden token on another map than the fight\'s hides nothing; fold 2: each player gets the fights on the map they are on',
+        j(uA) === j({ type: 'combats', combats: oneFight(uFid, 'm1', 3, 1, order) }) && j(uM) === j({ type: 'combats', combats: m2Out(true) })
+        && j(rowsOf(uA)).indexOf('Goblin') >= 0 && j(uM).indexOf('Orc2') < 0 && j(uM).indexOf('o2.png') < 0 && j(uM).indexOf('t_orc') < 0, j([uA, uM]));
+    check('fold M0: without fog that is each player\'s own copy (fold 2: per connection always, never a broadcast), the same for each admitted player on that map, nothing to a waiting or closed connection; the join snapshot (combatsFor) says the same; the host keeps the hidden token\'s row whole with its number',
+        U.bcast.length === ub0 && ub0 === 0 && j(uB) === j(uA) && U.conns[2].sent.length === 0 && U.conns[3].sent.length === 0
         && j(uSnap) === j([uA.combats, uA.combats]) && j(uHost) === j({ id: 'r_t_gob', name: 'Goblin', tokId: 't_gob', init: 23, src: 'gob.png', rolled: 1 }) && !/rolled|init/.test(j(uA)), j([U.bcast.length - ub0, uSnap, uHost]));   // initiative O1: the roster's roll marks the host's row rolled (a deliberate change); a player gets neither
-    tokOf(U, 'm1', 't_gob').hidden = false; tokOf(U, 'm2', 't_orc').hidden = false; U.N.broadcastCombats(); const uShown = U.last(U.conns[0]);
+    tokOf(U, 'm1', 't_gob').hidden = false; tokOf(U, 'm2', 't_orc').hidden = false; U.N.broadcastCombats(); const uShown = U.last(U.conns[0]), uShownM = U.last(U.conns[4]);
     check('fold M0: a token shown again goes out whole — its row as it was, on both maps',
-        j(uShown) === j({ type: 'combats', combats: { m1: { mapId: 'm1', round: 3, turn: 1, rows: order }, m2: m2Out(false) } }), j(uShown));
+        j(uShown) === j({ type: 'combats', combats: oneFight(uFid, 'm1', 3, 1, order) }) && j(uShownM) === j({ type: 'combats', combats: m2Out(false) }), j([uShown, uShownM]));
     // fogged: Bo cannot see the Orc on m1; the Goblin is hidden
-    const Fh = hideWorld({ fog: true, drops: { u_b: { t_orc: 1 } } }), fb0 = Fh.bcast.length; Fh.N.broadcastCombats();
-    const fhA = Fh.last(Fh.conns[0]), fhB = Fh.last(Fh.conns[1]);
-    check('fold M0 and the owner\'s ruling: on a fogged table each player\'s own copy (per-player sends, no broadcast) keeps the hidden Goblin by name — both saw it at the start — while Bo, who never saw the Orc, still gets its row Hidden, by its place; the Trap and Ana whole; m2 (no fog there) as on a table without fog; the join snapshot matches',
-        Fh.bcast.length === fb0 && fb0 === 0 && j(fhA) === j({ type: 'combats', combats: { m1: { mapId: 'm1', round: 3, turn: 1, rows: order }, m2: m2Out(true) } })
-        && j(fhB) === j({ type: 'combats', combats: { m1: { mapId: 'm1', round: 3, turn: 1, rows: [order[0], hidRow(1), order[2], order[3]] }, m2: m2Out(true) } })
-        && Fh.conns[2].sent.length === 0 && Fh.conns[3].sent.length === 0 && j(Fh.N.combatsFor('u_a')) === j(fhA.combats) && j(Fh.N.combatsFor('u_b')) === j(fhB.combats), j([fhA, fhB, Fh.bcast.length]));
+    const Fh = hideWorld({ fog: true, drops: { u_b: { t_orc: 1 } } }), fb0 = Fh.bcast.length, fhFid = fightIn(Fh.net.combats, 'm1').id; Fh.N.broadcastCombats();
+    const fhA = Fh.last(Fh.conns[0]), fhB = Fh.last(Fh.conns[1]), fhM = Fh.last(Fh.conns[4]);
+    check('fold M0 and the owner\'s ruling: on a fogged table each player\'s own copy (per-player sends, no broadcast) keeps the hidden Goblin by name — both saw it at the start — while Bo, who never saw the Orc, still gets its row Hidden, by its place; the Trap and Ana whole; the Yard (no fog there) as on a table without fog, to the player on it; the join snapshot matches',
+        Fh.bcast.length === fb0 && fb0 === 0 && j(fhA) === j({ type: 'combats', combats: oneFight(fhFid, 'm1', 3, 1, order) })
+        && j(fhB) === j({ type: 'combats', combats: oneFight(fhFid, 'm1', 3, 1, [order[0], hidRow(1), order[2], order[3]]) }) && j(fhM) === j({ type: 'combats', combats: m2Out(true) })
+        && Fh.conns[2].sent.length === 0 && Fh.conns[3].sent.length === 0 && j(Fh.N.combatsFor('u_a', 'm1')) === j(fhA.combats) && j(Fh.N.combatsFor('u_b', 'm1')) === j(fhB.combats), j([fhA, fhB, fhM, Fh.bcast.length]));
 
-    // net.syncCombatHidden (run for real): the host sends the combats again only when a running row's hidden flag changes
-    const Sy = scen(); Sy.rollRow('Goblin'); Sy.start();
-    const syn = () => { const n = Sy.bcast.length; Sy.net.syncCombatHidden(); return Sy.bcast.length - n; };
-    const syFirst = syn() + syn(), syQuiet = syn();
-    tokOf(Sy, 'm1', 't_gob').hidden = true; const syHide = syn(), syHideMsg = Sy.bcast[Sy.bcast.length - 1], syHideAgain = syn();
-    tokOf(Sy, 'm1', 't_x').hidden = true; Sy.camp.items.m1.whiteboard.push({ id: 'null', hidden: true }); const syOff = syn();   // the Bystander, left out of the fight, and an item no row names
-    tokOf(Sy, 'm1', 't_gob').hidden = false; const syShow = syn(), syShowMsg = Sy.bcast[Sy.bcast.length - 1];
-    Sy.net.combats.m2 = { mapId: 'm2', round: 1, turn: 0, rows: [{ id: 'c_tur', name: 'Turret', tokId: null, init: 9, src: null }] }; const syAdd = syn(), syAddMsg = Sy.bcast[Sy.bcast.length - 1];
-    delete Sy.net.combats.m2; const syDel = syn();
-    const cliBefore = Sy.conns.map(c => c.sent.length).join(); Sy.net.role = 'client'; tokOf(Sy, 'm1', 't_orc').hidden = true; const syCli = syn(), cliSent = Sy.conns.map(c => c.sent.length).join();
-    Sy.net.role = 'host'; Sy.net.active = false; const syOffline = syn(); Sy.net.active = true; const syBack = syn(), syBackMsg = Sy.bcast[Sy.bcast.length - 1];
-    check('fold M0: net.syncCombatHidden (run for real on a table without fog) sends the combats at most once while the flags stay the same, then nothing; one broadcast when a running row\'s token is hidden (its row by name: the table saw it) and nothing more after; nothing when a token no running row names is hidden; one more when it is shown',
-        syFirst <= 1 && syQuiet === 0 && syHide === 1 && j(rowsOf(syHideMsg)) === j(order) && syHideAgain === 0 && syOff === 0 && syShow === 1 && j(rowsOf(syShowMsg)) === j(order),
-        j([syFirst, syQuiet, syHide, syHideAgain, syOff, syShow, syHideMsg, syShowMsg]));
-    check('fold M0: a combat added or removed changes what net.syncCombatHidden compares (one send each); on a player\'s machine or with no session it sends nothing, and once hosting again it catches up with a change made meanwhile',
-        syAdd === 1 && !!syAddMsg.combats.m2 && syDel === 1 && syCli === 0 && cliSent === cliBefore &&syOffline === 0 && syBack === 1 && rowsOf(syBackMsg)[1].name === 'Orc' && rowsOf(syBackMsg)[1].id === order[1].id,
-        j([syAdd, syDel, syCli, syOffline, syBack]));
-    const Sf = scen({ fog: true }); Sf.rollRow('Goblin'); Sf.start(); Sf.net.syncCombatHidden(); Sf.conns.forEach(c => { c.sent.length = 0; });
-    tokOf(Sf, 'm1', 't_gob').hidden = true; Sf.net.syncCombatHidden();
+    // net.syncCombatHidden (run for real): the host sends the combats again only when a running row's hidden flag changes, and then (fold 2's review)
+    // only to a connection whose copy changes: a row a player saw keeps its name when its token is hidden (the owner's ruling of 2026-10-01), so
+    // their copy is as it was and nothing goes, where a copy as it was went out before and told them that the GM had hidden something. Here the
+    // Goblin is hidden from the start, so nobody has seen it; Mo stands on the Yard, and Pip joins the Keep once the Orc is hidden
+    const sendsTo = (s, i) => s.conns[i].sent.filter(m => m.type === 'combats').length;
+    const synOf = s => { const n = s.conns.map((c, i) => sendsTo(s, i)); s.net.syncCombatHidden(); return s.conns.map((c, i) => sendsTo(s, i) - n[i]); };
+    const Sy = scen({ m2: true }); tokOf(Sy, 'm1', 't_gob').hidden = true; Sy.rollRow('Goblin'); Sy.start();
+    const syFirst = synOf(Sy), syQuiet = synOf(Sy);
+    tokOf(Sy, 'm1', 't_gob').hidden = false; const syShow = synOf(Sy), syShowMsg = Sy.last(Sy.conns[0]), syShowAgain = synOf(Sy);   // shown: its row whole to both on the Keep
+    tokOf(Sy, 'm1', 't_gob').hidden = true; const syHide = synOf(Sy), syHideAgain = synOf(Sy);   // hidden again: both saw it, so their copies are as they were
+    tokOf(Sy, 'm1', 't_x').hidden = true; Sy.camp.items.m1.whiteboard.push({ id: 'null', hidden: true }); const syOff = synOf(Sy);   // the Bystander, left out of the fight, and an item no row names
+    Sy.net.combats.f_yard0002 = { id: 'f_yard0002', mapId: 'm2', round: 1, turn: 0, rows: [{ id: 'c_tur', name: 'Turret', tokId: null, init: 9, src: null }] }; const syAdd = synOf(Sy), syAddMsg = Sy.last(Sy.conns[4]);
+    delete Sy.net.combats.f_yard0002; const syDel = synOf(Sy), syDelMsg = Sy.last(Sy.conns[4]);
+    const cliBefore = Sy.conns.map(c => c.sent.length).join(); Sy.net.role = 'client'; tokOf(Sy, 'm1', 't_orc').hidden = true; const syCli = synOf(Sy), cliSent = Sy.conns.map(c => c.sent.length).join();
+    Sy.net.role = 'host'; Sy.net.active = false; const syOffline = synOf(Sy); Sy.net.active = true;
+    const cPip = mkConn('pPip'); Sy.conns.push(cPip); Sy.net.roster.pPip = { id: 'u_pip', location: 'm1' };   // a late joiner on the Keep, who never saw the Orc
+    const syBack = synOf(Sy), syBackPip = Sy.last(cPip), Z5 = [0, 0, 0, 0, 0];
+    check('fold M0: net.syncCombatHidden (run for real on a table without fog) sends nothing while the flags stay the same; when a running row\'s token is shown it sends each player on that map their copy with the row whole, and nothing more after; when it is hidden again nothing at all, since both saw it and their copies are as they were (fold 2\'s review: a copy as it was told them the GM had hidden something); nothing when a token no running row names is hidden; the player on another map is sent none of it',
+        j(syFirst) === j(Z5) && j(syQuiet) === j(Z5) && j(syShow) === j([1, 1, 0, 0, 0]) && j(rowsOf(syShowMsg)) === j(order) && j(syShowAgain) === j(Z5) && j(syHide) === j(Z5) && j(syHideAgain) === j(Z5) && j(syOff) === j(Z5),
+        j([syFirst, syQuiet, syShow, syShowAgain, syHide, syHideAgain, syOff, syShowMsg]));
+    check('fold M0: a combat added or removed changes what net.syncCombatHidden compares: the player on its map is sent it, once each, and nobody on another map (fold 2\'s review); on a player\'s machine or with no session it sends nothing, and once hosting again it catches up with a change made meanwhile: a player who joined meanwhile and never saw the creature hidden then gets its row Hidden, the others nothing, their copies as they were',
+        j(syAdd) === j([0, 0, 0, 0, 1]) && !!fightIn(syAddMsg.combats, 'm2') && !fightIn(syAddMsg.combats, 'm1') && j(syDel) === j([0, 0, 0, 0, 1]) && j(syDelMsg.combats) === '{}' && j(syCli) === j(Z5) && cliSent === cliBefore && j(syOffline) === j(Z5)
+        && j(syBack) === j([0, 0, 0, 0, 0, 1]) && j(rowsOf(syBackPip)) === j([hidRow(0), hidRow(1), order[2], order[3]]),
+        j([syAdd, syDel, syCli, syOffline, syBack, syBackPip]));
+    const Sf = scen({ fog: true }); tokOf(Sf, 'm1', 't_gob').hidden = true; Sf.rollRow('Goblin'); Sf.start(); Sf.net.syncCombatHidden(); Sf.conns.forEach(c => { c.sent.length = 0; });
+    tokOf(Sf, 'm1', 't_gob').hidden = false; Sf.net.syncCombatHidden();
     const sfOut = Sf.conns.map(c => c.sent.filter(m => m.type === 'combats').length).join(''), sfRows = [rowsOf(Sf.last(Sf.conns[0])), rowsOf(Sf.last(Sf.conns[1]))];
-    check('fold M0: on a fogged table net.syncCombatHidden sends each admitted player their own copy (the hidden token\'s row by name: each saw it); no broadcast, nothing to a waiting or closed connection',
-        sfOut === '1100' && Sf.bcast.length === 0 && j(sfRows) === j([order, order]), j([sfOut, sfRows]));
+    tokOf(Sf, 'm1', 't_gob').hidden = true; Sf.conns.forEach(c => { c.sent.length = 0; }); Sf.net.syncCombatHidden(); const sfOut2 = Sf.conns.map(c => c.sent.filter(m => m.type === 'combats').length).join('');
+    check('fold M0: on a fogged table net.syncCombatHidden sends each admitted player their own copy (the Goblin, hidden from the start and then shown, by name); no broadcast, nothing to a waiting or closed connection; hidden again, nothing, since each saw it (fold 2\'s review)',
+        sfOut === '1100' && Sf.bcast.length === 0 && j(sfRows) === j([order, order]) && sfOut2 === '0000', j([sfOut, sfRows, sfOut2]));
 
-    // what the table holds is recorded by every send of the rows to the table: a re-hide after another send (a turn step, a Start) still goes out
+    // what the table holds is recorded by every send of the rows: once the rows went out for another reason (a turn step), a token shown reaches the
+    // player who never saw it and only them, and hidden again it is sent to nobody, as everyone has seen it now (fold 2's review)
     const Sr = scen(); Sr.rollRow('Goblin'); Sr.start(); Sr.net.syncCombatHidden();
-    const srn = () => { const n = Sr.bcast.length; Sr.net.syncCombatHidden(); return Sr.bcast.length - n; };
-    tokOf(Sr, 'm1', 't_gob').hidden = true; const srHide = srn(); tokOf(Sr, 'm1', 't_gob').hidden = false; Sr.N.broadcastCombats(); const srWhole = rowsOf(Sr.bcast[Sr.bcast.length - 1]);
-    tokOf(Sr, 'm1', 't_gob').hidden = true; const srReHide = srn(), srReMsg = Sr.bcast[Sr.bcast.length - 1], srQuiet = srn();
-    check('fold M0: a token hidden again after the rows went out whole for another reason (a turn step) is sent again: every send of the rows to the table records what it holds, so net.syncCombatHidden compares with what the players last got',
-        srHide === 1 && j(srWhole) === j(order) && srReHide === 1 && j(rowsOf(srReMsg)) === j(order) && srQuiet === 0, j([srHide, srWhole, srReHide, srReMsg, srQuiet]));
+    tokOf(Sr, 'm1', 't_gob').hidden = true; const srHide = synOf(Sr);   // Pat and Bea saw it: nothing
+    const cPip2 = mkConn('pPip'); Sr.conns.push(cPip2); Sr.net.roster.pPip = { id: 'u_pip', location: 'm1' };
+    Sr.N.broadcastCombats(); const srPip = rowsOf(Sr.last(cPip2));   // the rows go out for another reason: Pip, new, gets the Goblin Hidden
+    tokOf(Sr, 'm1', 't_gob').hidden = false; const srShow = synOf(Sr), srShowPip = rowsOf(Sr.last(cPip2));
+    tokOf(Sr, 'm1', 't_gob').hidden = true; const srReHide = synOf(Sr);
+    check('fold M0: what the table holds is recorded by every send of the rows: once the rows went out for another reason (a turn step), the Goblin shown reaches Pip, who never saw it, and nobody else; hidden again it is sent to nobody, as everyone has seen it now (fold 2\'s review: a copy as it was is never sent again)',
+        j(srHide) === j([0, 0, 0, 0]) && j(srPip) === j([hidRow(0)].concat(order.slice(1))) && j(srShow) === j([0, 0, 0, 0, 1]) && j(srShowPip) === j(order) && j(srReHide) === j([0, 0, 0, 0, 0]), j([srHide, srPip, srShow, srShowPip, srReHide]));
     // the owner's ruling of 2026-10-01, run for real: a creature never sent whole in this fight reads Hidden until it is; one seen keeps its name while hidden or out of sight; a new fight there, the fight's end and a new table forget what was seen; a late joiner who never saw it gets Hidden
     const Sn = scen({ fog: true, drops: { u_b: { t_orc: 1 } } }); Sn.rollRow('Goblin'); Sn.start();
     const snA0 = rowsOf(Sn.last(Sn.conns[0])).map(r => r.name), snB0 = rowsOf(Sn.last(Sn.conns[1])).map(r => r.name);
     tokOf(Sn, 'm1', 't_gob').hidden = true; Sn.N.broadcastCombats(); const snA1 = rowsOf(Sn.last(Sn.conns[0])).map(r => r.name), snB1 = rowsOf(Sn.last(Sn.conns[1])).map(r => r.name);
-    Sn.net.roster.pC = { id: 'u_c' }; const snLate = Sn.N.combatsFor('u_c').m1.rows.map(r => r.name), snNull = Sn.N.combatsFor(null).m1.rows.map(r => r.name);
-    const seenAfterB = (() => { delete Sn.net.combats.m1; Sn.net.combatSet('m1', { round: 1, turn: 0, rows: [{ id: 'r_t_gob', name: 'Goblin', tokId: 't_gob', init: 1, src: null }, { id: 'r_t_orc', name: 'Orc', tokId: 't_orc', init: 2, src: null }] }); return rowsOf(Sn.last(Sn.conns[0])).map(r => r.name); })();   // a new fight: the hidden Goblin unseen again
+    Sn.net.roster.pC = { id: 'u_c', location: 'm1' }; const snLate = fightIn(Sn.N.combatsFor('u_c', 'm1'), 'm1').rows.map(r => r.name), snNull = fightIn(Sn.N.combatsFor(null, 'm1'), 'm1').rows.map(r => r.name);
+    const seenAfterB = (() => { Object.keys(Sn.net.combats).forEach(k => { delete Sn.net.combats[k]; }); Sn.net.combatSet('m1', { round: 1, turn: 0, rows: [{ id: 'r_t_gob', name: 'Goblin', tokId: 't_gob', init: 1, src: null }, { id: 'r_t_orc', name: 'Orc', tokId: 't_orc', init: 2, src: null }] }); return rowsOf(Sn.last(Sn.conns[0])).map(r => r.name); })();   // a new fight: the hidden Goblin unseen again
     tokOf(Sn, 'm1', 't_gob').hidden = false; Sn.N.broadcastCombats(); const snShown = rowsOf(Sn.last(Sn.conns[0])).map(r => r.name); tokOf(Sn, 'm1', 't_gob').hidden = true; Sn.N.broadcastCombats(); const snAgain = rowsOf(Sn.last(Sn.conns[0])).map(r => r.name);
     Sn.net.combatSet('m1', null); Sn.net.combatSet('m1', { round: 1, turn: 0, rows: [{ id: 'r_t_gob', name: 'Goblin', tokId: 't_gob', init: 1, src: null }] }); const snEnded = rowsOf(Sn.last(Sn.conns[0])).map(r => r.name);
     check('the owner\'s ruling of 2026-10-01 (combatsFor, run for real on a fogged table): at the start Ana sees everyone and Bo not the Orc (Hidden for him); the GM hiding the Goblin changes nothing for either (both saw it), the Orc still Hidden for Bo; a player who joins now, and the unfogged broadcast\'s own view, never saw the Goblin and get Hidden; a new fight on that map forgets what was seen (the hidden Goblin Hidden again), seen once shown it keeps its name when hidden again, and the fight\'s end forgets it too',
         j(snA0) === j(['Goblin', 'Orc', 'Trap', 'Ana']) && j(snB0) === j(['Goblin', 'Hidden', 'Trap', 'Ana']) && j(snA1) === j(snA0) && j(snB1) === j(snB0) && j(snLate) === j(['Hidden', 'Orc', 'Trap', 'Ana']) && j(snNull) === j(['Hidden', 'Orc', 'Trap', 'Ana'])
         && j(seenAfterB) === j(['Hidden', 'Orc']) && j(snShown) === j(['Goblin', 'Orc']) && j(snAgain) === j(['Goblin', 'Orc']) && j(snEnded) === j(['Hidden']), j([snA0, snB0, snA1, snB1, snLate, snNull, seenAfterB, snShown, snAgain, snEnded]));
-    check('the owner\'s ruling (source): what a player saw is kept in the combats slice alone, read only by combatsFor (and, as a read alone, by net.tokUnseen: secrets R2), forgotten by combatSet at a new fight and at the end and by fogForgetAll at a new table; the client\'s toast still names Hidden only for a row that reads so',
-        (src.match(/function combatForget\(/g) || []).length === 1 && (cbSrc.match(/combatSeen\(|combatSaw\(/g) || []).length === 4 && (src.match(/combatSeen\(|combatSaw\(/g) || []).length === 5 && /if \(typeof combatSeen === 'function' && combatSeen\(mapId, p\.id, tokId\)\) return false;/.test(src)
-        && /if \(!had && typeof combatForget === 'function'\) combatForget\(mapId\);/.test(src) && /delete net\.combats\[mapId\];\n[^\n]*marksEnd\(mapId\)[^\n]*\n\s*if \(typeof combatForget === 'function'\) combatForget\(mapId\);/.test(src) && /_fogCost = Object\.create\(null\); if \(typeof combatForget === 'function'\) combatForget\(\); \}/.test(src)
+    check('the owner\'s ruling (source): what a player saw is kept in the combats slice alone, per fight by its own id (fold 2: a new fight has an id of its own, so nothing is seen in it), read only by combatsFor (and, as a read alone, by net.tokUnseen: secrets R2, by the fight that holds the token), forgotten at the fight\'s end and by fogForgetAll at a new table; the client\'s toast still names Hidden only for a row that reads so',
+        (src.match(/function combatForget\(/g) || []).length === 1 && (cbSrc.match(/combatSeen\(|combatSaw\(/g) || []).length === 4 && (src.match(/combatSeen\(|combatSaw\(/g) || []).length === 5 && /if \(typeof combatSeen === 'function' && combatSeen\(fightOfTok\(mapId, tokId\), p\.id, tokId\)\) return false;/.test(src)
+        && /function combatSeen\(fid, pid, tokId\) \{ var m = typeof fid === 'string' \? _combatSeen\[fid\] : null;/.test(src) && /if \(typeof fid === 'string'\) \{ delete net\.combats\[fid\];[^\n]*\n[^\n]*\n[^\n]*marksEnd\(mapId\)[^\n]*\n\s*if \(typeof fid === 'string' && typeof combatForget === 'function'\) combatForget\(fid\);/.test(src) && /_fogCost = Object\.create\(null\); if \(typeof combatForget === 'function'\) combatForget\(\); \}/.test(src)
         && /A creature your players have seen stays in their order by name when you hide it or it moves out of their sight/.test(fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'index.html'), 'utf8')));
     // hidden pieces (owner, 2026-10-01): a pointer at a token the GM hid, or at nothing on the host's map, goes to no one, on a table without fog as on one
     // with it — hidden and gone answer alike; net.syncCombatHidden sends the pointers again when a hide, a show or a deletion changes which are sent
@@ -4392,11 +4468,11 @@ pendingChecks.push((async () => {
             s.net, {}, () => (patch ? { campId: 'k', itemId: 'm1', item: { id: 'm1' } } : null), () => 'h', {}, m => log.push('broadcast:' + m.type), () => log.push('follow'), () => null, () => {});
         s.net.onLocalSave(); s.net.syncCombatHidden = real; return log;
     };
-    const Ls = scen(); Ls.rollRow('Goblin'); Ls.start(); Ls.net.syncCombatHidden(); tokOf(Ls, 'm1', 't_gob').hidden = true; Ls.conns.forEach(c => { c.sent.length = 0; });
+    const Ls = scen(); tokOf(Ls, 'm1', 't_gob').hidden = true; Ls.rollRow('Goblin'); Ls.start(); Ls.net.syncCombatHidden(); tokOf(Ls, 'm1', 't_gob').hidden = false; Ls.conns.forEach(c => { c.sent.length = 0; });   // fold 2's review: hidden from the start, shown before the save, so the players' copies change
     const lsHost = runSave(Ls, true), lsWire = Ls.conns[0].sent.map(m => m.type), lsRows = rowsOf(Ls.last(Ls.conns[0]));
     const lsNoPatch = runSave(Ls, false);
     Ls.net.role = 'client'; Ls.net.foreign = true; Ls.net.syncedPeer = Ls.conns[0].peer; const lsCli = runSave(Ls, true); Ls.net.role = 'host'; Ls.net.foreign = false; Ls.net.syncedPeer = null; Ls.net.applyingRemote = true; const lsRemote = runSave(Ls, true); Ls.net.applyingRemote = false;
-    check('fold M0: the host\'s save (net.onLocalSave, run for real) calls net.syncCombatHidden once, right after the map went out (sendItem) — a player gets the map (the token gone from it) first, then the combats (the row by name: they saw it); a save with no map to send still calls it once; a player\'s save and a remote change\'s save never do',
+    check('fold M0: the host\'s save (net.onLocalSave, run for real) calls net.syncCombatHidden once, right after the map went out (sendItem) — a player gets the map (the token on it again) first, then the combats (its row whole now); a save with no map to send still calls it once; a player\'s save and a remote change\'s save never do',
         j(lsHost) === j(SYNCS.concat(['sendItem:m1', 'combatHidden', 'follow'])) && j(lsWire) === j(['item', 'combats']) && j(lsRows) === j(order)
         && j(lsNoPatch) === j(SYNCS.concat(['combatHidden', 'follow'])) && lsCli.indexOf('combatHidden') < 0 && !lsCli.some(e => SYNCS.indexOf(e) >= 0) && lsCli.length > 0 &&j(lsRemote) === j([]), j([lsHost, lsWire, lsNoPatch, lsCli, lsRemote]));
     const wbAll = fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', 'whiteboard.js'), 'utf8');
@@ -4736,7 +4812,7 @@ pendingChecks.push((async () => {
     const snA = src.indexOf('function applySnapshot(msg) {'), snZ = snA < 0 ? -1 : src.indexOf('\n}\n', snA), snCall = src.indexOf("    if (typeof rowTextKnows === 'function') rowTextKnows(msg.rowText);");
     check('155 the host\'s word (rowTextKnows and net.rowTextOk, sliced and run): a player\'s app offers a row of its own\'s long text only once its host\'s snapshot says rowText, and only as true (a later snapshot that does not say it takes the word back); the machine that owns the campaign, and one at no table, always may; the snapshot says it beside looks, and applySnapshot takes it through typeof right after the looks, the one place that sets the word',
         J(rtWays) === J([false, true, false, [false, false, false, false, false, false, false, false], true, true, true, true])
-        && /combats: combatsFor\(prof\.id\), looks: true, rowText: true, notepad: notepadMsg\(\) \};/.test(src)
+        && /combats: combatsFor\(prof\.id, prof\.location\), fights: true, looks: true, rowText: true, notepad: notepadMsg\(\) \};/.test(src)
         && /\n    if \(typeof styleHostKnows === 'function'\) styleHostKnows\(msg\.looks\);[^\n]*\n    if \(typeof rowTextKnows === 'function'\) rowTextKnows\(msg\.rowText\);/.test(src)
         && snA > 0 && snCall > snA && snCall < snZ && src.split('rowTextKnows(').length === 3 && src.split('_rowTextOk =').length === 3, J(rtWays));
 })());
@@ -5793,7 +5869,7 @@ pendingChecks.push((async () => {
         && j(syncNP({ create: 'invite', fromFile: false })) === j([{ type: 'newPlayers', campId: 'k', token: 'on', sight: false, create: 'invite', fromFile: false }]) && j(syncNP(undefined)) === j([{ type: 'newPlayers', campId: 'k', token: 'on', sight: false }])
         && j(takeNP({ token: 'on', sight: false, create: 'off', fromFile: false })) === j({ create: 'off', fromFile: false }) && takeNP({ token: 'on', sight: false, create: 'live!', fromFile: 0 }) === undefined, j([setNP({ create: 'off', fromFile: false }, { sight: true }), syncNP({ create: 'invite', fromFile: false })]));
     // the refusals of a character not yet in play (a sheet upload of one fills it: Onboarding F4, its own check)
-    const apS = between('// [netcheck:charapply-start]', '// [netcheck:charapply-end]', 'charapply'), rqS = between('// [netcheck:rollreq-start]', '// [netcheck:rollreq-end]', 'rollreq'), thI = src.indexOf("} else if (msg.type === 'throw-req' && net.role === 'host') {"), thS = src.slice(thI, src.indexOf('\n    } else if', thI + 10));
+    const apS = (ordersSrc + '\n' + between('// [netcheck:charapply-start]', '// [netcheck:charapply-end]', 'charapply')), rqS = (ordersSrc + '\n' + between('// [netcheck:rollreq-start]', '// [netcheck:rollreq-end]', 'rollreq')), thI = src.indexOf("} else if (msg.type === 'throw-req' && net.role === 'host') {"), thS = src.slice(thI, src.indexOf('\n    } else if', thI + 10));
     check('F3a a character in the making is not at the table yet: an apply (making), a roll from it (char) and a throw from it are refused on the host; the deny word survives the client\'s cleaner',
         /if \(chA\.making === 1\) \{ denyA\('making'\); return; \}/.test(apS)
         && /srcQ\.ownerId !== pidQ \|\| srcQ\.making === 1 \|\| !SQ \|\| !campQ\.system\) \{ denyQ\('char'\); return; \}/.test(rqS) && thI > 0 && /chT\.ownerId !== profT\.id \|\| chT\.making === 1\) return;/.test(thS) && Sx.cleanDenyReason('making') === 'making');
@@ -6369,7 +6445,7 @@ pendingChecks.push((async () => {
     const afS = fnSrc('function anyFog(', '\n}\n', 'anyFog') + '\n}\n', mfS = lineOf('function mapFogged('), svS = lineOf('var _saveSoon = null;') + '\n' + lineOf('function saveRemoteSoon()');
     const nsS2 = between('// [netcheck:newplayerssync-start]', '// [netcheck:newplayerssync-end]', 'newplayerssync'), thS2 = between('// [netcheck:threats-start]', '// [netcheck:threats-end]', 'threats');
     const posS2 = between('// [netcheck:pos-start]', '// [netcheck:pos-end]', 'pos'), patS2 = between('// [netcheck:patch-start]', '// [netcheck:patch-end]', 'patch'), clS2 = src.slice(src.indexOf('var POSTURE_SET = '), src.indexOf('function sanitizeItem('));
-    const netSrc = ['var charLimit = lim, _charSlowSaid = {}, _charPending = {}, _charHost = {}, _rowGrace = {}, bannedIds = {};', siS, flS, afS, mfS, whole('net.sendItem = function('), whole('net.broadcastItemFiltered = function('), whole('net.itemGone = function('), whole('net.kickPlayer = function('), smS, nsS2, cbS, svS, dlS, ftS, bpS,
+    const netSrc = ['var charLimit = lim, _charSlowSaid = {}, _charPending = {}, _charHost = {}, _rowGrace = {}, bannedIds = {};', siS, flS, afS, mfS, whole('net.sendItem = function('), whole('net.broadcastItemFiltered = function('), whole('net.itemGone = function('), whole('net.kickPlayer = function('), smS, nsS2, cbS, ordersSrc, svS, dlS, ftS, bpS,
         'return { edit: function(msg, conn) {', edS, '}, fx: function(msg, conn) {', fxS, '}, threats: function(msg, conn) {', thS2, '}, sig: function() { return _sensesSig; }, pend: function() { return _sensesPend; }, at: function() { return _sensesAt; }, seed: sensesSeed, fire: sensesFire, forget: sensesForget, reset: sensesReset, pids: sensesPids,',
         'drop: sensesDrop, forgetMap: sensesForgetMap, keys: sensesKeys, banned: function() { return bannedIds; },',
         'targets: typeof broadcastTargets === \'function\' ? broadcastTargets : null, targetsFor: typeof targetsFor === \'function\' ? targetsFor : null,',
@@ -6377,7 +6453,7 @@ pendingChecks.push((async () => {
     const NAMES = ['net', 'SC', 'window', 'peerPaused', 'getActiveCampaign', 'sendFailed', 'peerProfileId', 'lim', 'own', 'pushChat', 'state', 'itemDelta', 'broadcast', '_lastSent', 'setTimeout', 'clearTimeout', 'save', 'toast', 'logEvent', 'renderRoster', 'dropWaitingFor', 'allow', 'render', 'broadcastRoster'];
     // a player's live move and the map copy their app saves after it: the real pos gate and the real patch path, over the same net, fog, relay and save
     const buildPos = new Function('state', 'net', 'window', 'peerPaused', 'allow', 'checkRoomHandouts', 'applyPosToDom', 'broadcastPos', 'toast', 'saveRemoteSoon', 'sendFailed', 'setTimeout', 'playerStroke', 'SC', 'getActiveCampaign', 'bellOut',
-        clS2 + ownKeySrc + posS2 + '\n' + patS2 + '\nreturn { pos: function(m, c) { return handlePos(m, c); }, patch: function(m, p) { return applyClientItemFiltered(m, p); } };');
+        clS2 + ownKeySrc + posS2 + '\n' + patS2 + '\n' + ordersSrc + '\nreturn { pos: function(m, c) { return handlePos(m, c); }, patch: function(m, p) { return applyClientItemFiltered(m, p); } };');
     const buildNet = new Function(...NAMES, netSrc);
     const buildFog = new Function('window', 'document', 'getActiveMap', 'getActiveCampaign', 'state', "'use strict';\n" + fogSrc + '\nreturn { fogDropIds: fogDropIds, fogLitFor: fogLitFor, canSeePoint: canSeePoint, invalidateVision: invalidateVision, invalidateSeen: invalidateSeen, seenKeyOf: seenKeyOf, lightMoves: lightMoves, sightSigFor: sightSigFor, tokenSightCells: tokenSightCells, viewersFor: viewersFor, blocked: moveBlocked, wallCells: function(m) { return Object.keys(blockersFor(m, gridForMap(m)) || {}).sort(); }, held: function() { return Object.keys(_keyCache).sort(); }, seen: function(k) { return _keyCache[k]; }, walls: function() { return Object.keys(_blockerCache).sort(); } };');
     const sysS = Sx.cleanSystem({ v: 1, name: 'S', rolls: [], fields: [
@@ -6662,15 +6738,16 @@ pendingChecks.push((async () => {
         const rows = () => [{ id: 'r_a', name: 'Ana', tokId: 'tA', init: 9, src: null }, { id: 'r_o', name: 'Orc', tokId: 'orc', init: 7, src: null }, { id: 'r_g', name: 'Ogre', tokId: 'ogre', init: 5, src: null }];
         const W = mkW({ maps: ['mA', 'mO'] });
         W.net.combats = { mA: { mapId: 'mA', round: 2, turn: 1, rows: rows() } }; W.net.targets = { u_a: { mapId: 'mA', id: 'orc', x: 1, y: 2 }, u_b: { mapId: 'mA', id: 'ogre', x: 3, y: 4 } };
+        W.net.roster.pA1.location = 'mA'; W.net.roster.pA2.location = 'mA';   // fold 2: a player is sent the fights on the map they are on
         W.gm('c_a', 65); W.clear(); W.fire(500);
         const a1 = W.types(W.a1), cm = W.a1.sent.find(m => m.type === 'combats'), tg = W.a1.sent.find(m => m.type === 'targets');
         check('senses S0: when the map sent again holds a combat or is pointed at, the turn order and the target pointers follow it to that player\'s connections only, after the map and as that player may now see them — the orc now in sight by its name, the ogre still Hidden and its pointer left out, never a number of the order',
-            j(a1) === j(['item:mA', 'combats', 'targets']) && j(W.types(W.a2)) === j(a1) && quietOthers(W) && !!cm && j(cm.combats.mA.rows) === j([{ id: 'r_a', name: 'Ana', tokId: 'tA', src: null }, { id: 'r_o', name: 'Orc', tokId: 'orc', src: null }, { id: 'h2', name: 'Hidden', tokId: null, src: null }])
-            && cm.combats.mA.round === 2 && cm.combats.mA.turn === 1 && !/init/.test(j(cm)) && !!tg && j(tg.targets) === j({ u_a: { mapId: 'mA', id: 'orc', x: 1, y: 2 } }), j([a1, W.types(W.a2), cm, tg]));
+            j(a1) === j(['item:mA', 'combats', 'targets']) && j(W.types(W.a2)) === j(a1) && quietOthers(W) && !!cm && j(fightIn(cm.combats, 'mA').rows) === j([{ id: 'r_a', name: 'Ana', tokId: 'tA', src: null }, { id: 'r_o', name: 'Orc', tokId: 'orc', src: null }, { id: 'h2', name: 'Hidden', tokId: null, src: null }])
+            && fightIn(cm.combats, 'mA').round === 2 && fightIn(cm.combats, 'mA').turn === 1 && !/init/.test(j(cm)) && !!tg && j(tg.targets) === j({ u_a: { mapId: 'mA', id: 'orc', x: 1, y: 2 } }), j([a1, W.types(W.a2), cm, tg]));
         const V = mkW({ maps: ['mA', 'mB', 'mO'] });
         V.net.combats = { mB: { mapId: 'mB', round: 1, turn: 0, rows: [{ id: 'r_a', name: 'Ana', tokId: 'tA2', init: 9, src: null }] } }; V.net.targets = { u_a: { mapId: 'mB', id: 'orc2', x: 1, y: 2 }, u_z: null };
         V.gm('c_a', 64); V.clear(); V.fire(500); const plain = [V.types(V.a1), V.types(V.a2)];
-        const X = mkW({ maps: ['mA', 'mO'] }); X.net.combats = { mA: { mapId: 'mA', round: 1, turn: 0, rows: rows() } }; X.net.targets = {}; X.gm('c_a', 65); X.clear(); X.a2.open = false; X.fire(500);
+        const X = mkW({ maps: ['mA', 'mO'] }); X.net.combats = { mA: { mapId: 'mA', round: 1, turn: 0, rows: rows() } }; X.net.targets = {}; X.net.roster.pA1.location = 'mA'; X.net.roster.pA2.location = 'mA'; X.gm('c_a', 65); X.clear(); X.a2.open = false; X.fire(500);
         const Y = mkW({ maps: ['mA', 'mO'] }); Y.net.combats = null; Y.net.targets = { u_b: { mapId: 'mA', id: 'tB', x: 0, y: 0 } }; Y.gm('c_a', 65); Y.clear(); Y.fire(500);
         check('senses S0: a map with no combat on it and no pointer at it is sent alone (a combat or a pointer on another map sends neither); a combat without a pointer sends the turn order alone, a pointer without a combat the pointers alone; a connection of that player that has closed by then gets none of it',
             j(plain) === j([['item:mA'], ['item:mA']]) && j(X.types(X.a1)) === j(['item:mA', 'combats']) && X.a2.sent.length === 0 && j(Y.types(Y.a1)) === j(['item:mA', 'targets']) && quietOthers(X) && quietOthers(Y), j([plain, X.types(X.a1), X.types(X.a2), Y.types(Y.a1)]));
@@ -6775,8 +6852,8 @@ pendingChecks.push((async () => {
         const onePaused = both({ paused: peer => { asked.push(peer); return peer === 'pA1'; } }), flood = both({ allow: () => false });
         const badNums = [{ x: 'abc' }, { x: NaN }, { x: Infinity }, { x: undefined }, { x: {} }, { y: NaN }, { y: -Infinity }, { y: 'here' }, { rot: 'round' }, { rot: Infinity }, { front: 'back' }, { front: [1, 2] }].map(more => both(null, 'a1', 'tA', 'mA', more));
         const noSuch = [both(null, 'a1', 'tZ'), both(null, 'a1', 5), both(null, 'a1', null), both(null, 'a1', 'tA', 'mNone'), both(null, 'a1', 'tA', 'constructor'), both(null, 'a1', 'tA10', 'dD'), both(null, 'a1', 'tA', 'mA', { campId: 'k9' })];
-        const wallPre = W => { W.win.wpFog.moveBlocked = () => true; }, turnPre = W => { W.net.combats = { mA: { mapId: 'mA', round: 1, turn: 0, rows: [{ id: 'r_o', tokId: 'orc' }, { id: 'r_a', tokId: 'tA' }] } }; };
-        const limitPre = W => { W.win.wpFog.moveCells = () => 9; W.net.combats = { mA: { mapId: 'mA', round: 1, turn: 0, rows: [{ id: 'r_a', tokId: 'tA' }] } }; W.net.turnMove = { mA: { rowId: 'r_a', tokId: 'tA', moved: 0, allow: 2 } }; };
+        const wallPre = W => { W.win.wpFog.moveBlocked = () => true; }, turnPre = W => { W.net.combats = { f_pier0001: { id: 'f_pier0001', mapId: 'mA', round: 1, turn: 0, rows: [{ id: 'r_o', tokId: 'orc' }, { id: 'r_a', tokId: 'tA' }] } }; };   // fold 2's review: a fight by an id of its own
+        const limitPre = W => { W.win.wpFog.moveCells = () => 9; W.net.combats = { f_pier0001: { id: 'f_pier0001', mapId: 'mA', round: 1, turn: 0, rows: [{ id: 'r_a', tokId: 'tA' }] } }; W.net.turnMove = { f_pier0001: { rowId: 'r_a', tokId: 'tA', moved: 0, allow: 2 } }; };
         const wall = both({ pre: wallPre }), outOfTurn = both({ pre: turnPre }), pastMove = both({ pre: limitPre });
         const refused = [anothers, npcTok, stranger, lockedTok, hiddenTok, plainTok, elsewhere, tablePaused, onePaused, flood].concat(badNums, noSuch);
         check('senses S0: a pos the host refuses empties nothing — all four sets are the very sets they were, the token stays where it stood, nothing is relayed, saved or sent: another player\'s token, a creature\'s, a peer not admitted, a locked or a hidden token, a plain token, a map the player is not on, a paused table, a paused player, the rate limit, a place, turn or facing that is no number, a token or a map that is not there, a page, another campaign; and a move not yet final that a wall, the turn order or the turn\'s move stops',
@@ -7658,7 +7735,7 @@ pendingChecks.push((async () => {
     const bw = n => between('// [netcheck:' + n + '-start]', '// [netcheck:' + n + '-end]', n);
     const modSrc = ['var charLimit = lim, _charSlowSaid = {}, _charPending = {}, _charHost = {}, _rowGrace = {}, bannedIds = {};', siSrc(), bw('foglit'), fnSrc('function anyFog(', '\n}\n', 'anyFog') + '\n}\n', lineOf('function mapFogged('),
         fnSrc('function quickHash(', '\n}\n', 'quickHash') + '\n}\n', fnSrc('function playerStroke(', '\n}\n', 'playerStroke') + '\n}\n', whole4('net.sendItem = function('), whole4('net.broadcastItemFiltered = function('), whole4('net.itemGone = function('), whole4('net.kickPlayer = function('), bw('sensesmoved'), bw('combats'), lineOf('var _saveSoon = null;'), lineOf('function saveRemoteSoon()'), bw('bpos'),
-        src.slice(src.indexOf('var POSTURE_SET = '), src.indexOf('function sanitizeItem(')), ownKeySrc, bw('pos'), bw('patch'), bw('fogdiffapply'), bw('fogmove'),
+        src.slice(src.indexOf('var POSTURE_SET = '), src.indexOf('function sanitizeItem(')), ownKeySrc, bw('pos'), bw('patch'), bw('fogdiffapply'), bw('fogmove'), ordersSrc,
         'return { pos: handlePos, patch: applyClientItemFiltered, landed: fogLanded, sweep: fogDragSweep, open: openDrag, opens: openDrags, end: dragEnd, live: fogOwnLive, clean: sanitizeItem, combats: broadcastCombats, targets: broadcastTargets, drags: function() { return _dragFrom; }, stale: FOG_DRAG_STALE_MS,',
         'held: function() { return _fogHeld; }, seedSnap: fogSeedSnapshot, forgetAll: fogForgetAll, hash: quickHash, copy: fogCopyFor, hid: function() { return _hidPend; },',
         'acks: function() { return _acks; }, ackTook: ackTook, ackOf: ackOf, withAck: withAck, ackSend: ackSend, forgetConn: fogForgetConn,',
@@ -7724,7 +7801,9 @@ pendingChecks.push((async () => {
     W1.clearSent(); W1.net.sendItem('k', 'mA'); const gm1 = { a1: W1.ids(W1.a1), a2: W1.ids(W1.a2), b: W1.ids(W1.b1), aT: W1.at(W1.a1, 'tA'), a2T: W1.at(W1.a2, 'tA'), bT: W1.at(W1.b1, 'tA'), w: W1.w1.sent.length };
     W1.clearSent(); W1.net.broadcastItemFiltered('k', 'mA'); const bif1 = { a1: W1.ids(W1.a1), b: W1.ids(W1.b1), aT: W1.at(W1.a1, 'tA'), bT: W1.at(W1.b1, 'tA') };
     W1.net.combats = { mA: { mapId: 'mA', round: 1, turn: 0, rows: [{ id: 'r_a', name: 'Ana', tokId: 'tA' }, { id: 'r_o', name: 'Orc', tokId: 'orc' }] } }; W1.net.targets = { u_gm: { id: 'orc', mapId: 'mA', name: 'GM' } };
-    W1.clearSent(); W1.api.combats(); W1.api.targets(); const ro1 = { rows: W1.msg(W1.a1, 'combats').combats.mA.rows.map(r => r.name + ':' + r.tokId), targ: Object.keys(W1.msg(W1.a1, 'targets').targets) };
+    W1.net.roster.pA1.location = 'mA';   // fold 2: a player is sent the fights on the map they are on
+    W1.clearSent(); W1.api.combats(); W1.api.targets(); const ro1 = { rows: fightIn(W1.msg(W1.a1, 'combats').combats, 'mA').rows.map(r => r.name + ':' + r.tokId), targ: Object.keys(W1.msg(W1.a1, 'targets').targets) };
+    delete W1.net.roster.pA1.location;
     const host1 = W1.place('tA'), heldLeft1 = W1.api.opens().some(e => 'held' in e);
     W1.net.combats = {}; W1.net.targets = {};
     W1.move(W1.a1, 'tA', 250, 100, true); W1.clearSent(); W1.net.sendItem('k', 'mA'); const drop1 = { a1: W1.ids(W1.a1), entry: W1.entry('mA', 'tA') === undefined };
@@ -7980,8 +8059,8 @@ pendingChecks.push((async () => {
         check('14c K1: a move put back (a wall in the way, by the drop and by the map copy after it) reaches its mover once, saying the number of the action it answers, and everyone else who sees it as before, with no number; with no mover known it goes to everyone as before',
             J(back5) === J([[100, 6]]) && J(others5) === J([[100], [100]]) && J(back6) === J([[100, 8]]) && J(others6) === J([[100], [100]]) && J(noMover) === J([[100], [100]]), J([back5, others5, back6, others6, noMover]));
         // turn-based combat's put-backs answer their move too: out of turn, and past the move allowed
-        const turnBack = (setup) => { const W = mk4(); W.net.combats = { mA: { mapId: 'mA', round: 1, turn: 0, rows: [{ id: 'r_b', name: 'Bo', tokId: 'tB' }, { id: 'r_a', name: 'Ana', tokId: 'tA' }] } }; if (setup) setup(W); W.clearSent(); W.move(W.a1, 'tA', 350, 100, true, 'mA', { a: 12 }); return W.a1.sent.filter(m => m.type === 'pos').map(m => [m.x, m.ack]); };
-        const outOfTurn = turnBack(), pastMove = turnBack(W => { W.net.combats.mA.turn = 1; W.net.turnMove = { mA: { tokId: 'tA', rowId: 'r_a', allow: 1, moved: 0 } }; });
+        const turnBack = (setup) => { const W = mk4(); W.net.combats = { f_pier0001: { id: 'f_pier0001', mapId: 'mA', round: 1, turn: 0, rows: [{ id: 'r_b', name: 'Bo', tokId: 'tB' }, { id: 'r_a', name: 'Ana', tokId: 'tA' }] } }; if (setup) setup(W); W.clearSent(); W.move(W.a1, 'tA', 350, 100, true, 'mA', { a: 12 }); return W.a1.sent.filter(m => m.type === 'pos').map(m => [m.x, m.ack]); };
+        const outOfTurn = turnBack(), pastMove = turnBack(W => { W.net.combats.f_pier0001.turn = 1; W.net.turnMove = { f_pier0001: { tokId: 'tA', rowId: 'r_a', allow: 1, moved: 0 } }; });
         check('14c K1: turn-based combat\'s put-backs (a move out of its turn, a move past the move allowed) reach the mover saying the number of the move they answer',
             J(outOfTurn) === J([[100, 12]]) && J(pastMove) === J([[100, 12]]), J([outOfTurn, pastMove]));
         const A8 = mk4(); A8.api.ackTook(A8.a1, 5); A8.api.ackTook(A8.b1, 6); A8.api.forgetConn('pA1'); const f1 = [A8.api.ackOf(A8.a1), A8.api.ackOf(A8.b1)]; A8.api.forgetAll(); const f2 = [A8.api.ackOf(A8.b1)];
@@ -8260,9 +8339,9 @@ pendingChecks.push((async () => {
     const F2 = S7(); for (let i = 0; i < 201; i++) F2.camp.items.mA.whiteboard.push(T('m' + i, '', 'c_n', 15, 3)); F2.net.sendItem('k', 'mA'); F2.net.conns.forEach(c => { c.sent.length = 0; }); F2.move(F2.a1, 'tA', 250, 100, true); F2.fire(150); const many7 = kinds(F2.a1);
     const F3 = S7(); F3.camp.items.mA.whiteboard.push(T('big', '', 'c_n', 15, 3, { src: 'data:image/png;base64,' + 'A'.repeat(270000) })); F3.net.sendItem('k', 'mA'); F3.net.conns.forEach(c => { c.sent.length = 0; }); F3.move(F3.a1, 'tA', 250, 100, true); F3.fire(150); const big7 = kinds(F3.a1);
     const F4 = S7(); F4.camp.items.mA.whiteboard.push(T('x'.repeat(257), '', 'c_n', 15, 3)); F4.net.sendItem('k', 'mA'); F4.net.conns.forEach(c => { c.sent.length = 0; }); F4.move(F4.a1, 'tA', 250, 100, true); F4.fire(150); const long7 = kinds(F4.a1);
-    const R7 = S7(); R7.net.combats = { mA: { mapId: 'mA', round: 1, turn: 0, rows: [{ id: 'r_a', name: 'Ana', tokId: 'tA' }, { id: 'r_o', name: 'Orc', tokId: 'orc' }] } }; R7.net.targets = { u_b: { id: 'orc', mapId: 'mA', name: 'Bea' } };
-    R7.move(R7.a1, 'tA', 250, 100, true); R7.fire(150); const ros7 = { a1: kinds(R7.a1), rows: R7.msg(R7.a1, 'combats').combats.mA.rows.map(r => r.name), targ: Object.keys(R7.msg(R7.a1, 'targets').targets), b: kinds(R7.b1) };
-    R7.net.conns.forEach(c => { c.sent.length = 0; }); R7.move(R7.a1, 'tA', 100, 100, true); R7.fire(150); ros7.back = R7.msg(R7.a1, 'combats').combats.mA.rows.map(r => r.name); ros7.backTarg = Object.keys(R7.msg(R7.a1, 'targets').targets);
+    const R7 = S7(); R7.net.combats = { mA: { mapId: 'mA', round: 1, turn: 0, rows: [{ id: 'r_a', name: 'Ana', tokId: 'tA' }, { id: 'r_o', name: 'Orc', tokId: 'orc' }] } }; R7.net.targets = { u_b: { id: 'orc', mapId: 'mA', name: 'Bea' } }; R7.net.roster.pA1.location = 'mA';   // fold 2: Ana is on mA
+    R7.move(R7.a1, 'tA', 250, 100, true); R7.fire(150); const ros7 = { a1: kinds(R7.a1), rows: fightIn(R7.msg(R7.a1, 'combats').combats, 'mA').rows.map(r => r.name), targ: Object.keys(R7.msg(R7.a1, 'targets').targets), b: kinds(R7.b1) };
+    R7.net.conns.forEach(c => { c.sent.length = 0; }); R7.move(R7.a1, 'tA', 100, 100, true); R7.fire(150); ros7.back = fightIn(R7.msg(R7.a1, 'combats').combats, 'mA').rows.map(r => r.name); ros7.backTarg = Object.keys(R7.msg(R7.a1, 'targets').targets);
     const R8 = S7(); R8.net.combats = { mO: { mapId: 'mO', round: 1, turn: 0, rows: [] } }; R8.move(R8.a1, 'tA', 250, 100, true); R8.fire(150); const noFight = kinds(R8.a1);
     const litB = S7({ fogLitFor: (pid, camp, map) => (pid === 'u_b' && map.id === 'mA' && map.whiteboard.find(w => w.id === 'tA').x > 200 ? { lit: [{ c: 9, r: 9, t: 2 }], capped: false } : null) });
     litB.net.conns.forEach(c => { litB.net.sendItem('k', 'mA', c); c.sent.length = 0; }); litB.move(litB.a1, 'tA', 250, 100, true); litB.fire(150); const lit7b = { b: litB.b1.sent.filter(m => m.type !== 'pos').map(m => m.type + ':' + J([m.add || null, m.drop || null, m.lit || null])), a: litB.a1.sent.map(m => J(m.lit || null)), view: litB.view(litB.b1).fogLit };
@@ -8283,11 +8362,11 @@ pendingChecks.push((async () => {
     R9.move(R9.a1, 'tA', 250, 100, true); R9.fire(150); const r9 = { b: kinds(R9.b1), capMsg: (R9.b1.sent.find(m => m.type === 'fogDiff') || {}).capped, cap: R9.view(R9.b1).cap };
     R9.net.conns.forEach(c => { c.sent.length = 0; }); R9.move(R9.a1, 'tA', 100, 100, true); R9.fire(150); r9.capOff = (R9.b1.sent.find(m => m.type === 'fogDiff') || {}).capped; r9.viewOff = R9.view(R9.b1).cap;
     const RL = S7(); RL.net.combats = { mA: { mapId: 'mA', round: 1, turn: 0, rows: [{ id: 'r_a', name: 'Ana', tokId: 'tA' }] }, mB: { mapId: 'mB', round: 1, turn: 0, rows: [{ id: 'r_a2', name: 'Ana', tokId: 'tA2' }, { id: 'r_o2', name: 'Orc2', tokId: 'orc2' }] } };
-    RL.move(RL.a1, 'tA2', 250, 100, false, 'mB'); RL.net.conns.forEach(c => { c.sent.length = 0; }); RL.move(RL.a1, 'tA', 250, 100, true); RL.fire(150); const rl = (RL.msg(RL.a1, 'combats') || { combats: {} }).combats.mB;
+    RL.net.roster.pA1.location = 'mB'; RL.move(RL.a1, 'tA2', 250, 100, false, 'mB'); RL.net.conns.forEach(c => { c.sent.length = 0; }); RL.api.combats(); const rl = fightIn((RL.msg(RL.a1, 'combats') || { combats: {} }).combats, 'mB');   // fold 2: Ana on mB is sent the fights there, judged with her open drag there at its start
     const SS = S7(); SS.api.sensesForget('u_a'); const ssBefore = Object.keys(SS.api.sensesSig()).filter(k => k.indexOf('u_a|') === 0).length; SS.move(SS.a1, 'tA', 250, 100, true); SS.fire(150); const ssAfter = Object.prototype.hasOwnProperty.call(SS.api.sensesSig(), 'u_a|mA');
     const OT = S7(); OT.camp.items.mA.whiteboard.push(T('tAnew', 'u_a', 'c_a', 3, 5)); OT.move(OT.a1, 'tA', 250, 100, true); OT.fire(150); const ownAdd = OT.a1.sent.filter(m => m.type === 'fogDiff').some(m => (m.add || []).some(a => a.item.id === 'tAnew')), ownAsk = OT.asks(OT.a1).length;
     const UF = S7(); UF.camp.items.mA.fog.on = false; UF.move(UF.a1, 'tA', 250, 100, true); const ufArmed = UF.timers.filter(t => t.fn && t.ms === 150).length;
-    check('fold M7: the turn order follows only a change of what is held (lit cells alone send none) and is judged with every open drag at its start, one on another map too; a catch-up seeds what the player\'s copy was made by (senses); the player\'s own token the copy lacks is never added by it (the next whole copy brings it); a map without fog arms nothing; the light cap goes when it changes, both ways; the window reads a number only',
+    check('fold M7: the turn order follows only a change of what is held (lit cells alone send none) and is judged with every open drag at its start (fold 2: the fights on the map the player is on, with their own drag there); a catch-up seeds what the player\'s copy was made by (senses); the player\'s own token the copy lacks is never added by it (the next whole copy brings it); a map without fog arms nothing; the light cap goes when it changes, both ways; the window reads a number only',
         J(r9.b) === J(['fogDiff']) && r9.capMsg === true && r9.cap === true && r9.capOff === false && r9.viewOff === false && J(rl && rl.rows.map(r => r.name)) === J(['Ana', 'Hidden'])
         && ssBefore === 0 && ssAfter === true && ownAdd === false && ownAsk === 0 && ufArmed === 0 && R9.api.windowMs('400') === 150,
         J([r9, rl, ssBefore, ssAfter, ownAdd, ownAsk, ufArmed]));
@@ -8413,7 +8492,7 @@ pendingChecks.push((async () => {
         const copyOf = (W, x, y) => ({ type: 'item', campId: 'k', itemId: 'mA', item: { id: 'mA', type: 'map', whiteboard: [Object.assign({}, W.tok('tA'), { x: x, y: y })] } });
         const P = bW({}); P.api.item(copyOf(P, 350, 100), P.a1); const patR = [at(P), backs(P.a1)]; P.clearSent(); P.api.item(copyOf(P, 200, 100), P.a1); const patFree = at(P);
         const Pw = bW({ walls: 'warn' }); Pw.api.item(copyOf(Pw, 350, 100), Pw.a1); const Po = bW({ walls: 'off' }); Po.api.item(copyOf(Po, 350, 100), Po.a1);
-        const mrf = new Function('window', 'net', 'own', lineOf('function moveMode(') + '\n' + fnSrc('function turnCombatOf(', '\n}\n', 'turnCombatOf') + '\n}\n' + fnSrc('function moveRefused(', '\n}\n', 'moveRefused') + '\n}\nreturn moveRefused;');
+        const mrf = new Function('window', 'net', 'own', lineOf('function moveMode(') + '\n' + fnSrc('function turnCombatOf(', '\n}\n', 'turnCombatOf') + '\n}\n' + fnSrc('function moveRefused(', '\n}\n', 'moveRefused') + '\n}\n' + ordersSrc + '\nreturn moveRefused;');
         const why = rules => { const W = bW(rules); return mrf({ wpFog: W.fog, wpVtt: { on: () => true } }, { combats: {}, turnMove: {} }, (o, k) => Object.prototype.hasOwnProperty.call(o, k))(W.camp, W.camp.items.mA, 'mA', W.tok('tA'), 100, 100, 350, 100); };
         check('barriers (host, the real patch path): a map copy carrying her token across a barrier is put back where it stood, for her and everyone, under Refuse — its note the wall\'s own (moveRefused over the real fog.js) — and lands under Warn and under Off, as a wall\'s; a copy that moves it short of the barrier lands',
             J(patR) === J([[100, 100], [[100, 100]]]) && J(patFree) === J([200, 100]) && J(at(Pw)) === J([350, 100]) && J(at(Po)) === J([350, 100]) && why({}) === NOTE && why({ walls: 'warn' }) === '' && why({ walls: 'off' }) === '', J([patR, patFree, at(Pw), at(Po), why({})]));
@@ -8584,10 +8663,11 @@ pendingChecks.push((async () => {
         const mhWorld = (o) => {
             const calls = { hold: [], catch: [], forget: [], landed: [] }, oo = o || {};
             const camp = { id: 'k', fog: { fields: {}, defaults: oo.live ? { sight: 0 } : { sight: 0, marks: 'turn' } }, items: { m1: { id: 'm1', type: 'map', fog: { on: oo.unfogged !== true }, whiteboard: [{ id: 'ta', isChar: true, ownerId: 'u_a' }, { id: 'tb', isChar: true, ownerId: 'u_b' }, { id: 'tc', isChar: true, ownerId: 'u_c' }, { id: 'npc', isChar: true }, { id: 'hid', isChar: true, ownerId: 'u_h', hidden: true }, { id: 'wt', waiting: true, ownerId: 'u_w' }, { id: 'rock', type: 'rect', ownerId: 'u_r' }] } } };
-            const net = { active: true, role: oo.role || 'host', conns: [{ peer: 'pa', open: true }, { peer: 'pa2', open: true }, { peer: 'pb', open: true }, { peer: 'pd', open: true }, { peer: 'px', open: false }, { peer: 'pz', open: true }], roster: { pa: { id: 'u_a' }, pa2: { id: 'u_a' }, pb: { id: 'u_b' }, pd: { id: 'u_d' }, px: { id: 'u_x' } }, combats: oo.noFight ? {} : { m1: { rows: [{ tokId: 'ta' }, { tokId: 'npc' }, { tokId: 'tb' }, { name: 'Custom' }], turn: oo.turn || 0, round: 1 } } };
+            const net = { active: true, role: oo.role || 'host', conns: [{ peer: 'pa', open: true }, { peer: 'pa2', open: true }, { peer: 'pb', open: true }, { peer: 'pd', open: true }, { peer: 'px', open: false }, { peer: 'pz', open: true }], roster: { pa: { id: 'u_a' }, pa2: { id: 'u_a' }, pb: { id: 'u_b' }, pd: { id: 'u_d' }, px: { id: 'u_x' } }, combats: oo.noFight ? {} : { m1: { mapId: 'm1', rows: [{ tokId: 'ta' }, { tokId: 'npc' }, { tokId: 'tb' }, { name: 'Custom' }], turn: oo.turn || 0, round: 1 } } };   // fold 2: a fight names its map
+            if (oo.second) net.combats.f_bridge01 = { id: 'f_bridge01', mapId: 'm1', rows: [{ tokId: 'tc' }, { tokId: 'wt' }], turn: oo.second.turn || 0, round: 1 };   // fold 2: a second fight on the same map
             const env = { net, window: { wpFog: { marksHold: (pid, cp, m, drop) => calls.hold.push([pid, m.id, drop && drop.dropFor]), marksForget: id => calls.forget.push(id) } }, getActiveCampaign: () => camp, own: (ob, k) => Object.prototype.hasOwnProperty.call(ob, k), mapFogged: m => !!(m && m.fog && m.fog.on), fogDrop: (cp, m, pid) => ({ dropFor: pid }),
                 fogLanded: (id, fn) => { calls.landed.push(id); return fn(); }, fogCatchUp: (c, cp, m, pid, memo) => { calls.catch.push([c.peer, pid, m.id]); memo.n = (memo.n || 0) + 1; } };
-            const api = new Function('env', "'use strict';\nvar net = env.net, window = env.window, getActiveCampaign = env.getActiveCampaign, own = env.own, mapFogged = env.mapFogged, fogDrop = env.fogDrop, fogLanded = env.fogLanded, fogCatchUp = env.fogCatchUp;\n" + mhSrc + '\nreturn { marksTurn: marksTurn, marksRound: marksRound, marksStart: marksStart, marksEnd: marksEnd, marksOwnMoved: marksOwnMoved };')(env);
+            const api = new Function('env', "'use strict';\nvar net = env.net, window = env.window, getActiveCampaign = env.getActiveCampaign, own = env.own, mapFogged = env.mapFogged, fogDrop = env.fogDrop, fogLanded = env.fogLanded, fogCatchUp = env.fogCatchUp;\n" + ordersSrc + '\n' + mhSrc + '\nreturn { marksTurn: marksTurn, marksRound: marksRound, marksStart: marksStart, marksEnd: marksEnd, marksOwnMoved: marksOwnMoved };')(env);
             api.calls = calls; api.net = net; api.camp = camp; return api;
         };
         const mhT = mhWorld(); mhT.marksTurn('m1', mhT.net.combats.m1);
@@ -8599,8 +8679,11 @@ pendingChecks.push((async () => {
             J(mhT.calls.hold) === J([['u_a', 'm1', 'u_a']]) && J(mhT.calls.catch) === J([['pa', 'u_a', 'm1'], ['pa2', 'u_a', 'm1']]) && J(mhT.calls.landed) === J(['m1'])
             && mhNpc.calls.hold.length === 0 && mhCustom.calls.hold.length === 0 && J(mhOff) === J([0, 0, 0]) && mhOther.calls.hold.length === 0 && mhOther.calls.catch.length === 0, J([mhT.calls, mhOff]));
         const mhR = mhWorld(); mhR.marksRound('m1', mhR.net.combats.m1);
-        check('S4b marksRound (host): a new round takes afresh the marks of each player with no token in the fight — those with a token on the map (never by a hidden token or a plain shape) and every admitted one — and catches their connections up; players whose token has a row wait for its turn',
-            J(mhR.calls.hold.map(h => h[0])) === J(['u_c', 'u_w', 'u_d']) && J(mhR.calls.catch) === J([['pd', 'u_d', 'm1']]), J(mhR.calls));
+        // fold 2's review: with a second fight on the map a new round of either takes afresh the marks of the players with no token in ANY fight there
+        const mhR2 = mhWorld({ second: { turn: 0 } }); mhR2.marksRound('m1', mhR2.net.combats.m1); const mhR3 = mhWorld({ second: { turn: 0 } }); mhR3.marksRound('m1', mhR3.net.combats.f_bridge01);
+        check('S4b marksRound (host): a new round takes afresh the marks of each player with no token in the fight — those with a token on the map (never by a hidden token or a plain shape) and every admitted one — and catches their connections up; players whose token has a row wait for its turn; fold 2\'s review: with two fights on the map, a row in either counts, whichever fight\'s round it is',
+            J(mhR.calls.hold.map(h => h[0])) === J(['u_c', 'u_w', 'u_d']) && J(mhR.calls.catch) === J([['pd', 'u_d', 'm1']])
+            && J(mhR2.calls.hold.map(h => h[0])) === J(['u_d']) && J(mhR2.calls.catch) === J([['pd', 'u_d', 'm1']]) && J(mhR3.calls.hold.map(h => h[0])) === J(['u_d']), J([mhR.calls, mhR2.calls, mhR3.calls]));
         const mhS = mhWorld(); mhS.marksStart('m1'); const mhSl = mhWorld({ live: true }); mhSl.marksStart('m1');
         check('S4b marksStart (host): a fight beginning forgets what was held on that map and takes everyone\'s marks from now (every player with a token there and every admitted one), catching each connection up; a table playing As they move only forgets',
             J(mhS.calls.forget) === J(['m1']) && J(mhS.calls.hold.map(h => h[0])) === J(['u_a', 'u_b', 'u_c', 'u_w', 'u_d']) && J(mhS.calls.catch.map(c => c[0])) === J(['pa', 'pa2', 'pb', 'pd']) && J(mhSl.calls.forget) === J(['m1']) && mhSl.calls.hold.length === 0 && mhSl.calls.catch.length === 0, J([mhS.calls, mhSl.calls]));
@@ -8611,11 +8694,13 @@ pendingChecks.push((async () => {
         const own2 = mhWorld(); own2.marksOwnMoved('m1', [{ id: 'tb', ownerId: 'u_b' }], 'u_b'); own2.marksOwnMoved('m1', [{ id: 'ta', ownerId: 'u_a' }], 'u_b'); own2.marksOwnMoved('m1', [null], 'u_a');
         const own3 = mhWorld({ turn: 2 }); own3.marksOwnMoved('m1', [{ id: 'tc', ownerId: 'u_c' }, { id: 'tb', ownerId: 'u_b' }], 'u_b');
         const own4 = mhWorld({ noFight: true }); own4.marksOwnMoved('m1', [{ id: 'ta', ownerId: 'u_a' }], 'u_a'); const own5 = mhWorld({ turn: 3 }); own5.marksOwnMoved('m1', [{ id: 'ta', ownerId: 'u_a' }], 'u_a');
-        check('S4b marksOwnMoved (host): a player\'s own drop takes their marks afresh only when one of the tokens is theirs and on its turn; another player\'s token, one off its turn, no fight or a custom row\'s turn takes nothing',
-            J(own1.calls.hold.map(h => h[0])) === J(['u_a']) && J(own1.calls.catch.map(c => c[0])) === J(['pa', 'pa2']) && own2.calls.hold.length === 0 && J(own3.calls.hold.map(h => h[0])) === J(['u_b']) && own4.calls.hold.length === 0 && own5.calls.hold.length === 0, J([own1.calls, own3.calls]));
+        // fold 2's review: a second fight on the map (Cy's token and the waiting token): Cy's drop on his own turn there takes his marks, off it nothing
+        const own6 = mhWorld({ second: { turn: 0 } }); own6.marksOwnMoved('m1', [{ id: 'tc', ownerId: 'u_c' }], 'u_c'); const own7 = mhWorld({ second: { turn: 1 } }); own7.marksOwnMoved('m1', [{ id: 'tc', ownerId: 'u_c' }], 'u_c');
+        check('S4b marksOwnMoved (host): a player\'s own drop takes their marks afresh only when one of the tokens is theirs and on its turn; another player\'s token, one off its turn, no fight or a custom row\'s turn takes nothing; fold 2\'s review: on its turn in the second fight on the map too',
+            J(own1.calls.hold.map(h => h[0])) === J(['u_a']) && J(own1.calls.catch.map(c => c[0])) === J(['pa', 'pa2']) && own2.calls.hold.length === 0 && J(own3.calls.hold.map(h => h[0])) === J(['u_b']) && own4.calls.hold.length === 0 && own5.calls.hold.length === 0 && J(own6.calls.hold.map(h => h[0])) === J(['u_c']) && own7.calls.hold.length === 0, J([own1.calls, own3.calls, own6.calls, own7.calls]));
         check('S4b (source): the round hook, the turn hook, a fight\'s start and end, a player\'s drop on the pos gate and in a map copy, and a new table reach the held marks; nothing else calls them',
             /function roundChanged\(mapId, c\) \{[^\n]*if \(typeof marksRound === 'function'\) \{ try \{ marksRound\(mapId, c\); \}/.test(src) && /function turnStarted\(mapId, c\) \{[^\n]*if \(typeof marksTurn === 'function'\) \{ try \{ marksTurn\(mapId, c\); \}/.test(src)
-            && /net\.combats\[mapId\]\.mapId = mapId;\n\s*if \(!had && typeof marksStart === 'function'\) \{ try \{ marksStart\(mapId\); \}/.test(src) && /delete net\.combats\[mapId\];\n\s*if \(had && typeof marksEnd === 'function'\) \{ try \{ marksEnd\(mapId\); \}/.test(src)
+            && /net\.combats\[fid\] = f;\n\s*if \(first && typeof marksStart === 'function'\) \{ try \{ marksStart\(mapId\); \}/.test(src) && /if \(typeof fid === 'string'\) \{ delete net\.combats\[fid\];[^\n]*\n[^\n]*\n\s*if \(had && typeof marksEnd === 'function' && !fightsOn\(mapId\)\.length\) \{ try \{ marksEnd\(mapId\); \}/.test(src)
             && /fogForgetAll\(\);[^\n]*\n\s*if \(window\.wpFog && typeof window\.wpFog\.marksForget === 'function'\) window\.wpFog\.marksForget\(null\);/.test(src)
             && (src.match(/marksOwnMoved\(/g) || []).length === 3 && (src.match(/marksStart\(/g) || []).length === 2 && (src.match(/marksEnd\(/g) || []).length === 2 && (src.match(/marksTurn\(/g) || []).length === 2 && (src.match(/marksRound\(/g) || []).length === 2 && (src.match(/\.marksHold\(/g) || []).length === 1);
     }
@@ -8927,8 +9012,8 @@ pendingChecks.push((async () => {
 
     // fold R: a whole copy of a fogged map that changes which of a fight's tokens (or a pointer's) a connection holds sends that connection the
     // turn order and the pointers again at once — a creature the GM walks out of a player's sight loses its name there before the next turn step
-    const rFight = W => { W.net.combats = { mA: { mapId: 'mA', round: 1, turn: 0, rows: [{ id: 'r_a', name: 'Ana', tokId: 'tA' }, { id: 'r_o', name: 'Orc', tokId: 'orc' }, { id: 'r_x', name: 'Extra' }] } }; };
-    const rowsTo = (W, c) => { const m = W.msg(c, 'combats'); return m ? m.combats.mA.rows.map(r => r.name) : null; }, rKinds = c => c.sent.map(m => m.type);
+    const rFight = W => { W.net.combats = { mA: { mapId: 'mA', round: 1, turn: 0, rows: [{ id: 'r_a', name: 'Ana', tokId: 'tA' }, { id: 'r_o', name: 'Orc', tokId: 'orc' }, { id: 'r_x', name: 'Extra' }] } }; Object.keys(W.net.roster).forEach(k => { W.net.roster[k].location = 'mA'; }); };   // fold 2: everyone stands on mA, where the fight is
+    const rowsTo = (W, c) => { const m = W.msg(c, 'combats'), fr = m && fightIn(m.combats, 'mA'); return fr ? fr.rows.map(r => r.name) : null; }, rKinds = c => c.sent.map(m => m.type);
     const R1w = S7(); R1w.tok('orc').x = 250; rFight(R1w); R1w.clearSent(); R1w.net.sendItem('k', 'mA'); R1w.api.combats(); const rStart = [rowsTo(R1w, R1w.a1), rowsTo(R1w, R1w.b1)];
     R1w.tok('orc').x = 750; R1w.fog.invalidateVision(); R1w.clearSent(); R1w.net.sendItem('k', 'mA');
     const rAway = { a1: rKinds(R1w.a1), a2: rKinds(R1w.a2), b: rKinds(R1w.b1), rowsA: rowsTo(R1w, R1w.a1), rowsB: rowsTo(R1w, R1w.b1), orcA: R1w.ids(R1w.a1).indexOf('orc') >= 0 };
@@ -9178,14 +9263,14 @@ pendingChecks.push((async () => {
     const csK = fnSrc('net.combatStep = function', '// [netcheck:turnhold-start]', 'combatStep');
     const mkK = (turn, nRows, withHook) => { const calls = [], net = { role: 'host', combats: { m1: { mapId: 'm1', round: 1, turn: turn, rows: Array.from({ length: nRows }, (_, i) => ({ id: 'r' + i, name: 'R' + i, tokId: null, init: 0, src: null })) } } };
         const names = ['net', 'own', 'toast', 'logEvent', 'mapTitleOf', 'broadcastCombats', 'combatRefresh', 'roundChanged', 'turnStarted'].concat(withHook ? ['clockRounds'] : []), args = [net, H.own, () => {}, () => {}, () => 'Hall', () => {}, () => {}, () => {}, () => {}].concat(withHook ? [n => calls.push(n)] : []);
-        new Function(...names, "'use strict';\n" + csK).apply(null, args); return { net, calls }; };
+        new Function(...names, "'use strict';\n" + csK + '\n' + ordersSrc).apply(null, args); return { net, calls }; };
     const K1 = mkK(1, 2, true); [1, 1, -1, -1, -1, -1].forEach(d => K1.net.combatStep('m1', d));
     const K2 = mkK(0, 1, true); [1, 1, 1, -1].forEach(d => K2.net.combatStep('m1', d));
     const K3 = mkK(1, 2, false); let k3ok = true; try { K3.net.combatStep('m1', 1); } catch (e) { k3ok = false; }
     const K4 = mkK(1, 2, true); K4.net.role = 'client'; K4.net.combatStep('m1', 1);
     check('item 20 K2 a round of a fight moves the clock (the real combatStep, run for real): each new round tells the clock one round on, a step back past a round\'s first turn one back; a step within a round or back at the very first turn tells it nothing; without the clock\'s hook it runs as before; a player\'s app steps nothing; a round edited in the roster tells it the difference, and the hook reaches the calendar through a guard',
         j(K1.calls) === j([1, -1]) && j(K2.calls) === j([1, 1, 1, -1]) && k3ok && K3.net.combats.m1.round === 2 && j(K4.calls) === j([])
-        && src.includes("if (c.round !== r0 && typeof clockRounds === 'function') clockRounds(c.round - r0);") && src.includes("if (had && had.round !== net.combats[mapId].round && typeof clockRounds === 'function') clockRounds(net.combats[mapId].round - had.round);")
+        && src.includes("if (c.round !== r0 && typeof clockRounds === 'function') clockRounds(c.round - r0);") && src.includes("if (had && had.round !== f.round && typeof clockRounds === 'function') clockRounds(f.round - had.round);")
         && src.includes('function clockRounds(n) { try { if (window.wpCalendar && window.wpCalendar.rounds) window.wpCalendar.rounds(n); } catch (e) { console.error(e); } }'), j([K1.calls, K2.calls, K4.calls]));
     check('item 20 K2 the session log has a Time kind (net.js _logKinds, pinned) and its filter an option for it',
         /var _logKinds = \{[^}]*char: 'Characters', time: 'Time' \};/.test(src) && fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'index.html'), 'utf8').includes('<option value="travel">Travel</option><option value="time">Time</option>'));
@@ -10078,9 +10163,9 @@ pendingChecks.push((async () => {
         'var fxLib = function() { return {}; }, itemLib = function() { return {}; }, withHoverLines = function(v) { return v; };',
         ownKeySrc, siSrc(), mhSrc, fnSrc('function sanitizeAppState(', '\nfunction fogNow()', 'sanitizeAppState'), bw('foglit'), fnSrc('function anyFog(', '\n}\n', 'anyFog') + '\n}\n', lineOf('function mapFogged('), lineOf('var FOG_DIFF_ADD_MAX = '),
         fnSrc('function quickHash(', '\n}\n', 'quickHash') + '\n}\n', lineOf('function uniqueIds('), fnSrc('function itemDelta(itemId, clean) {', '\nfunction applyItemDelta(', 'itemDelta'), fnSrc('function playerStroke(', '\n}\n', 'playerStroke') + '\n}\n',
-        whole9('net.sendItem = function('), whole9('net.broadcastItemFiltered = function('), whole9('net.itemGone = function('), whole9('net.pushItems = function('), whole9('net.summonPlayerToMap = function('), bw('stage'),
+        whole9('net.sendItem = function('), whole9('net.broadcastItemFiltered = function('), whole9('net.itemGone = function('), whole9('net.pushItems = function('), whole9('net.summonPlayerToMap = function('), bw('stage'), bw('combats'),
         fnSrc('function freeSpotNear(', '\n}\n', 'freeSpotNear') + '\n}\n', fnSrc('function stepOffPortal(', '\n}\n', 'stepOffPortal') + '\n}\n', fnSrc('function portalUnder(', '\n}\n', 'portalUnder') + '\n}\n', trSrc,
-        lineOf('var _saveSoon = null;'), lineOf('function saveRemoteSoon()'), bw('bpos'), src.slice(src.indexOf('var POSTURE_SET = '), src.indexOf('function sanitizeItem(')), bw('pos'), bw('patch'), bw('fogmove'),
+        lineOf('var _saveSoon = null;'), lineOf('function saveRemoteSoon()'), bw('bpos'), src.slice(src.indexOf('var POSTURE_SET = '), src.indexOf('function sanitizeItem(')), bw('pos'), bw('patch'), bw('fogmove'), ordersSrc,
         'return { snapshot: sanitizeAppState, travel: hostTravel, stageConn: stageConn, relay: broadcastPos, seedSnap: fogSeedSnapshot, catchUp: fogCatchUp, fire: fogMoveFire, arm: fogArm, forgetConn: fogForgetConn, forgetAll: fogForgetAll, ackTook: ackTook, fogHeld: function() { return _fogHeld; },',
         'held: typeof mapHeld === "function" ? mapHeld : null, heldNote: typeof mapHeldNote === "function" ? mapHeldNote : null, heldOf: typeof mapHeldOf === "function" ? mapHeldOf : null, give: typeof mapGive === "function" ? mapGive : null, stub: typeof mapStub === "function" ? mapStub : null, store: function() { return typeof _mapHeld === "object" ? _mapHeld : null; }, take: typeof mapTake === "function" ? mapTake : null, left: typeof mapLeft === "function" ? mapLeft : null, follow: typeof followConns === "function" ? followConns : null, pend: function(p, m) { return typeof hidPendOf === "function" ? hidPendOf(p, m) : null; }, posIn: typeof handlePos === "function" ? handlePos : null, patchIn: typeof applyClientItemFiltered === "function" ? applyClientItemFiltered : null,',
         'needItem: function(msg, conn) {', niBody, '}, stubSync: typeof mapStubSync === "function" ? mapStubSync : null, stubSaid: function() { return typeof _stubSaid === "object" ? _stubSaid : null; } };'].join('\n');
@@ -10231,6 +10316,18 @@ pendingChecks.push((async () => {
         check('possession: a portal to the locked mB refuses as before (travelDenied, nothing of the map, nothing held); unlocked, hostTravel (run for real) moves Ana\'s token off the door and sends mA to everyone holding it, then gives her connection mB whole and only then her personal stage word; her other connection and Bo get nothing of mB; her page holds mB as the host\'s copy, no stub mark',
             J(refusedOut) === J({ ret: false, a1: ['travelDenied'], held: false }) && went === true && iB >= 0 && iS > iB && a1T.filter(t => t === 'item:mB').length === 1 && J(a2T) === J(['item:mA']) && J(bT) === J(['item:mA']) && !!stage && stage.personal === true && stage.stage.itemId === 'mB'
             && J(pageB) === J(W.cleanOf('mB')) && !('stub' in pageB) && W.held(W.a1, 'mB') === true && W.held(W.a2, 'mB') === false && W.held(W.b1, 'mB') === false && W.net.roster.pA1.location === 'mB' && W.net.roster.pA2.location === 'mA', J([refusedOut, a1T, a2T, bT]));
+    }
+    // (5b) fold 2's review: a portal's travel sends the traveller the fights on the map they arrive on, after the stage word, and the empty list where
+    // they leave a map with a fight for one with none (hostTravel and the combats slice, run for real); nobody else is sent any of it
+    {
+        const go = fights => { const W = mkW(); W.join(W.a1, 'mA'); W.join(W.a2, 'mA'); W.join(W.b1, 'mA'); delete W.camp.items.mB.meta.playerLock; W.camp.items.mA.whiteboard[0].x = 300; W.camp.items.mA.whiteboard[0].y = 300;
+            W.net.combats = fights; W.clear(); const went = W.api.travel(W.a1, W.net.roster.pA1, W.camp.items.mA.whiteboard[3], W.camp.items.mA);
+            const a1T = W.types(W.a1), cm = W.a1.sent.filter(m => m.type === 'combats');
+            return { went, order: a1T.filter(t => t === 'stage' || t === 'combats'), keys: cm.map(m => Object.keys(m.combats)), others: [W.a2, W.b1].map(c => c.sent.filter(m => m.type === 'combats').length) }; };
+        const both = go({ f_moat0001: { id: 'f_moat0001', mapId: 'mA', round: 1, turn: 0, rows: [{ id: 'rtB', name: 'Bo', tokId: 'tB' }] }, f_moat0002: { id: 'f_moat0002', mapId: 'mB', round: 2, turn: 0, rows: [{ id: 'r_beast', name: 'Beast', tokId: 'tokB' }] } });
+        const away = go({ f_moat0001: { id: 'f_moat0001', mapId: 'mA', round: 1, turn: 0, rows: [{ id: 'rtB', name: 'Bo', tokId: 'tB' }] } }), none = go({});
+        check('fold 2\'s review (hostTravel, run for real with the combats slice): a portal\'s travel sends the traveller the fights on the map they arrive on, after the stage word and with nothing of the fight they left; leaving a map with a fight for one with none sends the empty list after the stage word; between two maps with no fight nothing; their other connection and the player who stayed are sent none of it',
+            J([both, away, none]) === J([{ went: true, order: ['stage', 'combats'], keys: [['f_moat0002']], others: [0, 0] }, { went: true, order: ['stage', 'combats'], keys: [[]], others: [0, 0] }, { went: true, order: ['stage'], keys: [], others: [0, 0] }]), J([both, away, none]));
     }
     // (6) needItem: a map the connection was never given is refused there; one it holds, and a page, are sent
     {
@@ -11098,7 +11195,7 @@ pendingChecks.push((async () => {
             const st = { asked: {}, open: Object.create(null), asks: [], opened: [], threw: '' };
             const camp = { id: 'k', turnRules: {}, items: { m1: { id: 'm1', type: 'map', meta: { title: 'Keep' }, whiteboard: [{ id: 'orc', isChar: true, charName: 'Orc' }, { id: 'wolf', isChar: true, charName: 'Wolf' }, { id: 'bat', isChar: true, charName: 'Bat' }] } } };
             st.fire = (id, peer) => { const net = { role: 'host', roster: { pA: { id: 'u_a', name: 'Ana' }, pB: { id: 'u_b', name: 'Bo' } }, combats: {} };
-                try { new Function('msg', 'conn', 'net', 'allow', 'applyTarget', 'broadcastTargets', 'combatAsked', 'combatAskOpen', 'getActiveCampaign', 'showConfirm', 'mapTitleOf', 'window', 'own', taSrc)(
+                try { new Function('msg', 'conn', 'net', 'allow', 'applyTarget', 'broadcastTargets', 'combatAsked', 'combatAskOpen', 'getActiveCampaign', 'showConfirm', 'mapTitleOf', 'window', 'own', ordersSrc + '\n' + taSrc)(
                     { type: 'target', id, mapId: 'm1' }, { peer: peer || 'pA' }, net, () => true, () => {}, () => {}, st.asked, st.open, () => camp, (t, cb) => st.asks.push({ t, cb }), () => 'Keep', { wpOpenCombat: (m, o) => st.opened.push(o) }, H.own); }
                 catch (e) { st.threw = String(e && e.message); } };
             return st;
@@ -11219,16 +11316,19 @@ pendingChecks.push((async () => {
         const clSrc = slice('// [netcheck:connclose-start]', '// [netcheck:connclose-end]');
         const runEnd = active => {
             const out = { resets: 0, draws: [], loads: 0, threw: '' }, conn = { peer: 'room', open: false };
-            const net = { role: 'client', active, conns: [conn], roster: Object.create(null), targets: {}, applyingRemote: false, leaving: true, code: 'c1c1', peer: active ? { destroy() {} } : null, notepad: { on: true, text: 'The GM\'s words', look: { sig: 1 }, gm: 'GM' } };
+            const net = { role: 'client', active, conns: [conn], roster: Object.create(null), targets: {}, applyingRemote: false, leaving: true, code: 'c1c1', peer: active ? { destroy() {} } : null, notepad: { on: true, text: 'The GM\'s words', look: { sig: 1 }, gm: 'GM' },
+                combats: { f_dock0001: { id: 'f_dock0001', mapId: 'm1', round: 2, turn: 0, rows: [{ id: 'r1', name: 'Kael' }] } } };   // fold 2: the copy of the GM's fights it holds
             const env = { net, assetInflight: {}, assetRefs: {}, assetBytes: {}, diceLimit: null, charLimit: null, _lim: {}, _connMeta: {}, lastSeen: {},
                 sensesForget() {}, fogDragSweep() {}, fogForgetConn() {}, videoHang() {}, videoTold() {}, videoOver() {}, renderRoster() {}, toast() {}, getActiveCampaign: () => null, logEvent() {}, startWaitGrace() {}, render() {}, broadcastTargets() {}, save() {}, broadcastRoster() {},
                 cancelReconnect() {}, setPausedLocal() {}, stopHeartbeat() {}, setIndicator() {}, load() { out.loads++; }, reconn: {}, scheduleReconnect() {}, getProfile: () => ({ name: 'Me' }), window: {}, hostGone: () => false,
                 padReset() { out.resets++; }, renderNotepad() { out.draws.push([net.active, net.notepad.on, net.notepad.text]); }, setTimeout: f => f() };
             const names = Object.keys(env);
             try { new Function('conn', ...names, clSrc)(conn, ...names.map(n => env[n])); } catch (e) { out.threw = String(e && e.message); }
-            out.pad = net.notepad; return out;
+            out.pad = net.notepad; out.combats = Object.keys(net.combats); return out;
         };
         const ended = clSrc ? runEnd(true) : null, own = clSrc ? runEnd(false) : null;
+        check('fold 0\'s live check (fold 2, backlog 152): when the GM ends the table a player\'s app lets its copy of the GM\'s fights go with the table, so neither its turn strip, its pill nor its clock reads the GM\'s fights on its own campaign afterwards (the close handler run for real: that way out runs no leaveSession); a Leave of the player\'s own, which has put everything away already, touches nothing here',
+            !!ended && ended.threw === '' && J(ended.combats) === '[]' && J(own.combats) === J(['f_dock0001']), J([ended && ended.combats, own && own.combats]));
         check('J6b (a player\'s app, the close handler run for real): the GM ends the session, removes the player or refuses them, and the table\'s connection closes: the GM\'s table notepad goes with the table, its words and what styled them, and is drawn again so that it is put away, after the app has left the table; a Leave of the player\'s own, which has put everything away already, does nothing more here',
             !!ended && ended.threw === '' && J(ended.pad) === J({ on: false, text: '' }) && ended.resets === 1 && J(ended.draws) === J([[false, false, '']]) && ended.loads === 1
             && own.threw === '' && own.resets === 0 && own.draws.length === 0 && own.pad.on === true && own.loads === 0, J([ended, own]));
@@ -11242,7 +11342,7 @@ pendingChecks.push((async () => {
             const camp = { id: 'k', turnRules: {}, items: { m1: { id: 'm1', type: 'map', meta: { title: 'Keep' }, whiteboard: [{ id: 'orc', isChar: true, charName: 'Orc' }] } } };
             const net = { role: 'host', roster: Object.create(null), combats: {} }; net.roster.pA = { id: 'u_a', name: 'Ana' }; net.roster.pB = { id: 'u_b', name: 'Bo' };
             try {
-                new Function('msg', 'conn', 'net', 'allow', 'applyTarget', 'broadcastTargets', 'combatAsked', 'combatAskOpen', 'getActiveCampaign', 'showConfirm', 'mapTitleOf', 'window', 'own', 'toast', taSrc)(
+                new Function('msg', 'conn', 'net', 'allow', 'applyTarget', 'broadcastTargets', 'combatAsked', 'combatAskOpen', 'getActiveCampaign', 'showConfirm', 'mapTitleOf', 'window', 'own', 'toast', ordersSrc + '\n' + taSrc)(
                     { type: 'target', id: 'orc', mapId: 'm1' }, { peer: 'pA' }, net, () => true, () => {}, () => {}, {}, open, () => camp, (t, cb) => out.asks.push(cb), () => 'Keep', { wpOpenCombat: (m, o) => out.opened.push([m, o]) }, H.own, m => out.toasts.push(String(m)));
                 meanwhile(net); out.asks[0](yes);
             } catch (e) { out.threw = String(e && e.message); }
@@ -12480,7 +12580,7 @@ pendingChecks.push((async () => {
             && pendSrc.includes("    if (typeof styleLay === 'function') styleLay(charId);") && chinSrc.includes("if (typeof noteHostLooks === 'function') noteHostLooks(outC);") && chinSrc.indexOf('noteHostLooks(outC)') < chinSrc.indexOf('Object.keys(outC).forEach(reapplyPending)')
             && chinSrc.includes("if (typeof noteHostChar === 'function') noteHostChar(c1); if (c1.partial || c1.ownerId !== net.myId) dropP(c1.id);") && /\n    if \(typeof styleLay === 'function'\) styleLay\(charId\);[^\n]*\n\}\nfunction noteHostCopy\(/.test(pendSrc) && chinSrc.includes("delete _charHost[msg.id]; if (typeof styleGone === 'function') styleGone(msg.id);")
             && /noteHostCopy\(id, cs\.chars\[id\]\.values\); \}\); \}\);[^\n]*\n    if \(typeof noteHostChar === 'function'\) Object\.values\(state\.appState\.campaigns \|\| \{\}\)\.forEach\(function\(cs\) \{[^\n]*noteHostChar\(cs\.chars\[id\]\);/.test(src)
-            && src.includes("if (charLimit) charLimit.reset(); if (typeof styleReset === 'function') styleReset(); }") && /noteHostChar\(cs\.chars\[id\]\); \}\); \}\);[^\n]*\n    if \(typeof styleHostKnows === 'function'\) styleHostKnows\(msg\.looks\);/.test(src) && /combats: combatsFor\(prof\.id\), looks: true, rowText: true, notepad: notepadMsg\(\) \}; if \(sheetFilesHere\(\)\) snap\.sheetFiles = true; gmSignSnap\(snap, conn\); \};/.test(src) && !/_styleKnown|_styleOldSaid|styleHeard/.test(src)
+            && src.includes("if (charLimit) charLimit.reset(); if (typeof styleReset === 'function') styleReset(); }") && /noteHostChar\(cs\.chars\[id\]\); \}\); \}\);[^\n]*\n    if \(typeof styleHostKnows === 'function'\) styleHostKnows\(msg\.looks\);/.test(src) && /combats: combatsFor\(prof\.id, prof\.location\), fights: true, looks: true, rowText: true, notepad: notepadMsg\(\) \}; if \(sheetFilesHere\(\)\) snap\.sheetFiles = true; gmSignSnap\(snap, conn\); \};/.test(src) && !/_styleKnown|_styleOldSaid|styleHeard/.test(src)
             && (() => { const a0 = src.indexOf('function applySnapshot(msg) {'), a = src.indexOf('styleHostKnows(msg.looks);'), z = a < 0 ? -1 : src.indexOf('\n}\n', a), tail = a0 >= 0 && a > a0 && z > a ? src.slice(a + 26, z) : 'styleReset('; return src.split('styleHostKnows(msg.looks)').length === 2 && src.slice(a0, a).indexOf('\n}\n') < 0 && !/styleReset\(|charSessionReset\(|diceSessionReset\(|leaveSession\(|_styleHostOk|styleHostKnows\(/.test(tail); })() && src.split('net.syncCharStyle(').length === 2 && src.split('net.charStyle = function(').length === 2, j(gates));
     }
 })());
@@ -14395,7 +14495,7 @@ pendingChecks.push((async () => {
         fnSrc('function quickHash(', '\n}\n', 'quickHash') + '\n}\n', lineOf('function uniqueIds('), fnSrc('function itemDelta(itemId, clean) {', '\nfunction applyItemDelta(', 'itemDelta'), fnSrc('function playerStroke(', '\n}\n', 'playerStroke') + '\n}\n',
         wholeS('net.sendItem = function('), wholeS('net.broadcastItemFiltered = function('), wholeS('net.itemGone = function('), wholeS('net.pushItems = function('), wholeS('net.summonPlayerToMap = function('), bw('stage'),
         fnSrc('function freeSpotNear(', '\n}\n', 'freeSpotNear') + '\n}\n', fnSrc('function stepOffPortal(', '\n}\n', 'stepOffPortal') + '\n}\n', fnSrc('function portalUnder(', '\n}\n', 'portalUnder') + '\n}\n', fnSrc('function hostTravel(conn, traveler, portal, fromMap, gmHand) {', '\n// The portal item under a token\'s center', 'hostTravel'),
-        lineOf('var _saveSoon = null;'), lineOf('function saveRemoteSoon()'), bw('bpos'), src.slice(src.indexOf('var POSTURE_SET = '), src.indexOf('function sanitizeItem(')), bw('pos'), bw('patch'), bw('fogmove'),
+        lineOf('var _saveSoon = null;'), lineOf('function saveRemoteSoon()'), bw('bpos'), src.slice(src.indexOf('var POSTURE_SET = '), src.indexOf('function sanitizeItem(')), bw('pos'), bw('patch'), bw('fogmove'), ordersSrc,
         'return { snapshot: sanitizeAppState, seedSnap: fogSeedSnapshot, arm: fogArm, heldNote: mapHeldNote, heldOf: mapHeldOf, patchIn: applyClientItemFiltered };'].join('\n');
     const NAMES = ['net', 'SC', 'window', 'peerPaused', 'getActiveCampaign', 'sendFailed', 'peerProfileId', 'lim', 'pushChat', 'state', 'broadcast', '_lastSent', 'setTimeout', 'clearTimeout', 'save', 'toast', 'logEvent', 'renderRoster', 'dropWaitingFor', 'allow', 'render', 'broadcastRoster', 'checkRoomHandouts', 'applyPosToDom', 'bellOut', 'renderNotepad', 'fogNow', 'ensurePlayerToken', 'findLandingRoom', 'landingPoint'];
     const buildHost = new Function(...NAMES, modSrc);
@@ -14771,6 +14871,180 @@ pendingChecks.push((async () => {
             && tipsSaid4.length > 0 && tipsSaid4.every(t => t === '"tip":"round"' || t === '"tip":"square"' || t === '"tip":"flat"') && N.w1.sent.length === 0,
             J([after2, changedN3, hostNow3, sqSame, moved3, ev3, after3, set3, changedN4, same4, ev4, after4, tipsSaid4]));
     }
+})());
+// Fold 2 (backlog 152, docs/FIGHT_CLOCK_DESIGN.md sections 2, 4, 8 and 10): fights have ids of their own, so one map may hold two. net.js run for
+// real on one host world with three fights, two on the Docks and one on the Bridge: the combats slice, everything from combatRefresh to the old names,
+// the orders slice, the pos gate's turnCombatOf, the stage slice, net.itemGone and the turn messages' own branches; and a player's app beside it
+// (the client's combats branch with the combats and orders slices). Each reader is asked of the fight that holds the token or the character
+pendingChecks.push((async () => {
+    const url = f => 'file:///' + path.resolve(path.join(__dirname, '..', 'system', 'app', 'scripts', f)).split(String.fromCharCode(92)).join('/');
+    const Sx = await import(url('systemcore.js')), Fx = await import(url('formula.js')), Dx = await import(url('dicecore.js'));
+    const J = v => JSON.stringify(v), FID = /^f_[a-z0-9]{8}$/;
+    const rdApp = f => fs.readFileSync(path.join(__dirname, '..', 'system', 'app', f), 'utf8').replace(/\r\n/g, '\n');
+    const cbS = between('// [netcheck:combats-start]', '// [netcheck:combats-end]', 'combats'), setS = fnSrc('function combatRefresh() {', '\nnet.combatStep = function', 'combatSet'), stepS = fnSrc('net.combatStep = function', '\nnet.combatEnd = function', 'combatStep');
+    const tcS = fnSrc('function turnCombatOf(', '\n}\n', 'turnCombatOf') + '\n}\n' + lineOf('function moveMode(') + '\n', stgS = between('// [netcheck:stage-start]', '// [netcheck:stage-end]', 'stage');
+    const teS = between('// [netcheck:turnend-start]', '// [netcheck:turnend-end]', 'turnend'), hmS = between('// [netcheck:turnholdmsg-start]', '// [netcheck:turnholdmsg-end]', 'turnholdmsg');
+    const igA = src.indexOf('net.itemGone = function(campId, itemId, title) {'), igS = src.slice(igA, src.indexOf('\n};\n', igA) + 4);
+    const mkH = () => {
+        const toasts = [], logs = [], marks = [], hooks = [], asked = [];
+        const tok = (id, charId, ownerId, more) => Object.assign({ id, type: 'image', isChar: true, charId, x: 0, y: 0, w: 50, h: 50 }, ownerId ? { ownerId } : {}, more || {});
+        const camp = { id: 'k', items: {
+            mDocks: { id: 'mDocks', type: 'map', meta: { title: 'Docks' }, whiteboard: [tok('t_kael', 'c_kael', 'u_a'), tok('t_u7', 'c_u7'), tok('t_sela', 'c_sela', 'u_b'), tok('t_crate', 'c_crate', null, { isChar: false })] },
+            mBridge: { id: 'mBridge', type: 'map', meta: { title: 'Bridge' }, whiteboard: [tok('t_u9', 'c_u9'), tok('t_u8', 'c_u8')] },
+            mEmpty: { id: 'mEmpty', type: 'map', meta: { title: 'Yard' }, whiteboard: [] }, mQuiet: { id: 'mQuiet', type: 'map', meta: { title: 'Quay' }, whiteboard: [] } },
+            chars: { c_kael: { id: 'c_kael', name: 'Kael', ownerId: 'u_a', values: {} }, c_u7: { id: 'c_u7', name: 'Unit 7', npc: true, values: {} }, c_sela: { id: 'c_sela', name: 'Sela', ownerId: 'u_b', values: {} }, c_u9: { id: 'c_u9', name: 'Unit 9', npc: true, values: {} }, c_u8: { id: 'c_u8', name: 'Unit 8', npc: true, values: {} }, c_crate: { id: 'c_crate', name: 'Crate', npc: true, values: {} } } };
+        const mk = p => ({ peer: p, open: true, sent: [], send(m) { packCheck(m); this.sent.push(JSON.parse(J(m))); } }), conns = [mk('pA'), mk('pB'), mk('pC')];
+        const net = { active: true, role: 'host', myId: 'u_gm', conns, roster: { pA: { id: 'u_a', name: 'Pat', location: 'mDocks' }, pB: { id: 'u_b', name: 'Bea', location: 'mDocks' }, pC: { id: 'u_c', name: 'Cy', location: 'mBridge' } }, combats: {}, targets: {}, turnSpent: {}, paused: false };
+        const env = { net, window: { wpVtt: { on: () => true }, wpSheets: { roundHook: (m, c) => hooks.push('R:' + m + ':' + c.round), turnHook: m => hooks.push('T:' + m) } }, getActiveCampaign: () => camp, SC: () => Sx,
+            own: H.own, toast: t => toasts.push(t), logEvent: (k, t) => logs.push(t), render() {}, console: { error: e => { throw e; } }, showConfirm: (t, cb) => { asked.push(t); cb(true); }, sendFailed: e => { throw e; },
+            anyFog: () => false, fogDrop: () => null, broadcast: () => { throw new Error('the fights go to each connection on its own'); }, marksStart: m => marks.push('start:' + m), marksEnd: m => marks.push('end:' + m), renderNotepad() {},
+            ensurePlayerToken() {}, peerPaused: () => false, allow: () => true, saveRemoteSoon() {}, pushChat() {}, _lastSent: {} };
+        const api = new Function(...Object.keys(env), "'use strict';\n" + cbS + '\n' + setS + '\n' + stepS + '\n' + ordersSrc + '\n' + tcS + '\n' + stgS + '\n' + igS
+            + '\nreturn { turnCombatOf: turnCombatOf, actsCombat: actsCombat, initIntoFight: initIntoFight, stageConn: stageConn, fightIds: fightIds, hidSig: combatHidSigNow, sentForget: combatsSentForget, sentSeed: combatsSentSeed, forgetAll: function() { combatForget(); }, turnEnd: function(msg, conn) {\n' + teS + '\n}, turnHold: function(msg, conn) {\n' + hmS + '\n} };')(...Object.values(env));
+        return { net, camp, api, toasts, logs, marks, hooks, conns, asked };
+    };
+    {   // found live: End on a map of three fights said "The other fight there goes on."
+        const E = mkH(), rowE = (tokId, name) => ({ id: 'r' + tokId, name, tokId, init: 0, src: null });
+        const e1 = E.net.fightSet(null, { mapId: 'mDocks', round: 2, turn: 0, rows: [rowE('t_kael', 'Kael')] }), e2 = E.net.fightSet(null, { mapId: 'mDocks', round: 1, turn: 0, rows: [rowE('t_u7', 'Unit 7')] }), e3 = E.net.fightSet(null, { mapId: 'mDocks', round: 1, turn: 0, rows: [rowE('t_sela', 'Sela')] });
+        const endE = [];
+        [e1, e2, e3].forEach(f => { E.asked.length = 0; E.net.fightEnd(f); endE.push([E.asked.slice(), E.net.fightsOn('mDocks').length]); });
+        check('fold 2 (net.js fightEnd, run for real; found live): End asks first, and on a map of three fights says that the other 2 go on, then that the other one goes on, and for the last that the ring and the turn strip go for everyone; each yes ends that fight alone',
+            J(endE) === J([[['End combat on Docks? Round 2, 1 in the order. The other 2 fights there go on.'], 2], [['End combat on Docks? Round 1, 1 in the order. The other fight there goes on.'], 1], [['End combat on Docks? Round 1, 1 in the order. The ring and the turn strip go for everyone.'], 0]]), J(endE));
+    }
+    const W = mkH(), N = W.net, A = W.api, camp = W.camp, wb = id => camp.items.mDocks.whiteboard.find(w => w.id === id), rowOf = (tokId, name) => ({ id: 'r' + tokId, name, tokId, init: 0, src: null });
+    const f1 = N.fightSet(null, { mapId: 'mDocks', round: 1, turn: 0, rows: [rowOf('t_kael', 'Kael'), rowOf('t_u7', 'Unit 7'), rowOf('t_crate', 'Crate')] });
+    const f2 = N.fightSet(null, { mapId: 'mDocks', round: 1, turn: 0, rows: [rowOf('t_sela', 'Sela'), rowOf('t_kael', 'Kael')] });   // Kael is in the first fight already: his row stays out of the second
+    const f3 = N.fightSet(null, { mapId: 'mBridge', round: 1, turn: 0, rows: [rowOf('t_u9', 'Unit 9')] }), marksStarted = W.marks.slice();
+    const g1 = { ids: [f1, f2, f3].every(x => FID.test(x)) && new Set([f1, f2, f3]).size === 3, docks: J(N.fightsOn('mDocks')) === J([f1, f2]), bridge: J(N.fightsOn('mBridge')) === J([f3]), f2rows: N.combats[f2].rows.map(r => r.id),
+        on: N.fightOn === f3, forDocks: N.combatFor('mDocks') === N.combats[f1], forBridge: N.combatFor('mBridge') === N.combats[f3], noFight: N.combatFor('mEmpty') };
+    N.fightPlay(f2); g1.played = [N.fightOn === f2, N.combatFor('mDocks') === N.combats[f2], N.fightPlay('f_nothere1')]; N.fightPlay(f1);
+    g1.tok = [N.combatOfTok('mDocks', 't_sela') === N.combats[f2], N.combatOfTok('mDocks', 't_kael') === N.combats[f1], N.combatOfTok('mBridge', 't_u9') === N.combats[f3], N.combatOfTok('mDocks', 't_u9'), N.combatOfTok('mDocks', 'constructor')];
+    g1.order = [N.orderOf('c_kael') === f1, N.orderOf('c_sela') === f2, N.orderOf('c_u9') === f3, N.orderOf('c_crate'), N.charInCombat('c_crate'), N.charInCombat('c_sela'), N.orderOf('c_none'), N.orderOf('__proto__')];
+    check('fold 2 (backlog 152, run for real): fights have ids of their own (f_ and 8 of a-z0-9), two on the Docks and one on the Bridge, listed by their map in the order begun; a token is in one fight at most, so Kael\'s row stays out of the second fight on the Docks; a new fight is the one played, and net.combatFor answers the fight played on a map, else the first begun there; net.combatOfTok the fight that holds a token; the marks start with a map\'s first fight only',
+        g1.ids && g1.docks && g1.bridge && J(g1.f2rows) === J(['rt_sela']) && g1.on && g1.forDocks && g1.forBridge && g1.noFight === null && J(g1.played) === J([true, true, false]) && J(g1.tok) === J([true, true, true, null, null])
+        && J(marksStarted) === J(['start:mDocks', 'start:mBridge']), J([g1, marksStarted]));
+    check('fold 2: net.orderOf is the one judge of which fight a character is in, by combatChars\' rule — a character token of a character of the campaign, a hidden token counted too — so a token with Is Character unticked puts its character in no fight (its timed effects run as outside one: net.charInCombat), where it used to stop them without ever ticking them; a character that is none, or a prototype\'s name, is in none',
+        J(g1.order) === J([true, true, true, null, false, true, null, null]) && /function charCombat\(camp, charId\) \{[^\n]*\n    var fid = orderOfIn\(camp, charId\); return fid \? \{ mapId: net\.combats\[fid\]\.mapId, combat: net\.combats\[fid\] \} : null;\n\}/.test(src) && (src.match(/function orderOfIn\(/g) || []).length === 1, J(g1.order));
+    // fold 2's review: the one judge reads Is Character as combatChars reads it, any word that is true (a file may write 1 or yes), so such a character
+    // is in its fight for both; read as true alone, it was a fighter to the round and turn hooks and in no fight to net.orderOf, its timed effects running
+    const ischar = [1, 'yes', true, 0, false, null].map(v => { wb('t_u7').isChar = v; return [N.orderOf('c_u7') === f1, Sx.combatChars(camp.items.mDocks, N.combats[f1], camp.chars).some(x => x.charId === 'c_u7'), N.charInCombat('c_u7')]; }); wb('t_u7').isChar = true;
+    check('fold 2\'s review: net.orderOf reads a token\'s Is Character as combatChars reads it — any word that is true, as a file may write 1 or yes, puts its character in its fight for both, and net.charInCombat says so; a word that is false puts it in none for both',
+        J(ischar) === J([[true, true, true], [true, true, true], [true, true, true], [false, false, false], [false, false, false], [false, false, false]]), J(ischar));
+    // each reader asked of the right fight
+    const g2 = { tc: [A.turnCombatOf(camp, 'mDocks', wb('t_sela')) === N.combats[f2], A.turnCombatOf(camp, 'mDocks', wb('t_kael')) === N.combats[f1], A.turnCombatOf(camp, 'mDocks', wb('t_u7')) === N.combats[f1], A.turnCombatOf(camp, 'mEmpty', wb('t_kael'))],
+        acts: [A.actsCombat(camp, 'c_sela', N.roster.pB) === N.combats[f2], A.actsCombat(camp, 'c_kael', N.roster.pA) === N.combats[f1], A.actsCombat(camp, 'c_kael', N.roster.pC)] };
+    g2.init = [A.initIntoFight(camp, 'mDocks', 'c_sela', 'u_b', 12), N.combats[f2].rows[0].init, N.combats[f2].rows[0].rolled, N.combats[f1].rows.every(r => !r.rolled)];
+    const st = () => [N.combats[f1].round, N.combats[f1].turn, N.combats[f2].round, N.combats[f2].turn, N.combats[f3].round];
+    const s0 = st(); A.turnEnd({ type: 'turn-end', mapId: 'mDocks', row: 'rt_sela' }, W.conns[1]); const s1 = st();
+    A.turnEnd({ type: 'turn-end', mapId: 'mDocks', row: 'rt_kael' }, W.conns[0]); const s2 = st();
+    A.turnEnd({ type: 'turn-end', mapId: 'mDocks', row: 'rt_sela' }, W.conns[0]); const s3 = st();   // Pat ends a turn that is Sela's: nothing
+    A.turnHold({ type: 'turn-hold', mapId: 'mDocks', row: 'rt_sela' }, W.conns[1]); const s4 = st();
+    check('fold 2 (run for real): each reader asks the fight that holds the token or the character — the pos gate\'s turnCombatOf, the actions a turn allows (actsCombat), a player\'s initiative roll into the fight (initIntoFight, Sela\'s in the second fight and nothing of the first) — and the turn messages find their fight by the row, carrying nothing new: Sela\'s End turn steps the second fight, Kael\'s the first, Pat ending a turn that is Sela\'s does nothing, and Sela\'s hold moves her own fight alone',
+        J(g2.tc) === J([true, true, true, null]) && J(g2.acts) === J([true, true, null]) && J(g2.init) === J([true, 12, 1, true])
+        && J([s0, s1, s2, s3, s4]) === J([[1, 0, 1, 0, 1], [1, 0, 2, 0, 1], [1, 1, 2, 0, 1], [1, 1, 2, 0, 1], [1, 1, 3, 0, 1]]), J([g2, s0, s1, s2, s3, s4]));
+    // fold 2's review: what the table was told of hidden rows (combatHidSigNow) is read fight by fight, so hiding a token of the second fight on the
+    // Docks moves it as hiding one of the first does; and a copy of a fogged map that leaves out or brings back a token of the second fight there
+    // changes what that connection's order holds (fogSeed), as one of the first does
+    const sg0 = A.hidSig(); wb('t_sela').hidden = true; const sg1 = A.hidSig(); wb('t_sela').hidden = false; wb('t_kael').hidden = true; const sg2 = A.hidSig(); wb('t_kael').hidden = false; const sg3 = A.hidSig();
+    const fsS = (() => { const i = src.indexOf('function fogSeed(conn, mapId, out) {'), e = src.indexOf('\n}\n', i); return i < 0 || e < 0 ? 'function fogSeed() { throw new Error("fogSeed is not found"); }' : src.slice(i, e + 3); })();
+    const netF = { combats: { f_dock0001: { id: 'f_dock0001', mapId: 'mDocks', round: 1, turn: 0, rows: [{ id: 'rt_kael', tokId: 't_kael' }] }, f_dock0002: { id: 'f_dock0002', mapId: 'mDocks', round: 1, turn: 0, rows: [{ id: 'rt_sela', tokId: 't_sela' }] } }, targets: {} };
+    const seedF = new Function('net', 'own', 'getActiveCampaign', "'use strict';\nvar _fogHeld = Object.create(null); function quickHash(s) { return s; }\n" + ordersSrc + '\n' + fsS + '\nreturn fogSeed;')(netF, H.own, () => null);
+    const cF = { peer: 'pB' }, wbOf = ids => ({ whiteboard: ids.map(id => ({ id })) });
+    const seedR = [['t_kael', 't_sela', 't_crate'], ['t_kael', 't_sela', 't_crate'], ['t_kael', 't_crate'], ['t_kael', 't_sela', 't_crate'], ['t_kael', 't_sela'], ['t_sela']].map(ids => seedF(cF, 'mDocks', wbOf(ids)));
+    check('fold 2\'s review (combatHidSigNow and fogSeed, run for real): hiding a token of the second fight on a map moves what the table was told of hidden rows, as one of the first does, and showing it again puts it back; a copy of a fogged map that leaves out a token of the second fight there, or brings it back, changes what that connection\'s turn order holds, as one of the first does, and a piece that is in no fight changes nothing',
+        sg1 !== sg0 && sg2 !== sg0 && sg2 !== sg1 && sg3 === sg0 && J(seedR) === J([true, false, true, true, false, true]), J([sg0, sg1, sg2, seedR]));
+    // what each connection is sent: the fights on the map it is on, under their own ids, nothing of the host's own; a stage sends them after the word
+    const lastC = c => c.sent.filter(m => m.type === 'combats').pop(), ca = lastC(W.conns[0]), cb = lastC(W.conns[1]), cc = lastC(W.conns[2]), allSent = J(W.conns.map(c => c.sent));
+    const kinds = c => c.sent.map(m => m.type + (m.type === 'combats' ? ':' + Object.keys(m.combats).join(',') : ''));
+    W.conns[2].sent.length = 0; A.stageConn(W.conns[2], { campId: 'k', itemId: 'mDocks' }, true); const stg1 = kinds(W.conns[2]);
+    W.conns[2].sent.length = 0; A.stageConn(W.conns[2], { campId: 'k', itemId: 'mEmpty' }, true); const stg2 = kinds(W.conns[2]);
+    W.conns[2].sent.length = 0; A.stageConn(W.conns[2], { campId: 'k', itemId: 'mQuiet' }, true); const stg3 = kinds(W.conns[2]);
+    check('fold 2 (run for real): each connection is sent the fights on the map it is on, under their own ids in the order begun — Pat and Bea the two on the Docks, Cy the one on the Bridge — each fight naming its map and id, and never a fight\'s count, last rolled round or a row\'s number; a stage sends that connection the fights on the map it now stands on, after the stage word, and the empty list where it left a fight for a map with none; between two maps with no fight it sends none',
+        J(Object.keys(ca.combats)) === J([f1, f2]) && J(cb) === J(ca) && J(Object.keys(cc.combats)) === J([f3]) && J(Object.values(ca.combats).map(f => [f.id, f.mapId])) === J([[f1, 'mDocks'], [f2, 'mDocks']]) && !/"n":|"rr":|"init":|"rolled":|"tb":/.test(allSent)
+        && J(stg1) === J(['stage', 'combats:' + f1 + ',' + f2]) && J(stg2) === J(['stage', 'combats:']) && J(stg3) === J(['stage']), J([Object.keys(ca.combats), Object.keys(cc.combats), stg1, stg2, stg3]));
+    // fold 2's review: a fight that moves on another map sends a connection nothing at all. Before, everyone was sent a copy at every step of any fight,
+    // an empty one to a player on a map with none, which told them that a fight ran elsewhere and how fast. A copy that changed still goes; the record
+    // of what each connection holds is forgotten with the connection and at a new table, and the join snapshot seeds it
+    const cmbN = () => W.conns.map(c => c.sent.filter(m => m.type === 'combats').length), clearW = () => W.conns.forEach(c => { c.sent.length = 0; });
+    clearW(); N.fightStep(f3, 1); N.fightStep(f3, 1); const q1 = cmbN();   // the Bridge's fight: Pat and Bea are on the Docks, Cy on the Quay
+    N.roster.pC.location = 'mBridge'; clearW(); N.fightStep(f3, 1); const q2 = cmbN();   // Cy now on the Bridge: its fight is news to him
+    clearW(); N.fightStep(f2, 1); const q3 = cmbN(), q3b = Object.keys((W.conns[1].sent.filter(m => m.type === 'combats').pop() || { combats: {} }).combats);   // the Docks' second fight: Pat and Bea
+    A.sentForget('pA'); clearW(); N.fightStep(f3, 1); const q4 = cmbN(), patCopy = (W.conns[0].sent.filter(m => m.type === 'combats').pop() || {}).combats;   // Pat's connection gone and back: he is sent his copy again
+    A.forgetAll(); clearW(); N.fightStep(f3, 1); const q5 = cmbN();   // a new table: everyone
+    A.sentForget('pA'); A.sentSeed(W.conns[0], patCopy); clearW(); N.fightStep(f3, 1); const q6 = cmbN();   // Pat's snapshot carried his copy: nothing more
+    N.roster.pC.location = 'mQuiet';
+    check('fold 2\'s review (broadcastCombats, run for real): a fight that moves on another map sends a connection nothing at all — Pat and Bea on the Docks and Cy on the Quay hear nothing of two steps of the Bridge\'s fight, where each was sent a copy at every step before — while a copy that changed still goes: Cy, now on the Bridge, its fight; Pat and Bea a step of the Docks\' second fight; Pat his copy again once his connection is gone and back, and everyone at a new table; a copy the join snapshot carried is not sent again',
+        J(q1) === J([0, 0, 0]) && J(q2) === J([0, 0, 1]) && J(q3) === J([1, 1, 0]) && J(q3b) === J([f1, f2]) && J(q4) === J([1, 0, 1]) && J(q5) === J([1, 1, 1]) && J(q6) === J([0, 0, 1]), J([q1, q2, q3, q4, q5, q6]));
+    // the end of each: the marks end with a map's last fight; the fight played handed on; a deleted map ends every fight on it
+    W.marks.length = 0; N.fightSet(f1, null); const mEnd1 = W.marks.slice(), on1 = N.fightOn === f2; N.fightSet(f2, null); const mEnd2 = W.marks.slice(), on2 = N.fightOn === f3;
+    W.marks.length = 0; const f4 = N.fightSet(null, { mapId: 'mBridge', round: 1, turn: 0, rows: [rowOf('t_u8', 'Unit 8')] }), mF4 = W.marks.slice(); W.toasts.length = 0;
+    delete camp.items.mBridge; N.itemGone('k', 'mBridge', 'Bridge'); const gone = { left: A.fightIds(), marks: W.marks.slice(), on: N.fightOn, toasts: W.toasts.filter(t => t === 'Combat ended on Bridge.').length, f4: FID.test(f4) };
+    check('fold 2 (run for real): the marks end only with a map\'s last fight (the first fight on the Docks ends and the marks stay held for the second; the second ends and they end); the fight played that ends hands on to the first begun of those left; a second fight on the Bridge starts no marks again, and deleting the Bridge ends both fights on it, each with its notice, and the marks there once',
+        J(mEnd1) === J([]) && on1 && J(mEnd2) === J(['end:mDocks']) && on2 && J(mF4) === J([]) && J(gone) === J({ left: [], marks: ['end:mBridge'], on: null, toasts: 2, f4: true }), J([mEnd1, mEnd2, mF4, gone]));
+    // a player's roll reads CombatRound from the fight that holds its token (roll-req, run for real over the hud-d20 fixture)
+    const rqS = between('// [netcheck:rollreq-start]', '// [netcheck:rollreq-end]', 'rollreq'), helpersR = ['function own(', 'function peerProfileId(', 'function fxLib(', 'function itemLib(', 'function diceFrom('].map(k => lineOf(k)).join('\n') + '\n';
+    const gmSys = Sx.cleanSystem(JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'hud-d20.json'), 'utf8')), { F: Fx, gmView: true });
+    const rollAs = (charId, ownerId, peer, tokId) => {
+        const campR = { id: 'k', activeItemId: 'mDocks', system: gmSys, chars: { [charId]: { id: charId, name: 'X', ownerId, npc: false, values: { f_str: 14, f_level: 5 } } }, items: { mDocks: { type: 'map', whiteboard: [{ id: tokId, isChar: true, charId, ownerId, x: 0, y: 0 }] } } };
+        const netR = { active: true, role: 'host', paused: false, roster: { [peer]: { id: ownerId, name: 'P', location: 'mDocks' } }, combats: { f_dock0001: { id: 'f_dock0001', mapId: 'mDocks', round: 2, turn: 0, rows: [{ id: 'rt_kael', tokId: 't_kael' }] }, f_dock0002: { id: 'f_dock0002', mapId: 'mDocks', round: 7, turn: 0, rows: [{ id: 'rt_sela', tokId: 't_sela' }] } } };
+        const out = [];
+        new Function('msg', 'conn', 'net', 'DC', 'SC', 'window', 'getActiveCampaign', 'peerPaused', 'sendFailed', 'sendTable', 'pushRoll', 'logEvent', 'var diceLimit = null, _diceSlowSaid = {};\n' + helpersR + ordersSrc + "\nnet.fightOn = 'f_dock0002';   // the GM plays the second fight (set after the slice, which starts with none)\n" + rqS)(
+            { type: 'roll-req', rid: 'q1', expr: 'd20 + RoundNow', charId }, { peer, send() {} }, netR, () => Dx, () => Sx, { wpFormula: Fx, wpSheets: { playerSystem: c => Sx.cleanSystem(c.system, { F: Fx, gmView: false }) }, wpVtt: { on: () => true, rulesOn: () => true } }, () => campR, () => false, e => { throw e; }, rec => out.push(rec), () => {}, () => {});
+        const r = out[0]; return r ? (r.names || []).filter(x => x.name === 'RoundNow').map(x => x.value)[0] : 'none';
+    };
+    const rounds = [rollAs('c_kael', 'u_a', 'pA', 't_kael'), rollAs('c_sela', 'u_b', 'pB', 't_sela'), rollAs('c_rook', 'u_c', 'pC', 't_rook')];
+    check('fold 2 (roll-req, run for real): a player\'s roll reads CombatRound from the fight that holds their token, two fights on one map in rounds 2 and 7 — Kael\'s reads 2 and Sela\'s 7 — and one whose token is in neither reads the first begun there, though the GM plays the second (fold 2\'s review: as the player\'s own sheet reads it, net.combatRoundOf; the fight played is the host\'s own and never sent)',
+        J(rounds) === J([2, 7, 2]), J(rounds));
+    // a player's app: the toasts follow the fight that holds their token on the map on screen; a newer player at an older host reads today's shape
+    const cbr = (() => { const a = src.indexOf("} else if (msg.type === 'combats' && net.role === 'client') {"), b = src.indexOf("    } else if (msg.type === 'targets' && net.role === 'client') {", a); return a < 0 || b < 0 ? 'throw new Error("the combats branch is not found");' : src.slice(src.indexOf('\n', a) + 1, b); })();
+    const mkC = () => {
+        const toasts = [], campC = { activeItemId: 'mDocks', items: { mDocks: { id: 'mDocks', type: 'map', whiteboard: [{ id: 't_sela', isChar: true, ownerId: 'u_b' }, { id: 't_kael', isChar: true, ownerId: 'u_a' }] } } }, netC = { role: 'client', myId: 'u_b', combats: {} };
+        const apiC = new Function('net', 'getActiveCampaign', 'toast', 'fromHost', 'combatRefresh', "'use strict';\n" + cbS + '\n' + ordersSrc + '\nreturn { know: fightsKnow, cleanCombats: cleanCombats, cleanFights: cleanFights, got: function(msg, conn) {\n' + cbr + '\n} };')(netC, () => campC, t => toasts.push(t), () => true, () => {});
+        return { net: netC, api: apiC, toasts };
+    };
+    const O = mkC(); O.api.know(undefined); O.api.got({ type: 'combats', combats: { mDocks: { mapId: 'mDocks', round: 1, turn: 0, rows: [{ id: 'rt_sela', name: 'Sela', tokId: 't_sela' }] } } }, {});
+    const old1 = [Object.keys(O.net.combats), O.net.combats.mDocks && O.net.combats.mDocks.round, O.toasts.slice(), O.net.fightsOn('mDocks')];
+    const O2 = mkC(); O2.api.know('yes'); O2.api.got({ type: 'combats', combats: { mDocks: { mapId: 'mDocks', round: 1, turn: 0, rows: [{ id: 'x', name: 'X' }] } } }, {}); const old2 = Object.keys(O2.net.combats);
+    const two = (t1, t2) => ({ type: 'combats', combats: { f_dock0001: { id: 'f_dock0001', mapId: 'mDocks', round: 1, turn: t1, rows: [{ id: 'rt_kael', name: 'Kael', tokId: 't_kael' }, { id: 'c_u7', name: 'Unit 7', tokId: null }] }, f_dock0002: { id: 'f_dock0002', mapId: 'mDocks', round: 1, turn: t2, rows: [{ id: 'rt_sela', name: 'Sela', tokId: 't_sela' }, { id: 'c_u8', name: 'Unit 8', tokId: null }] } } });
+    const Nw = mkC(); Nw.api.know(true); Nw.api.got(two(0, 0), {}); const n1 = Nw.toasts.slice();
+    Nw.api.got(two(1, 0), {}); const n2 = Nw.toasts.length; Nw.api.got(two(1, 1), {}); const n3 = Nw.toasts.slice(-1);
+    Nw.api.got({ type: 'combats', combats: { f_dock0001: two(1, 1).combats.f_dock0001 } }, {}); const n4 = [Nw.toasts.slice(-1), Object.keys(Nw.net.combats)];
+    Nw.api.got({ type: 'combats', combats: { mDocks: { mapId: 'mDocks', round: 1, turn: 0, rows: [{ id: 'x', name: 'X' }] } } }, {}); const n5 = Object.keys(Nw.net.combats);
+    check('fold 2 (a player\'s app, the combats branch run for real): a host that says fights (true only) is read by the fights\' own ids, two on one map; the toasts follow the fight that holds this player\'s token on the map on screen — "Combat! Sela\'s turn." as it begins, nothing when the other fight there moves on, her own fight\'s next turn, and "Combat is over." when her fight ends while the other goes on — and a map-keyed copy from such a host holds no fight; a newer player at an older host, which says nothing of fights (or says something that is not true), reads today\'s shape exactly, by the map',
+        J(old1) === J([['mDocks'], 1, ["Combat! Sela's turn."], ['mDocks']]) && J(old2) === J(['mDocks']) && J(n1) === J(["Combat! Sela's turn."]) && n2 === 1 && J(n3) === J(["Unit 8's turn."]) && J(n4) === J([['Combat is over.'], ['f_dock0001']]) && J(n5) === J([]),
+        J([old1, old2, n1, n2, n3, n4, n5]));
+    // fold 2's review: a player's app finds the turn of theirs in whichever fight on the map holds it (net.myTurnTok, run for real over the orders slice),
+    // and its End turn names that row, which the host finds its fight by: Sela on turn in the second fight on the Docks, Kael in the first
+    const mtS = (() => { const a = src.indexOf('net.myTurnTok = function() {'), b = src.indexOf('\nnet.turnAct = function(rowId) {', a); return a < 0 || b < 0 ? 'throw new Error("net.myTurnTok is not found");' : src.slice(a, b); })();
+    const myTurn = (me, t1, t2) => {
+        const sentT = [], campT = { activeItemId: 'mDocks', items: { mDocks: { id: 'mDocks', type: 'map', whiteboard: [{ id: 't_kael', isChar: true, ownerId: 'u_a' }, { id: 't_sela', isChar: true, ownerId: 'u_b' }, { id: 't_u7', isChar: true }] } } };
+        const netT = { active: true, role: 'client', stream: false, myId: me, foreign: true, syncedPeer: 'h', conns: [{ peer: 'h', open: true, send(m) { sentT.push(JSON.parse(J(m))); } }], combats: two(t1, t2).combats };
+        new Function('net', 'getActiveCampaign', 'window', 'own', "'use strict';\n" + ordersSrc + '\n' + mtS)(netT, () => campT, { wpVtt: { on: () => true } }, H.own);
+        const t = netT.myTurnTok(), e = netT.turnEnd(); return [t ? [t.fid, t.rowId, t.tok.id] : null, e.ok === true ? sentT : e.error];
+    };
+    const mt = [myTurn('u_b', 1, 0), myTurn('u_a', 0, 0), myTurn('u_b', 1, 1), myTurn('u_a', 1, 0)];
+    check('fold 2\'s review (a player\'s app, net.myTurnTok and net.turnEnd run for real): Sela on turn in the second fight on the Docks finds it there, with Unit 7 on turn in the first, and her End turn names her row; Kael on turn in the first finds his; neither finds a turn of someone else\'s',
+        J(mt) === J([[['f_dock0002', 'rt_sela', 't_sela'], [{ type: 'turn-end', mapId: 'mDocks', row: 'rt_sela' }]], [['f_dock0001', 'rt_kael', 't_kael'], [{ type: 'turn-end', mapId: 'mDocks', row: 'rt_kael' }]], [null, 'It is not your turn.'], [null, 'It is not your turn.']]), J(mt));
+    // a hostile host's "__proto__" key: a key like any other, never the copy's prototype, by either reader; an id that is no fight's dropped
+    const hostileOld = JSON.parse('{"__proto__":{"mapId":"mDocks","round":5,"turn":0,"rows":[{"id":"x","name":"Evil"}]},"mDocks":{"mapId":"mDocks","round":1,"turn":0,"rows":[{"id":"y","name":"Y"}]}}');
+    const hostileNew = JSON.parse('{"__proto__":{"id":"f_aaaaaaaa","mapId":"mDocks","rows":[{"id":"x"}]},"f_bbbbbbbb":{"mapId":"mDocks","rows":[{"id":"z"}]},"f_BAD12345":{"mapId":"mDocks","rows":[{"id":"q"}]},"f_cccccccc":{"mapId":"","rows":[{"id":"q"}]},"f_dddddddd":{"mapId":"mDocks","rows":[]}}');
+    const oc = O.api.cleanCombats(hostileOld), nc = O.api.cleanFights(hostileNew), Hc = mkC(); Hc.api.know(false); Hc.api.got({ type: 'combats', combats: hostileOld }, {});
+    const hp = [Object.getPrototypeOf(oc) === null, Object.keys(oc).sort(), oc.round, oc.rows, Object.getPrototypeOf(nc) === null, Object.keys(nc), nc.f_bbbbbbbb && nc.f_bbbbbbbb.id, nc.rows, Object.getPrototypeOf(Hc.net.combats) === null, ({}).round, Hc.net.combats.round];
+    check('fold 2 (security): a hostile host\'s "__proto__" key is a key like any other — the reader of an older host\'s shape (cleanCombats) and the reader by id (cleanFights) build into an object with no prototype, so no fight becomes the copy\'s prototype (before, the older reader took it as one: the copy then read that fight\'s round and rows for any name); cleanFights keeps only an id of f_ and 8 of a-z0-9 with a map\'s id and a row, and names each fight by its key; nothing reaches Object.prototype',
+        J(hp) === J([true, ['__proto__', 'mDocks'], null, null, true, ['f_bbbbbbbb'], 'f_bbbbbbbb', null, true, null, null]), J(hp));
+    // the wiring
+    const snapAt = src.indexOf('function applySnapshot(msg) {'), snapEnd = src.indexOf('\n}\n', snapAt), snapBody = snapAt > 0 && snapEnd > snapAt ? src.slice(snapAt, snapEnd) : '';
+    const wbSrcR = rdApp('scripts/whiteboard.js'), shSrcR = rdApp('scripts/sheets.js');
+    check('fold 2\'s review (source): the join snapshot seeds what its connection holds of the fights, and its close (fogForgetConn) and a new table (combatForget) forget it; CombatRound reads net.combatRoundOf in the host\'s roll for a player, in an apply action and on the sheet, never the fight the GM plays; the board\'s ring on a token whose turn it is asks every fight on the map through onTurnHere',
+        /\n    if \(snapOk && typeof combatsSentSeed === 'function'\) combatsSentSeed\(conn, snap\.combats\);/.test(src) && /function fogForgetConn\(peer\) \{[^\n]*if \(typeof combatsSentForget === 'function'\) combatsSentForget\(peer\); \}/.test(src)
+        && /function combatForget\(fid\) \{ if \(fid === undefined\) \{ _combatSeen = Object\.create\(null\); _combatsSent = Object\.create\(null\); \}/.test(src)
+        && (src.match(/net\.combatRoundOf\(/g) || []).length === 2 && !/net\.combatFor\(loc[QA]\)/.test(src) && (shSrcR.match(/n\.combatRoundOf\(/g) || []).length === 1
+        && /el\.classList\.toggle\('wb-turn', onTurnHere\(window\.wpNet, activeMap\.id, item\.id\)\);/.test(wbSrcR) && (wbSrcR.match(/onTurnHere\(/g) || []).length === 2);
+    check('fold 2 (source): the join snapshot says fights (true) and carries the fights on the map the player lands on; a player\'s app takes the word through typeof before it reads the snapshot\'s fights and reads every later copy by it; nothing of the host reads a fight by its map\'s id any more (net.js, whiteboard.js, pills.js and sheets.js); fights start, change and end in fightSet alone and end in combatOver alone; the host\'s branches are still 28',
+        /combats: combatsFor\(prof\.id, prof\.location\), fights: true,/.test(src) && /\n    if \(typeof fightsKnow === 'function'\) fightsKnow\(msg\.fights\);[^\n]*\n    net\.combats = typeof cleanFightsIn === 'function' \? cleanFightsIn\(msg\.combats\) : cleanCombats\(msg\.combats\);/.test(snapBody)
+        && src.split('fightsKnow(').length === 3 && /var before = net\.combats, after = typeof cleanFightsIn === 'function' \? cleanFightsIn\(msg\.combats\) : cleanCombats\(msg\.combats\);/.test(src)
+        && !/combats\[(mapId|am\.id|map\.id|activeMap\.id|combatDraft\.mapId|getActiveMap\(\)\.id|msg\.mapId|locQ|locA|pr\.location|mid)\]/.test(src + rdApp('scripts/whiteboard.js') + rdApp('scripts/pills.js') + rdApp('scripts/sheets.js'))
+        && (src.match(/net\.combats\[fid\] = f;/g) || []).length === 1 && (src.match(/combatOver\(/g) || []).length === 4 && (src.match(/msg\.type === '[a-z-]+' && net\.role === 'host'/g) || []).length === 28);
 })());
 Promise.all(pendingChecks).then(() => {   // the async checks land before the summary
     /* ---- 1.5.4: the follow ruling (the owner, 2026-10-04): nobody follows the GM around unless the table is set to ---- */

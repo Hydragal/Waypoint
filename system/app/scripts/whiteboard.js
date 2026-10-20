@@ -950,8 +950,7 @@ import { cssColor, picRef } from './safecore.js';   // a map from a file: colour
           if (clientView) { el.style.display = absentOwner ? 'none' : ''; }
 
           else { el.style.display = ''; el.classList.toggle('wb-absent', absentOwner); }
-          var combatR = window.wpNet && window.wpNet.active && window.wpNet.combats && window.wpNet.combats[activeMap.id];
-          el.classList.toggle('wb-turn', !!(combatR && combatR.rows[combatR.turn] && combatR.rows[combatR.turn].tokId === item.id));
+          el.classList.toggle('wb-turn', onTurnHere(window.wpNet, activeMap.id, item.id));   // fold 2: on turn in any fight on this map
           if (state.selWbIds && state.selWbIds.includes(item.id) && state.selWbIds.length > 1) { el.style.boxShadow = '0 0 0 2px var(--gold)'; } else { el.style.boxShadow = _isPortal ? ('inset 0 0 0 4px ' + _pc) : 'none'; }   // keep the portal ring when not multi-selected
 
           
@@ -8114,10 +8113,19 @@ function castMenuHtml(camp) {
     return html;
 }
 /* ---------- combat: roster panel (GM) and the turn strip (everyone) ---------- */
-var combatDraft = null;   // { mapId, rows:[{id,name,tokId,init,src,on}], running }
+var combatDraft = null;   // { mapId, fid, rows:[{id,name,tokId,init,src,on,busy}], running }: fid, the fight it edits (fold 2), null for a new one
+function fightsHere(mapId) { var n = window.wpNet; return n && typeof n.fightsOn === 'function' ? n.fightsOn(mapId) : []; }   // fold 2: the fights on a map, in the order begun
+// [lookcheck:onturn-start]
+// Fold 2's review: the board's ring on a token whose turn it is, in any fight on that map, while a table is up
+function onTurnHere(n, mapId, tokId) {
+    if (!n || !n.active || typeof n.fightsOn !== 'function' || typeof tokId !== 'string' || !tokId) return false;
+    return n.fightsOn(mapId).some(function(f) { var c = n.combats && n.combats[f], r = c && Array.isArray(c.rows) ? c.rows[c.turn] : null; return !!(r && r.tokId === tokId); });
+}
+// [lookcheck:onturn-end]
 function combatRowsFor(mapId, opts) {
     var camp = getActiveCampaign(), map = camp && camp.items[mapId]; if (!map) return [];
-    var n = window.wpNet, running = n.combats && n.combats[mapId];
+    var n = window.wpNet, fidR = opts && typeof opts.fid === 'string' ? opts.fid : null, running = fidR && n.combats && Object.prototype.hasOwnProperty.call(n.combats, fidR) ? n.combats[fidR] : null;
+    var elsewhere = Object.create(null); fightsHere(mapId).forEach(function(f) { if (f !== fidR) (n.combats[f].rows || []).forEach(function(r) { if (r && typeof r.tokId === 'string') elsewhere[r.tokId] = 1; }); });   // fold 2: a token is in one fight at a time
     var byTok = {}; (running ? running.rows : []).forEach(function(r) { if (r.tokId) byTok[r.tokId] = r; });
     // live target pairs on this map: whoever is targeting (their own token) and whoever they target
     var pair = {}; ((opts && opts.pre) || []).forEach(function(id) { pair[id] = 'targeted'; });
@@ -8128,9 +8136,9 @@ function combatRowsFor(mapId, opts) {
         if (mine) pair[mine.id] = pair[mine.id] || 'targeting';
     });
     var rows = (map.whiteboard || []).filter(function(w) { return w.isChar && !w.hidden; }).map(function(w) {
-        var was = byTok[w.id];
-        var on = !!was || !!pair[w.id];   // only a running combat's rows and the tokens in a target pair start ticked
-        return { id: was ? was.id : 'r' + w.id, name: w.charName || w.name || 'Unnamed', tokId: w.id, init: was ? was.init : 0, rolled: !!(was && was.rolled === 1), tb: was && Array.isArray(was.tb) ? was.tb.slice() : undefined, src: w.src || null, on: on, party: !!w.ownerId, targeted: pair[w.id] || '', charId: w.charId || null };
+        var was = byTok[w.id], busy = !was && elsewhere[w.id] === 1;
+        var on = !busy && (!!was || !!pair[w.id]);   // only a running combat's rows and the tokens in a target pair start ticked; never a token in another fight (fold 2)
+        return { id: was ? was.id : 'r' + w.id, name: w.charName || w.name || 'Unnamed', tokId: w.id, init: was ? was.init : 0, rolled: !!(was && was.rolled === 1), tb: was && Array.isArray(was.tb) ? was.tb.slice() : undefined, src: w.src || null, on: on, busy: busy, party: !!w.ownerId, targeted: pair[w.id] || '', charId: w.charId || null };
     });
     // custom rows of a running combat (no token) stay
     (running ? running.rows : []).forEach(function(r) { if (!r.tokId) rows.push({ id: r.id, name: r.name, tokId: null, init: r.init, rolled: r.rolled === 1, tb: Array.isArray(r.tb) ? r.tb.slice() : undefined, src: null, on: true, custom: true }); });
@@ -8147,16 +8155,17 @@ function combatSortByInit(rows) {   // high to low, ties keep their place (initi
 function renderCombatModal() {
     var m = document.getElementById('combatModal'), list = document.getElementById('combatRows'); if (!m || !list || !combatDraft) return;
     var camp = getActiveCampaign(), map = camp && camp.items[combatDraft.mapId];
-    document.getElementById('combatMapName').textContent = map && map.meta && map.meta.title || combatDraft.mapId;
+    var mapNm = map && map.meta && map.meta.title || combatDraft.mapId, fidsM = fightsHere(combatDraft.mapId), atM = combatDraft.fid ? fidsM.indexOf(combatDraft.fid) : -1;
+    document.getElementById('combatMapName').textContent = mapNm + (atM >= 0 && fidsM.length > 1 ? ', fight ' + (atM + 1) + ' of ' + fidsM.length : (!combatDraft.fid && fidsM.length ? ', another fight' : ''));   // fold 2: which fight on the map
     var running = combatDraft.running, findHere = findWho(window.wpNet, !!window.wpStream), amHere = getActiveMap();   // backlog 26: a name finds its token on this screen
     document.getElementById('combatStartBtn').textContent = running ? 'Update Combat' : 'Start Combat';
     var rallB = document.getElementById('combatRollAllBtn'); if (rallB) rallB.style.display = window.wpSheets && window.wpSheets.hasInitRoll() ? '' : 'none';   // initiative O1: only with an initiative roll in the system
     list.innerHTML = combatDraft.rows.map(function(r, i) {
         return '<div class="combat-row' + (r.on ? '' : ' off') + '" draggable="true" data-i="' + i + '">'
             + '<span class="combat-grip" title="Drag to reorder">&#8942;</span>'
-            + '<input type="checkbox" class="combat-on"' + (r.on ? ' checked' : '') + ' title="In the fight">'
+            + '<input type="checkbox" class="combat-on"' + (r.on ? ' checked' : '') + (r.busy ? ' disabled title="In another fight on this map: a token is in one fight at a time"' : ' title="In the fight"') + '>'
             + (r.src ? '<img class="combat-face" src="' + esc(resolveImg(r.src)) + '" alt="">' : '<span class="combat-face combat-face-empty">' + (r.custom ? '&#10022;' : '&#9733;') + '</span>')
-            + '<span class="combat-name">' + findName(r.name, r.tokId, !!findOf(combatDraft.mapId, r.tokId, findHere, amHere, state.viewMode)) + (r.party ? ' <span class="combat-tag">party</span>' : '') + (r.targeted ? ' <span class="combat-tag" style="color:var(--gold); border-color:var(--gold);">' + r.targeted + '</span>' : '') + (r.custom ? ' <span class="combat-tag">custom</span>' : '') + '</span>'
+            + '<span class="combat-name">' + findName(r.name, r.tokId, !!findOf(combatDraft.mapId, r.tokId, findHere, amHere, state.viewMode)) + (r.party ? ' <span class="combat-tag">party</span>' : '') + (r.targeted ? ' <span class="combat-tag" style="color:var(--gold); border-color:var(--gold);">' + r.targeted + '</span>' : '') + (r.custom ? ' <span class="combat-tag">custom</span>' : '') + (r.busy ? ' <span class="combat-tag">in another fight on ' + esc(mapNm) + '</span>' : '') + '</span>'
             + (r.charId && window.wpSheets && window.wpSheets.hasInitRoll() ? '<button class="tool ghost combat-roll" title="Roll initiative from the character sheet: a table roll, or yours alone when it reads a GM-only value. Players see the order, never the number">&#127922;</button>' : '')
             + '<input type="number" class="combat-init field" value="' + (r.init || 0) + '" title="Initiative — higher goes first">'
             + '<button class="tool ghost combat-up" title="Move up">&#9650;</button><button class="tool ghost combat-down" title="Move down">&#9660;</button>'
@@ -8165,10 +8174,11 @@ function renderCombatModal() {
     }).join('') || '<div style="color:var(--dim); padding:8px;">No character tokens on this map. Add a custom row below, or place tokens first.</div>';
     m.style.display = 'flex';
 }
-function openCombatModal(mapId, opts) {
+function openCombatModal(mapId, opts) {   // opts.fid: that fight's roster; opts.fresh: a new fight beside those on the map (fold 2); else the strip's fight there, or a new one
     var n = window.wpNet; if (!(n && n.active && n.role === 'host')) { toast('Combat runs at the table — host a session first.'); return; }
-    var running = n.combats && n.combats[mapId];
-    combatDraft = { mapId: mapId, rows: combatRowsFor(mapId, opts), running: !!running };
+    opts = opts || {};
+    var fid = opts.fresh === true ? null : (typeof opts.fid === 'string' && fightsHere(mapId).indexOf(opts.fid) >= 0 ? opts.fid : stripFightId(mapId));
+    combatDraft = { mapId: mapId, fid: fid, rows: combatRowsFor(mapId, Object.assign({}, opts, { fid: fid })), running: !!fid };
     renderCombatModal();
 }
 window.wpOpenCombat = openCombatModal;
@@ -8177,7 +8187,7 @@ window.wpOpenCombat = openCombatModal;
     function rowOf(e) { var r = e.target.closest && e.target.closest('.combat-row'); return r ? +r.dataset.i : -1; }
     list.addEventListener('change', function(e) {
         var i = rowOf(e); if (i < 0) return;
-        if (e.target.classList.contains('combat-on')) { combatDraft.rows[i].on = e.target.checked; renderCombatModal(); }
+        if (e.target.classList.contains('combat-on')) { combatDraft.rows[i].on = e.target.checked && !combatDraft.rows[i].busy; renderCombatModal(); }   // fold 2: never a token in another fight
         if (e.target.classList.contains('combat-init')) { combatDraft.rows[i].init = Number(e.target.value) || 0; combatDraft.rows[i].rolled = true; delete combatDraft.rows[i].tb; combatDraft.rows = combatSortByInit(combatDraft.rows); renderCombatModal(); }   // initiative O1: a number given is its number (a player's roll no longer changes it)
     });
     list.addEventListener('keydown', function(e) { e.stopPropagation(); });
@@ -8233,30 +8243,52 @@ window.wpOpenCombat = openCombatModal;
     document.getElementById('combatCloseBtn').addEventListener('click', function() { m.style.display = 'none'; combatDraft = null; });
     document.getElementById('combatStartBtn').addEventListener('click', function() {
         var n = window.wpNet; if (!combatDraft || !n) return;
-        var rows = combatDraft.rows.filter(function(r) { return r.on; }).map(function(r) { var o = { id: r.id, name: r.name, tokId: r.tokId, init: r.init, src: r.src }; if (r.rolled) o.rolled = 1; if (Array.isArray(r.tb)) o.tb = r.tb; return o; });   // initiative O1: whether a row has its number
+        var rows = combatDraft.rows.filter(function(r) { return r.on && !r.busy; }).map(function(r) { var o = { id: r.id, name: r.name, tokId: r.tokId, init: r.init, src: r.src }; if (r.rolled) o.rolled = 1; if (Array.isArray(r.tb)) o.tb = r.tb; return o; });   // initiative O1: whether a row has its number
         if (!rows.length) { toast('Tick at least one combatant.'); return; }
-        var was = n.combats && n.combats[combatDraft.mapId];
+        var was = combatDraft.fid && n.combats && Object.prototype.hasOwnProperty.call(n.combats, combatDraft.fid) ? n.combats[combatDraft.fid] : null;   // fold 2: the fight this roster edits, by its id
         var turn = 0, round = 1;
         if (was) { round = was.round; var curId = (was.rows[was.turn] || {}).id; var at = rows.findIndex(function(r) { return r.id === curId; }); turn = at >= 0 ? at : 0; }
-        n.combatSet(combatDraft.mapId, { mapId: combatDraft.mapId, round: round, turn: turn, rows: rows });
+        var midS = combatDraft.mapId, fidS = n.fightSet(was ? combatDraft.fid : null, { mapId: midS, round: round, turn: turn, rows: rows });
+        if (!was && typeof fidS === 'string' && typeof stripShow === 'function') { stripShow(midS, fidS); if (typeof renderCombatStrip === 'function') renderCombatStrip(); }   // fold 2: a fight started here is the one this screen's strip shows
         m.style.display = 'none'; combatDraft = null;
     });
 })();
+// [lookcheck:stripfight-start]
+// Fold 2 (backlog 152): a map may hold two fights. The strip shows one: the one picked here with its switch, else the one that holds this screen's own
+// token, else the one the GM plays, else the first begun. The switch ("1 of 2") is this screen's own and changes nothing at the table
+var _stripPick = Object.create(null);   // mapId -> the fight the strip shows there, as its switch left it
+function stripFightId(mapId) {
+    var n = window.wpNet, ids = fightsHere(mapId); if (!ids.length) return null;
+    var pick = _stripPick[mapId]; if (typeof pick === 'string' && ids.indexOf(pick) >= 0) return pick;
+    var camp = getActiveCampaign(), map = camp && camp.items && Object.prototype.hasOwnProperty.call(camp.items, mapId) ? camp.items[mapId] : null, mine = Object.create(null);
+    (map && Array.isArray(map.whiteboard) ? map.whiteboard : []).forEach(function(w) { if (w && w.isChar && w.ownerId && w.ownerId === n.myId && typeof w.id === 'string') mine[w.id] = 1; });
+    var hit = ids.filter(function(f) { return (n.combats[f].rows || []).some(function(r) { return !!r && typeof r.tokId === 'string' && mine[r.tokId] === 1; }); })[0];
+    if (hit) return hit;
+    if (n.role === 'host' && ids.indexOf(n.fightOn) >= 0) return n.fightOn;
+    return ids[0];
+}
+function stripSwitch(mapId) { var ids = fightsHere(mapId); if (ids.length < 2) return null; var next = ids[(ids.indexOf(stripFightId(mapId)) + 1) % ids.length]; _stripPick[mapId] = next; return next; }   // the next fight on that map, on this screen alone
+function stripShow(mapId, fid) { var ids = typeof mapId === 'string' ? fightsHere(mapId) : []; if (typeof fid === 'string' && ids.indexOf(fid) >= 0) _stripPick[mapId] = fid; }   // a fight this screen just started is the one its strip shows
+window.wpStripFight = function(mapId) { var n = window.wpNet, f = typeof mapId === 'string' ? stripFightId(mapId) : null; return f && n && n.combats ? n.combats[f] : null; };   // the pill and the menus say the fight the strip shows
+// [lookcheck:stripfight-end]
 function renderCombatStrip() {
     if (typeof window !== 'undefined' && window.wpPills) window.wpPills.sync();   // the top row's Round pill (pills.js) says the same fight
     var strip = document.getElementById('combatStrip'); if (!strip) return;
     var n = window.wpNet, am = getActiveMap();
-    var c = n && n.active && am && am.type === 'map' && state.viewMode === 'visual' && n.combats && n.combats[am.id];
+    var fidS = n && n.active && am && am.type === 'map' && state.viewMode === 'visual' ? stripFightId(am.id) : null, c = fidS ? n.combats[fidS] : null;
     if (!c) { strip.innerHTML = ''; strip.wpDrawn = ''; strip.style.display = 'none'; return; }
+    var idsS = fightsHere(am.id), atS = idsS.indexOf(fidS);
     var cur = c.rows[c.turn] || {}, nxt = c.rows[(c.turn + 1) % c.rows.length] || {};
     var host = n.role === 'host', mine = !host && n.myTurnTok ? n.myTurnTok() : null;   // turn-based combat T2: the player on turn ends it here
+    if (mine && mine.fid && mine.fid !== fidS) mine = null;   // fold 2: on the strip of the fight they are on turn in
     strip.style.display = 'flex';
     var who = findWho(n, !!window.wpStream), nameOf = function(r) { return findName(r.name || '', r.tokId, !!findOf(am.id, r.tokId, who, am, state.viewMode)); };   // backlog 26: a name that finds its token on this screen is a button
     var myTokIds = {}; if (!host && am && Array.isArray(am.whiteboard)) am.whiteboard.forEach(function(w) { if (w && w.isChar && w.ownerId && w.ownerId === n.myId && typeof w.id === 'string') myTokIds[w.id] = 1; });   // initiative O3: whose held rows a player may act from
     var heldH = c.rows.map(function(r, i) { return r && r.held === 1 && i !== c.turn ? '<span class="combat-strip-held" data-tip="Holding their turn: Act puts them right after whoever is acting">held ' + nameOf(r) + '</span>' + (host || (typeof r.tokId === 'string' && myTokIds[r.tokId] === 1) ? '<button class="combat-strip-btn" data-act="act" data-row="' + esc(r.id) + '" title="Act now: right after whoever is acting">Act</button>' : '') : ''; }).join('');
     // drawn again only when it changed (found live, 2026-10-17): a redraw between a press and its click took the button pressed off the page, so
     // the press did nothing. What was written last is kept on the strip, since a hover moves each title into data-tip and the page's markup changes
-    var html = '<span class="combat-strip-round" title="Round">&#9876; R' + c.round + '</span>'
+    var html = (idsS.length > 1 ? '<button class="combat-strip-btn combat-strip-switch" data-act="switch" title="' + idsS.length + ' fights run on this map: show the next one. This changes nothing for anyone else">' + (atS + 1) + ' of ' + idsS.length + '</button>' : '')
+        + '<span class="combat-strip-round" title="Round">&#9876; R' + c.round + '</span>'
         + (c.side === 'pc' || c.side === 'rest' ? '<span class="combat-strip-side" title="Side initiative: this round&rsquo;s sides roll put this side first">' + (c.side === 'pc' ? 'players first' : 'the rest first') + '</span>' : '')
         + (host ? '<button class="combat-strip-btn" data-act="prev" title="Previous turn">&#9664;</button>' : '')
         + '<span class="combat-strip-cur" data-tip="Whose turn it is">' + (cur.src ? '<img src="' + esc(resolveImg(cur.src)) + '" alt="">' : '') + nameOf(cur) + '</span>'
@@ -8276,15 +8308,17 @@ window.wpRenderCombatStrip = renderCombatStrip;
         var b = e.target.closest && e.target.closest('.combat-strip-btn'); if (!b) return;
         e.stopPropagation();
         var n = window.wpNet, am = getActiveMap();
+        if (b.dataset.act === 'switch') { if (am && stripSwitch(am.id)) renderCombatStrip(); return; }   // fold 2: the next fight on this map, on this screen alone
         if (b.dataset.act === 'endturn') { var rt = n && n.turnEnd ? n.turnEnd() : null; if (rt && rt.error) toast(rt.error); return; }   // turn-based combat T2
         if (n && n.role !== 'host' && (b.dataset.act === 'hold' || b.dataset.act === 'act')) { var rh = b.dataset.act === 'hold' ? (n.turnHold ? n.turnHold() : null) : (n.turnAct ? n.turnAct(String(b.dataset.row || '')) : null); if (rh && rh.error) toast(rh.error); return; }   // initiative O3: a player's own hold or act
         if (!(n && n.role === 'host' && am)) return;
-        if (b.dataset.act === 'next') n.combatStep(am.id, 1);
-        else if (b.dataset.act === 'prev') n.combatStep(am.id, -1);
-        else if (b.dataset.act === 'edit') openCombatModal(am.id, {});
-        else if (b.dataset.act === 'end') n.combatEnd(am.id);
-        else if (b.dataset.act === 'hold') n.combatHold(am.id);   // initiative O3
-        else if (b.dataset.act === 'act') n.combatAct(am.id, String(b.dataset.row || ''));
+        var fidB = stripFightId(am.id); if (!fidB) return;   // fold 2: the fight the strip shows, by its id
+        if (b.dataset.act === 'next') n.fightStep(fidB, 1);
+        else if (b.dataset.act === 'prev') n.fightStep(fidB, -1);
+        else if (b.dataset.act === 'edit') openCombatModal(am.id, { fid: fidB });
+        else if (b.dataset.act === 'end') n.fightEnd(fidB);
+        else if (b.dataset.act === 'hold') n.fightHold(fidB);   // initiative O3
+        else if (b.dataset.act === 'act') n.fightAct(fidB, String(b.dataset.row || ''));
     });
 })();
 // [lookcheck:combatfind-start]
@@ -8426,13 +8460,14 @@ function tableMenuParts(e, role) {
         html += castMenuHtml(camp);
         if (role === 'host') {
             html += '<div class="menu-divider"></div>' + head('Session');
-            var combatM = getActiveMap() && n.combats && n.combats[getActiveMap().id];
+            var amM = getActiveMap(), combatM = amM && typeof window.wpStripFight === 'function' ? window.wpStripFight(amM.id) : null;   // fold 2: the fight the strip shows
             if (combatM) {
                 var curM = combatM.rows[combatM.turn] || {};
                 html += '<div class="menu-item cm-session" data-act="combat-next" title="Round ' + combatM.round + ' — ' + esc(curM.name || '') + ' is up">&#9876; Next Turn</div>';
                 html += '<div class="menu-item cm-session" data-act="combat-prev">&#9194; Previous Turn</div>';
                 html += '<div class="menu-item cm-session" data-act="combat-edit">&#9998; Combat Roster\u2026</div>';
                 html += '<div class="menu-item cm-session" data-act="combat-end" style="color:var(--danger)">End Combat</div>';
+                html += '<div class="menu-item cm-session" data-act="combat-new" title="Another fight on this map, with its own order and rounds. A token is in one fight at a time">&#9876; Start another fight here\u2026</div>';
             } else html += '<div class="menu-item cm-session" data-act="combat" title="Pick who is in the fight, give initiative, run the turns">&#9876; Start Combat\u2026</div>';
             html += '<div class="menu-item cm-session" data-act="notepad">&#128221; ' + (n.notepad && n.notepad.on ? (typeof n.notepadHidden === 'function' && n.notepadHidden() ? 'Show Table Notepad' : 'Put Away Table Notepad') : 'Open Table Notepad') + '</div>';
             html += '<div class="menu-divider"></div>';
@@ -8488,9 +8523,10 @@ function tableMenuParts(e, role) {
                 else if (act === 'log') n.openSessionLog();
                 else if (act === 'notepad') n.notepadToggle();
                 else if (act === 'combat' || act === 'combat-edit') { var amX = getActiveMap(); if (amX) openCombatModal(amX.id, {}); }
-                else if (act === 'combat-next') { var amN = getActiveMap(); if (amN) n.combatStep(amN.id, 1); }
-                else if (act === 'combat-prev') { var amP = getActiveMap(); if (amP) n.combatStep(amP.id, -1); }
-                else if (act === 'combat-end') { var amE = getActiveMap(); if (amE) n.combatEnd(amE.id); }
+                else if (act === 'combat-new') { var amW = getActiveMap(); if (amW) openCombatModal(amW.id, { fresh: true }); }   // fold 2: another fight beside the one on this map
+                else if (act === 'combat-next') { var amN = getActiveMap(), fN = amN ? stripFightId(amN.id) : null; if (fN) n.fightStep(fN, 1); }
+                else if (act === 'combat-prev') { var amP = getActiveMap(), fP = amP ? stripFightId(amP.id) : null; if (fP) n.fightStep(fP, -1); }
+                else if (act === 'combat-end') { var amE = getActiveMap(), fE = amE ? stripFightId(amE.id) : null; if (fE) n.fightEnd(fE); }
                 else if (act === 'pin') {
                     var campP = getActiveCampaign(), amP = getActiveMap(); if (!campP || !amP) return;
                     campP.pinnedMaps = (Array.isArray(campP.pinnedMaps) ? campP.pinnedMaps : []).filter(function(id) { return campP.items[id]; });
@@ -8518,11 +8554,11 @@ function tableMenuParts(e, role) {
 function gmFightModel(map, items, sel) {   // sel (158): the one token the GM has selected, which can target the token under the pointer
     var n = window.wpNet; if (!n || !n.active || n.role !== 'host' || window.wpStream || !map || !Array.isArray(items)) return null;
     var toks = items.filter(function(w) { return !!(w && w.isChar && !w.waiting); }); if (!toks.length) return null;
-    var c = n.combats && Object.prototype.hasOwnProperty.call(n.combats, map.id) ? n.combats[map.id] : null, inIds = {};
-    if (c && Array.isArray(c.rows)) c.rows.forEach(function(r) { if (r && typeof r.tokId === 'string') inIds[r.tokId] = 1; });
+    var ids = typeof n.fightsOn === 'function' ? n.fightsOn(map.id) : [], inIds = Object.create(null);   // fold 2: every fight on this map; a token is in one at most
+    ids.forEach(function(f) { var c = n.combats[f]; if (c && Array.isArray(c.rows)) c.rows.forEach(function(r) { if (r && typeof r.tokId === 'string') inIds[r.tokId] = f; }); });
     var one = toks.length === 1 && items.length === 1 && !toks[0].hidden ? toks[0] : null, t = n.targets && n.myId ? n.targets[n.myId] : null;
     var as = one && sel && typeof sel === 'object' && sel.isChar && !sel.waiting && sel.id !== one.id && (map.whiteboard || []).indexOf(sel) >= 0 ? sel : null, ta = as && n.targets ? n.targets['tk:' + as.id] : null;   // 158: Target as the selected character
-    return { toks: toks, running: !!c, add: toks.filter(function(w) { return inIds[w.id] !== 1 && !w.hidden; }), drop: toks.filter(function(w) { return inIds[w.id] === 1; }), target: one, mine: !!(one && t && t.id === one.id && t.mapId === map.id), as: as, asMine: !!(as && ta && ta.id === one.id && ta.mapId === map.id) };
+    return { toks: toks, running: ids.length > 0, fights: ids, add: toks.filter(function(w) { return typeof inIds[w.id] !== 'string' && !w.hidden; }), drop: toks.filter(function(w) { return typeof inIds[w.id] === 'string'; }), target: one, mine: !!(one && t && t.id === one.id && t.mapId === map.id), as: as, asMine: !!(as && ta && ta.id === one.id && ta.mapId === map.id) };
 }
 function gmEsc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }   // 158: a character's name, the one word of a token this menu writes
 function gmFightHtml(m) {
@@ -8532,8 +8568,10 @@ function gmFightHtml(m) {
     if (m.target) h += '<div class="menu-item cm-gm-fight" data-fight="target" title="' + (m.mine ? 'Stop targeting it (Esc does too)' : 'Point at it as the GM: your NPCs&rsquo; rolls read the range to it, and it is ticked when you start a fight (T while pointing at a token does the same)') + '">' + (m.mine ? '&#9711; Clear target' : '&#9678; Target') + '</div>';
     if (!m.running) h += '<div class="menu-item cm-gm-fight" data-fight="start" title="Open the roster with ' + (m.toks.length === 1 ? 'this token' : 'these tokens') + ' ticked, and whoever is targeted">&#9876; Start combat&hellip;</div>';
     else {
-        if (m.add.length) h += '<div class="menu-item cm-gm-fight" data-fight="add" title="Into the fight running on this map, at the end of the order (its initiative is given or rolled in the roster)">&#9876; Add to the fight</div>';
-        if (m.drop.length) h += '<div class="menu-item cm-gm-fight" data-fight="drop" title="Out of the fight running on this map">&#9876; Remove from the fight</div>';
+        var two = Array.isArray(m.fights) && m.fights.length > 1;
+        if (m.add.length) h += '<div class="menu-item cm-gm-fight" data-fight="add" title="' + (two ? 'Into one of the fights running on this map: you pick which. It goes at the end of the order' : 'Into the fight running on this map, at the end of the order') + ' (its initiative is given or rolled in the roster)">&#9876; Add to the fight</div>';
+        if (m.drop.length) h += '<div class="menu-item cm-gm-fight" data-fight="drop" title="Out of the fight it is in on this map">&#9876; Remove from the fight</div>';
+        if (m.add.length) h += '<div class="menu-item cm-gm-fight" data-fight="new" title="Another fight on this map, with ' + (m.add.length === 1 ? 'this token' : 'these tokens') + ' ticked: its own order and rounds">&#9876; Start another fight&hellip;</div>';   // fold 2
     }
     return h;
 }
@@ -8542,12 +8580,29 @@ function gmFightDo(map, m, act) {
     if (act === 'target') { if (!m.target || !n.setTarget) return false; n.setTarget(m.target.id, map.id, m.target.charName || m.target.name); return true; }
     if (act === 'targetas') { if (!m.target || !m.as || !n.setTargetAs) return false; return n.setTargetAs(m.as, m.target.id, map.id, m.target.charName || m.target.name) === true; }
     if (act === 'start') { if (m.running) return false; openCombatModal(map.id, { pre: m.toks.filter(function(w) { return !w.hidden; }).map(function(w) { return w.id; }) }); return true; }
-    var c = n.combats && Object.prototype.hasOwnProperty.call(n.combats, map.id) ? n.combats[map.id] : null; if (!c || !Array.isArray(c.rows) || (act !== 'add' && act !== 'drop')) return false;
+    if (act === 'new') { if (!m.running || !m.add.length) return false; openCombatModal(map.id, { fresh: true, pre: m.add.map(function(w) { return w.id; }) }); return true; }   // fold 2: another fight beside the one on this map
+    var ids = Array.isArray(m.fights) ? m.fights.filter(function(f) { return !!(n.combats && Object.prototype.hasOwnProperty.call(n.combats, f) && n.combats[f] && Array.isArray(n.combats[f].rows)); }) : []; if (!ids.length || (act !== 'add' && act !== 'drop')) return false;
+    if (act === 'add') {
+        if (!m.add.length) return false;
+        if (ids.length === 1) return gmFightPut(n, map, ids[0], m.add, null);
+        // two fights on this map: which one, asked with two answers (the one the strip shows, and the next)
+        var sf = typeof window.wpStripFight === 'function' ? window.wpStripFight(map.id) : null, f1 = sf && ids.indexOf(sf.id) >= 0 ? sf.id : ids[0], f2 = ids[(ids.indexOf(f1) + 1) % ids.length];
+        var said = function(f) { var c = n.combats[f], cur = c.rows[c.turn] || {}; return ('Round ' + c.round + ': ' + String(cur.name || 'someone').slice(0, 30) + ' is up').slice(0, 60); };
+        showConfirm('Add to which fight on ' + ((map.meta && map.meta.title) || 'this map') + '? Each is named by its round and whose turn it is.' + (ids.length > 2 ? ' Its two answers are the fight the strip shows and the next one. Switch the strip to reach another.' : ''), function(ans) { if (ans === true) gmFightPut(n, map, f1, m.add, null); else if (ans === 'alt') gmFightPut(n, map, f2, m.add, null); }, { yes: said(f1), alt: said(f2), noEnter: true });   // fold 2's review: its buttons alone answer it, as neither fight is the safe answer (Cancel is)
+        return true;
+    }
+    if (!m.drop.length) return false;
+    var out = {}; m.drop.forEach(function(w) { out[w.id] = 1; });
+    ids.forEach(function(f) { if (n.combats[f].rows.some(function(r) { return !!r && typeof r.tokId === 'string' && out[r.tokId] === 1; })) gmFightPut(n, map, f, null, out); });   // each fight that holds a token of the selection
+    return true;
+}
+function gmFightPut(n, map, fid, add, out) {   // that fight with the tokens added at the end of its order, or those out taken out (its last row taken out ends it, asked first)
+    var c = n.combats[fid]; if (!c || !Array.isArray(c.rows)) return false;
     var rows = c.rows.map(function(r) { var o = { id: r.id, name: r.name, tokId: r.tokId, init: r.init, src: r.src }; if (r.rolled === 1) o.rolled = 1; if (Array.isArray(r.tb)) o.tb = r.tb; if (r.held === 1) o.held = 1; return o; }), curId = (c.rows[c.turn] || {}).id;
-    if (act === 'add') { if (!m.add.length) return false; m.add.forEach(function(w) { rows.push({ id: 'r' + w.id, name: w.charName || w.name || 'Unnamed', tokId: w.id, init: 0, src: w.src || null }); }); }
-    else { if (!m.drop.length) return false; var out = {}; m.drop.forEach(function(w) { out[w.id] = 1; }); rows = rows.filter(function(r) { return !(typeof r.tokId === 'string' && out[r.tokId] === 1); }); if (!rows.length) { n.combatEnd(map.id); return true; } }
+    if (add) add.forEach(function(w) { rows.push({ id: 'r' + w.id, name: w.charName || w.name || 'Unnamed', tokId: w.id, init: 0, src: w.src || null }); });
+    if (out) { rows = rows.filter(function(r) { return !(typeof r.tokId === 'string' && out[r.tokId] === 1); }); if (!rows.length) { n.fightEnd(fid); return true; } }
     var at = rows.findIndex(function(r) { return r.id === curId; });
-    n.combatSet(map.id, { mapId: map.id, round: c.round, turn: at >= 0 ? at : Math.min(c.turn, rows.length - 1), rows: rows });
+    n.fightSet(fid, { mapId: map.id, round: c.round, turn: at >= 0 ? at : Math.min(c.turn, rows.length - 1), rows: rows });
     return true;
 }
 // T while pointing at a token, for the GM at a hosted table: the same pointer as the menu's Target

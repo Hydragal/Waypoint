@@ -2872,6 +2872,20 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             const soGot = [S0.marksStrictOn(hmCamp, hmMap), S0.marksStrictOn(snCamp([hear()]), hmMap), S0.marksStrictOn(hmCamp, liveMap), S0.marksStrictOn(hmCamp, null), S0.marksStrictOn(null, hmMap)];
             check('S4b the GM\'s preview reads what is held and never takes a refresh of its own (a player with nothing held: worked out, not kept); out of a fight nothing is held; marksStrictOn: the table plays On your own turn and a fight runs on that map',
                 lj(pvGot) === lj([{ c: 10, r: 2, k: 1 }]) && pvHeld === false && lj(liveGot) === lj([{ c: 10, r: 2, k: 1 }]) && liveHeld === false && lj(soGot) === lj([true, false, false, false, false]), lj([pvGot, pvHeld, liveHeld, soGot]));
+            {   // fold 2 (backlog 152, docs/FIGHT_CLOCK_DESIGN.md): marksStrictOn asked through net.js's own combatFor (its orders slice, run for real), the fights keyed by their own ids
+                const ntF = require('fs').readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', 'net.js'), 'utf8').replace(/\r\n/g, NL), ordA = ntF.indexOf('// [netcheck:orders-start]'), ordZ = ntF.indexOf('// [netcheck:orders-end]');
+                let so2 = 'no orders slice';
+                if (ordA > 0 && ordZ > ordA) {
+                    const realNet = { active: true, role: 'host', combats: { f_dock0001: { id: 'f_dock0001', mapId: hmMap.id, round: 1, turn: 0, rows: [] }, f_dock0002: { id: 'f_dock0002', mapId: hmMap.id, round: 3, turn: 0, rows: [] } } };
+                    new Function('net', 'getActiveCampaign', ntF.slice(ordA, ordZ))(realNet, () => hmCamp);
+                    const keepNet = s0Win.wpNet; s0Win.wpNet = realNet;
+                    so2 = [S0.marksStrictOn(hmCamp, hmMap)]; delete realNet.combats.f_dock0001; so2.push(S0.marksStrictOn(hmCamp, hmMap)); delete realNet.combats.f_dock0002; so2.push(S0.marksStrictOn(hmCamp, hmMap));
+                    realNet.combats.f_brdg0001 = { id: 'f_brdg0001', mapId: liveMap.id, round: 1, turn: 0, rows: [] }; so2.push(S0.marksStrictOn(hmCamp, hmMap), S0.marksStrictOn(hmCamp, liveMap));
+                    realNet.active = false; so2.push(S0.marksStrictOn(hmCamp, liveMap)); s0Win.wpNet = keepNet;
+                }
+                check('fold 2 (backlog 152): marksStrictOn through net.js\'s own combatFor (run for real), the fights keyed by their own ids: a map that holds two fights plays its marks On your own turn while either runs, the first or the second, and as they move once both are over; a fight on another map counts for nothing there and for its own map; no table, no fight',
+                    lj(so2) === lj([true, true, false, false, true, false]), lj(so2));
+            }
             const fgMap = Object.assign(mkMap(), { id: 'odd|map' }); fights[fgMap.id] = { rows: [] }; hold(hmCamp, fgMap); hold(hmCamp, offMap);
             const fg0 = S0.marksHeld(); S0.marksForget('map'); const fg1 = S0.marksHeld(); S0.marksForget('odd|map'); const fg2 = S0.marksHeld(); S0.marksForget(null); const fg3 = S0.marksHeld();
             check('S4b marksForget: one map\'s held marks (a map id may hold a bar), or every map\'s with null',

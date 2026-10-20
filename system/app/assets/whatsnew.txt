@@ -60,6 +60,20 @@ Combat
   delete the map it is on. Its timed effects run again at once, its
   rounds count for the time rules, and the Calendar's clock no longer
   waits for it.
+- Two fights can run on one map. Right-click the map and pick Start
+  another fight here, or start one from a token's menu. Each fight has
+  its own order and its own rounds, and a token is in one fight at a
+  time. Where a map holds two, the turn strip shows one with a 1 of 2
+  button that shows the other on your screen alone, and Add to the
+  fight asks which one. Click your answer: Enter does not answer it.
+- A player is sent only the fights on the map they are on, and nothing
+  at all when a fight on another map moves on. Every fight on every map
+  used to reach every player.
+- For now each fight still moves the clock by its own rounds, so two
+  fights at once move it twice. Fights that keep their own time come
+  next.
+- A player's app forgets your fights when you end the session, so their
+  own campaign shows no turn strip of yours afterwards.
 
 WAYPOINT 1.5.4 — What's New
 ============================

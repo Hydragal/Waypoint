@@ -1030,8 +1030,9 @@ function mutations(tpl) {
             'fogDiff@host': { type: 'fogDiff', campId: 'c1', itemId: 'm_fog', drop: ['tok_far'] }
         }
     };
-    // a combat on m_open so the turn-* branches have rows to find
-    function seedCombat() { net.combats = { m_open: { mapId: 'm_open', round: 1, turn: 0, rows: [{ id: 'row_p1', name: 'Ayla', tokId: 'tok_p1', init: 15 }, { id: 'row_npc', name: 'Orc', tokId: 'tok_npc', init: 10 }, { id: 'row_p2', name: 'Bram', tokId: 'tok_p2', init: 5 }] } }; }
+    // two fights on m_open (fold 2 of backlog 152: fights by their own ids, a map may hold two) so the turn-* branches have rows to find, each in its own fight
+    function seedCombat() { net.combats = { f_open0001: { id: 'f_open0001', mapId: 'm_open', round: 1, turn: 0, n: 1, rows: [{ id: 'row_p1', name: 'Ayla', tokId: 'tok_p1', init: 15 }, { id: 'row_npc', name: 'Orc', tokId: 'tok_npc', init: 10 }] },
+        f_open0002: { id: 'f_open0002', mapId: 'm_open', round: 1, turn: 0, n: 2, rows: [{ id: 'row_p2', name: 'Bram', tokId: 'tok_p2', init: 5 }, { id: 'c_crate', name: 'Crate', tokId: null, init: 2 }] } }; }
     seedCombat();
 
     let readmits = 0, readmitFailed = [];
@@ -1174,8 +1175,8 @@ function mutations(tpl) {
         'char-edit': o => campH().chars.c_p1.values.f_str === 12 && o.p1.some(m => m.type === 'char-ack'),
         'char-edits': () => campH().chars.c_p1.values.f_str === 13 && campH().chars.c_p1.values.f_dex === 11,
         'char-apply': o => o.p1.some(m => m.type === 'char-ack') && o.p1.some(m => m.type === 'apply'),
-        'turn-hold': () => net.combats.m_open.turn === 1 && net.combats.m_open.rows.some(r => r.id === 'row_p1' && r.held === 1),
-        'turn-end': () => net.combats.m_open.turn === 1,
+        'turn-hold': () => net.combats.f_open0001.turn === 1 && net.combats.f_open0001.rows.some(r => r.id === 'row_p1' && r.held === 1) && net.combats.f_open0002.turn === 0,   // fold 2: the fight found by the row, the other left as it was
+        'turn-end': () => net.combats.f_open0001.turn === 1 && net.combats.f_open0002.turn === 0,
         'char-upload': o => o.p1.some(m => m.type === 'char-upload-ans' && typeof m.n === 'number') && (campH().uploads || []).some(u => u.charId === 'c_p1' && u.reader === 'fuzz'),   // read by the suite's own reader (FUZZ_READER): the proposal waits for the GM with the reader's id, and the answer counts it
         'char-item': o => Array.isArray(campH().chars.c_p1.values.f_inv) && campH().chars.c_p1.values.f_inv.length === 1 && o.p1.some(m => m.type === 'char-ack'),
         'lib-idx': o => o.p1.some(m => m.type === 'lib-idx-ans'),
@@ -1255,6 +1256,13 @@ function mutations(tpl) {
         await resetWorld(); const sb = conns.p1.sent.length;
         await fireHost('p1', 'travel naming the trap', 'hidden portal id', { type: 'travel', viaItemId: 'trap1' });
         check('host: naming a hidden trap tile in a travel moves nobody and answers nothing', net.roster.peer_p1.location === 'm_open' && conns.p1.sent.length === sb);
+    }
+    {   // fold 2's review: the turn messages find their fight by the row, a fight that is not the first begun on the map included. Bram (p2) is on turn in
+        // the second fight on the open map: his End turn steps that fight and his hold holds there, the first fight left as it was each time
+        await resetWorld(); const st = () => [net.combats.f_open0001.turn, net.combats.f_open0002.turn, net.combats.f_open0002.round];
+        const e0 = st(); await fireHost('p2', 'turn-end (the second fight)', 'well-formed, row_p2', { type: 'turn-end', mapId: 'm_open', row: 'row_p2' }); const e1 = st();
+        await resetWorld(); await fireHost('p2', 'turn-hold (the second fight)', 'well-formed, row_p2', { type: 'turn-hold', mapId: 'm_open', row: 'row_p2' }); const h1 = st(), held = net.combats.f_open0002.rows.some(r => r.id === 'row_p2' && r.held === 1);
+        check('host (fold 2\'s review): a well-formed turn-end and turn-hold from the player on turn in the SECOND fight on a map step and hold that fight, found by its row, and leave the first as it was', JSON.stringify([e0, e1, h1, held]) === JSON.stringify([[0, 0, 1], [0, 1, 1], [0, 1, 1], true]), JSON.stringify([e0, e1, h1, held]));
     }
     {   // a portal's own lock (the owner, 2026-10-03): a travel naming the locked portal and a drop on it, against the whole of net.js
         await resetWorld(); const den = () => conns.p1.sent.filter(m => m.type === 'travelDenied' && m.reason === 'portal'), stages = () => conns.p1.sent.filter(m => m.type === 'stage').length, s0 = stages(), d0 = den().length;
@@ -2762,7 +2770,7 @@ function mutations(tpl) {
         'travelLock': { type: 'travelLock', on: false }, 'travelDenied': { type: 'travelDenied', reason: 'closed', map: 'Cellar' },
         'handout': { type: 'handout', kind: 'text', text: 'note', title: 'T', caption: 'c', id: 'sh_1', campId: 'c1', gmId: 'u_gm', look: { fmt: { b: true }, font: 'Lora', sig: win.wpLook.textSig('note') } },   // item 35, fold 2b: a page may come with a look
         'notepad': { type: 'notepad', on: true, text: 'hi', campId: 'c1', gmId: 'u_gm', campaign: 'C', gm: 'GM', look: { fmt: { b: true, spans: [{ s: 0, e: 1, link: 'https://a.example/' }] }, font: 'Lora', sig: win.wpLook.textSig('hi') } },   // item 35, fold 3a: the pad may come with a look, so the seeded mutations reach its cleaner
-        'combats': { type: 'combats', combats: { m_open: { mapId: 'm_open', round: 1, turn: 0, rows: [{ id: 'row_p1', name: 'Ayla', tokId: 'tok_p1' }, { id: 'row_npc', name: 'Orc', tokId: 'tok_npc' }] } } },
+        'combats': { type: 'combats', combats: { f_open0001: { id: 'f_open0001', mapId: 'm_open', round: 1, turn: 0, rows: [{ id: 'row_p1', name: 'Ayla', tokId: 'tok_p1' }, { id: 'row_npc', name: 'Orc', tokId: 'tok_npc' }] }, f_open0002: { id: 'f_open0002', mapId: 'm_open', round: 2, turn: 0, rows: [{ id: 'row_p2', name: 'Bram', tokId: 'tok_p2' }] } } },   // fold 2: two fights on one map, each by its own id
         'targets': { type: 'targets', targets: { u_p2: { id: 'tok_npc', mapId: 'm_open', name: 'Bram' } } },
         'pos': { type: 'pos', campId: 'c1', itemId: 'm_open', wbId: 'tok_p2', x: 200, y: 210, rot: 45, front: 0, final: true },
         'pos-own': { type: 'pos', campId: 'c1', itemId: 'm_open', wbId: 'tok_p1', x: 90, y: 90, rot: 0, front: 0, final: true, ack: 3 },
@@ -2818,7 +2826,7 @@ function mutations(tpl) {
         'stage': () => campC().activeItemId === 'm_open' && rec.toasts.some(t => /arrive/.test(t)),
         'pause': () => cnet.paused === true, 'snap': () => cnet.tableSnapOn === true, 'stance': () => !!cnet.stance,
         'handout': () => rec.journal.length === 1, 'notepad': () => cnet.notepad && cnet.notepad.on === true && JSON.stringify(cnet.notepad.look) === JSON.stringify({ fmt: { b: true }, font: 'Lora', sig: win.wpLook.textSig('hi') }),   // (the look as the rule of the pad cleans it: its link is gone)
-        'combats': () => cnet.combats.m_open && cnet.combats.m_open.rows.length === 2,
+        'combats': () => !!cnet.combats.f_open0001 && cnet.combats.f_open0001.rows.length === 2 && !!cnet.combats.f_open0002 && cnet.combats.f_open0002.mapId === 'm_open' && cnet.combats.f_open0002.round === 2,
         'targets': () => cnet.targets.u_p2 && cnet.targets.u_p2.id === 'tok_npc',
         'pos': () => tokC('m_open', 'tok_p2').x === 200 && tokC('m_open', 'tok_p2').rot === 45,
         // 'auth' is answered before the snapshot only (checked there); after it the branch is inert by design
@@ -2858,7 +2866,7 @@ function mutations(tpl) {
         const changes = before && after !== EMPTY_SNAP ? diffOf(before, after) : [];
         const padd = protoAdded(); if (padd.length) finding('prototype pollution (client)', tag + ' → ' + padd.join(', '), msg, mut);
         if (cnet.targets && Object.getPrototypeOf(cnet.targets) !== Object.prototype) { finding('client: net.targets re-parented by a "__proto__" key from the host', tag, msg, mut); cnet.targets = {}; }
-        if (cnet.combats && Object.getPrototypeOf(cnet.combats) !== Object.prototype) { finding('client: net.combats re-parented by a "__proto__" key from the host', tag, msg, mut); cnet.combats = {}; }
+        if (cnet.combats && ((p => p !== null && p !== Object.prototype)(Object.getPrototypeOf(cnet.combats)) || Object.keys(cnet.combats).some(k => { const f = cnet.combats[k]; return !!f && typeof f === 'object' && Object.getPrototypeOf(f) !== Object.prototype; }))) { finding('client: net.combats re-parented by a "__proto__" key from the host', tag, msg, mut); cnet.combats = {}; }   // fold 2: a copy of the fights has no prototype by design; neither it nor a fight in it takes one from the host
         if (from !== 'host') { const w = changes.filter(c => !/^\.(active|role)$/.test(c.path)); if (w.length) finding('client: a connection other than the synced host writes state', tag + ' → ' + w[0].path.replace(/\[id=[^\]]+\]/g, '[id=…]').replace(/\.whiteboard.*$/, '.whiteboard'), msg, mut); }
         if (!cnet.foreign) { const w = changes.filter(c => /^\.app\.campaigns\.camp_tutorial/.test(c.path)); if (w.length) finding('client: a message before the snapshot writes into the player\'s OWN campaign', tag + ' → ' + w[0].path.replace(/\[id=[^\]]+\]/g, '[id=…]').replace(/\.whiteboard.*$/, '.whiteboard'), msg, mut); }
         const lsAfter = localStorage.dump(); Object.keys(lsAfter).concat(Object.keys(lsBefore)).forEach(k => { if (lsAfter[k] !== lsBefore[k] && k !== 'wp_vtt_local' && !(k === 'wp_tableKeys' && msg.type === 'snapshot')) finding('client: localStorage written by a message', tag + ' → ' + k, msg, mut); });
