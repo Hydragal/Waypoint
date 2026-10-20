@@ -69,6 +69,11 @@ Combat
 - A player is sent only the fights on the map they are on, and nothing
   at all when a fight on another map moves on. Every fight on every map
   used to reach every player.
+- A step back on the turn strip is a correction. Going back and on
+  again runs an action set to Also each round or Also at its turn's
+  start only once for each round and turn the fight reaches. A
+  character's timed effects count once a round, even with two rows in
+  the order or after a hold and Act.
 - For now each fight still moves the clock by its own rounds, so two
   fights at once move it twice. Fights that keep their own time come
   next.

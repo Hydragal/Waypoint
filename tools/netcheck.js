@@ -3569,7 +3569,8 @@ pendingChecks.push((async () => {
         j([b5_chK.values.f_gr, b5_K1.pushed, b5_K1.toasts, b5_K2.pushed, b5_K2.toasts, b5_KOn.pushed, b5_KQ.table, b5_KQ.sent, b5_KQ.pushed]));
 })());
 // Stage 6 HUD G10: the round hook fires when a combat's round changes — its start, a step past either end (net.js combatSet / combatStep, run
-// for real) — never within a round, on a roster edit that keeps the round, or at its end; a hook that throws never stops the turn
+// for real) — never within a round, on a roster edit that keeps the round, or at its end; a hook that throws never stops the turn. Fold 3 (backlog
+// 152, moved on purpose): only for a round the fight reaches for the first time, so a step back past the first and on again runs nothing twice
 {
     const setSrcG = fnSrc('function combatRefresh() {', '\nnet.combatStep = function', 'combatSet'), stepSrcG = fnSrc('net.combatStep = function', '\nnet.combatEnd = function', 'combatStep');
     const ccSrcG = fnSrc('function cleanCombats(c) {', '\nfunction applyNotepad(', 'cleanCombats');
@@ -3588,12 +3589,12 @@ pendingChecks.push((async () => {
     netG.combatStep('m1', -1); seen.push(st() + '=' + calls.join());
     netG.combatStep('m1', -1); seen.push(st() + '=' + calls.join());
     netG.combatStep('m1', -1); seen.push(st() + '=' + calls.join());
-    hook.throws = true; netG.combatStep('m1', 1); netG.combatStep('m1', 1); netG.combatStep('m1', 1); seen.push(st() + '=' + calls.join()); hook.throws = false;
+    hook.throws = true; netG.combatStep('m1', 1); netG.combatStep('m1', 1); netG.combatStep('m1', 1); netG.combatStep('m1', 1); netG.combatStep('m1', 1); netG.combatStep('m1', 1); seen.push(st() + '=' + calls.join()); hook.throws = false;   // fold 3: on through round 2, reached already, into round 3
     netG.combatSet('m1', { round: 5, turn: 0, rows: rw(3) }); seen.push(st() + '=' + calls.join());
     netG.combatSet('m1', null); seen.push(st() + '=' + calls.join());
-    check('G10 the round hook (net.js, run for real): at the combat\'s start (round 1), a step past the last (round 2) and back past the first (round 1), a roster edit that sets another round — never within a round, on a roster edit that keeps it, at round 1\'s first turn stepping back, or at the end; a hook that throws is logged and the turn still moves',
-        j(seen) === j(['r1t0=m1:1', 'r1t1=m1:1', 'r1t2=m1:1', 'r2t0=m1:1,m1:2', 'r1t2=m1:1,m1:2,m1:1', 'r1t1=m1:1,m1:2,m1:1', 'r1t0=m1:1,m1:2,m1:1',
-            'r2t0=m1:1,m1:2,m1:1,m1:2', 'r5t0=m1:1,m1:2,m1:1,m1:2,m1:5', 'none=m1:1,m1:2,m1:1,m1:2,m1:5']) && j(errs) === j(['boom']), j([seen, errs]));
+    check('G10 the round hook (net.js, run for real): at the combat\'s start (round 1), a step past the last (round 2), on again into round 3 and a roster edit that sets round 5 — never within a round, on a roster edit that keeps it, at round 1\'s first turn stepping back, or at the end; fold 3: a step back past the first is a correction, so going back into round 1 and on again into round 2 runs nothing; a hook that throws is logged and the turn still moves',
+        j(seen) === j(['r1t0=m1:1', 'r1t1=m1:1', 'r1t2=m1:1', 'r2t0=m1:1,m1:2', 'r1t2=m1:1,m1:2', 'r1t1=m1:1,m1:2', 'r1t0=m1:1,m1:2',
+            'r3t0=m1:1,m1:2,m1:3', 'r5t0=m1:1,m1:2,m1:3,m1:5', 'none=m1:1,m1:2,m1:3,m1:5']) && j(errs) === j(['boom']), j([seen, errs]));
 }
 
 // Fold 0 (backlog 152, docs/FIGHT_CLOCK_DESIGN.md): a fight ends as End combat ends it when the session ends (leaveSession) and when its map is
@@ -3880,8 +3881,136 @@ pendingChecks.push((async () => {
         netT, { wpSheets: { roundHook: (m, c) => callsT.push('R' + c.round), turnHook: (m, c) => callsT.push('T' + c.round + '.' + c.turn) } }, () => ({ items: { m1: { type: 'map', meta: { title: 'K' } } } }), () => {}, () => {}, () => {}, () => {}, { error: () => {} }, () => {});
     const rwT = n => Array.from({ length: n }, (_, i) => ({ id: 'r' + i, name: 'N' + i, tokId: 't' + i, init: 0, src: null }));
     netT.combatSet('m1', { round: 1, turn: 0, rows: rwT(2) }); netT.combatSet('m1', { round: 1, turn: 1, rows: rwT(3) }); netT.combatStep('m1', 1); netT.combatStep('m1', 1); netT.combatStep('m1', -1); netT.combatStep('m1', -1); netT.combatStep('m1', -1); netT.combatStep('m1', -1);
-    check('T2b the turn\'s start (net.js, run for real): at the combat\'s start (after the round), on each step that moves the turn (after the round when it changes too) — never on a roster edit, or a step back at round 1\'s first turn',
-        j(callsT) === j(['R1', 'T1.0', 'T1.2', 'R2', 'T2.0', 'R1', 'T1.2', 'T1.1', 'T1.0']), j(callsT));
+    check('T2b the turn\'s start (net.js, run for real): at the combat\'s start (after the round), on each step that moves the turn (after the round when it changes too) — never on a roster edit, or a step back at round 1\'s first turn; fold 3 (moved on purpose): never for a round or a turn the fight reached already, so the steps back past round 2\'s first turn run neither hook',
+        j(callsT) === j(['R1', 'T1.0', 'T1.2', 'R2', 'T2.0']), j(callsT));
+})());
+
+// Fold 3 (backlog 152, docs/FIGHT_CLOCK_DESIGN.md sections 2 and 6, settled 18): a step back is a correction, so a fight lives nothing twice. Run for
+// real on a host world: the combats slice, the cut of the old names (roundChanged and turnStarted, with the real turnMoveStart, turnActsStart and
+// turnFxStart over the real fxTick, and initIntoFight with the real orderByInit) and the orders slice (fightSet, fightStep, fightHold, fightAct), with
+// Kael and Sela, two players' characters, and Unit 7, an NPC sheet with two tokens, on the Docks. The round hook (Each round actions) runs once for each
+// round a fight reaches, the turn hook (Each turn actions) and a turn's timed effects once for each turn reached in it, and a character's timed effects
+// once a round of that fight whatever rows it has; the move and the turn's actions are still given back at a step back; a turn reached is known by its
+// row, so a roster edit (a row taken out before, at or after the row on turn, one added, the order sorted again) and a player's initiative that
+// re-sorts the order in play neither skip a turn still to come nor run one again; two fights on one map keep their own; and rh, th and turned are never sent
+pendingChecks.push((async () => {
+    const url = f => 'file:///' + path.resolve(path.join(__dirname, '..', 'system', 'app', 'scripts', f)).split(String.fromCharCode(92)).join('/');
+    const Sx = await import(url('systemcore.js')), Fx = await import(url('formula.js'));
+    const J = v => JSON.stringify(v);
+    const cbS = between('// [netcheck:combats-start]', '// [netcheck:combats-end]', 'combats'), setS = fnSrc('function combatRefresh() {', '\nnet.combatStep = function', 'combatSet');
+    const pidS = (() => { const i = src.indexOf('function peerProfileId('); return src.slice(i, src.indexOf('\n', i)) + '\n'; })();
+    const sys3 = Sx.cleanSystem({ v: 1, name: 'F3', fields: [{ id: 'f_fx', key: 'Effects', kind: 'effects' }], rolls: [], effects: [{ id: 'e_c', name: 'Charge', dur: '100 turns', mods: [] }], combat: { turn: { acts: [{ key: 'Action', n: 1 }] } } }, { F: Fx, gmView: true });
+    const mk3 = () => {
+        const hooks = [], toasts = [];
+        const tok = (id, charId, ownerId) => Object.assign({ id, type: 'image', isChar: true, charId, x: 0, y: 0, w: 50, h: 50 }, ownerId ? { ownerId } : {});
+        const fx = id => ({ f_fx: [{ id, ref: 'e_c', on: true, t: { left: 600, at: 0 } }] });   // banked, as a fight's start leaves them: each turn's tick takes the round's 6 seconds
+        const camp = { id: 'k', system: sys3, items: { mDocks: { id: 'mDocks', type: 'map', meta: { title: 'Docks' }, whiteboard: [tok('t_kael', 'c_kael', 'u_a'), tok('t_u7', 'c_u7'), tok('t_u7b', 'c_u7'), tok('t_sela', 'c_sela', 'u_b'), tok('t_mira', 'c_mira')] } },
+            chars: { c_kael: { id: 'c_kael', name: 'Kael', ownerId: 'u_a', values: fx('x_k') }, c_u7: { id: 'c_u7', name: 'Unit 7', npc: true, values: fx('x_7') }, c_sela: { id: 'c_sela', name: 'Sela', ownerId: 'u_b', values: fx('x_s') }, c_mira: { id: 'c_mira', name: 'Mira', npc: true, values: fx('x_m') } } };
+        const mkC = p => ({ peer: p, open: true, sent: [], send(m) { packCheck(m); this.sent.push(JSON.parse(J(m))); } }), conns = [mkC('pA'), mkC('pB')];
+        const net = { active: true, role: 'host', myId: 'u_gm', conns, roster: { pA: { id: 'u_a', name: 'Pat', location: 'mDocks' }, pB: { id: 'u_b', name: 'Bea', location: 'mDocks' } }, combats: {}, targets: {}, paused: false, syncCharDelta() {} };
+        const fids = [], tag = c => { let i = fids.indexOf(c.id); if (i < 0) { fids.push(c.id); i = fids.length - 1; } return '@' + (i + 1); };   // each fight named by the order it first reached a hook
+        const env = { net, window: { wpVtt: { on: () => true }, wpSheets: { roundHook: (m, c) => hooks.push('R' + c.round + tag(c)), turnHook: (m, c) => hooks.push('T' + c.round + '.' + c.turn + ':' + c.rows[c.turn].name + tag(c)), charChanged() {} } },
+            getActiveCampaign: () => camp, SC: () => Sx, own: H.own, toast: t => toasts.push(t), logEvent() {}, render() {}, console: { error: e => { throw e; } }, showConfirm: (t, cb) => cb(true), sendFailed: e => { throw e; },
+            anyFog: () => false, fogDrop: () => null, broadcast: () => { throw new Error('the fights go to each connection on its own'); }, moveMode: () => 'refuse', saveRemoteSoon() {}, pushChat() {} };
+        const api = new Function(...Object.keys(env), "'use strict';\n" + pidS + cbS + '\n' + setS + '\n' + ordersSrc + '\nreturn { initIntoFight: initIntoFight, combatsFor: combatsFor, cleanFights: cleanFights, cleanCombats: cleanCombats };')(...Object.values(env));
+        const row = (tokId, name) => ({ id: 'r' + tokId, name, tokId, init: 0, src: null });
+        const ticks = id => (600 - camp.chars[id].values.f_fx[0].t.left) / 6;   // how many turns' timed effects that character has counted
+        const fight = (rows) => net.fightSet(null, { mapId: 'mDocks', round: 1, turn: 0, rows });
+        return { net, camp, api, hooks, toasts, conns, row, ticks, fight };
+    };
+    // (A) a Prev past round 2's first turn and on again: each round and turn reached runs once; the move and the actions come back at the step back
+    const A = mk3(), NA = A.net, fA = A.fight([A.row('t_kael', 'Kael'), A.row('t_u7', 'Unit 7')]);
+    NA.fightStep(fA, 1); NA.fightStep(fA, 1); NA.fightStep(fA, -1);   // Unit 7, round 2 with Kael, back to Unit 7 in round 1
+    NA.turnSpent.c_kael = { Action: 1 }; const sentA = A.conns[0].sent.length;   // Kael spent his action
+    NA.fightStep(fA, -1);   // back to Kael's turn in round 1
+    const backA = { move: J(NA.turnMove[fA]), spent: Object.prototype.hasOwnProperty.call(NA.turnSpent, 'c_kael'), told: A.conns[0].sent.slice(sentA).filter(m => m.type === 'acts-left').map(m => m.charId + ':' + J(m.left)), hooks: A.hooks.length };
+    NA.fightStep(fA, 1); NA.fightStep(fA, 1); NA.fightStep(fA, 1); NA.fightStep(fA, 1);   // on again: Unit 7 and Kael's round 2, reached already; Unit 7 in round 2 and round 3, never reached
+    const gA = { hooks: A.hooks, ticks: [A.ticks('c_kael'), A.ticks('c_u7')], back: backA, reach: [NA.combats[fA].rh, J(NA.combats[fA].th), J(NA.combats[fA].turned)] };
+    check('fold 3 (backlog 152, run for real): a step back is a correction — the round hook (Each round actions) runs once for each round a fight reaches, and the turn hook (Each turn actions) and a turn\'s timed effects once for each turn reached in it, so a Prev past round 2\'s first turn and on again runs nothing twice and goes on into round 3 as before (Kael\'s Charge counted three turns, Unit 7\'s two); the move and the turn\'s actions are still given back at the step back, as before: Kael\'s move begun afresh, what he spent gone and his player told',
+        J(gA.hooks) === J(['R1@1', 'T1.0:Kael@1', 'T1.1:Unit 7@1', 'R2@1', 'T2.0:Kael@1', 'T2.1:Unit 7@1', 'R3@1', 'T3.0:Kael@1']) && J(gA.ticks) === J([3, 2])
+        && J(backA) === J({ move: J({ rowId: 'rt_kael', tokId: 't_kael', moved: 0, allow: null }), spent: false, told: ['c_kael:{"Action":1}'], hooks: 5 }) && J(gA.reach) === J([3, J({ rt_kael: 1 }), J({ c_kael: 3, c_u7: 2 })]), J(gA));
+    // (B) a Hold and Act: the turn Kael acts from his hold is no turn reached anew; (C) two rows of one NPC sheet: its timed effects once a round
+    const B = mk3(), NB = B.net, fB = B.fight([B.row('t_kael', 'Kael'), B.row('t_u7', 'Unit 7'), B.row('t_sela', 'Sela')]);
+    NB.fightHold(fB); const actB = NB.fightAct(fB, 'rt_kael'), orderB = NB.combats[fB].rows.map(r => r.name);   // Kael holds, Unit 7 is up, Kael acts: right after Unit 7
+    NB.fightStep(fB, 1); NB.fightStep(fB, 1); NB.fightStep(fB, 1); NB.fightStep(fB, 1);   // Kael acting, Sela, round 2 with Unit 7 first, Kael
+    const gB = { hooks: B.hooks, act: actB, order: orderB, ticks: [B.ticks('c_kael'), B.ticks('c_u7'), B.ticks('c_sela')] };
+    const C = mk3(), NC = C.net, fC = C.fight([C.row('t_u7', 'Unit 7'), C.row('t_u7b', 'Unit 7b'), C.row('t_kael', 'Kael')]);
+    NC.fightStep(fC, 1); NC.fightStep(fC, 1); NC.fightStep(fC, 1); NC.fightStep(fC, 1);   // Unit 7b, Kael, round 2 with Unit 7, Unit 7b
+    const gC = { hooks: C.hooks, ticks: [C.ticks('c_u7'), C.ticks('c_kael')] };
+    check('fold 3 (run for real): a Hold and Act counts once — Kael holds his turn and acts after Unit 7, and the turn he acts in is no turn reached anew, so neither his Each turn actions nor his timed effects run again in round 1 (one turn counted in each round); two rows of one character count once — Unit 7, an NPC sheet with two tokens in the fight, has its Each turn actions at each of its turns but its timed effects counted once a round (two in two rounds, not four)',
+        gB.act === true && J(gB.order) === J(['Unit 7', 'Kael', 'Sela']) && J(gB.hooks) === J(['R1@1', 'T1.0:Kael@1', 'T1.1:Unit 7@1', 'T1.2:Sela@1', 'R2@1', 'T2.0:Unit 7@1', 'T2.1:Kael@1']) && J(gB.ticks) === J([2, 2, 1])
+        && J(gC.hooks) === J(['R1@1', 'T1.0:Unit 7@1', 'T1.1:Unit 7b@1', 'T1.2:Kael@1', 'R2@1', 'T2.0:Unit 7@1', 'T2.1:Unit 7b@1']) && J(gC.ticks) === J([2, 1]), J([gB, gC]));
+    // (D) a roster edit keeps how far the fight has gone: a row taken out before the one on turn, then a round set back
+    const D = mk3(), ND = D.net, fD = D.fight([D.row('t_kael', 'Kael'), D.row('t_u7', 'Unit 7'), D.row('t_sela', 'Sela')]);
+    ND.fightStep(fD, 1);   // Unit 7's turn
+    const editD = (round, turn) => ND.fightSet(fD, { mapId: 'mDocks', round, turn, rows: [D.row('t_u7', 'Unit 7'), D.row('t_sela', 'Sela')] });   // as the menu's Remove from the fight sends it: Kael out, the row on turn kept
+    editD(1, 0); const keptD = [ND.combats[fD].rh, J(ND.combats[fD].th), J(ND.combats[fD].turned)];
+    ND.fightStep(fD, 1); ND.fightStep(fD, 1);   // Sela, never reached in round 1; round 2 with Unit 7
+    editD(1, 1); ND.fightStep(fD, 1); ND.fightStep(fD, 1);   // the roster sets round 1 again with Sela on turn: on into round 2, reached already, with Unit 7, then Sela
+    const gD = { hooks: D.hooks, kept: keptD, ticks: [D.ticks('c_kael'), D.ticks('c_u7'), D.ticks('c_sela')] };
+    // (E) a player's initiative re-sorts the order in play: Kael rolls low after his turn, and Sela, still to come, keeps hers
+    const E = mk3(), NE = E.net, fE = E.fight([E.row('t_kael', 'Kael'), E.row('t_u7', 'Unit 7'), E.row('t_sela', 'Sela')]);
+    NE.fightStep(fE, 1); const intoE = E.api.initIntoFight(E.camp, 'mDocks', 'c_kael', 'u_a', -5), orderE = NE.combats[fE].rows.map(r => r.name), turnE = NE.combats[fE].turn;
+    NE.fightStep(fE, 1); NE.fightStep(fE, 1);   // Sela, then Kael, moved past the row on turn though he had his turn
+    const gE = { into: intoE, order: orderE, turn: turnE, hooks: E.hooks.slice(3), ticks: [E.ticks('c_kael'), E.ticks('c_sela')] };
+    check('fold 3 (run for real): a roster edit keeps how far the fight has gone (rh, th and turned put back after cleaning, as rr and side are), a turn reached known by its row — Kael taken out before Unit 7\'s turn costs Sela, still to come, nothing; the roster setting round 1 again runs no round hook and no turn of it again; and a player\'s initiative that re-sorts the order in play keeps it the same way: Kael rolling low after his turn moves to the end, Sela, still to come, has her turn, and Kael\'s place at the end runs no second turn of his in that round',
+        J(gD.kept) === J([1, J({ rt_kael: 1, rt_u7: 1 }), J({ c_kael: 1, c_u7: 1 })]) && J(gD.hooks) === J(['R1@1', 'T1.0:Kael@1', 'T1.1:Unit 7@1', 'T1.1:Sela@1', 'R2@1', 'T2.0:Unit 7@1', 'T2.1:Sela@1']) && J(gD.ticks) === J([1, 2, 2])
+        && gE.into === true && J(gE.order) === J(['Unit 7', 'Sela', 'Kael']) && gE.turn === 0 && J(gE.hooks) === J(['T1.1:Sela@1']) && J(gE.ticks) === J([1, 1]), J([gD, gE]));
+    // (H) the review of fold 3: a turn reached is known by its row, never by its place, so no edit of the order skips a turn still to come or runs one again
+    const four = Wd => [Wd.row('t_kael', 'Kael'), Wd.row('t_u7', 'Unit 7'), Wd.row('t_sela', 'Sela'), Wd.row('t_mira', 'Mira')];
+    const H1 = mk3(), g1 = H1.fight(four(H1));
+    H1.net.fightStep(g1, 1); H1.net.fightStep(g1, 1);   // Sela's turn
+    H1.net.fightSet(g1, { mapId: 'mDocks', round: 1, turn: 0, rows: [H1.row('t_kael', 'Kael'), H1.row('t_u7', 'Unit 7'), H1.row('t_mira', 'Mira')] });   // the roster's Update with Sela unticked: with the row on turn gone it sends the first row's turn (whiteboard.js, at >= 0 ? at : 0)
+    H1.net.fightStep(g1, 1); H1.net.fightStep(g1, 1); H1.net.fightStep(g1, 1);   // Unit 7, reached already; Mira, never reached; round 2 with Kael
+    const H2 = mk3(), g2 = H2.fight(four(H2));
+    H2.net.fightStep(g2, 1); H2.net.fightStep(g2, 1); H2.net.fightStep(g2, -1);   // Sela's turn, then a step back to Unit 7
+    H2.net.fightSet(g2, { mapId: 'mDocks', round: 1, turn: 1, rows: [H2.row('t_kael', 'Kael'), H2.row('t_u7', 'Unit 7'), H2.row('t_mira', 'Mira')] });   // the menu's Remove from the fight takes Sela out, the row on turn kept
+    H2.net.fightStep(g2, 1);   // Mira, never reached
+    const H3 = mk3(), g3 = H3.fight([Object.assign(H3.row('t_u7', 'Unit 7'), { init: 10, rolled: 1 }), Object.assign(H3.row('t_sela', 'Sela'), { init: 8, rolled: 1 }), Object.assign(H3.row('t_mira', 'Mira'), { init: 5, rolled: 1 }), H3.row('t_kael', 'Kael')]);
+    H3.net.fightStep(g3, 1); H3.net.fightStep(g3, 1); H3.net.fightStep(g3, -1);   // Sela, Mira, then a step back to Sela
+    const into3 = H3.api.initIntoFight(H3.camp, 'mDocks', 'c_kael', 'u_a', 6), order3 = H3.net.combats[g3].rows.map(r => r.name);   // Kael's first number goes in between Sela and Mira
+    H3.net.fightStep(g3, 1); H3.net.fightStep(g3, 1);   // Kael, never reached; Mira, reached already
+    const H4 = mk3(), g4 = H4.fight(four(H4));
+    H4.net.fightStep(g4, 1);   // Unit 7's turn
+    H4.net.fightSet(g4, { mapId: 'mDocks', round: 1, turn: 1, rows: [H4.row('t_mira', 'Mira'), H4.row('t_u7', 'Unit 7'), H4.row('t_kael', 'Kael'), H4.row('t_sela', 'Sela')] });   // the roster's Update after numbers typed: the draft sorted again, the row on turn kept
+    H4.net.fightStep(g4, 1); H4.net.fightStep(g4, 1); H4.net.fightStep(g4, 1);   // Kael, reached already; Sela; round 2 with Mira
+    const H5 = mk3(), g5 = H5.fight([H5.row('t_kael', 'Kael'), H5.row('t_u7', 'Unit 7')]);
+    H5.net.fightStep(g5, 1); H5.net.fightStep(g5, 1);   // round 2, Kael's turn
+    H5.net.fightSet(g5, { mapId: 'mDocks', round: 2, turn: 0, rows: [H5.row('t_kael', 'Kael'), H5.row('t_u7', 'Unit 7'), H5.row('t_mira', 'Mira')] });   // Add to the fight: Mira at the end, the row on turn kept
+    H5.net.fightStep(g5, -1); const back5 = { round: H5.net.combats[g5].round, on: H5.net.combats[g5].rows[H5.net.combats[g5].turn].name, ticks: H5.ticks('c_mira') };   // a step back into round 1 lands on Mira
+    H5.net.fightStep(g5, 1); H5.net.fightStep(g5, 1); H5.net.fightStep(g5, 1);   // on again: Kael, reached already; Unit 7; Mira
+    const gH = { h1: [H1.hooks, H1.ticks('c_mira'), H1.ticks('c_u7')], h2: [H2.hooks, H2.ticks('c_mira')], h3: [into3, order3, H3.hooks, H3.ticks('c_kael'), H3.ticks('c_mira')], h4: [H4.hooks, H4.ticks('c_kael')], h5: [back5, H5.hooks, H5.ticks('c_mira')] };
+    check('fold 3\'s review (run for real): a turn reached is known by its row, never by its place — the roster\'s Update with the row on turn unticked costs Mira, still to come, nothing and gives Unit 7 no second turn; a row taken out between the turn and the furthest turn reached after a step back costs Mira nothing; a player\'s first initiative that puts Kael in between after a step back gives him his turn and Mira no second one; the roster sorting a row already reached after the row on turn gives it no second turn; and a step back into a round the fight has gone past runs nothing for a row added since, which then has its turn and its timed effects once',
+        J(gH.h1) === J([['R1@1', 'T1.0:Kael@1', 'T1.1:Unit 7@1', 'T1.2:Sela@1', 'T1.2:Mira@1', 'R2@1', 'T2.0:Kael@1'], 1, 1])
+        && J(gH.h2) === J([['R1@1', 'T1.0:Kael@1', 'T1.1:Unit 7@1', 'T1.2:Sela@1', 'T1.2:Mira@1'], 1])
+        && J(gH.h3) === J([true, ['Unit 7', 'Sela', 'Kael', 'Mira'], ['R1@1', 'T1.0:Unit 7@1', 'T1.1:Sela@1', 'T1.2:Mira@1', 'T1.2:Kael@1'], 1, 1])
+        && J(gH.h4) === J([['R1@1', 'T1.0:Kael@1', 'T1.1:Unit 7@1', 'T1.3:Sela@1', 'R2@1', 'T2.0:Mira@1'], 1])
+        && J(gH.h5) === J([{ round: 1, on: 'Mira', ticks: 0 }, ['R1@1', 'T1.0:Kael@1', 'T1.1:Unit 7@1', 'R2@1', 'T2.0:Kael@1', 'T2.1:Unit 7@1', 'T2.2:Mira@1'], 1]), J(gH));
+    // (F) two fights on one map keep their own
+    const F = mk3(), NF = F.net, f1 = F.fight([F.row('t_kael', 'Kael'), F.row('t_u7', 'Unit 7')]), f2 = F.fight([F.row('t_sela', 'Sela')]);
+    NF.fightStep(f1, 1); NF.fightStep(f1, 1); NF.fightStep(f1, -1);   // the first fight: Unit 7, round 2 with Kael, back to Unit 7
+    NF.fightStep(f2, 1); NF.fightStep(f2, -1); NF.fightStep(f2, 1);   // the second: its own round 2, back and on again
+    NF.fightStep(f1, 1); NF.fightStep(f1, 1);   // the first: round 2 again with Kael, then Unit 7
+    const gF = { hooks: F.hooks, own: [f1, f2].map(f => [NF.combats[f].rh, J(NF.combats[f].th), J(NF.combats[f].turned)]), ticks: [F.ticks('c_kael'), F.ticks('c_u7'), F.ticks('c_sela')] };
+    check('fold 3 (run for real): two fights on one map keep how far each has gone on its own — the second fight reaches its own round 2 though the first has, and each fight\'s step back and on again runs nothing twice in that fight',
+        J(gF.hooks) === J(['R1@1', 'T1.0:Kael@1', 'R1@2', 'T1.0:Sela@2', 'T1.1:Unit 7@1', 'R2@1', 'T2.0:Kael@1', 'R2@2', 'T2.0:Sela@2', 'T2.1:Unit 7@1'])
+        && J(gF.own) === J([[2, J({ rt_kael: 1, rt_u7: 1 }), J({ c_kael: 2, c_u7: 2 })], [2, J({ rt_sela: 1 }), J({ c_sela: 2 })]]) && J(gF.ticks) === J([2, 2, 2]), J(gF));
+    // (G) never sent: every copy of the fights the players were sent, and what the join snapshot and a hostile host would give
+    const keysOf = cs => Object.keys(cs).map(k => Object.keys(cs[k]).sort().join(','));
+    const S5 = ['id', 'mapId', 'round', 'turn', 'rows'].sort().join(','), S4 = ['mapId', 'round', 'turn', 'rows'].sort().join(',');   // the keys a fight is sent with, and an older host's
+    const msgs = [A, B, C, D, E, F].reduce((all, Wd) => all.concat(...Wd.conns.map(c => c.sent.filter(m => m.type === 'combats'))), []);
+    const snapA = A.api.combatsFor('u_a', 'mDocks'), hostile = { f_abcd1234: { mapId: 'mDocks', round: 2, turn: 0, rows: [{ id: 'r1', name: 'Kael', tokId: 't_kael' }], rh: 9, th: 3, turned: { c_kael: 9 } } };
+    const cleanedF = A.api.cleanFights(hostile), cleanedC = A.api.cleanCombats({ mDocks: hostile.f_abcd1234 });
+    const gG = { host: [A, F].map(Wd => Object.keys(Wd.net.combats).every(k => ['rh', 'th', 'turned'].every(x => Object.prototype.hasOwnProperty.call(Wd.net.combats[k], x)))), msgs: msgs.length,
+        sent: msgs.every(m => /"(rh|th|turned)"/.test(J(m)) === false && keysOf(m.combats).every(s => s === S5)), snap: keysOf(snapA), cleaned: [keysOf(cleanedF), keysOf(cleanedC)] };
+    check('fold 3 (run for real): rh, th and turned are the host\'s own — every fight here keeps all three, and none of them is in any copy of the fights a player was sent, in what the join snapshot carries (combatsFor), or in what a player\'s app keeps from a hostile host that names them (cleanFights, cleanCombats)',
+        J(gG) === J({ host: [true, true], msgs: gG.msgs, sent: true, snap: [S5], cleaned: [[S5], [S4]] }) && gG.msgs > 20, J(gG));
+    const rd3 = f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8').replace(/\r\n/g, '\n'), help3 = rd3('system/app/index.html'), notes3 = ['WHATSNEW.txt', 'system/app/assets/whatsnew.txt'].map(rd3);
+    check('fold 3 (source): Help\'s combat entry says that a step back is a correction and runs nothing twice, naming the actions by the words their list shows, the Rolls entry says the round still goes back at a step back but runs an action once for each round reached, the timed effects say they count once a round, and both release notes say it under 1.5.5\'s Combat',
+        help3.includes('<li>A step back with <b>&#9664;</b> on the turn strip is a correction. Going on again runs no <b>Also each round</b> or <b>Also at its turn&rsquo;s start</b> action twice, and counts no timed effect twice.</li>')
+        && help3.includes('<b>Also each round</b> runs it on every character with a token in the fight once for each round the fight reaches. The round changes at the combat&rsquo;s start, at <b>Next turn</b> past the last and back at a step back past the first. A step back is a correction, so a round reached before runs nothing again.') && !help3.includes('runs no Each round or Each turn action')
+        && help3.includes('In a combat one round passes at the start of its character&rsquo;s turn, once in each round of the fight, and a step back counts nothing again.')
+        && notes3.every(t => { const a = t.indexOf('WAYPOINT 1.5.5'), b = t.indexOf('WAYPOINT 1.5.4'), c = t.indexOf('\nCombat\n', a), i = t.indexOf('- A step back on the turn strip is a correction. Going back and on\n'); return a >= 0 && c > a && i > c && i < b; }));
 })());
 
 // Turn-based combat T3a (D11, owner): walls stop a player's token — the host's pos gate (net.js, run for real) asks the fog for the move from
@@ -4231,6 +4360,7 @@ pendingChecks.push((async () => {
         return out;
     };
     const rowsOf = (m, mapId) => { const fr = m && fightIn(m.combats, mapId || 'm1'); return fr ? fr.rows : null; };   // fold 2: the fight on that map, under its own id
+    const noFid = m => j(m).replace(/f_[a-z0-9]{8}/g, 'f_');   // a message as text with each fight's id taken out: an id is eight random letters and digits, and may hold any short word looked for (fold 3's review: "gob" one run in 7,800, "23" one in 185)
     const full = (id, name, tokId, src) => ({ id, name, tokId, src });
     const order = [full('r_t_gob', 'Goblin', 't_gob', 'gob.png'), full('r_t_orc', 'Orc', 't_orc', 'orc.png'), full('c_trap', 'Trap', null, null), full('r_t_ana', 'Ana', 't_ana', 'ana.png')];
 
@@ -4246,7 +4376,7 @@ pendingChecks.push((async () => {
         j([a.rolls, aDraft, aHost]));
     check('combat roster (no fog): players get the order, the names, the tokens and the pictures, never a number — fold 2: under the fight\'s own id, each admitted player on that map their own copy, the same for each, never a broadcast; a waiting or closed connection gets nothing',
         /^f_[a-z0-9]{8}$/.test(aFid) && j(aMsg) === j({ type: 'combats', combats: oneFight(aFid, 'm1', 1, 0, order) }) && j(aMsgB) === j(aMsg) && a.bcast.length === 0
-        && a.conns[2].sent.length === 0 && a.conns[3].sent.length === 0 && j(aMsg).indexOf('init') < 0 && j(aMsg).indexOf('23') < 0, j([aMsg, a.bcast.length, a.conns[2].sent]));
+        && a.conns[2].sent.length === 0 && a.conns[3].sent.length === 0 && noFid(aMsg).indexOf('init') < 0 && noFid(aMsg).indexOf('23') < 0, j([aMsg, a.bcast.length, a.conns[2].sent]));
     const snapA = a.N.combatsFor('u_a', 'm1');
     check('combat roster: the join snapshot\'s combats (combatsFor, per player) carry no number either, and building them leaves the host\'s own rows as they were',
         j(snapA) === j(aMsg.combats) && aHost.rows[0].init === 23 && aHost.rows[0].src === 'gob.png' && aHost.rows.every(r => 'init' in r), j([snapA, aHost.rows[0]]));
@@ -4291,12 +4421,12 @@ pendingChecks.push((async () => {
     const hid = { id: 'h0', name: 'Hidden', tokId: null, src: null };
     check('combat roster (fog): an unseen creature\'s row is Hidden whole — no name, token, picture or token-bearing id — in its place in the order; nor is there a number on any row, on the fogged map or an unfogged one',
         j(rowsOf(fA)) === j([hid].concat(order.slice(1))) && j(fYardOut) === j(oneFight(fYard.id, 'm2', 2, 1, [full('c_tur', 'Turret', null, null), full('c_gat', 'Gate', null, null)]))
-        && j(fA).indexOf('gob') < 0 && j(fA).indexOf('Goblin') < 0 && j(fA).indexOf('init') < 0, j([fA, fYardOut]));
+        && noFid(fA).indexOf('gob') < 0 && noFid(fA).indexOf('Goblin') < 0 && noFid(fA).indexOf('init') < 0, j([fA, fYardOut]));
     check('fold 2 (backlog 152, run for real): a player is sent only the fights on the map they are on — Ana, on the Keep, gets the Keep\'s fight and nothing of the fight on the Yard (its turret, its gate, its round); every player was sent every fight on every map before',
         Object.keys(fA.combats).length === 1 && fightIn(fA.combats, 'm2') === undefined && Object.keys(fB.combats).length === 1 && fightIn(fB.combats, 'm2') === undefined && j(fA).indexOf('Turret') < 0 && j(fB).indexOf('Gate') < 0
         && Object.keys(f.net.combats).length === 2 && !!fYard && fYard.id !== fightIn(f.net.combats, 'm1').id, j([fA, fB]));
     check('combat roster (fog): each admitted player gets their own copy (the one who sees the Goblin, the plain order); nothing goes to a waiting or closed connection; the host keeps the Goblin whole with its 23',
-        j(rowsOf(fB)) === j(order) && j(fB).indexOf('init') < 0 && f.bcast.length === 0 && f.conns[2].sent.length === 0 && f.conns[3].sent.length === 0
+        j(rowsOf(fB)) === j(order) && noFid(fB).indexOf('init') < 0 && f.bcast.length === 0 && f.conns[2].sent.length === 0 && f.conns[3].sent.length === 0
         && fightIn(f.net.combats, 'm1').rows[0].name === 'Goblin' && fightIn(f.net.combats, 'm1').rows[0].init === 23 && fightIn(f.net.combats, 'm1').rows[0].tokId === 't_gob', j([fB, fightIn(f.net.combats, 'm1').rows[0]]));
     const fSnap = f.N.combatsFor('u_a', 'm1'), fSnapB = f.N.combatsFor('u_b', 'm1');
     check('combat roster (fog): the join snapshot for each player matches what the broadcast sent them', j(fSnap) === j(fA.combats) && j(fSnapB) === j(fB.combats), j([fSnap, fSnapB]));
@@ -6615,7 +6745,7 @@ pendingChecks.push((async () => {
         W.sendAll(); const dazed = W.sigs()['u_a|mA'];
         const cb = { mapId: 'mA', round: 1, turn: 0, rows: [{ id: 'r_a', name: 'Ana', tokId: 'tA', init: 3, src: null }] }; W.net.combats = { mA: cb };
         W.api.turn('mA', cb); const tick = { left: W.camp.chars.c_a.values.f_fx.map(r => r.t.left), a1: W.types(W.a1), made: W.made(500), keys: W.pendKeys(), cmp: W.ev.filter(e => /^sig:/.test(e)) };
-        W.clear(); W.api.turn('mA', cb); const gone = { rows: W.camp.chars.c_a.values.f_fx.length, a1: W.types(W.a1), keys: W.pendKeys(), chat: W.chat.map(m => m.text) };
+        W.clear(); cb.round = 2; W.api.turn('mA', cb); const gone = { rows: W.camp.chars.c_a.values.f_fx.length, a1: W.types(W.a1), keys: W.pendKeys(), chat: W.chat.map(m => m.text) };   // fold 3 (moved on purpose): the next round's turn, as a turn's timed effects count once a round
         W.fire(500); const ended = { a1: W.types(W.a1), a2: W.types(W.a2), b1: W.types(W.b1), items: W.items(W.a1), sig: W.sigs()['u_a|mA'] };
         check('senses S0: an effect\'s timer that only counts down (the real turn tick) sends the character and no map, though the hook is reached; when an effect that lowered Sight runs out, its player is sent that map once (60 ft again: 12 cells), and nobody else is',
             dazed === '4' && j(tick) === j({ left: [6, 6], a1: ['charDelta'], made: 0, keys: [], cmp: ['sig:u_a|mA=4', 'sig:u_b|mA=12'] }) && gone.rows === 0 && j(gone.keys) === j(['u_a|mA']) && j(gone.chat) === j(['Dazzled ran out on Ana.', 'Bless ran out on Ana.'])

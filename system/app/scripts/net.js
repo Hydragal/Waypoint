@@ -4430,8 +4430,31 @@ function combatRefresh() { render(); if (window.wpRenderCombatStrip) window.wpRe
 // Item 20 K2 (the reference VTT's model): n rounds of a fight move the campaign's clock on by the round's length, back for a step back (calendar.js)
 function clockRounds(n) { try { if (window.wpCalendar && window.wpCalendar.rounds) window.wpCalendar.rounds(n); } catch (e) { console.error(e); } }
 function clockFightEnd() { try { if (window.wpCalendar && window.wpCalendar.fightEnded) window.wpCalendar.fightEnded(); } catch (e) { console.error(e); } }   // K5: a fight's rounds, as active time, asked about now
-function roundChanged(mapId, c) { try { if (window.wpSheets && window.wpSheets.roundHook) window.wpSheets.roundHook(mapId, c); } catch (e) { console.error(e); } if (typeof marksRound === 'function') { try { marksRound(mapId, c); } catch (e) { console.error(e); } } }   // senses S4b: marks held to the round
-function turnStarted(mapId, c) { try { if (window.wpSheets && window.wpSheets.turnHook) window.wpSheets.turnHook(mapId, c); } catch (e) { console.error(e); } try { turnMoveStart(mapId, c); } catch (e) { console.error(e); } try { turnActsStart(mapId, c); } catch (e) { console.error(e); } try { turnFxStart(mapId, c); } catch (e) { console.error(e); } if (typeof marksTurn === 'function') { try { marksTurn(mapId, c); } catch (e) { console.error(e); } } }   // turn-based combat T2b: a character's turn just began; T3b: its move; senses S4b: its player's marks
+function roundChanged(mapId, c) { if (fightReachRound(c)) { try { if (window.wpSheets && window.wpSheets.roundHook) window.wpSheets.roundHook(mapId, c); } catch (e) { console.error(e); } } if (typeof marksRound === 'function') { try { marksRound(mapId, c); } catch (e) { console.error(e); } } }   // senses S4b: marks held to the round; fold 3: the round hook only for a round the fight reaches for the first time
+function turnStarted(mapId, c) { var first = fightReachTurn(c); if (first) { try { if (window.wpSheets && window.wpSheets.turnHook) window.wpSheets.turnHook(mapId, c); } catch (e) { console.error(e); } } try { turnMoveStart(mapId, c); } catch (e) { console.error(e); } try { turnActsStart(mapId, c); } catch (e) { console.error(e); } if (first) { try { turnFxStart(mapId, c); } catch (e) { console.error(e); } } if (typeof marksTurn === 'function') { try { marksTurn(mapId, c); } catch (e) { console.error(e); } } }   // turn-based combat T2b: a character's turn just began; T3b: its move; senses S4b: its player's marks; fold 3: the turn hook and its timed effects only for a turn first reached in that round, its move and its actions at every start, a step back's too
+// Fold 3 (backlog 152, docs/FIGHT_CLOCK_DESIGN.md sections 2 and 6, settled 18): a step back is a correction, so nothing is lived twice in a fight. Each
+// fight keeps how far it has gone, the host's own and never sent (combatsFor names what it sends, and cleanFightBody writes none of it): rh, the highest
+// round reached; th, { rowId: 1 }, the rows whose turn the fight reached in round rh (begun again whenever rh rises); turned, { charId: round }, the round
+// each character's turn timed effects were last counted in (turnFxStart). The round hook runs only for a round first reached, as the initiative re-roll
+// does (rr), and the turn hook and a turn's timed effects only for a row's turn first reached in round rh, never in a round the fight has gone past, so a
+// Prev and Next, or a Hold and Act, runs nothing again. A turn reached is known by its ROW and never by its place (fold 3's review): a roster edit that
+// takes a row out, adds one or sorts the order again, and a player's initiative that re-sorts it in play, neither skip a turn still to come nor run one
+// again. A new fight starts with none, and a roster edit keeps all three (fightReachKept). A new place that reorders a fight's rows keeps each row's id
+function fightReachRound(c) { var rh = c && typeof c.rh === 'number' ? c.rh : 0; if (!c || !(c.round > rh)) return false; c.rh = c.round; c.th = Object.create(null); return true; }
+function fightReachTurn(c) {
+    var row = c && typeof c.round === 'number' && typeof c.turn === 'number' && Array.isArray(c.rows) ? c.rows[c.turn] : null; if (!row) return false;
+    var rh = typeof c.rh === 'number' ? c.rh : 0;
+    if (c.round > rh) { c.rh = c.round; c.th = Object.create(null); }
+    else if (c.round < rh) return false;   // a round the fight has gone past: a correction, nothing of it runs again
+    var th = c.th && typeof c.th === 'object' ? c.th : (c.th = Object.create(null)), k = typeof row.id === 'string' && row.id ? row.id : '#' + c.turn;   // a row with no id by its place
+    if (th[k] === 1) return false;
+    th[k] = 1; return true;
+}
+function fightReachKept(had, f) {   // a roster edit: how far the fight has gone, kept whole (a row taken out and put back in the same round keeps its turn had)
+    if (typeof had.rh === 'number') f.rh = had.rh;
+    if (had.th && typeof had.th === 'object') f.th = had.th;
+    if (had.turned && typeof had.turned === 'object') f.turned = had.turned;
+}
 // [netcheck:turnmove-start]
 // Turn-based combat T3b (D1, D2): the move of the character whose turn begins — how far its token may go this turn, in the map's cells (its
 // system's Move per turn, worked out through its player's view with its token; none, a GM-only one, one that fails: no limit) and how far
@@ -4534,9 +4557,10 @@ net.timeCard = function(ch, text, gmOnly) {
 };
 // [netcheck:timecard-end]
 function fxCombatChars(mapId, combat) { var camp = getActiveCampaign(); if (!camp || !camp.system) return []; var S = SC(), mp = camp && camp.items && own(camp.items, mapId) ? camp.items[mapId] : null; return S && S.combatChars && mp ? S.combatChars(mp, combat, camp.chars || {}).map(function(e) { return camp.chars[e.charId]; }).filter(Boolean) : []; }
-function turnFxStart(mapId, c) {   // the character whose turn begins: a round of its timed effects passes
+function turnFxStart(mapId, c) {   // the character whose turn begins: a round of its timed effects passes, once in each round of that fight (fold 3: c.turned, so two rows of one sheet count once)
     var camp = getActiveCampaign(), row = c && Array.isArray(c.rows) ? c.rows[c.turn] : null; if (!camp || !row) return;
-    fxCombatChars(mapId, { rows: [row] }).forEach(function(ch) { fxApply(camp, ch, 'turn', Date.now()); });
+    var tn = c.turned && typeof c.turned === 'object' ? c.turned : (c.turned = Object.create(null)), rd = typeof c.round === 'number' ? c.round : 1;
+    fxCombatChars(mapId, { rows: [row] }).forEach(function(ch) { if (typeof ch.id === 'string') { if (Object.prototype.hasOwnProperty.call(tn, ch.id) && tn[ch.id] >= rd) return; tn[ch.id] = rd; } fxApply(camp, ch, 'turn', Date.now()); });
 }
 function fxCombatEdge(mapId, combat, kind) { var camp = getActiveCampaign(), now = Date.now(); fxCombatChars(mapId, combat).forEach(function(ch) { fxApply(camp, ch, kind, now); }); }   // bank at a combat's start, resume at its end
 function fxClockTick() {   // out of combat: the clock, on the GM's own machine
@@ -4736,6 +4760,7 @@ function fightSet(fid, combat) {
         if (had && typeof had.rr === 'number') f.rr = had.rr;   // initiative O4: the last round the fight rolled for, and this round's side, kept through a roster edit
         if (had && (had.side === 'pc' || had.side === 'rest')) f.side = had.side;
         if (typeof combatSides === 'function') combatSides(mapId, f, !had);   // ...and each side together (a new fight rolls the sides first)
+        if (had && typeof fightReachKept === 'function') fightReachKept(had, f);   // fold 3: a roster edit keeps how far the fight has gone (rh, th, turned), put back after cleaning as rr and side are; a new fight starts with none
         if (!had || had.round !== f.round) roundChanged(mapId, f);   // G10: the first round (a roster edit keeps its round)
         if (had && had.round !== f.round && typeof clockRounds === 'function') clockRounds(f.round - had.round);   // item 20 K2: a round edited in the roster moves the clock with it (a new fight moves nothing)
         if (!had) { net.fightOn = fid; logEvent('table', 'Combat started on ' + mapTitleOf(mapId) + ': ' + f.rows.map(function(r) { return r.name; }).join(', ')); }   // a new fight is the one played
