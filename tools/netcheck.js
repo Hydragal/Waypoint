@@ -3633,7 +3633,7 @@ pendingChecks.push((async () => {
             combats: { mDocks: { mapId: 'mDocks', round: 3, turn: 1, rows: [row('t_kael', 'Kael'), row('t_u7', 'Unit 7')] }, mBridge: { mapId: 'mBridge', round: 1, turn: 0, rows: [row('t_u9', 'Unit 9')] } },
             syncCharDelta: () => {}, videoStop: () => {}, libReset: () => {} };
         if (o.sela) net.combats.mBridge.rows.push(row('t_sela', 'Sela'));
-        const win = { wpVtt: { on: k => (k === 'calendar' ? o.calendar === true : true) }, wpSheets: { charChanged: () => {} }, wpCalendar: { fightEnded: () => { cal.push(net.active); ev.push('calendar'); } } };
+        const win = { wpVtt: { on: k => (k === 'calendar' ? o.calendar === true : true) }, wpSheets: { charChanged: () => {} }, wpCalendarCore: Cx, wpCalendar: { ownTime: () => false, second: () => { cal.push(net.active); ev.push('calendar'); } } };   // 152 fold 4: an end hands its closing round to ownTime and the clock to second (once a fight), where fightEnded was asked
         const broadcast = msg => { packCheck(msg); ev.push('broadcast:' + msg.type); conns.forEach(c => { if (c.open && net.roster[c.peer]) c.send(msg); }); };
         const noop = () => {}, env = { net, window: win, getActiveCampaign: () => camp, SC: () => Sx, own: (ob, k) => !!ob && Object.prototype.hasOwnProperty.call(ob, k), broadcast, sendFailed: e => { throw e; }, logEvent: (k, t) => logs.push(k + ':' + t), toast: t => toasts.push(t),
             render: noop, moveMode: () => 'refuse', saveRemoteSoon: noop, pushChat: noop, anyFog: () => false, fogDrop: () => null, marksEnd: mid => marks.push(mid), _lastSent: {},
@@ -3671,12 +3671,12 @@ pendingChecks.push((async () => {
     const GP = mkW({ role: 'client' }); delete GP.camp.items.mDocks; GP.net.itemGone('k', 'mDocks', 'Docks'); const g5 = { combats: Object.keys(GP.net.combats), cal: GP.cal.length, sent: GP.conns[0].sent.length, toasts: GP.toasts.length };
     const E = mkW({ sela: true }); E.net.combatSet('mDocks', null);
     const eGot = { combats: Object.keys(E.net.combats), cal: E.cal, toasts: E.toasts, logs: E.logs, marks: E.marks, seen: E.seen(), spent: J(E.net.turnSpent), acts: E.acts(), sent: sentOf(E), at: E.atOf() };
-    const selaSpent = J({ c_sela: { Action: 1 } }), selaBanked = { c_kael: 'banked', c_u7: 'banked', c_u9: 'banked', c_sela: 'banked' }, docksRun = { c_kael: 'run', c_u7: 'run', c_u9: 'banked', c_sela: 'banked' };
-    check('fold 0 (run for real): a fight on a deleted map ends as End combat ends it — the fight taken away and the players sent the fights left, before they are told the map is gone; the Calendar asked once; End\'s notice and log line naming the map by the name the delete hands on, and as the deleted map where none is handed on; the marks\' end; nothing of it still seen; what Kael spent gone and his player told, while what Sela spent, still fighting on the Bridge, stays and her player is told nothing until that fight ends too — so the clock no longer waits for it (calendar.js liveHeld: a fight, then still a fight on the Bridge, then running once that map goes too); a map with no token left to find its fighters by has the clock\'s own tick set their effects going at once (the Calendar off: Kael and Unit 7 run again, Unit 9 and Sela still banked in the fight on the Bridge; the Calendar on: banked, as the game clock counts them); another delete, of that map again or of a page, ends nothing; on a player\'s app a delete ends no fight; End itself as before',
+    const selaSpent = J({ c_sela: { Action: 1 } }), selaBanked = { c_kael: 'banked', c_u7: 'banked', c_u9: 'banked', c_sela: 'banked' };
+    check('fold 0 (run for real): a fight on a deleted map ends as End combat ends it — the fight taken away and the players sent the fights left, before they are told the map is gone; the Calendar asked once; End\'s notice and log line naming the map by the name the delete hands on, and as the deleted map where none is handed on; the marks\' end; nothing of it still seen; what Kael spent gone and his player told, while what Sela spent, still fighting on the Bridge, stays and her player is told nothing until that fight ends too — so the clock no longer waits for it (calendar.js liveHeld: a fight, then still a fight on the Bridge, then running once that map goes too); a map with no token left to find its fighters by has the clock\'s own tick run at once, which (152 fold 4, moved on purpose) keeps everyone\'s effects banked while the fight on the Bridge runs, Kael and Unit 7 following the second as everyone in no fight does, with the Calendar off as on; another delete, of that map again or of a page, ends nothing; on a player\'s app a delete ends no fight; End itself as before, its fighters\' effects banked while another fight runs (fold 4)',
         g0 === 'fight' && J(g1) === J({ lh: 'fight', combats: ['mBridge'], cal: [true], toasts: ['Combat ended on Docks.'], logs: ['table:Combat ended on Docks after 3 rounds'], marks: ['mDocks'], seen: false, spent: selaSpent, acts: ['c_kael:null'], sent: ['combats:mBridge', 'itemGone:mDocks'], at: selaBanked })
         && J(g2) === J({ lh: '', combats: '{}', cal: 2, toasts: ['Combat ended on the deleted map.'], logs: ['table:Combat ended on the deleted map after 1 round'], spent: '{}', acts: ['c_kael:null', 'c_sela:null'], sent: ['combats:', 'itemGone:mBridge'] }) && J(g3) === J({ cal: 2, toasts: 2, combats: 2 })
-        && J(g4) === J(docksRun) && J(g5) === J({ combats: ['mDocks', 'mBridge'], cal: 0, sent: 0, toasts: 0 })
-        && J(eGot) === J({ combats: ['mBridge'], cal: [true], toasts: ['Combat ended on Docks.'], logs: [ended[0]], marks: ['mDocks'], seen: false, spent: selaSpent, acts: ['c_kael:null'], sent: ['combats:mBridge'], at: docksRun }),
+        && J(g4) === J(selaBanked) && J(g5) === J({ combats: ['mDocks', 'mBridge'], cal: 0, sent: 0, toasts: 0 })
+        && J(eGot) === J({ combats: ['mBridge'], cal: [true], toasts: ['Combat ended on Docks.'], logs: [ended[0]], marks: ['mDocks'], seen: false, spent: selaSpent, acts: ['c_kael:null'], sent: ['combats:mBridge'], at: selaBanked }),
         J([g0, g1, g2, g3, g4, g5, eGot]));
     const dlgJs = fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', 'dialogs.js'), 'utf8');
     check('fold 0 (source): End, the session\'s end and a deleted map end a fight in one place (combatOver); the session\'s end asks it right after its drags go back, before the end is said and while the table is still on, never in the stream window; a deleted map asks it only on an active host, before the players are told, with the name it was handed; dialogs.js\'s two deletes of an item hand on the name the item had',
@@ -4306,9 +4306,9 @@ pendingChecks.push((async () => {
         j(c.camp.chars.c_q.values.f_fx) === '[]' && j(c.camp.chars.c_r.values.f_fx) === '[]' && c.camp.chars.c_p.values.f_fx.length === 1 && j(c.out.chat.map(m => m.text)) === j(['Quick ran out on Quin.', 'Quick ran out on Rex.']) && c.conns[0].sent.length === 1
         && d.camp.chars.c_q.values.f_fx.length === 1 && !d.out.chat.length && e.camp.chars.c_q.values.f_fx.length === 1, j([c.out.chat, c.conns[0].sent]));
     const T = src.replace(/\r\n/g, '\n');
-    check('T5a the wiring (source): a player\'s added effect starts its timer on the host with the host\'s clock and whether they are in a combat; turnStarted takes a round; a combat\'s start banks and its end resumes; the clock starts with the first render',
+    check('T5a the wiring (source): a player\'s added effect starts its timer on the host with the host\'s clock and whether they are in a combat; turnStarted takes a round; a combat\'s start banks and its end resumes, once no fight is left (152 fold 4, moved on purpose); the clock starts with the first render',
         /view: window\.wpSheets \? window\.wpSheets\.playerSystem\(campX\) : null, now: Date\.now\(\), inCombat: !!\(net\.charInCombat && net\.charInCombat\(qx\.charId\)\), timersGm: !!\(campX\.turnRules && campX\.turnRules\.timers === 'gm'\) \}\);/.test(T) && /try \{ turnFxStart\(mapId, c\); \} catch \(e\)/.test(T)
-        && /if \(f && !had\) \{ try \{ fxCombatEdge\(mapId, f, 'bank'\); \}/.test(T) && /if \(had\) \{ try \{ fxCombatEdge\(mapId, had, 'resume'\); \}/.test(T) && /function renderWhere\(\) \{\n\s*if \(typeof fxClockStart === 'function'\) fxClockStart\(\);/.test(T));
+        && /if \(f && !had\) \{ try \{ fxCombatEdge\(mapId, f, 'bank'\); \}/.test(T) && /if \(had && !leftO\) \{ try \{ fxCombatEdge\(mapId, had, 'resume'\); \}/.test(T) && /function renderWhere\(\) \{\n\s*if \(typeof fxClockStart === 'function'\) fxClockStart\(\);/.test(T));
 })());
 
 // The combat roster on the wire (1.5.0): players get the order, never a number. A row's initiative can be the total of a roll the GM alone
@@ -9389,19 +9389,21 @@ pendingChecks.push((async () => {
     const snRk = SAk(gmK({ t: 500, hold: true, rate: 10 }), 'u_p').campaigns.k1.clock, rRk = runK({ type: 'clock', campId: 'k_1', clock: { t: 77, hold: true, rate: 60 } }, 'host1');
     check('the running clock on the wire (1.5.4): the GM\'s hold and speed are the host\'s own \u2014 the clock message and the join snapshot carry the time alone, and a change of either sends nothing \u2014 and a player\'s app keeps neither from a host that sends them',
         sentRk === j([{ type: 'clock', campId: 'k_r', clock: { t: 600 } }]) && sentRk2 === 1 && j(snRk) === j({ t: 500 }) && j(rRk[0]) === j({ t: 77 }), j([sentRk, sentRk2, snRk, rRk]));
-    // a round of a fight: the real combatStep, over stubs, with the clock's hook watched
-    const csK = fnSrc('net.combatStep = function', '// [netcheck:turnhold-start]', 'combatStep');
-    const mkK = (turn, nRows, withHook) => { const calls = [], net = { role: 'host', combats: { m1: { mapId: 'm1', round: 1, turn: turn, rows: Array.from({ length: nRows }, (_, i) => ({ id: 'r' + i, name: 'R' + i, tokId: null, init: 0, src: null })) } } };
-        const names = ['net', 'own', 'toast', 'logEvent', 'mapTitleOf', 'broadcastCombats', 'combatRefresh', 'roundChanged', 'turnStarted'].concat(withHook ? ['clockRounds'] : []), args = [net, H.own, () => {}, () => {}, () => 'Hall', () => {}, () => {}, () => {}, () => {}].concat(withHook ? [n => calls.push(n)] : []);
+    // a round of a fight: the real combatStep, over stubs, with the calendar watched. 152 fold 4 (moved on purpose): a round no longer tells the clock its
+    // rounds; each fight keeps its own time (at), and the coordinator hands the clock the floor of the least time of the fights (calendar.js second)
+    const SxK = await import(url('systemcore.js')), csK = fnSrc('net.combatStep = function', '// [netcheck:turnhold-start]', 'combatStep');
+    const mkK = (turn, nRows, withCal) => { const calls = [], camp = { id: 'k', clock: { t: 7200 }, system: { combat: { turn: { secs: 1 } } }, items: {}, chars: {} }, net = { role: 'host', combats: { m1: { mapId: 'm1', round: 1, turn: turn, rows: Array.from({ length: nRows }, (_, i) => ({ id: 'r' + i, name: 'R' + i, tokId: null, init: 0, src: null })) } } };
+        const win = withCal ? { wpCalendarCore: CCx, wpCalendar: { ownTime: g => { calls.push(['own', g.length]); return false; }, second: (s, back, last) => calls.push([s, back, last]) } } : {};
+        const names = ['net', 'own', 'toast', 'logEvent', 'mapTitleOf', 'broadcastCombats', 'combatRefresh', 'roundChanged', 'turnStarted', 'window', 'getActiveCampaign', 'SC'], args = [net, H.own, () => {}, () => {}, () => 'Hall', () => {}, () => {}, () => {}, () => {}, win, () => camp, () => SxK];
         new Function(...names, "'use strict';\n" + csK + '\n' + ordersSrc).apply(null, args); return { net, calls }; };
     const K1 = mkK(1, 2, true); [1, 1, -1, -1, -1, -1].forEach(d => K1.net.combatStep('m1', d));
     const K2 = mkK(0, 1, true); [1, 1, 1, -1].forEach(d => K2.net.combatStep('m1', d));
     const K3 = mkK(1, 2, false); let k3ok = true; try { K3.net.combatStep('m1', 1); } catch (e) { k3ok = false; }
     const K4 = mkK(1, 2, true); K4.net.role = 'client'; K4.net.combatStep('m1', 1);
-    check('item 20 K2 a round of a fight moves the clock (the real combatStep, run for real): each new round tells the clock one round on, a step back past a round\'s first turn one back; a step within a round or back at the very first turn tells it nothing; without the clock\'s hook it runs as before; a player\'s app steps nothing; a round edited in the roster tells it the difference, and the hook reaches the calendar through a guard',
-        j(K1.calls) === j([1, -1]) && j(K2.calls) === j([1, 1, 1, -1]) && k3ok && K3.net.combats.m1.round === 2 && j(K4.calls) === j([])
-        && src.includes("if (c.round !== r0 && typeof clockRounds === 'function') clockRounds(c.round - r0);") && src.includes("if (had && had.round !== f.round && typeof clockRounds === 'function') clockRounds(f.round - had.round);")
-        && src.includes('function clockRounds(n) { try { if (window.wpCalendar && window.wpCalendar.rounds) window.wpCalendar.rounds(n); } catch (e) { console.error(e); } }'), j([K1.calls, K2.calls, K4.calls]));
+    check('item 20 K2 a round of a fight moves the clock (the real combatStep, run for real; 152 fold 4, moved on purpose): each new round adds the round\'s length to the fight\'s own time and the clock is handed the floor of the least time of the fights, a step back past a round\'s first turn takes it back as a correction; a step within a round or back at the very first turn hands it nothing; without the calendar at hand the fight steps as before; a player\'s app steps nothing; the clock\'s old hooks are gone',
+        j(K1.calls) === j([[7201, false, false], [7200, true, false]]) && j(K1.net.combats.m1.at) === j({ s: 7200, ms: 0 }) && j(K2.calls) === j([[7201, false, false], [7202, false, false], [7203, false, false], [7202, true, false]]) && j(K2.net.combats.m1.at) === j({ s: 7202, ms: 0 })
+        && k3ok && K3.net.combats.m1.round === 2 && !('at' in K3.net.combats.m1) && j(K4.calls) === j([])
+        && !/clockRounds|clockFightEnd/.test(src), j([K1.calls, K2.calls, K4.calls]));
     check('item 20 K2 the session log has a Time kind (net.js _logKinds, pinned) and its filter an option for it',
         /var _logKinds = \{[^}]*char: 'Characters', time: 'Time' \};/.test(src) && fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'index.html'), 'utf8').includes('<option value="travel">Travel</option><option value="time">Time</option>'));
 })());
@@ -9440,10 +9442,9 @@ pendingChecks.push((async () => {
     check('item 20 K5 a time rules summary (net.timeCard, run for real): a private line for the GM (pushed to its own chat) and one to every connection of the character\'s player, never another\'s or a waiting one, capped at 1500 characters, with a Session Log line under Time; the GM alone for a rule its player may not see or an NPC; nothing from a player\'s app or with no character',
         T1.out.chat.length === 1 && T1.out.chat[0].scope === 'whisper' && T1.out.chat[0].text.length === 1500 && T1.conns[0].sent.length === 1 && T1.conns[1].sent.length === 1 && T1.conns[2].sent.length === 0 && T1.conns[3].sent.length === 0 && T1.out.log.length === 1 && T1.out.log[0][0] === 'time'
         && T2.out.chat.length === 2 && T2.conns.every(c => c.sent.length === 0) && T3.out.chat.length === 0 && T3.conns.every(c => c.sent.length === 0), j([T1.conns.map(c => c.sent.length), T2.out.chat.map(m => m.text)]));
-    check('item 20 K5 the counts never travel (clockOut sends a clock\'s time and its notes players may see, never what the time rules counted); a fight\'s end asks the calendar about its rounds after its effects\' clocks run again (pinned)',
-        /var o = \{ t: ck\.t \}, ns = /.test(src) && !/acc/.test(between('// [netcheck:clocksync-start]', '// [netcheck:clocksync-end]', 'clocksync'))
-        && src.includes("if (had && typeof clockFightEnd === 'function') clockFightEnd();") && src.includes('function clockFightEnd() { try { if (window.wpCalendar && window.wpCalendar.fightEnded) window.wpCalendar.fightEnded(); } catch (e) { console.error(e); } }')
-        && /fxCombatEdge\(mapId, had, 'resume'\); \} catch \(e\) \{ console\.error\(e\); \} \}[^\n]*\n\s*if \(had && typeof clockFightEnd === 'function'\) clockFightEnd\(\);/.test(src));
+    check('item 20 K5 the counts never travel (clockOut sends a clock\'s time and its notes players may see, never what the time rules counted, a character\'s own time or the NPCs whose rules are off); 152 fold 4 (moved on purpose): a fight\'s end hands the round it ends in to the coordinator as the last thing it does (pinned), where it asked the calendar about its rounds',
+        /var o = \{ t: ck\.t \}, ns = /.test(src) && !/acc|lived|rulesOff/.test(between('// [netcheck:clocksync-start]', '// [netcheck:clocksync-end]', 'clocksync'))
+        && /\n    if \(endO && typeof ordersMoved === 'function'\) ordersMoved\('end', endO\);[^\n]*\n    if \(had && !leftO\) \{ try \{ fxClockTick\(\); \}[^\n]*\n    return !!had;\n\}/.test(src) && !/clockFightEnd|wpCalendar\.fightEnded|wpCalendar\.rounds/.test(src));
 }
 // Item 21 V2: a video shown live to the table — the link is agreed over the table's own data connection (an offer, an answer, candidates as
 // messages); the host's slices and the player's run for real on a stubbed RTCPeerConnection, the real RateLimit and the real videocore
@@ -15106,10 +15107,11 @@ pendingChecks.push((async () => {
     check('fold 2\'s review (broadcastCombats, run for real): a fight that moves on another map sends a connection nothing at all — Pat and Bea on the Docks and Cy on the Quay hear nothing of two steps of the Bridge\'s fight, where each was sent a copy at every step before — while a copy that changed still goes: Cy, now on the Bridge, its fight; Pat and Bea a step of the Docks\' second fight; Pat his copy again once his connection is gone and back, and everyone at a new table; a copy the join snapshot carried is not sent again',
         J(q1) === J([0, 0, 0]) && J(q2) === J([0, 0, 1]) && J(q3) === J([1, 1, 0]) && J(q3b) === J([f1, f2]) && J(q4) === J([1, 0, 1]) && J(q5) === J([1, 1, 1]) && J(q6) === J([0, 0, 1]), J([q1, q2, q3, q4, q5, q6]));
     // the end of each: the marks end with a map's last fight; the fight played handed on; a deleted map ends every fight on it
-    W.marks.length = 0; N.fightSet(f1, null); const mEnd1 = W.marks.slice(), on1 = N.fightOn === f2; N.fightSet(f2, null); const mEnd2 = W.marks.slice(), on2 = N.fightOn === f3;
+    // 152 fold 4: the GM's own steps above made the Bridge's fight the one played, so the Docks' first is played again before it ends
+    N.fightPlay(f1); W.marks.length = 0; N.fightSet(f1, null); const mEnd1 = W.marks.slice(), on1 = N.fightOn === f2; N.fightSet(f2, null); const mEnd2 = W.marks.slice(), on2 = N.fightOn === f3;
     W.marks.length = 0; const f4 = N.fightSet(null, { mapId: 'mBridge', round: 1, turn: 0, rows: [rowOf('t_u8', 'Unit 8')] }), mF4 = W.marks.slice(); W.toasts.length = 0;
     delete camp.items.mBridge; N.itemGone('k', 'mBridge', 'Bridge'); const gone = { left: A.fightIds(), marks: W.marks.slice(), on: N.fightOn, toasts: W.toasts.filter(t => t === 'Combat ended on Bridge.').length, f4: FID.test(f4) };
-    check('fold 2 (run for real): the marks end only with a map\'s last fight (the first fight on the Docks ends and the marks stay held for the second; the second ends and they end); the fight played that ends hands on to the first begun of those left; a second fight on the Bridge starts no marks again, and deleting the Bridge ends both fights on it, each with its notice, and the marks there once',
+    check('fold 2 (run for real): the marks end only with a map\'s last fight (the first fight on the Docks ends and the marks stay held for the second; the second ends and they end); the fight played that ends hands on to the one furthest behind, which, with no fight keeping time here, is the first begun of those left (152 fold 4); a second fight on the Bridge starts no marks again, and deleting the Bridge ends both fights on it, each with its notice, and the marks there once',
         J(mEnd1) === J([]) && on1 && J(mEnd2) === J(['end:mDocks']) && on2 && J(mF4) === J([]) && J(gone) === J({ left: [], marks: ['end:mBridge'], on: null, toasts: 2, f4: true }), J([mEnd1, mEnd2, mF4, gone]));
     // a player's roll reads CombatRound from the fight that holds its token (roll-req, run for real over the hud-d20 fixture)
     const rqS = between('// [netcheck:rollreq-start]', '// [netcheck:rollreq-end]', 'rollreq'), helpersR = ['function own(', 'function peerProfileId(', 'function fxLib(', 'function itemLib(', 'function diceFrom('].map(k => lineOf(k)).join('\n') + '\n';
@@ -15175,6 +15177,181 @@ pendingChecks.push((async () => {
         && src.split('fightsKnow(').length === 3 && /var before = net\.combats, after = typeof cleanFightsIn === 'function' \? cleanFightsIn\(msg\.combats\) : cleanCombats\(msg\.combats\);/.test(src)
         && !/combats\[(mapId|am\.id|map\.id|activeMap\.id|combatDraft\.mapId|getActiveMap\(\)\.id|msg\.mapId|locQ|locA|pr\.location|mid)\]/.test(src + rdApp('scripts/whiteboard.js') + rdApp('scripts/pills.js') + rdApp('scripts/sheets.js'))
         && (src.match(/net\.combats\[fid\] = f;/g) || []).length === 1 && (src.match(/combatOver\(/g) || []).length === 4 && (src.match(/msg\.type === '[a-z-]+' && net\.role === 'host'/g) || []).length === 28);
+})());
+// Fold 4 (backlog 152, docs/FIGHT_CLOCK_DESIGN.md sections 1 and 4 to 6; the owner's answer to question 1, "Every character"): each fight keeps its own
+// time, and the clock reads the one furthest behind, counting every second once. net.js run for real (the combats slice, everything from combatRefresh
+// to the old names, the orders slice, a player's End turn) beside calendar.js's own window slice (ownTime, second, moveTo) with the real calendarcore
+// and systemcore, the sheets module a recorder: what it is asked to run, with the words and the round it is handed
+pendingChecks.push((async () => {
+    const url = f => 'file:///' + path.resolve(path.join(__dirname, '..', 'system', 'app', 'scripts', f)).split(String.fromCharCode(92)).join('/');
+    const Sx = await import(url('systemcore.js')), Cx = await import(url('calendarcore.js'));
+    const J = v => JSON.stringify(v);
+    const cbS = between('// [netcheck:combats-start]', '// [netcheck:combats-end]', 'combats'), setS = fnSrc('function combatRefresh() {', '\nnet.combatStep = function', 'combatSet'), stepS = fnSrc('net.combatStep = function', '\nnet.combatEnd = function', 'combatStep');
+    const teS = between('// [netcheck:turnend-start]', '// [netcheck:turnend-end]', 'turnend');
+    const calJs = fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', 'calendar.js'), 'utf8').replace(/\r\n/g, '\n');
+    const cutC = (a, b) => { const i = calJs.indexOf(a), k = calJs.indexOf(b, i + 1); if (i < 0 || k < 0) throw new Error('netcheck: calendar.js slice ' + a); return calJs.slice(i, k); };
+    const calSrc = cutC('// [sinkcheck:calendarwin-start]', '// [sinkcheck:calendarwin-end]') + cutC('function openWin()', '(function wire()');
+    const tok = (id, charId, ownerId, more) => Object.assign({ id, type: 'image', isChar: true, charId, x: 0, y: 0, w: 50, h: 50 }, ownerId ? { ownerId } : {}, more || {});
+    const fxv = (left, at) => ({ f_fx: [{ id: 'x_' + left, ref: 'e_c', on: true, t: { left: left, at: at || 0 } }] });
+    const row = (tokId, name) => ({ id: 'r' + tokId, name, tokId, init: 0, src: null });
+    const mkT = o => {
+        o = o || {};
+        const out = { toasts: [], logs: [], runs: [], errs: [], saves: 0, views: 0 };
+        const camp = { id: 'k', clock: { t: 43200 }, system: { fields: [{ id: 'f_fx', key: 'Effects', kind: 'effects' }], effects: [{ id: 'e_c', name: 'Charge', dur: '30 seconds', mods: [] }], combat: { turn: { secs: o.rs || 1 } }, rolls: o.rolls || [{ id: 'r_tick', label: 'Tick', apply: [], inFight: { n: 1, u: 'round' } }] },
+            items: { mDocks: { id: 'mDocks', type: 'map', meta: { title: 'Docks' }, whiteboard: [tok('t_kael', 'c_kael', 'u_a'), tok('t_u7', 'c_u7'), tok('t_crate', 'c_crate', null, { isChar: false })] },
+                mBridge: { id: 'mBridge', type: 'map', meta: { title: 'Bridge' }, whiteboard: [tok('t_sela', 'c_sela', 'u_b'), tok('t_u9', 'c_u9')] } },
+            chars: { c_kael: { id: 'c_kael', name: 'Kael', ownerId: 'u_a', values: {} }, c_u7: { id: 'c_u7', name: 'Unit 7', npc: true, values: {} }, c_crate: { id: 'c_crate', name: 'Crate', npc: true, values: fxv(10) },
+                c_sela: { id: 'c_sela', name: 'Sela', ownerId: 'u_b', values: {} }, c_u9: { id: 'c_u9', name: 'Unit 9', npc: true, values: {} }, c_rook: { id: 'c_rook', name: 'Rook', ownerId: 'u_c', values: fxv(30) } } };
+        const mk = p => ({ peer: p, open: true, sent: [], send(m) { packCheck(m); this.sent.push(JSON.parse(J(m))); } }), conns = [mk('pA'), mk('pB')];
+        const net = { active: true, role: 'host', myId: 'u_gm', conns, roster: { pA: { id: 'u_a', name: 'Pat', location: 'mDocks' }, pB: { id: 'u_b', name: 'Bea', location: 'mBridge' } }, combats: {}, targets: {}, turnSpent: {}, paused: false, syncCharDelta() {} };
+        const win = { wpVtt: { on: k => (k === 'calendar' ? o.calendar !== false : true) }, wpCalendarCore: Cx,
+            wpSheets: { roundHook() {}, turnHook() {}, charChanged() {}, runTimeRules: (fires, words, at) => { out.runs.push([fires.map(f => f.c + ':' + f.r + (f.x ? ':x' : '') + ':' + f.n), words, at === undefined ? null : at]); return fires.length; } } };
+        const env = { net, window: win, getActiveCampaign: () => camp, SC: () => Sx, own: H.own, toast: t => out.toasts.push(t), logEvent: (k, t) => out.logs.push(t), render() {}, console: { error: e => out.errs.push(String(e && e.stack || e)) }, showConfirm: (t, cb) => cb(true), sendFailed: e => { throw e; },
+            anyFog: () => false, fogDrop: () => null, broadcast: () => {}, marksStart() {}, marksEnd() {}, renderNotepad() {}, ensurePlayerToken() {}, peerPaused: () => false, allow: () => true, saveRemoteSoon() {}, pushChat() {}, _lastSent: {} };
+        const api = new Function(...Object.keys(env), "'use strict';\n" + cbS + '\n' + setS + '\n' + stepS + '\n' + ordersSrc
+            + '\nreturn { combatsFor: combatsFor, combatsOverAll: combatsOverAll, ordersOfChars: ordersOfChars, orderOfIn: orderOfIn, charCombat: charCombat, fxClockTick: fxClockTick, turnEnd: function(msg, conn) {\n' + teS + '\n} };')(...Object.values(env));
+        const cal = new Function('document', 'window', 'getActiveCampaign', 'save', 'saveView', 'toast', 'roundSecs', 'cleanCalendar', 'cleanClock', 'cleanAcc', 'ruleFires', 'livedSpans', 'freshAcc', 'tCmp', 'tSpanMs', 'dateOf', 'timeOf', 'periodDays', 'dayLength', 'fmtDate', 'fmtWhen', 'fmtSpan', 'CAL_LIMITS', 'net', 'sysNow',
+            "'use strict';\n" + calSrc + '\nreturn { ownTime: ownTime, second: second, fightBegan: fightBegan, moveTo: moveTo, st: function() { return { pend: pend, pendQ: pendQ }; }, memSt: function() { return memT; } };')(
+            { getElementById: () => null }, win, () => camp, () => out.saves++, () => out.views++, t => out.toasts.push(t), Sx.roundSecs, Cx.cleanCalendar, Cx.cleanClock, Cx.cleanAcc, Cx.ruleFires, Cx.livedSpans, Cx.freshAcc, Cx.tCmp, Cx.tSpanMs, Cx.dateOf, Cx.timeOf, Cx.periodDays, Cx.dayLength, Cx.fmtDate, Cx.fmtWhen, Cx.fmtSpan, Cx.CAL_LIMITS, () => net, () => camp.system);
+        win.wpCalendar = cal;
+        return { net, camp, api, cal, out, conns, win };
+    };
+    const docks = rows => ({ mapId: 'mDocks', round: 1, turn: 0, rows }), bridge = rows => ({ mapId: 'mBridge', round: 1, turn: 0, rows });
+    // the owner's example: a fight begun at 12:00:00 with rounds of 1 s and ended in round 3; the clock goes on from 12:00:03, a second a round once
+    const A = mkT(), fA = A.net.fightSet(null, docks([row('t_kael', 'Kael'), row('t_u7', 'Unit 7')]));
+    const a0 = [A.camp.clock.t, J(A.net.combats[fA].at), J(A.net.second)];
+    A.net.fightStep(fA, 1); const aT = A.camp.clock.t; A.net.fightStep(fA, 1); const a1 = [aT, A.camp.clock.t, A.net.combats[fA].round];
+    A.net.fightStep(fA, 1); A.net.fightStep(fA, 1); A.net.fightStep(fA, 1); const a2 = [A.camp.clock.t, A.net.combats[fA].round, A.net.combats[fA].turn];
+    A.net.fightSet(fA, null); const a3 = [A.camp.clock.t, A.net.second, J(A.camp.clock.lived || null), A.out.runs, A.out.errs];
+    check('152 fold 4 the owner\'s example (net.js and calendar.js, run for real): a fight begun at 12:00:00 with no fight on starts at the clock; each round it closes adds the round\'s length to its own time and moves the clock with it, 12:00:01 at round 2 and 12:00:02 at round 3, a turn within a round nothing; ended in round 3, the round it ends in counts and the clock goes on from 12:00:03; each round closed runs the In a fight rule for everyone in it, the NPC too, handed its round and its words',
+        J(a0) === J([43200, J({ s: 43200, ms: 0 }), J({ frame: 'clock', s: 43200 })]) && J(a1) === J([43200, 43201, 2]) && J(a2) === J([43202, 3, 1])
+        && J(a3) === J([43203, null, 'null', [[['c_kael:r_tick:x:1', 'c_u7:r_tick:x:1'], 'Round 1 on Docks', { round: 1 }], [['c_kael:r_tick:x:1', 'c_u7:r_tick:x:1'], 'Round 2 on Docks', { round: 2 }], [['c_kael:r_tick:x:1', 'c_u7:r_tick:x:1'], 'Round 3 on Docks', { round: 3 }]], []]), J([a0, a1, a2, a3]));
+    // ten rounds of 0.1 s move the clock one second, exactly
+    const B = mkT({ rs: 0.1 }), fB = B.net.fightSet(null, docks([row('t_kael', 'Kael')])), bClock = []; for (let i = 0; i < 10; i++) { B.net.fightStep(fB, 1); bClock.push(B.camp.clock.t); }
+    check('152 fold 4 ten rounds of 0.1 s move the clock one second, exactly: the fight\'s own time is kept to the millisecond and the clock is its floor, where each round moved the clock by its length floored to nothing',
+        J(bClock) === J([43200, 43200, 43200, 43200, 43200, 43200, 43200, 43200, 43200, 43201]) && J(B.net.combats[fB].at) === J({ s: 43201, ms: 0 }), J([bClock, B.net.combats[fB].at]));
+    // two fights move the clock once: it reads the fight furthest behind
+    const C2 = mkT(), c1f = C2.net.fightSet(null, docks([row('t_kael', 'Kael')])), c2f = C2.net.fightSet(null, bridge([row('t_sela', 'Sela')]));
+    C2.net.fightStep(c1f, 1); const cc1 = C2.camp.clock.t; C2.net.fightStep(c2f, 1); const cc2 = C2.camp.clock.t; C2.net.fightStep(c1f, 1); C2.net.fightStep(c1f, 1); const cc3 = C2.camp.clock.t;
+    check('152 fold 4 two fights on two maps move the clock once: a round of the Docks leaves the clock with the Bridge, a round of the Bridge then moves it one second, and the Docks running two rounds ahead moves it by the one it shares with the Bridge alone',
+        J([cc1, cc2, cc3]) === J([43200, 43201, 43201]), J([cc1, cc2, cc3]));
+    // a new fight starts at the time of the fight played, with no fight on at the clock; those who walk into a fight ahead of the second live the gap
+    const D = mkT(), d1 = D.net.fightSet(null, docks([row('t_kael', 'Kael')])); D.net.fightStep(d1, 1); D.net.fightStep(d1, 1); D.net.fightStep(d1, 1);
+    const d2 = D.net.fightSet(null, bridge([row('t_sela', 'Sela')])); D.net.fightStep(d1, 1); D.net.fightStep(d1, 1);
+    const d3 = D.net.fightSet(null, bridge([row('t_u9', 'Unit 9')]));
+    const dd = [J(D.net.combats[d1].at), J(D.net.combats[d2].at), J(D.net.combats[d3].at), D.camp.clock.t, D.net.fightOn === d3, J(D.camp.clock.lived)];
+    check('152 fold 4 a new fight starts at the time of the fight played (the brief: at the Active fight\'s time, with no fight on at the clock): the Bridge begun while the Docks is played at 12:00:03 starts there; the GM playing the Docks on to 12:00:05 leaves the clock with the Bridge; a third fight begun then starts at 12:00:05, is the one played, and Unit 9, who walks in, lives the gap from the second as time outside a fight',
+        J(dd) === J([J({ s: 43205, ms: 0 }), J({ s: 43203, ms: 0 }), J({ s: 43205, ms: 0 }), 43203, true, J({ c_kael: [43205, 0], c_u9: [43205, 0] })]), J(dd));
+    // a step back is a correction: the fight's time and the clock go back, and on again counts nothing twice
+    const E = mkT({ rolls: [{ id: 'r_tick', label: 'Tick', apply: [], inFight: { n: 1, u: 'round' } }, { id: 'r_drain', label: 'Drain', apply: [], every: { n: 2, u: 'Sec' } }] }); E.camp.system.combat.turn.units = [{ key: 'Sec', secs: 1 }];
+    const e1 = E.net.fightSet(null, docks([row('t_kael', 'Kael'), row('t_u7', 'Unit 7')])); E.net.fightStep(e1, 1); E.net.fightStep(e1, 1);
+    const e0 = [E.camp.clock.t, E.out.runs.length, J(E.camp.clock.acc)];
+    E.net.fightStep(e1, -1); const eB = [E.camp.clock.t, J(E.net.combats[e1].at), J(E.camp.clock.top)];
+    E.net.fightStep(e1, 1); const eA = [E.camp.clock.t, E.out.runs.length, 'top' in E.camp.clock, J(E.camp.clock.acc)];
+    check('152 fold 4 a Prev past a round\'s first turn is a correction: the fight\'s time and the clock go back a round, the clock keeping the highest second reached as its top; Next again reaches that second with nothing counted twice, neither a fighter\'s In a fight count nor anyone\'s By the clock count, and the top goes',
+        J(e0) === J([43201, 1, J({ c_kael: { r_drain: 1 }, c_u7: { r_drain: 1 }, c_crate: { r_drain: 1 }, c_sela: { r_drain: 1 }, c_u9: { r_drain: 1 }, c_rook: { r_drain: 1 } })]) && J(eB) === J([43200, J({ s: 43200, ms: 0 }), J({ s: 43201, ms: 0 })]) && J(eA) === J([43201, 1, false, e0[2]]), J([e0, eB, eA]));
+    // a fight run ahead and ended leaves its people ahead; the Active fight ending hands on to the one furthest behind
+    const W = mkT(), wa = W.net.fightSet(null, docks([row('t_kael', 'Kael')])), wb = W.net.fightSet(null, bridge([row('t_sela', 'Sela')]));
+    [1, 2, 3, 4].forEach(() => W.net.fightStep(wb, 1)); const wOn = W.net.fightOn === wb; W.net.fightSet(wb, null);
+    const w1 = [wOn, W.camp.clock.t, J(W.camp.clock.lived), W.net.fightOn === wa];
+    W.net.fightSet(wa, null); const w2 = [W.camp.clock.t, J(W.camp.clock.lived), W.net.second];
+    check('152 fold 4 a fight run ahead and ended leaves its people\'s own time ahead of the clock: the Bridge played on four rounds and ended in round 5 leaves Sela at 12:00:05 while the clock stays with the Docks at 12:00:00, and the fight played, ending, hands on to the one furthest behind; the Docks ended in its first round moves the clock to 12:00:01 and Sela still lives nothing until it reaches her',
+        J(w1) === J([true, 43200, J({ c_sela: [43205, 0] }), true]) && J(w2) === J([43201, J({ c_sela: [43205, 0] }), null]), J([w1, w2]));
+    // the session's end (combatsOverAll, which leaveSession asks): the furthest ahead first, so the clock stays with the one behind
+    const G = mkT(), ga = G.net.fightSet(null, docks([row('t_kael', 'Kael')])), gb = G.net.fightSet(null, bridge([row('t_sela', 'Sela')]));
+    [1, 2, 3].forEach(() => G.net.fightStep(gb, 1)); const gN = G.api.combatsOverAll();
+    const g1 = [gN, G.camp.clock.t, J(G.camp.clock.lived), G.out.logs.filter(l => /^Combat ended/.test(l)), G.net.second];
+    check('152 fold 4 the session\'s end ends the fight furthest ahead first, so the clock stays with the one behind: the Bridge, three rounds ahead, ends first and leaves Sela at 12:00:04; the Docks ends in its first round and the clock goes on from 12:00:01, never to the Bridge\'s time',
+        J(g1) === J([2, 43201, J({ c_sela: [43204, 0] }), ['Combat ended on Bridge after 4 rounds', 'Combat ended on Docks after 1 round'], null]), J(g1));
+    // an NPC whose rules the GM switched off runs nothing by itself in a fight: listed unticked, with its round, and the window opens nothing
+    const L = mkT(); L.camp.clock.rulesOff = ['c_u7']; const l1 = L.net.fightSet(null, docks([row('t_kael', 'Kael'), row('t_u7', 'Unit 7')])); L.net.fightStep(l1, 1); L.net.fightStep(l1, 1);
+    const pL = L.cal.st().pend, ll = [L.out.runs, pL && pL.fires.map(f => [f.c, f.r, f.x, f.rd]), pL && J(pL.on), pL && pL.words, L.out.toasts.filter(t => /^Time rules are due/.test(t)).length];
+    check('152 fold 4 the Rules run switch (camp.clock.rulesOff) in a fight: an NPC listed there runs none of its rules by itself, its fire going to the waiting list unticked with the round it came from, while everyone else in the fight runs; the window never opens by itself while a fight runs, and a notice says the rules are due',
+        J(ll) === J([[[['c_kael:r_tick:x:1'], 'Round 1 on Docks', { round: 1 }]], [['c_u7', 'r_tick', 1, 1]], '{"c_u7":false}', 'Round 1 on Docks', 1]), J(ll));
+    // what is never sent; and the one judge for everyone at once: an unticked Is Character puts its character in no fight, its effects following the second
+    const H4 = mkT(), h1 = H4.net.fightSet(null, docks([row('t_kael', 'Kael'), row('t_crate', 'Crate')])); [1, 2, 3, 4, 5, 6].forEach(() => H4.net.fightStep(h1, 1));
+    const sent = J(H4.conns.map(c => c.sent)), snap = J(H4.api.combatsFor('u_a', 'mDocks')), oc = H4.api.ordersOfChars(H4.camp);
+    const hh = [!!H4.net.combats[h1].at && typeof H4.net.combats[h1].n === 'number', /"at"|"n":|"rh"|"turned"/.test(sent + snap), J(Object.keys(oc)), H4.api.charCombat(H4.camp, 'c_crate'), Object.keys(H4.camp.chars).every(id => (oc[id] || null) === H4.api.orderOfIn(H4.camp, id)), H4.camp.chars.c_crate.values.f_fx[0].t.left, H4.camp.chars.c_rook.values.f_fx[0].t.left];
+    check('152 fold 4 a fight\'s own time and count are the host\'s own: neither is in anything a player was sent nor in combatsFor; the one judge for every character at once (ordersOfChars) answers as orderOfIn does for each, so a token with Is Character unticked puts its character in no fight: its timed effects follow the second as everyone\'s outside a fight do (three rounds: Crate and Rook three seconds each)',
+        J(hh) === J([true, false, J(['c_kael']), null, true, 7, 27]), J(hh));
+    // timed effects with the Calendar off, while a fight runs: the clock's tick banks everyone, and the second moving runs the effects of everyone in no fight
+    const X = mkT({ calendar: false }), now0 = Date.now(); X.camp.chars.c_rook.values.f_fx[0].t = { left: 30, at: now0 - 2000 };
+    const x1 = X.net.fightSet(null, docks([row('t_kael', 'Kael')])); X.api.fxClockTick(); const xBank = J(Object.keys(X.camp.chars.c_rook.values.f_fx[0].t).sort()) + ':' + X.camp.chars.c_rook.values.f_fx[0].t.at;
+    const rookL = X.camp.chars.c_rook.values.f_fx[0].t.left; X.net.fightStep(x1, 1); X.net.fightStep(x1, 1);
+    const xx = [xBank, Math.round((rookL - X.camp.chars.c_rook.values.f_fx[0].t.left) * 1000) / 1000, X.camp.clock.t, J(X.net.second), X.out.runs.length, J(X.cal.memSt() && X.cal.memSt().t)];
+    X.net.fightSet(x1, null); const xEnd = [X.camp.clock.t, X.net.second, X.cal.memSt(), X.camp.chars.c_rook.values.f_fx[0].t.at > 0];
+    check('152 fold 4 the Calendar off: a fight keeps its own time in memory alone (the frame mem), the date where it was; In a fight still counts by the rounds; while it runs the clock\'s tick banks everyone, so no real time counts, and the second moving on runs the timed effects of everyone in no fight (Rook two seconds); when the last fight ends the memory goes and everyone\'s effects run in real time again',
+        J(xx) === J(['["at","left"]:0', 2, 43200, J({ frame: 'mem', s: 43202 }), 2, '43202']) && J(xEnd) === J([43200, null, null, true]), J([xx, xEnd]));
+    // Remove from the fight counts the round in play, as an end does: Unit 7 taken out lives it and leaves at its end
+    const R = mkT(), r1f = R.net.fightSet(null, docks([row('t_kael', 'Kael'), row('t_u7', 'Unit 7')])); R.net.fightStep(r1f, 1); R.net.fightStep(r1f, 1);
+    R.net.fightSet(r1f, { mapId: 'mDocks', round: 2, turn: 0, rows: [row('t_kael', 'Kael')] }); const rr1 = [R.out.runs.slice(), J(R.camp.clock.lived), R.camp.clock.t];
+    R.net.fightStep(r1f, 1); const rr2 = [R.out.runs.slice(2), R.camp.clock.t, J(R.camp.clock.lived || null)];
+    check('152 fold 4 Remove from the fight counts the round in play, as an end does: Unit 7 taken out of the Docks\' fight in round 2 lives that round, its In a fight rule run, and leaves at its end, 12:00:02, ahead of the clock; the fight goes on without it, and when its round closes the clock reaches Unit 7',
+        J(rr1) === J([[[['c_kael:r_tick:x:1', 'c_u7:r_tick:x:1'], 'Round 1 on Docks', { round: 1 }], [['c_u7:r_tick:x:1'], 'Round 2 on Docks', { round: 2 }]], J({ c_u7: [43202, 0] }), 43201])
+        && J(rr2) === J([[[['c_kael:r_tick:x:1'], 'Round 2 on Docks', { round: 2 }]], 43202, 'null']), J([rr1, rr2]));
+    // a player's End turn steps their fight without making it the one played; the GM's own step does
+    const Y = mkT(), y1 = Y.net.fightSet(null, docks([row('t_kael', 'Kael'), row('t_u7', 'Unit 7')])), y2 = Y.net.fightSet(null, bridge([row('t_sela', 'Sela')]));
+    Y.net.fightPlay(y1); Y.api.turnEnd({ type: 'turn-end', mapId: 'mBridge', row: 'rt_sela' }, Y.conns[1]); const yP = [Y.net.fightOn === y1, Y.net.combats[y2].round];
+    Y.net.fightStep(y2, 1); const yG = Y.net.fightOn === y2;
+    check('152 fold 4 the fight played (net.fightOn): a player\'s End turn steps their own fight and leaves the GM\'s fight the one played; the GM\'s own step of a fight makes it the one played',
+        J(yP) === J([true, 2]) && yG === true, J([yP, yG]));
+    // the review of fold 4: those who walk into a fight that is ahead live the gap for their timed effects as for their time rules. Unit 9 (a 30 s effect)
+    // follows the second while the Docks runs alone, then walks into a fight begun at the Docks' time, two seconds past the second
+    const D2w = mkT(); D2w.camp.chars.c_u9.values = fxv(30); const dw1 = D2w.net.fightSet(null, docks([row('t_kael', 'Kael')])); [1, 2, 3].forEach(() => D2w.net.fightStep(dw1, 1));
+    const u9a = D2w.camp.chars.c_u9.values.f_fx[0].t.left; D2w.net.fightSet(null, bridge([row('t_sela', 'Sela')])); D2w.net.fightStep(dw1, 1); D2w.net.fightStep(dw1, 1);
+    D2w.net.fightSet(null, bridge([row('t_u9', 'Unit 9')])); const dw = [u9a, D2w.camp.chars.c_u9.values.f_fx[0].t.left, J(D2w.camp.clock.lived)];
+    check('152 fold 4 (the review) those who walk into a fight that is ahead live the gap for their timed effects as for their time rules (net.fxSpans with walk): Unit 9, three seconds down while it follows the second, walks into a fight begun at the Docks\' time two seconds past the second and loses those two and its first turn\'s round, 27 to 24, where the fight that holds it by then passed the gap over (26)',
+        J(dw) === J([27, 24, J({ c_kael: [43205, 0], c_u9: [43205, 0] })]), J(dw));
+    // the Calendar switched off while a fight runs: from then the fight's time is kept in memory alone, so the date stays where it was and nobody is left
+    // ahead of a clock that never followed; switched on again, a move of the clock counts for everyone
+    const qo = {}, Qw = mkT(qo), q1 = Qw.net.fightSet(null, docks([row('t_kael', 'Kael'), row('t_u7', 'Unit 7')])); Qw.net.fightStep(q1, 1); Qw.net.fightStep(q1, 1);
+    qo.calendar = false; [1, 2, 3, 4, 5, 6, 7, 8].forEach(() => Qw.net.fightStep(q1, 1)); const rookOf = () => Math.round(Qw.camp.chars.c_rook.values.f_fx[0].t.left);
+    const qMid = [J(Qw.net.second), Qw.camp.clock.t, Qw.net.combats[q1].round, rookOf()];
+    Qw.net.fightSet(q1, null); const qEnd = [Qw.camp.clock.t, J(Qw.camp.clock.lived || null), Qw.net.second, Qw.cal.memSt(), rookOf(), Qw.out.runs.length];
+    qo.calendar = true; Qw.cal.moveTo(43204, 'Moved on 3 seconds'); const qAft = [Qw.camp.clock.t, J(Qw.camp.clock.lived || null), rookOf()];
+    check('152 fold 4 (the review) the Calendar switched off while a fight runs: the fight\'s time is kept in memory alone from then (the frame mem), the date staying at 12:00:01 while In a fight still counts by the rounds and Rook\'s effect follows the second; the fight ended in round 6 leaves nobody ahead of the clock, where everyone was left at 12:00:06; the Calendar on again, three seconds moved on count for everyone',
+        J(qMid) === J([J({ frame: 'mem', s: 43205 }), 43201, 6, 25]) && J(qEnd) === J([43201, 'null', null, null, 24, 6]) && J(qAft) === J([43204, 'null', 21]), J([qMid, qEnd, qAft]));
+    // with the Calendar off a fight's memory begins from the clock's own marks: Sela, left ahead of the clock by a fight that ran ahead, lives nothing twice
+    const mo = {}, Mw = mkT(mo), mwa = Mw.net.fightSet(null, docks([row('t_kael', 'Kael')])), mwb = Mw.net.fightSet(null, bridge([row('t_sela', 'Sela')]));
+    [1, 2, 3, 4].forEach(() => Mw.net.fightStep(mwb, 1)); Mw.net.fightSet(mwb, null); Mw.net.fightSet(mwa, null); const mw0 = [Mw.camp.clock.t, J(Mw.camp.clock.lived || null)];
+    mo.calendar = false; const mwc = Mw.net.fightSet(null, bridge([row('t_sela', 'Sela')])), mwk = Mw.out.runs.length; [1, 2, 3, 4, 5].forEach(() => Mw.net.fightStep(mwc, 1));
+    const mw1 = [Mw.out.runs.slice(mwk), J(Mw.net.second), Mw.camp.clock.t];
+    check('152 fold 4 (the review) with the Calendar off a fight\'s memory begins from the clock\'s own marks: Sela, left at 12:00:05 by a fight that ran ahead while the clock stayed at 12:00:01, fights again with the Calendar off and lives none of her first four rounds twice, her In a fight rule run only for the fifth; the date stays where it was',
+        J(mw0) === J([43201, J({ c_sela: [43205, 0] })]) && J(mw1) === J([[[['c_sela:r_tick:x:1'], 'Round 5 on Bridge', { round: 5 }]], J({ frame: 'mem', s: 43206 }), 43201]), J([mw0, mw1]));
+    // a roster edit that sets another round moves the fight's time by the difference: up, its rounds lived; down, a correction
+    const Vw = mkT(), v1 = Vw.net.fightSet(null, docks([row('t_kael', 'Kael'), row('t_u7', 'Unit 7')]));
+    Vw.net.fightSet(v1, { mapId: 'mDocks', round: 3, turn: 0, rows: [row('t_kael', 'Kael'), row('t_u7', 'Unit 7')] }); const vU = [Vw.camp.clock.t, J(Vw.net.combats[v1].at), Vw.out.runs.slice()];
+    Vw.net.fightSet(v1, { mapId: 'mDocks', round: 2, turn: 0, rows: [row('t_kael', 'Kael'), row('t_u7', 'Unit 7')] }); const vD = [Vw.camp.clock.t, J(Vw.net.combats[v1].at), J(Vw.camp.clock.top)];
+    Vw.net.fightStep(v1, 1); Vw.net.fightStep(v1, 1); const vA = [Vw.camp.clock.t, Vw.net.combats[v1].round, Vw.out.runs.length, 'top' in Vw.camp.clock];
+    check('152 fold 4 (the review) a roster edit that sets another round moves the fight\'s time by the difference: round 1 to 3 moves it and the clock two seconds and its fighters live both rounds, the In a fight rule run twice for each and handed round 2; back to round 2 is a correction, the clock keeping the highest second reached as its top; on again to round 3 counts nothing twice and the top goes',
+        J(vU) === J([43202, J({ s: 43202, ms: 0 }), [[['c_kael:r_tick:x:2', 'c_u7:r_tick:x:2'], 'Round 2 on Docks', { round: 2 }]]]) && J(vD) === J([43201, J({ s: 43201, ms: 0 }), J({ s: 43202, ms: 0 })]) && J(vA) === J([43202, 3, 1, false]), J([vU, vD, vA]));
+    // Each fight starts again: a fight begun takes off its people's In a fight counts of the rules ticked so, and a join takes off the joiner's
+    const Frw = mkT({ rolls: [{ id: 'r_f', label: 'Fresh', apply: [], inFight: { n: 2, u: 'round', fresh: true } }, { id: 'r_k', label: 'Keep', apply: [], inFight: { n: 2, u: 'round' } }] });
+    const fr1 = Frw.net.fightSet(null, docks([row('t_kael', 'Kael'), row('t_u7', 'Unit 7')])); Frw.net.fightSet(fr1, null); const frA = J(Frw.camp.clock.acc || null);
+    const fr2 = Frw.net.fightSet(null, docks([row('t_kael', 'Kael')])); const frB = J(Frw.camp.clock.acc || null);
+    Frw.net.fightSet(fr2, { mapId: 'mDocks', round: 1, turn: 0, rows: [row('t_kael', 'Kael'), row('t_u7', 'Unit 7')] }); const frC = J(Frw.camp.clock.acc || null);
+    check('152 fold 4 (the review) Each fight starts again (calendar.js fightBegan, asked by the coordinator): a fight ended in its first round leaves Kael and Unit 7 a second counted on both rules; a new fight for Kael takes his count off the rule ticked so and keeps the other, Unit 7 untouched; Unit 7 added to it loses that count too',
+        frA === J({ c_kael: { x_f: 1, x_k: 1 }, c_u7: { x_f: 1, x_k: 1 } }) && frB === J({ c_kael: { x_k: 1 }, c_u7: { x_f: 1, x_k: 1 } }) && frC === J({ c_kael: { x_k: 1 }, c_u7: { x_k: 1 } }), J([frA, frB, frC]));
+    // the Calendar off: an NPC whose rules are switched off runs nothing and nothing is listed, since no window could answer it; a rule ticked Ask me first
+    // is counted and never run, as it waits for the GM's word and nothing can give it
+    const Lxw = mkT({ calendar: false }); Lxw.camp.clock.rulesOff = ['c_u7']; const lx1 = Lxw.net.fightSet(null, docks([row('t_kael', 'Kael'), row('t_u7', 'Unit 7')])); Lxw.net.fightStep(lx1, 1); Lxw.net.fightStep(lx1, 1);
+    const lxx = [Lxw.out.runs, Lxw.cal.st().pend, Lxw.out.toasts.filter(t => /^Time rules are due/.test(t)).length];
+    const Axw = mkT({ calendar: false, rolls: [{ id: 'r_tick', label: 'Brace', apply: [], inFight: { n: 2, u: 'round' }, ask: true }] }), ax1 = Axw.net.fightSet(null, docks([row('t_kael', 'Kael'), row('t_u7', 'Unit 7')]));
+    Axw.net.fightStep(ax1, 1); Axw.net.fightStep(ax1, 1); const axA = J(Axw.camp.clock.acc || null); Axw.net.fightStep(ax1, 1); Axw.net.fightStep(ax1, 1);
+    const axx = [axA, Axw.out.runs.length, Axw.cal.st().pend, J(Axw.camp.clock.acc || null), Axw.out.toasts.filter(t => /^Time rules are due/.test(t)).length];
+    check('152 fold 4 (the review) the Calendar off in a fight: an NPC whose rules are switched off runs nothing and nothing waits, Kael\'s rule run alone; a rule ticked Ask me first is counted, a round each for Kael and Unit 7, and when it comes due it runs for nobody and nothing waits, since no window could give the GM\'s word',
+        J(lxx) === J([[[['c_kael:r_tick:x:1'], 'Round 1 on Docks', { round: 1 }]], null, 0]) && J(axx) === J([J({ c_kael: { x_tick: 1 }, c_u7: { x_tick: 1 } }), 0, null, 'null', 0]), J([lxx, axx]));
+    const rd4 = f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8').replace(/\r\n/g, '\n'), help4 = rd4('system/app/index.html'), notes4 = ['WHATSNEW.txt', 'system/app/assets/whatsnew.txt'].map(rd4);
+    check('152 fold 4 (the review, source): Help\'s combat entry and both release notes say that a new fight starts at the time of the fight you play, the one you last started or stepped, and that the one furthest behind is played once that fight ends, where they said the fight you last stepped; the owner\'s example names its rounds as 1 second long, in Help and both notes',
+        help4.includes('A new fight starts at the time of the fight you play, which is the one you last started or stepped. When that fight ends, the one furthest behind is the one you play.') && !help4.includes('the fight you last stepped')
+        && help4.includes('With rounds of 1 second, a fight begun at 12:00:00 and ended in round 3 lets the clock go on from 12:00:03.') && !/Begun at 12:00:00/.test(help4)
+        && notes4.every(t => t.includes('- A new fight starts at the time of the fight you play, which is the\n  one you last started or stepped, or at the clock when no fight is on.\n  When that fight ends, the one furthest behind is the one you play.\n')
+            && t.includes('in counts: with rounds of 1 second, a fight begun at 12:00:00 and\n  ended in round 3 lets the clock go on from 12:00:03.') && !t.includes('fight you last stepped')));
+    const errs = [A, B, C2, D, E, W, G, L, H4, X, Y, R, D2w, Qw, Mw, Vw, Frw, Lxw, Axw].reduce((acc, w) => acc.concat(w.out.errs), []);
+    check('152 fold 4 (source): the clock\'s old hooks are gone; ordersMoved is the one coordinator, asked by a fight\'s start or roster edit, a step that changes its round and an end, each once; a player\'s End turn and hold step their fight as a player; the session takes its second away; calendar.js counts a character\'s span only through livedSpans, in spansOf (which ownTime and moveTo ask), and has no rounds or fightEnded; no world above logged an error',
+        !/clockRounds|clockFightEnd/.test(src) && (src.match(/ordersMoved\(/g) || []).length === 4 && /if \(tg\) ordersMoved\(had \? 'edit' : 'start', tg\);/.test(src) && /if \(tg\) ordersMoved\('step', tg\);/.test(src) && /ordersMoved\('end', endO\);/.test(src)
+        && src.includes("fightStep(fidT, 1, 'player');") && src.includes("fightHold(fidH, 'player');") && src.includes('net.fightOn = null; net.second = null;')
+        && (calJs.match(/livedSpans\(/g) || []).length === 2 && !/function rounds\(|fightEnded|roundPend/.test(calJs) && errs.length === 0, J(errs.slice(0, 3)));
 })());
 Promise.all(pendingChecks).then(() => {   // the async checks land before the summary
     /* ---- 1.5.4: the follow ruling (the owner, 2026-10-04): nobody follows the GM around unless the table is set to ---- */

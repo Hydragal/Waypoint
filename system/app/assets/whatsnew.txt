@@ -24,9 +24,10 @@ Your own rows
   A row you make GM only keeps its text from its player.
 
 Calendar
-- Time rules now run at once by default: players' characters' rules run
-  as time passes, with no list to answer. Ask me is still there in
-  Settings for a GM who wants to say which run.
+- Time rules now run at once by default: every character's rules run
+  as time passes, NPCs too, with no list to answer. An NPC's summary
+  comes to you alone. Ask me is still there in Settings for a GM who
+  wants to say which run.
 - The steps, Move and Set in the Calendar window always work. Time you
   move on while a list of time rules waits is counted once you apply
   or skip it.
@@ -74,9 +75,20 @@ Combat
   start only once for each round and turn the fight reaches. A
   character's timed effects count once a round, even with two rows in
   the order or after a hold and Act.
-- For now each fight still moves the clock by its own rounds, so two
-  fights at once move it twice. Fights that keep their own time come
-  next.
+- Each fight now keeps its own time, and each round adds the round's
+  length. While fights run, the clock shows the fight furthest behind,
+  so two fights move it once for each second. The round a fight ends
+  in counts: with rounds of 1 second, a fight begun at 12:00:00 and
+  ended in round 3 lets the clock go on from 12:00:03. A step back is a
+  correction, and nothing counts twice.
+- A new fight starts at the time of the fight you play, which is the
+  one you last started or stepped, or at the clock when no fight is on.
+  When that fight ends, the one furthest behind is the one you play.
+- While a fight is on, the Calendar's steps, Move and Set move
+  nothing, and a press says why. With the Calendar off, each fight
+  still keeps its own time for the session.
+- Your system's time rules run in a fight at the close of each round,
+  for everyone in it, NPCs too, with no list.
 - A player's app forgets your fights when you end the session, so their
   own campaign shows no turn strip of yours afterwards.
 

@@ -3395,9 +3395,10 @@ function timedHook(mapId, combat, kind) {
 // Item 20 K5: the time rules a stretch of the campaign's clock fired (calendar.js: after the GM's Apply, or at once when Automatic) — each fire
 // { c: charId, r: ruleId, n } run n times with the GM's full view and no token (systemcore timeRuleRun: the host makes every roll), stored, one
 // delta per character, its views redrawn; then one summary per character (net.timeCard: its player and the GM, or the GM alone for an NPC or a
-// rule that moves or reads what its player cannot see) and the Session Log's line. words: the stretch ("8 hours of rest"). Returns how many
-// characters changed
-function runTimeRules(fires, words) {
+// rule that moves or reads what its player cannot see) and the Session Log's line. words: the stretch ("8 hours of rest"; a fight's round, "Round 3
+// on Docks"). Backlog 152: a rule may run By the clock, In a fight or both, and a fire In a fight (x) runs in its fight's round, so CombatRound reads
+// it: its own rd, else at ({ round }). Returns how many characters changed
+function runTimeRules(fires, words, at) {
     var camp = getActiveCampaign(), sys = systemOf(camp), n = net(), D = window.wpDiceCore; if (!camp || !sys || !F() || !Array.isArray(fires)) return 0;
     var byChar = Object.create(null), order = [], changed = 0;
     fires.forEach(function(fi) { if (!fi || typeof fi.c !== 'string' || typeof fi.r !== 'string') return; if (!byChar[fi.c]) { byChar[fi.c] = []; order.push(fi.c); } byChar[fi.c].push(fi); });
@@ -3405,8 +3406,9 @@ function runTimeRules(fires, words) {
         var c = charById(cid, camp); if (!c) return;
         var parts = [], all = {}, gm = false;
         byChar[cid].forEach(function(fi) {
-            var rule = (Array.isArray(sys.rolls) ? sys.rolls : []).filter(function(r) { return r && r.id === fi.r && r.every; })[0]; if (!rule) return;
-            var res = timeRuleRun(sys, c, rule, fi.n, F(), D), ks = Object.keys(res.values);
+            var rule = (Array.isArray(sys.rolls) ? sys.rolls : []).filter(function(r) { return r && r.id === fi.r && (r.every || r.inFight); })[0]; if (!rule) return;
+            var atF = fi.x === 1 ? (typeof fi.rd === 'number' && isFinite(fi.rd) ? { round: fi.rd } : at && typeof at === 'object' ? at : undefined) : undefined;   // 152: a fire In a fight reads its fight's round
+            var res = timeRuleRun(sys, c, rule, fi.n, F(), D, atF), ks = Object.keys(res.values);
             if (res.held && !res.ran) return;   // 1.5.4: its needs were not met, so it was passed over
             if (ks.length) { c.values = c.values || {}; ks.forEach(function(k) { if (JSON.stringify(c.values[k]) === JSON.stringify(res.values[k])) return; c.values[k] = res.values[k]; all[k] = res.values[k]; }); }   // only what really moved is stored and sent
             var acts = Array.isArray(rule.apply) ? rule : { apply: Array.isArray(rule.then) ? rule.then : [] }, reads = typeof rule.formula === 'string' ? gmOnlyNames(sys, F().names(rule.formula).map(function(x) { return { name: x }; })).length > 0 : false;

@@ -1,22 +1,22 @@
 /* Game calendar (1.5.0, backlog item 20) — the DOM half: the campaign's clock in the header (a chip with the date and time) and the
    Calendar window (the period in view as a grid of days by the week, the steps that move time on, a day and a time to set the clock
    to, whether players see the date). World time lives on the campaign (camp.clock: { t, hide?, hold?, rate? }); the pure half (calendarcore.js)
-   turns it into a date by the system's calendar. Each round of a combat moves it on by the system's round length (net.js calls
-   rounds()). A player's app shows the clock the host sends (net.js 'clock'), read-only, and a player may hide it for themselves (the
+   turns it into a date by the system's calendar. While fights run it reads the fight furthest behind (backlog 152: net.js ordersMoved hands each
+   character's own time to ownTime and the second to second()). A player's app shows the clock the host sends (net.js 'clock'), read-only, and a player may hide it for themselves (the
    Calendar feature's own per-player switch). Every text reaches the page as a text node or a value. Design of record:
    docs/CALENDAR_PLAN.md. */
 import { getActiveCampaign } from './models.js';
 import { save, saveView, toast } from './io.js';
 import { roundSecs } from './systemcore.js';
-import { cleanCalendar, cleanClock, cleanAcc, ruleFires, dateOf, timeOf, periodDays, dayLength, fmtDate, fmtWhen, fmtSpan, CAL_LIMITS } from './calendarcore.js';
+import { cleanCalendar, cleanClock, cleanAcc, ruleFires, livedSpans, freshAcc, tCmp, tSpanMs, dateOf, timeOf, periodDays, dayLength, fmtDate, fmtWhen, fmtSpan, CAL_LIMITS } from './calendarcore.js';
 
 function net() { return window.wpNet || null; }
 function sysNow() { var sh = window.wpSheets; return sh && sh.systemOf ? sh.systemOf() : null; }
 // [sinkcheck:calendarwin-start]
-var restMode = false, pend = null, roundPend = 0, pendQ = [];   // item 20 K5: time moved on as Rest (else Active), the time rules waiting for the GM's word, a fight's rounds not yet counted; 159: time the GM moved on while a list waited
-// What waits belongs to the campaign it was counted in (the owed review, 2026-10-09): a list of time rules due, the live time counted behind
-// it and a fight's rounds carried into the next campaign opened, whose own rules then ran for hours that never passed there. Asked before any
-// of the three is read or added to. With another campaign on screen they are PUT ASIDE for their own, and are back when it is: letting them
+var restMode = false, pend = null, pendQ = [];   // item 20 K5: time moved on as Rest (else Active), the time rules waiting for the GM's word; 159: time moved on while a list waited
+// What waits belongs to the campaign it was counted in (the owed review, 2026-10-09): a list of time rules due and the live time counted behind
+// it carried into the next campaign opened, whose own rules then ran for hours that never passed there. Asked before either is read or added to
+// (152 fold 4: a fight's rounds no longer wait for its end, so nothing of them waits here). With another campaign on screen they are PUT ASIDE for their own, and are back when it is: letting them
 // go lost a list, with its counts, when another campaign was merely looked at (the review of that fix). What is kept is bounded
 var pendCamp = '', pendKept = Object.create(null), PEND_KEEP = 40;
 function pendFor(camp) {
@@ -24,10 +24,10 @@ function pendFor(camp) {
     if (id === pendCamp) return;
     if (pendCamp) {
         delete pendKept[pendCamp];
-        if (pend || livePend > 0 || roundPend > 0 || pendQ.length) { pendKept[pendCamp] = { pend: pend, live: livePend, round: roundPend, q: pendQ }; var ksP = Object.keys(pendKept); if (ksP.length > PEND_KEEP) delete pendKept[ksP[0]]; }
+        if (pend || livePend > 0 || pendQ.length) { pendKept[pendCamp] = { pend: pend, live: livePend, q: pendQ }; var ksP = Object.keys(pendKept); if (ksP.length > PEND_KEEP) delete pendKept[ksP[0]]; }
     }
     var kP = id && pendKept[id] ? pendKept[id] : null;
-    pend = kP ? kP.pend : null; livePend = kP ? kP.live : 0; roundPend = kP ? kP.round : 0; pendQ = kP && Array.isArray(kP.q) ? kP.q : [];
+    pend = kP ? kP.pend : null; livePend = kP ? kP.live : 0; pendQ = kP && Array.isArray(kP.q) ? kP.q : [];
     if (id) delete pendKept[id];
     pendCamp = id;
 }
@@ -90,17 +90,17 @@ function winBaseOf(camp, ck, cal) { return camp.id + '|' + (ck.hide ? 1 : 0) + '
 function winSigOf(camp, ck, cal) { return winBaseOf(camp, ck, cal) + '|' + ck.t; }
 // Item 20 K5 (the owner's answers of 2026-09-30): the time rules — rolls and apply actions that also run every so often by this clock. Rest adds
 // up per character and rule, activity breaks it (calendarcore ruleFires); the steps and any amount run them as Rest or Active, a Set forward
-// always asks (the GM's choice), a fight's rounds count as activity and are asked about when it ends. What is due waits in the window: players'
-// characters ticked, NPCs offered; Apply runs the ticked ones on this machine (sheets.js runTimeRules), Skip lets the time pass; either way
-// what each rule has counted is kept (camp.clock.acc, the GM's own)
+// always asks (the GM's choice). What is due waits in the window: players' characters ticked, NPCs offered; Apply runs the ticked ones on this
+// machine (sheets.js runTimeRules), Skip lets the time pass; either way what each rule has counted is kept (camp.clock.acc, the GM's own)
 // K5b: the table's word on the time rules (Settings \u25b8 VTT features \u25b8 Calendar: camp.turnRules.time) — 'auto' (the default since 1.5.5:
-// players' characters' rules run at once; a Set forward still asks), 'confirm' (the GM says), 'off' (none run and nothing is counted); a paused
+// the rules run at once; a Set forward still asks), 'confirm' (the GM says), 'off' (none run and nothing is counted); a paused
 // table runs none. 159 (the owner, 2026-10-18, of the list Ask me left at the table: "the effects should run unless i pause time. unless some
-// gms might want this level of control?"): Run at once is the default, so a campaign with no word of its own runs them; Ask me is stored
+// gms might want this level of control?"): Run at once is the default, so a campaign with no word of its own runs them; Ask me is stored.
+// 152 (the owner's answer, "Every character"): under Run at once an NPC's rules run as time passes, as a player's do, its summary to the GM alone
 function timeMode(camp) { var t = camp && camp.turnRules && typeof camp.turnRules === 'object' ? camp.turnRules.time : ''; return t === 'confirm' || t === 'off' ? t : 'auto'; }
 function tablePaused() { var n = net(); return !!(n && n.active && n.paused); }
 function isPc(ch) { return !!ch && ch.npc !== true && typeof ch.ownerId === 'string' && !!ch.ownerId; }
-function clockRules(sys) { return sys && Array.isArray(sys.rolls) ? sys.rolls.filter(function(r) { return r && r.every; }) : []; }
+function clockRules(sys) { return sys && Array.isArray(sys.rolls) ? sys.rolls.filter(function(r) { return r && (r.every || r.inFight); }) : []; }   // 152: By the clock, In a fight, or both
 function sysUnits(sys) { return sys && sys.combat && sys.combat.turn && Array.isArray(sys.combat.turn.units) ? sys.combat.turn.units : []; }
 function commitAcc(acc, live) {   // live (1.5.4): the clock ran by itself — written quietly, and not at all when the counts did not move
     var camp = getActiveCampaign(); if (!camp || isPlayer()) return;
@@ -108,32 +108,150 @@ function commitAcc(acc, live) {   // live (1.5.4): the clock ran by itself — w
     if (live === true && JSON.stringify(a) === JSON.stringify(ck.acc || null)) return;
     if (a) nc.acc = a; else delete nc.acc; camp.clock = nc; if (live === true) saveView(); else save();
 }
-function timePassed(secs, rest, ask, live) {   // ask: always ask (a Set forward: the GM's choice); live (1.5.4): the clock ran by itself
-    var camp = getActiveCampaign(), sys = sysNow(); pendFor(camp); if (!camp || isPlayer() || typeof secs !== 'number' || !(secs > 0) || !sys || timeMode(camp) === 'off' || tablePaused()) return false;
-    var rules = clockRules(sys); if (!rules.length) return false;
-    if (pend) { queueStretch(secs, rest, ask, live); if (winOpen()) renderWin(); return false; }   // 159: a list waits for the GM's word, and this time is judged once it is answered
-    var ck = clockOf(camp) || { t: 0 }, res = ruleFires(sysCal(), sysUnits(sys), rules, camp.chars ? Object.keys(camp.chars) : [], ck.acc, secs, !!rest);
-    if (!res.fires.length) { commitAcc(res.acc, live); return false; }
-    var on = Object.create(null); res.fires.forEach(function(f) { on[f.c] = isPc(camp.chars[f.c]); });
-    if (!ask && timeMode(camp) === 'auto') {   // K5b: Automatic — players' characters' rules run now, the counts kept
-        var go = res.fires.filter(function(f) { return on[f.c] === true; });
-        if (go.length && window.wpSheets && window.wpSheets.runTimeRules) window.wpSheets.runTimeRules(go, spanWords(sysCal(), secs, rest, live));
-        commitAcc(res.acc, live); return false;
+// Backlog 152 (the fight clock, docs/FIGHT_CLOCK_DESIGN.md sections 1, 5 and 6): EACH CHARACTER'S OWN TIME, counted in ONE place. A stretch of time
+// comes as a group { kind, ids, t0, t1 } (times as whole seconds or calendarcore's pairs): 'clock', the clock moved with no fight running (a step,
+// Move, a Set, the clock running by itself: moveTo); 'fight', a round a fight closed or the round it ended in, for its fighters (net.js ordersMoved,
+// with the round, its length rs and its words, "Round 3 on Docks"); 'out', the second moving on while fights run, for everyone in no fight, and
+// those who walk into a fight that is ahead of the second. Each character's span is worked out here alone, through calendarcore livedSpans: it
+// lives what it has not lived yet, so a step back and on again, a fight that ran ahead or one sheet in two fights counts each second once. The marks
+// are the clock's own (camp.clock.lived and top: saved, the GM's own, never sent), or, with the Calendar off while fights run (net.second's frame
+// 'mem'), this machine's memory alone, let go when the last fight ends: no clock would ever reach them. Each span then goes to the timed effects
+// (net.fxSpans; never a fight's, whose effects follow its turns) and to the time rules (groupRules). Under Off or a paused table the marks still
+// rise, so lifting either counts nothing twice
+var memT = null;   // the 'mem' frame: { camp, t: the second, whole; top: the highest second reached, a pair, or null; lived }, begun from the clock's own top and marks
+function frameOf() { var n = net(); return n && n.second && n.second.frame === 'mem' ? 'mem' : 'clock'; }
+function memOf(camp) {   // a character ahead of the clock (a fight that ran ahead, or the Calendar switched off while fights run) lives nothing twice in memory either
+    var n = net(); if (memT && memT.camp === camp.id) return memT;
+    var ck = clockOf(camp) || { t: 0 }; memT = { camp: camp.id, t: n && n.second && typeof n.second.s === 'number' ? n.second.s : ck.t, top: ck.top || null, lived: ck.lived ? JSON.parse(JSON.stringify(ck.lived)) : {} };
+    return memT;
+}
+function hasOwn(o, k) { return !!o && typeof o === 'object' && Object.prototype.hasOwnProperty.call(o, k); }
+function charIdsOf(camp) { return camp && camp.chars && typeof camp.chars === 'object' ? Object.keys(camp.chars) : []; }
+function ordersRun() { var n = net(); return !!(n && n.active && n.role === 'host' && n.combats && typeof n.combats === 'object' && Object.keys(n.combats).some(function(k) { return !!n.combats[k]; })); }   // a fight runs at this table
+function spansOf(camp, g) {   // each character's span of a group, its mark moved on: before the clock moves, so a character is judged against the clock as it was
+    var r;
+    if (frameOf() === 'mem') { var m = memOf(camp); r = livedSpans(m.lived, m.top && tCmp(m.top, m.t) > 0 ? m.top : m.t, g.ids, g.t0, g.t1); m.lived = r.lived; return r.spans; }
+    var ck = clockOf(camp) || { t: 0 }, nc = Object.assign({}, ck); r = livedSpans(ck.lived, ck.top || ck.t, g.ids, g.t0, g.t1);
+    if (Object.keys(r.lived).length) nc.lived = r.lived; else delete nc.lived;
+    if (JSON.stringify(nc.lived || null) !== JSON.stringify(ck.lived || null)) { camp.clock = cleanClock(nc) || { t: ck.t }; g.marked = true; }
+    return r.spans;
+}
+function uniformOf(spans) { var v = null, ok = true; Object.keys(spans).forEach(function(k) { if (v === null) v = spans[k]; else if (spans[k] !== v) ok = false; }); return ok ? v : null; }
+function evenSpans(camp, s) { var o = {}; charIdsOf(camp).forEach(function(id) { o[id] = s; }); return o; }
+function ownTime(groups) {   // the one counter: each group's spans, once, to the timed effects and the time rules; true where a list was made
+    var camp = getActiveCampaign(); pendFor(camp); if (!camp || isPlayer() || !Array.isArray(groups)) return false;
+    var sys = sysNow(), n = net(), made = false, marked = false;
+    groups.forEach(function(g0) {
+        if (!g0 || typeof g0 !== 'object' || !Array.isArray(g0.ids)) return;
+        var g = Object.assign({}, g0); g.kind = g.kind === 'fight' || g.kind === 'out' ? g.kind : 'clock';
+        if (g.kind === 'fight') g.rest = false; else if (g.kind === 'out') g.rest = restMode;   // a fight is activity; outside one, time passes as the window says (settled 16)
+        if (typeof g.secs !== 'number') g.secs = Math.max(0, tSpanMs(g.t0, g.t1) / 1000);
+        var spans = g.spans && typeof g.spans === 'object' ? g.spans : null; if (!spans) { g.marked = false; spans = spansOf(camp, g); if (g.marked) marked = true; }   // a move of the clock hands its spans in, and writes them with the clock
+        if (!Object.keys(spans).length) return;
+        if (g.kind !== 'fight' && n && typeof n.fxSpans === 'function') { try { n.fxSpans(spans, g.walk === true); } catch (e) { console.error(e); } }   // section 6: outside a fight its timed effects follow its own time; in one, its turns. walk: those who walk into a fight live the gap before it
+        if (groupRules(camp, sys, g, spans)) made = true;
+    });
+    if (marked && frameOf() === 'clock') saveView();   // a fight that runs ahead moves no clock: its people's marks are written quietly
+    return made;
+}
+// fireOut (section 5): a fire runs at once or waits for the GM's word. It waits where its stretch is a Set forward, where Time rules is Ask me and the
+// stretch is no fight's (a fight's run at each round, with no list: brief 7, "At each turn"), and where its rule is ticked Ask me first (ask). The rules
+// that run at once are counted, run and kept now, whether or not a list waits, for every character (152, the owner's answer: "Every character"; an
+// NPC's summary to the GM alone), but an NPC whose rules the GM switched off (camp.clock.rulesOff, the Rules run switch) has its fires listed,
+// unticked, in a fight or out of one. The rules asked for are counted into the list, or, while one waits, queued behind it and counted once it is
+// answered: the list keeps only their counts, never taking back a count the others made since (keepAsked). With the Calendar off In a fight alone
+// counts, in a fight, and nothing waits: there is no window to answer it in. A rule ticked Ask me first then is counted and never run, as an NPC's
+// whose rules are off: it waits for the GM's word, in a fight too (the owner's answer), and nothing can give that word. only: a stretch that waited, counted now for the rules it asked for alone
+function groupRules(camp, sys, g, spans, only) {
+    var mode = timeMode(camp), fight = g.kind === 'fight', cal = clockOn(); if (!sys || mode === 'off' || tablePaused() || (!fight && !cal)) return false;
+    var rules = clockRules(sys); if (!cal) rules = rules.filter(function(r) { return !!r.inFight; }).map(function(r) { var m = { id: r.id, label: r.label, inFight: r.inFight }; if (r.ask === true) m.ask = true; return m; });   // By the clock needs the Calendar, as it always has
+    if (!rules.length || !Object.keys(spans).length) return false;
+    var asks = function(r) { return g.ask === true || (mode === 'confirm' && !fight) || r.ask === true; };
+    var now = only ? [] : rules.filter(function(r) { return !asks(r); }), later = only ? rules.filter(function(r) { return only === true || only.indexOf(r.id) >= 0; }) : rules.filter(asks);
+    var off = offOf(camp), list = [], asked = null, rd = function(f) { if (fight && f.x === 1 && typeof g.round === 'number') f.rd = g.round; return f; };
+    if (now.length) {
+        var rn = firesOf(camp, sys, now, g, spans), go = [];
+        commitAcc(rn.acc, g.live === true); heldFollow(now, rn.acc);
+        rn.fires.forEach(function(f) { rd(f); if (!off(f.c)) go.push(f); else if (cal) list.push(f); });
+        if (go.length && window.wpSheets && window.wpSheets.runTimeRules) window.wpSheets.runTimeRules(go, groupWords(g), fight && typeof g.round === 'number' ? { round: g.round } : undefined);
     }
-    pend = { secs: secs, rest: !!rest, fires: res.fires, acc: res.acc, on: on, camp: camp.id }; if (live === true) pend.live = true;
+    if (later.length && !cal) { var rx = firesOf(camp, sys, later, g, spans); commitAcc(rx.acc, g.live === true); heldFollow(later, rx.acc); }   // the Calendar off: counted, its fires never run
+    else if (later.length && pend) queueStretch(camp, g, spans, later, rules);   // 159: a list waits for the GM's word, and this time is judged once it is answered
+    else if (later.length) {
+        var rl = firesOf(camp, sys, later, g, spans);
+        if (!rl.fires.length) commitAcc(rl.acc, g.live === true);
+        else { rl.fires.forEach(function(f) { list.push(rd(f)); }); asked = { acc: rl.acc, keys: keysOf(later), ids: Object.keys(spans) }; }
+    }
+    return list.length ? listUp(camp, g, list, asked) : false;
+}
+function firesOf(camp, sys, rules, g, spans) {   // the fires of these rules over each character's span; outside a fight with every span the same, as it always counted
+    var acc = accNow(camp), ids = Object.keys(spans), one = uniformOf(spans);
+    if (g.kind !== 'fight' && one !== null) return ruleFires(sysCal(), sysUnits(sys), rules, ids, acc, one, !!g.rest);
+    return ruleFires(sysCal(), sysUnits(sys), rules, ids, acc, spans, !!g.rest, { fight: g.kind === 'fight', rs: typeof g.rs === 'number' && g.rs > 0 ? g.rs : roundSecs(sys) });
+}
+// What each rule has counted, as the next stretch counts on from it: the clock's counts, with those a waiting list holds for the rules it asked for laid
+// over them, so a rule asked for in one stretch and run at once in another (a Set, then a step; a list of Ask me, then a fight) never counts the same
+// time twice. A rule counted at once while a list waits moves the list's own count with it (heldFollow): Apply or Skip then keeps what was counted
+function layAsked(acc, p) {
+    (Array.isArray(p.ids) ? p.ids : []).forEach(function(c) {
+        p.keys.forEach(function(k) { var v = hasOwn(p.acc, c) && hasOwn(p.acc[c], k) ? p.acc[c][k] : undefined; if (v === undefined) { if (hasOwn(acc, c)) delete acc[c][k]; } else { if (!hasOwn(acc, c)) acc[c] = {}; acc[c][k] = v; } });
+        if (hasOwn(acc, c) && !Object.keys(acc[c]).length) delete acc[c];
+    });
+    return acc;
+}
+function heldOf(camp) { return !!pend && !!pend.acc && Array.isArray(pend.keys) && pend.keys.length > 0 && pend.camp === (camp && camp.id); }
+function accNow(camp) { var ck = clockOf(camp) || { t: 0 }, cur = ck.acc ? JSON.parse(JSON.stringify(ck.acc)) : {}; return heldOf(camp) ? layAsked(cur, pend) : cur; }
+function heldFollow(rules, acc) {
+    if (!heldOf(getActiveCampaign())) return;
+    var ks = keysOf(rules).filter(function(k) { return pend.keys.indexOf(k) >= 0; }); if (!ks.length) return;
+    pend.ids.forEach(function(c) { ks.forEach(function(k) { var v = hasOwn(acc, c) && hasOwn(acc[c], k) ? acc[c][k] : undefined; if (v === undefined) { if (hasOwn(pend.acc, c)) delete pend.acc[c][k]; } else { if (!hasOwn(pend.acc, c)) pend.acc[c] = {}; pend.acc[c][k] = v; } }); });
+}
+function keysOf(rules) { var ks = []; rules.forEach(function(r) { ks.push(r.id, 'x_' + r.id.slice(2)); }); return ks; }   // a rule's two counts: By the clock (its id) and In a fight (x_ and its tail)
+function offOf(camp) {   // the GM's Rules run switch, off (camp.clock.rulesOff): an NPC's alone, a player's character is never held by it
+    var ck = clockOf(camp), set = Object.create(null); (ck && Array.isArray(ck.rulesOff) ? ck.rulesOff : []).forEach(function(id) { set[id] = 1; });
+    return function(c) { return set[c] === 1 && !isPc(hasOwn(camp.chars, c) ? camp.chars[c] : null); };
+}
+function groupWords(g) { return typeof g.words === 'string' && g.words ? g.words : spanWords(sysCal(), g.secs, g.rest, g.live); }
+var PEND_FIRES = 2000;
+function listUp(camp, g, fires, asked) {   // fires for the GM to answer: a list of their own, or, while one waits, joined to it (their counts are kept already)
+    var on = Object.create(null); fires.forEach(function(f) { on[f.c] = isPc(hasOwn(camp.chars, f.c) ? camp.chars[f.c] : null); });
+    if (pend) {
+        fires.forEach(function(f) { var same = pend.fires.filter(function(x) { return x.c === f.c && x.r === f.r && (x.x === 1) === (f.x === 1); })[0]; if (same) same.n = Math.min(500, same.n + f.n); else if (pend.fires.length < PEND_FIRES) pend.fires.push(f); if (!hasOwn(pend.on, f.c)) pend.on[f.c] = on[f.c]; });
+        if (winOpen()) renderWin(); refresh(); return false;
+    }
+    pend = { secs: g.secs, rest: !!g.rest, fires: fires, acc: asked ? asked.acc : null, keys: asked ? asked.keys : [], ids: asked ? asked.ids : [], on: on, camp: camp.id };
+    if (g.live === true) pend.live = true; if (g.kind !== 'clock') pend.words = groupWords(g);
     if (typeof window !== 'undefined' && window.wpNotices) window.wpNotices.wait('time', 'Time rules are due: ' + pendWords(sysCal()) + '.', 'time', null);   // 160: in the bell's list until it is answered
-    if (live === true && !winOpen()) { refresh(); toast('Time rules are due: click the date in the header to apply or skip them.'); return true; }   // never a window opened under the GM's hands
+    if ((g.live === true || ordersRun()) && !winOpen()) { refresh(); toast('Time rules are due: click the date in the header to apply or skip them.'); return true; }   // never a window opened under the GM's hands, nor while a fight runs
     if (!winOpen()) openWin(); else renderWin();
     return true;
 }
 // 159 (the owner, 2026-10-18: the steps were greyed while a list waited, so the clock could not be moved at the table): the steps, Move and
 // Set never wait. The time they move while a list waits is kept here, in order, and judged once the list is answered (pendDone), as the
-// clock's own running time is (livePend); a stretch like the one before it runs on as one, and at most PEND_Q are kept, the rest joining the last
+// clock's own running time is (livePend); a stretch like the one before it runs on as one, and at most PEND_Q are kept, the rest joining the last.
+// 152: only the rules asked for are kept (k, where not every rule is), with a fight's kind, round and round's length, its words and each character's
+// own span (c, where they differ, or not every character lives it); with none of these a stretch is kept exactly as before
 var PEND_Q = 200;
-function queueStretch(secs, rest, ask, live) {
-    var q = { s: secs, r: !!rest, a: ask === true, l: live === true }, last = pendQ.length ? pendQ[pendQ.length - 1] : null;
-    if (last && (pendQ.length >= PEND_Q || (last.r === q.r && last.a === q.a && last.l === q.l))) { last.s += secs; return; }
-    pendQ.push(q);
+function queueStretch(camp, g, spans, later, rules) {
+    var ids = Object.keys(spans), one = uniformOf(spans), even = one !== null && one === g.secs && ids.length === charIdsOf(camp).length;
+    var q = { s: g.secs, r: !!g.rest, a: g.ask === true, l: g.live === true };
+    if (g.kind !== 'clock') q.g = g.kind; if (typeof g.round === 'number') q.n = g.round; if (g.kind === 'fight' && typeof g.rs === 'number') q.rs = g.rs; if (g.kind !== 'clock') q.w = groupWords(g);
+    if (later.length !== rules.length) q.k = later.map(function(r) { return r.id; });
+    if (!even) q.c = Object.assign({}, spans);
+    if (q.l && Object.keys(q).length === 4) { livePend += q.s; sinceSync(); return; }   // the clock's own minutes, said under the list as they pass
+    var last = pendQ.length ? pendQ[pendQ.length - 1] : null;
+    if (last && (pendQ.length >= PEND_Q || sameShape(last, q))) joinStretch(camp, last, q); else pendQ.push(q);
+    sinceSync();
+}
+function sameShape(a, b) { return a.r === b.r && a.a === b.a && a.l === b.l && a.g === b.g && a.rs === b.rs && JSON.stringify(a.k || null) === JSON.stringify(b.k || null) && !a.c === !b.c; }
+function joinStretch(camp, a, b) {   // b runs on from a: their seconds summed (each character's own, where either has them), b's round and words the latest
+    if (a.c || b.c) { var ac = a.c || evenSpans(camp, a.s), bc = b.c || evenSpans(camp, b.s), out = {}; Object.keys(ac).concat(Object.keys(bc)).forEach(function(id) { if (!hasOwn(out, id)) out[id] = Math.round(((hasOwn(ac, id) ? ac[id] : 0) + (hasOwn(bc, id) ? bc[id] : 0)) * 1000) / 1000; }); a.c = out; }
+    a.s = Math.round((a.s + b.s) * 1000) / 1000; if (hasOwn(b, 'n')) a.n = b.n; if (hasOwn(b, 'w')) a.w = b.w;
+}
+function qGroup(q) { return { kind: q.g === 'fight' || q.g === 'out' ? q.g : 'clock', secs: q.s, rest: q.r === true, ask: q.a === true, live: q.l === true, round: q.n, rs: q.rs, words: q.w }; }
+function keepAsked(camp, p) {   // a list answered: the counts of the rules it asked for, as it counted them, for the characters it counted; every other count stays
+    if (!p.acc || !Array.isArray(p.keys) || !p.keys.length) return;
+    var ck = clockOf(camp) || { t: 0 }; commitAcc(layAsked(JSON.parse(JSON.stringify(ck.acc || {})), p));
 }
 // 160: time rules due, as the bell's list knows them (notices.js): they wait while a list waits for the campaign on screen; Open opens the Calendar
 if (typeof window !== 'undefined') { var nkT = window.wpNoticeKinds = window.wpNoticeKinds || {}; nkT.time = { label: 'Open', still: function() { pendFor(getActiveCampaign()); return !!pend; }, run: function() { openWin(); } }; }
@@ -148,7 +266,7 @@ function pendWhere(camp) {   // 159: the map each character stands on, by its fi
     return { at: at, order: order, items: items };
 }
 function spanWords(cal, secs, rest, live) { return live === true ? 'The clock ran' : fmtSpan(cal, secs) + (rest ? ' of rest' : ' of activity'); }   // what a summary is headed with (1.5.4: the running clock is no stretch the GM chose)
-function pendWords(cal) { return pend ? (pend.live === true ? 'as the clock ran' : spanWords(cal, pend.secs, pend.rest)) : ''; }
+function pendWords(cal) { return pend ? (pend.words ? pend.words : pend.live === true ? 'as the clock ran' : spanWords(cal, pend.secs, pend.rest)) : ''; }
 function pendPanel(body, cal) {   // 159 (the owner by prompt, 2026-10-18: "Every character, buttons on top"; "maybe a PCs and NPCs category, and sort by map location")
     var box = cel('div', 'cal-pend'), camp = getActiveCampaign(), sys = sysNow(), byC = Object.create(null), order = [];
     var top = cel('div', 'cal-pend-bar'); top.appendChild(cel('span', 'cal-pend-head', 'Time rules due \u2014 ' + pendWords(cal)));
@@ -181,10 +299,11 @@ function pendDone(apply) {
     var p = pend, cal = sysCal(); pend = null;
     if (typeof window !== 'undefined' && window.wpNotices) window.wpNotices.done('time');   // 160
     var camp = getActiveCampaign(); if (!camp || camp.id !== p.camp) { renderWin(); return false; }
-    if (apply) { var go = p.fires.filter(function(f) { return p.on[f.c] === true; }); if (go.length && window.wpSheets && window.wpSheets.runTimeRules) window.wpSheets.runTimeRules(go, spanWords(cal, p.secs, p.rest, p.live)); }
-    commitAcc(p.acc);
-    if (livePend > 0) { var lp = livePend; livePend = 0; timePassed(lp, false, false, true); }   // 1.5.4: the time that passed while this list waited (the clock running, a fight's rounds)
-    while (!pend && pendQ.length) { var qd = pendQ.shift(); timePassed(qd.s, qd.r, qd.a, qd.l); }   // 159: then the time the GM moved on meanwhile, in order, until a stretch makes rules due again
+    if (apply) { var go = p.fires.filter(function(f) { return p.on[f.c] === true; }); if (go.length && window.wpSheets && window.wpSheets.runTimeRules) window.wpSheets.runTimeRules(go, p.words || spanWords(cal, p.secs, p.rest, p.live)); }
+    keepAsked(camp, p);   // 152: only the counts of the rules this list asked for: a count another rule made since stays
+    var sysD = sysNow();
+    if (livePend > 0) { var lp = livePend; livePend = 0; groupRules(camp, sysD, { kind: 'clock', secs: lp, rest: false, live: true }, evenSpans(camp, lp), true); }   // 1.5.4: the time that passed while this list waited (the clock running)
+    while (!pend && pendQ.length) { var qd = pendQ.shift(); groupRules(camp, sysD, qGroup(qd), qd.c && typeof qd.c === 'object' ? qd.c : evenSpans(camp, qd.s), Array.isArray(qd.k) ? qd.k : true); }   // 159: then the time moved on meanwhile, in order, until a stretch makes rules due again
     renderWin(); refresh(); return true;
 }
 function comingUp(body, cal, notes, today, gm) {   // the next five notes from today on (a player's app holds only those it may see)
@@ -265,13 +384,13 @@ function renderWin() {
     body.appendChild(an);
     var hl = cel('label', 'cal-tick'), hc = cel('input', 'cal-hide'); hc.type = 'checkbox'; hc.checked = !ck.hide; hc.title = 'Off: players see no date or time; you still do';
     hl.appendChild(hc); hl.appendChild(document.createTextNode(' Players see the date')); body.appendChild(hl);
-    body.appendChild(cel('div', 'sys-note cal-round', 'Each round of a combat moves the clock on ' + fmtSpan(cal, roundSecs(sys)) + ' (the round\u2019s length: the Combat card\u2019s Turns box).'));
+    body.appendChild(cel('div', 'sys-note cal-round', 'Each fight keeps its own time. Each round adds ' + fmtSpan(cal, roundSecs(sys)) + ', the round\u2019s length from the Combat card\u2019s Turns box. While fights run, the clock shows the fight furthest behind.'));
 }
 // The running clock (1.5.4; the owner, 2026-10-04: "id like it to run by default", and by prompt: while a session is open, held in a fight —
 // rounds move it — and "both real time and a speed i can set should be available, real time by default"). On the GM's machine, while it
 // hosts a table, game time moves on with real time times the campaign's speed (camp.clock.rate: stored only when it is not 1), a whole game
-// minute at a time, kept on whole minutes. It waits while the table is paused, while a fight runs on any map (each round moves the clock, as
-// ever), and while the GM holds it (camp.clock.hold: only the hold is stored, so a campaign that never touched it runs). Two looks more than
+// minute at a time, kept on whole minutes. It waits while the table is paused, while a fight runs on any map (the clock then follows the fight
+// furthest behind: 152), and while the GM holds it (camp.clock.hold: only the hold is stored, so a campaign that never touched it runs). Two looks more than
 // two minutes apart (the machine slept) count as two minutes. A minute that passes is no change of the GM's own hand: no log line, no undo
 // pass and no stamp on the map — the table is told (net.syncClock), timed effects run, a dated note reached is said, and the file is written
 // by the quiet save a moved view uses (io.js saveView). To the time rules it is Active time: Run at once runs them as it passes; Ask me
@@ -293,7 +412,7 @@ function liveWords(why, rate) {
     if (why === 'hold') return 'Held: the clock moves only by your steps and by a fight\u2019s rounds.';
     if (why === 'solo') return 'It runs by itself while you host a session: no table is open now.';
     if (why === 'paused') return 'Waiting: the table is paused.';
-    if (why === 'fight') return 'Waiting: a fight is on, and each round moves the clock.';
+    if (why === 'fight') return 'Waiting: a fight is on. The clock follows the fight furthest behind.';
     return '';
 }
 function liveRow(body, camp, ck) {   // the GM's window: Runs / Held, the speed, and what the clock is doing now
@@ -322,10 +441,6 @@ function setRate(r) {
     var nc = Object.assign({}, ck); if (r === 1) delete nc.rate; else nc.rate = r; camp.clock = nc;
     save(); refresh(); return true;
 }
-function liveRules(secs) {   // live time is Active time (timePassed: run at once under Run at once, counted and asked about under Ask me, nothing under Off)
-    pendFor(getActiveCampaign()); livePend += secs; if (pend) { sinceSync(); return; }   // a list waits for the GM's word: the time since is counted once they have answered (159: and said under it)
-    var s = livePend; livePend = 0; timePassed(s, false, false, true);
-}
 function liveTick(now) {   // one look at the wall clock, about once a second on the GM's machine
     var camp = getActiveCampaign(), why = liveHeld(camp);
     if (why !== liveWas) { liveWas = why; refresh(); }   // the chip's mark and an open window say what the clock is doing
@@ -337,24 +452,27 @@ function liveTick(now) {   // one look at the wall clock, about once a second on
     if (liveBankAt && now - liveBankAt < LIVE_EVERY) return false;   // at a fast speed: at most one move in five seconds
     var off = ck.t % S, mins = Math.floor((liveMs / 1000 + off) / S); if (mins < 1) return false;
     var secs = mins * S - off; liveMs -= secs * 1000; liveBankAt = now;
-    if (!moveTo(ck.t + secs, null, true)) return false;
+    if (!moveTo(ck.t + secs, null, true)) return false;   // live time is Active time (moveTo counts it: run at once under Run at once, counted and asked about under Ask me, nothing under Off)
     if (!liveSaid) { liveSaid = true; toast('The game clock runs by itself while your table is open. Click the date in the header to hold it or change its speed.'); }
-    liveRules(secs);
     return true;
 }
 // [calendarcheck:live-end]
 // The GM moves the clock to a moment (clamped to the calendar's range): saved, sent to the table with the save, and said in the
-// session log unless it came from a combat round
-function moveTo(t1, why, live) {   // live (1.5.4): the clock ran by itself — the table is told and the file written quietly, with no save of the GM's own
+// session log when the GM's hand moved it (why). 152: a move on with no fight running is a stretch of each character's own time (ownTime: its timed
+// effects and its time rules; how: { rest, ask }, rest and a Set that asks), judged against the clock as it was; own: the second of the fights, whose
+// spans ownTime has counted already. A step back keeps the highest second reached (top), so moving on again lives nothing twice
+function moveTo(t1, why, live, own, how) {   // live (1.5.4): the clock ran by itself — the table is told and the file written quietly, with no save of the GM's own
     var camp = getActiveCampaign(); if (!camp || isPlayer() || typeof t1 !== 'number' || !isFinite(t1)) return false;
     var ck = clockOf(camp) || { t: 0 }, cal = sysCal(); t1 = Math.max(0, Math.min(CAL_LIMITS.time, Math.floor(t1)));
     if (t1 === ck.t) return false;
-    var hits = notesReached(notesOf(ck), ck.t, t1, dayLength(cal)), gone = t1 - ck.t;   // K3: the dated notes this move reaches, told to the GM
-    camp.clock = Object.assign({}, ck, { t: t1 });
-    if (gone > 0 && net() && net().fxGameTime) net().fxGameTime(gone);   // K4: timed effects outside a fight run by the game clock (never back)
+    var hits = notesReached(notesOf(ck), ck.t, t1, dayLength(cal)), gone = t1 - ck.t, g = null;   // K3: the dated notes this move reaches, told to the GM
+    if (gone > 0 && own !== true) { g = { kind: 'clock', ids: charIdsOf(camp), t0: ck.t, t1: t1, secs: gone, rest: !!(how && how.rest === true), ask: !!(how && how.ask === true), live: live === true }; g.spans = spansOf(camp, g); ck = clockOf(camp) || ck; }   // 152: each character's own time
+    var nc = Object.assign({}, ck, { t: t1 }); if (gone < 0) nc.top = ck.top || { s: ck.t, ms: 0 };   // 152: a step back keeps the highest second reached
+    camp.clock = cleanClock(nc) || { t: t1 };
     if (why && net() && net().logEvent) net().logEvent('time', why + ' \u2014 now ' + fmtWhen(cal, t1));
     hits.forEach(function(n) { if (net() && net().logEvent) net().logEvent('time', 'Note reached \u2014 ' + fmtDate(cal, n.day * dayLength(cal)) + ': ' + n.text); });
     if (hits.length) toast(hits.length === 1 ? 'Today: ' + hits[0].text : hits.length + ' dated notes reached: ' + hits.slice(0, 3).map(function(n) { return n.text; }).join('; ') + (hits.length > 3 ? '; \u2026' : ''));
+    if (g) { try { ownTime([g]); } catch (e) { console.error(e); } }   // K4, K5: each character's span of it, once, to its timed effects and its time rules; a rule that fails never keeps the move from being saved and told
     if (live === true) { if (net() && net().syncClock) net().syncClock(); saveView(); } else save();
     refresh(live === true); return true;
 }
@@ -371,7 +489,7 @@ function addNote(day, text, shown) {
 }
 function noteVis(id, shown) { return editNotes(function(list) { var n = list.filter(function(x) { return x.id === id; })[0]; if (!n) return false; if (shown) n.vis = 'all'; else delete n.vis; }); }
 function delNote(id) { return editNotes(function(list) { var i = -1; list.forEach(function(x, k) { if (x.id === id) i = k; }); if (i < 0) return false; list.splice(i, 1); }); }
-function moveBy(secs) { var camp = getActiveCampaign(), cal = sysCal(); if (typeof secs !== 'number' || !isFinite(secs) || !secs) return false; return moveTo(tOf(camp) + secs, (secs > 0 ? 'Moved on ' : 'Moved back ') + fmtSpan(cal, secs)); }
+function moveBy(secs, rest) { var camp = getActiveCampaign(), cal = sysCal(); if (typeof secs !== 'number' || !isFinite(secs) || !secs) return false; return moveTo(tOf(camp) + secs, (secs > 0 ? 'Moved on ' : 'Moved back ') + fmtSpan(cal, secs), false, false, { rest: rest === true }); }
 function setHidden(hide) {
     var camp = getActiveCampaign(); if (!camp || isPlayer()) return false;
     var ck = clockOf(camp) || { t: 0 }; if (!!ck.hide === !!hide) return false;
@@ -379,6 +497,7 @@ function setHidden(hide) {
     if (net() && net().logEvent) net().logEvent('time', hide ? 'Players no longer see the date' : 'Players see the date again');
     save(); refresh(); return true;
 }
+var FIGHT_HOLDS = 'A fight is on, so the clock follows the fight furthest behind. The steps, Move and Set work again once every fight has ended.';
 function onWinClick(e) {
     var b = e.target && e.target.closest ? e.target.closest('button') : null; if (!b) return;
     if (b.id === 'calendarClose') { closeWin(); return; }
@@ -392,18 +511,19 @@ function onWinClick(e) {
     if (act === 'callive') { setHold(b.dataset.live === 'hold'); return; }   // 1.5.4: Runs / Held
     if (act === 'calpendapply') { pendDone(true); return; }
     if (act === 'calpendskip') { pendDone(false); return; }
-    if (act === 'calstep') { var sv = Number(b.dataset.secs); if (moveBy(sv) && sv > 0) timePassed(sv, restMode); return; }
+    if ((act === 'calstep' || act === 'calany' || (act === 'calset' && pick !== null)) && ordersRun()) { toast(FIGHT_HOLDS); return; }   // 152: while a fight runs the clock follows it; nothing is greyed (159), a press says why
+    if (act === 'calstep') { moveBy(Number(b.dataset.secs), restMode); return; }
     if (act === 'caladdnote' && pick !== null) { var nt = q('cal-note-new'), nv = q('cal-note-newvis'), txt = nt ? String(nt.value || '').trim() : ''; if (!txt) { toast('Type the note first.'); return; } addNote(pick, txt, !!(nv && nv.checked === true)); return; }
     if (act === 'calnotedel') { delNote(b.dataset.note); return; }
     if (act === 'calany') {
         var ni = q('cal-any-n'), ui = q('cal-any-u'), n = ni ? Number(ni.value) : NaN, u = ui ? unitsOf(cal, sysNow()).filter(function(x) { return x.id === ui.value; })[0] : null;
         if (!u || !(String(ni.value).trim() !== '' && isFinite(n)) || !n) { toast('Type an amount: below 0 moves the clock back.'); return; }
-        var mv = Math.round(n * u.secs); if (moveBy(mv) && mv > 0) timePassed(mv, restMode); return;
+        moveBy(Math.round(n * u.secs), restMode); return;
     }
     if (act === 'calset' && pick !== null) {
         var cc = cleanCalendar(cal) || {}, H = cc.hours || 24, M = cc.minutes || 60, S = cc.seconds || 60, hi = q('cal-set-h'), mi = q('cal-set-m'), h = hi ? Number(hi.value) : 0, m = mi ? Number(mi.value) : 0;
         if (!(h >= 0 && h < H && Math.floor(h) === h && m >= 0 && m < M && Math.floor(m) === m)) { toast('The hour is 0 to ' + (H - 1) + ' and the minute 0 to ' + (M - 1) + '.'); return; }
-        var t1 = pick * dayLength(cal) + (h * M + m) * S, t0 = tOf(camp); if (moveTo(t1, 'Set')) { view = viewOf(cal, t1); pick = null; if (!(t1 > t0 && timePassed(t1 - t0, restMode, true))) renderWin(); }   // K5: a Set forward asks (the GM's choice), whatever the table's mode
+        var t1 = pick * dayLength(cal) + (h * M + m) * S; if (moveTo(t1, 'Set', false, false, { rest: restMode, ask: true })) { view = viewOf(cal, t1); pick = null; renderWin(); }   // K5: a Set forward asks (the GM's choice), whatever the table's mode
     }
 }
 function onWinChange(e) {
@@ -438,19 +558,37 @@ function refresh(live) {   // live (1.5.4): the clock ran by itself, or a host's
     if (nl) { winSig = sig; nl.textContent = fmtWhen(cal, ck.t, dateOf(cal, ck.t).s !== 0); }   // the clock ran on within the day: its line alone, so a half-typed note or amount stays
     else renderWin();
 }
-// Item 20 K2 (the reference VTT's model: a round moves world time on by the round's length): n rounds of a combat on the GM's side, forward or back
-function rounds(n) {
-    if (isPlayer() || typeof n !== 'number' || !isFinite(n) || !n || !clockOn()) return false;
-    var camp = getActiveCampaign(), s = n * roundSecs(sysNow()), ok = moveTo(tOf(camp) + s, null);
-    if (ok && s > 0) { var cmp = getActiveCampaign(); pendFor(cmp); if (timeMode(cmp) === 'auto') timePassed(s, false); else if (timeMode(cmp) !== 'off' && !tablePaused()) roundPend += s; }   // K5 (the owner's answer): a fight's rounds count as activity — run as they pass when Automatic, else asked about when it ends
-    return ok;
+// 152 (docs/FIGHT_CLOCK_DESIGN.md 1 and 4): THE SECOND. While fights run the clock reads the floor of the least time of the fights running (net.js
+// ordersMoved). With the Calendar on it is written to the clock (moveTo with own: ownTime has counted each character, so it runs no timed effect);
+// forward it says the dated notes it reaches; back only for a correction (back), when the clock keeps the highest second reached as its top, so
+// on again lives nothing twice. With the Calendar off (frame 'mem') it is kept here alone, and the date stays where it was. last: no fight is
+// left — in memory the marks go, since no clock would reach them
+function second(s1, back, last) {
+    var camp = getActiveCampaign(); if (!camp || isPlayer() || typeof s1 !== 'number' || !isFinite(s1)) return false;
+    s1 = Math.max(0, Math.min(CAL_LIMITS.time, Math.floor(s1)));
+    if (frameOf() === 'mem') {
+        var m = memOf(camp), moved = false;
+        if (s1 < m.t && back === true) { m.top = m.top && tCmp(m.top, m.t) > 0 ? m.top : { s: m.t, ms: 0 }; m.t = s1; moved = true; }
+        else if (s1 > m.t) { m.t = s1; moved = true; if (m.top && tCmp(m.top, s1) <= 0) m.top = null; }
+        if (last === true) memT = null;
+        return moved;
+    }
+    memT = null;
+    if (!clockOn() || (s1 < tOf(camp) && back !== true)) return false;
+    return moveTo(s1, null, false, true);
 }
-function fightEnded() { pendFor(getActiveCampaign()); if (isPlayer() || !(roundPend > 0)) { roundPend = 0; return false; } var s = roundPend; roundPend = 0; if (pend) { livePend += s; sinceSync(); return false; } return timePassed(s, false); }   // 1.5.4: a list already waiting is never written over — the rounds are counted once it is answered
+// 152: a fight begins for these characters (net.js ordersMoved): Each fight starts again takes off their In a fight counts of the rules ticked so
+function fightBegan(ids) {
+    var camp = getActiveCampaign(), sys = sysNow(); if (!camp || isPlayer() || !sys || !Array.isArray(ids) || !ids.length) return false;
+    var ck = clockOf(camp) || { t: 0 }; if (!ck.acc) return false;
+    var a = cleanAcc(freshAcc(ck.acc, ids, clockRules(sys))); if (JSON.stringify(a) === JSON.stringify(ck.acc)) return false;
+    commitAcc(a); return true;
+}
 (function wire() {
     var chip = document.getElementById('clockChip'); if (chip) chip.addEventListener('click', openWin);
     var m = document.getElementById('calendarModal'); if (m) { m.addEventListener('click', onWinClick); m.addEventListener('change', onWinChange); m.addEventListener('mousedown', function(e) { if (e.target === m) closeWin(); }); }
     if (typeof setInterval === 'function') setInterval(function() { try { liveTick(Date.now()); } catch (e) {} }, 1000);   // 1.5.4: the running clock's look at the wall clock
 })();
 
-window.wpCalendar = { refresh: refresh, rounds: rounds, fightEnded: fightEnded, open: openWin, close: closeWin, moveTo: moveTo };
-export { refresh, rounds, fightEnded, openWin, closeWin, moveTo };
+window.wpCalendar = { refresh: refresh, ownTime: ownTime, second: second, fightBegan: fightBegan, open: openWin, close: closeWin, moveTo: moveTo };
+export { refresh, ownTime, second, fightBegan, openWin, closeWin, moveTo };

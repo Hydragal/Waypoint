@@ -4213,7 +4213,8 @@ net.notepadInput = function(text) {   // the pad changed under the GM's hand: it
 
 /* ---------- combat / turn order ----------
    Fights by id (1.5.5, backlog 152, docs/FIGHT_CLOCK_DESIGN.md fold 2): net.combats[fid] = { id, mapId, round, turn, rows: [{ id, name, tokId,
-   init, src }], side?, rr?, n }, so one map may hold two fights. fid is 'f_' and 8 of a-z0-9; n, the order the fights began in, is the host's own.
+   init, src }], side?, rr?, n, at }, so one map may hold two fights. fid is 'f_' and 8 of a-z0-9; n, the order the fights began in, and at, its own
+   time (fold 4), are the host's own.
    The host owns them; a player's app holds the fights on the map it is on, from the snapshot and the 'combats' messages. Ends with the session. */
 net.combats = {};
 var combatAsked = {};   // mapId|tokId -> true: the "start combat?" question for a targeted NPC is asked once per session
@@ -4427,9 +4428,7 @@ function marksOwnMoved(mapId, toks, pid) {   // a player dropped tokens of their
 function combatRefresh() { render(); if (window.wpRenderCombatStrip) window.wpRenderCombatStrip(); }
 // Stage 6 HUD G10: a combat's round just changed (its start, or a step past either end) — the sheets' round hook runs the Each round actions;
 // a fault in it never stops the turn
-// Item 20 K2 (the reference VTT's model): n rounds of a fight move the campaign's clock on by the round's length, back for a step back (calendar.js)
-function clockRounds(n) { try { if (window.wpCalendar && window.wpCalendar.rounds) window.wpCalendar.rounds(n); } catch (e) { console.error(e); } }
-function clockFightEnd() { try { if (window.wpCalendar && window.wpCalendar.fightEnded) window.wpCalendar.fightEnded(); } catch (e) { console.error(e); } }   // K5: a fight's rounds, as active time, asked about now
+// Item 20 K2 moved the clock by a fight's rounds here; 152 fold 4 gives each fight its own time, and the orders slice's coordinator (ordersMoved) moves the clock
 function roundChanged(mapId, c) { if (fightReachRound(c)) { try { if (window.wpSheets && window.wpSheets.roundHook) window.wpSheets.roundHook(mapId, c); } catch (e) { console.error(e); } } if (typeof marksRound === 'function') { try { marksRound(mapId, c); } catch (e) { console.error(e); } } }   // senses S4b: marks held to the round; fold 3: the round hook only for a round the fight reaches for the first time
 function turnStarted(mapId, c) { var first = fightReachTurn(c); if (first) { try { if (window.wpSheets && window.wpSheets.turnHook) window.wpSheets.turnHook(mapId, c); } catch (e) { console.error(e); } } try { turnMoveStart(mapId, c); } catch (e) { console.error(e); } try { turnActsStart(mapId, c); } catch (e) { console.error(e); } if (first) { try { turnFxStart(mapId, c); } catch (e) { console.error(e); } } if (typeof marksTurn === 'function') { try { marksTurn(mapId, c); } catch (e) { console.error(e); } } }   // turn-based combat T2b: a character's turn just began; T3b: its move; senses S4b: its player's marks; fold 3: the turn hook and its timed effects only for a turn first reached in that round, its move and its actions at every start, a step back's too
 // Fold 3 (backlog 152, docs/FIGHT_CLOCK_DESIGN.md sections 2 and 6, settled 18): a step back is a correction, so nothing is lived twice in a fight. Each
@@ -4566,36 +4565,51 @@ function fxCombatEdge(mapId, combat, kind) { var camp = getActiveCampaign(), now
 function fxClockTick() {   // out of combat: the clock, on the GM's own machine
     if (net.role === 'client' || net.stream || (window.wpVtt && !window.wpVtt.on('sheets'))) return;
     var camp = getActiveCampaign(), now = Date.now(); if (!camp || !camp.system || !camp.chars) return;
-    var byGame = !!(window.wpVtt && window.wpVtt.on('calendar'));   // K4: the Calendar on — real time never counts outside a fight
-    Object.keys(camp.chars).forEach(function(id) { if (charCombat(camp, id)) return; if (byGame) fxApply(camp, camp.chars[id], 'bank', now); else { fxApply(camp, camp.chars[id], 'resume', now); fxApply(camp, camp.chars[id], 'clock', now); } });
+    var byGame = !!(window.wpVtt && window.wpVtt.on('calendar')), inF = typeof ordersOfChars === 'function' ? ordersOfChars(camp) : null, fights = typeof fightIds === 'function' && fightIds().length > 0;   // K4: the Calendar on — real time never counts outside a fight; 152 fold 4: nor while any fight runs, when everyone in no fight follows the second (net.fxSpans)
+    Object.keys(camp.chars).forEach(function(id) { if (inF ? inF[id] : charCombat(camp, id)) return; if (byGame || fights) fxApply(camp, camp.chars[id], 'bank', now); else { fxApply(camp, camp.chars[id], 'resume', now); fxApply(camp, camp.chars[id], 'clock', now); } });
 }
-net.fxGameTime = function(secs) {   // K4: the game clock moved on secs seconds (calendar.js): every timed effect outside a fight runs that much
-    if (net.role === 'client' || net.stream || typeof secs !== 'number' || !isFinite(secs) || !(secs > 0) || (window.wpVtt && (!window.wpVtt.on('sheets') || !window.wpVtt.on('calendar')))) return;
+// 152 fold 4 (docs/FIGHT_CLOCK_DESIGN.md 6): each character's own span of game time as calendar.js ownTime counts it, { charId: seconds }: the timed effects
+// of a character in no fight run that much, the Calendar on or off. One in a fight is passed over: its effects follow its turns (turnFxStart). walk (true
+// only): the gap lived by those who walk into a fight that is ahead (fightTime), which the fight holds by then, though the gap was lived before it. Its
+// effects run it too, so each span is counted once for the time rules and the timed effects alike
+net.fxSpans = function(spans, walk) {
+    if (net.role === 'client' || net.stream || !spans || typeof spans !== 'object' || (window.wpVtt && !window.wpVtt.on('sheets'))) return;
     var camp = getActiveCampaign(), now = Date.now(); if (!camp || !camp.system || !camp.chars) return;
-    Object.keys(camp.chars).forEach(function(id) { if (!charCombat(camp, id)) fxApply(camp, camp.chars[id], 'game', now, secs); });
+    var inF = typeof ordersOfChars === 'function' ? ordersOfChars(camp) : null;
+    Object.keys(spans).forEach(function(id) { var s = spans[id]; if (!own(camp.chars, id) || typeof s !== 'number' || !isFinite(s) || !(s > 0) || (walk !== true && (inF ? inF[id] : charCombat(camp, id)))) return; fxApply(camp, camp.chars[id], 'game', now, s); });
+};
+net.fxGameTime = function(secs) {   // K4: the game clock moved on secs seconds: every timed effect outside a fight runs that much (152 fold 4: as one span for every character, through net.fxSpans)
+    if (net.role === 'client' || net.stream || typeof secs !== 'number' || !isFinite(secs) || !(secs > 0) || (window.wpVtt && (!window.wpVtt.on('sheets') || !window.wpVtt.on('calendar')))) return;
+    var camp = getActiveCampaign(); if (!camp || !camp.system || !camp.chars) return;
+    var sp = {}; Object.keys(camp.chars).forEach(function(id) { sp[id] = secs; }); net.fxSpans(sp);
 };
 var _fxClock = null;
 function fxClockStart() { if (!_fxClock && typeof setInterval === 'function') _fxClock = setInterval(function() { try { fxClockTick(); } catch (e) {} }, 5000); }
 // [netcheck:fxtime-end]
 function mapTitleOf(mapId) { var camp = getActiveCampaign(); var m = camp && camp.items[mapId]; return (m && m.meta && m.meta.title) || mapId; }
 // Fold 0 (backlog 152, docs/FIGHT_CLOCK_DESIGN.md): a fight ends as End combat ends it, in ONE place: End (combatSet with null), the session's end
-// (combatsOverAll, from leaveSession) and a deleted map (net.itemGone). What its characters spent goes, their timed effects run again, the Calendar
-// counts its rounds (asked once a fight), the marks follow every move again and nothing of it stays seen. quiet: no notice of its own (the session's
-// end says one for every fight). The caller broadcasts. A deleted map holds no token to find its characters by: every character no fight holds
-// now loses what it spent, and the clock's own tick runs at once, which sets their effects going as it does every few seconds (combatFreed).
+// (combatsOverAll, from leaveSession) and a deleted map (net.itemGone). What its characters spent goes, the round it ends in counts (fold 4: its people
+// live it up to its time and one round's length, and leave there), the marks follow every move again and nothing of it stays seen; their timed effects
+// run again once no fight is left (fold 4: while another runs they follow the second, as everyone in no fight does). The Active fight that ends hands on
+// to the one furthest behind, since only it moves the clock. quiet: no notice of its own (the session's end says one for every fight). The caller
+// broadcasts. A deleted map holds no token to find its characters by: every character no fight holds now loses what it spent, and the clock's own
+// tick runs at once, which sets their effects going as it does every few seconds (combatFreed). The last fight over, that tick runs at once too.
 // title: a deleted map's own name, which the delete hands on through net.itemGone; with none the notice and the log line say the deleted map
 function combatOver(fid, had, quiet, title) {   // fold 2: by the fight's own id; its map is the fight's
     var mapId = had && typeof had.mapId === 'string' ? had.mapId : '';
     var campO = had ? getActiveCampaign() : null, gone = !!had && !(campO && campO.items && Object.prototype.hasOwnProperty.call(campO.items, mapId)), nmO = had ? (gone ? (typeof title === 'string' && title ? title : 'the deleted map') : mapTitleOf(mapId)) : '';
+    var endO = had && typeof fightEndTime === 'function' ? fightEndTime(campO, had, nmO) : null;   // 152 fold 4: the round it ends in, lived up to its time and one round's length
     if (had) { try { turnActsEnd(mapId, had); } catch (e) { console.error(e); } }   // T4
-    if (had) { try { fxCombatEdge(mapId, had, 'resume'); } catch (e) { console.error(e); } }   // T5a: their effects' clocks run again
-    if (had && typeof clockFightEnd === 'function') clockFightEnd();   // item 20 K5 (the owner's answer): the fight's rounds counted as active time for the time rules
     if (had) { logEvent('table', 'Combat ended on ' + nmO + ' after ' + had.round + ' round' + (had.round === 1 ? '' : 's')); if (!quiet) toast('Combat ended on ' + nmO + '.'); }
     if (typeof fid === 'string') { delete net.combats[fid]; if (net.turnMove) delete net.turnMove[fid]; }   // fold 2: by its id, and its turn's move with it
-    if (had && net.fightOn === fid) net.fightOn = fightIds()[0] || null;   // fold 2: the Active fight ended: the first begun of those left is played
+    if (had && net.fightOn === fid) net.fightOn = typeof fightBehind === 'function' ? fightBehind() : (fightIds()[0] || null);   // fold 4: the Active fight ended: the one furthest behind is played
     if (had && typeof marksEnd === 'function' && !fightsOn(mapId).length) { try { marksEnd(mapId); } catch (e) { console.error(e); } }   // senses S4b: the marks follow every move again, once the map's last fight is over (fold 2)
     if (typeof fid === 'string' && typeof combatForget === 'function') combatForget(fid);   // the fight over: nothing of it seen
+    var leftO = fightIds().length;
+    if (had && !leftO) { try { fxCombatEdge(mapId, had, 'resume'); } catch (e) { console.error(e); } }   // T5a: their effects' clocks run again, once no fight is left
     if (gone) { try { combatFreed(campO); } catch (e) { console.error(e); } }
+    if (endO && typeof ordersMoved === 'function') ordersMoved('end', endO);   // fold 4: the coordinator counts its closing round and moves the clock
+    if (had && !leftO) { try { fxClockTick(); } catch (e) { console.error(e); } }   // fold 4: the last fight over, everyone's effects follow the clock again at once (after the second's last move, which counted them)
     return !!had;
 }
 // Every character no fight holds is taken as one the deleted fight held. That is so while net.turnSpent holds fighters alone, as it does today: actSpend
@@ -4605,8 +4619,10 @@ function combatFreed(camp) {   // a deleted map's fight is over: what the charac
     Object.keys(net.turnSpent || {}).forEach(function(id) { if (!charCombat(camp, id)) { delete net.turnSpent[id]; actsTell(camp, id, true); } });
     fxClockTick();
 }
-function combatsOverAll() {   // the session's end: every fight ends as End ends it, quietly; how many ended
-    var n = 0; fightIds().forEach(function(fid) { if (combatOver(fid, net.combats[fid], true)) n++; });   // fold 2: each fight by its own id
+function combatsOverAll() {   // the session's end: every fight ends as End ends it, quietly; how many ended. Fold 4: the furthest ahead first, so the clock stays with the one behind and those ahead keep their own time
+    var n = 0, CCa = typeof timeCore === 'function' ? timeCore() : null, campA = getActiveCampaign(), idsA = fightIds();
+    if (CCa) idsA = idsA.map(function(k, i) { return { k: k, i: i, a: fightAtOf(net.combats[k], campA) }; }).sort(function(x, y) { return CCa.tCmp(y.a, x.a) || (x.i - y.i); }).map(function(x) { return x.k; });
+    idsA.forEach(function(fid) { if (combatOver(fid, net.combats[fid], true)) n++; });   // fold 2: each fight by its own id
     return n;
 }
 // host: put a combat on a map (or take it off with null). Fold 2: the old name, a thin wrapper for the strip's fight on that map (fightAt): a roster
@@ -4705,9 +4721,9 @@ net.combatEnd = function(mapId) { return fightEnd(fightAt(mapId)); };   // fold 
    reader asks for the fight that holds the token or the character (fightOfTok, net.orderOf), or for every fight on the map (fightsOn). Which order
    a character is in is judged in ONE place, net.orderOf, by combatChars' rule: a character token (isChar) of a character of the campaign, a hidden
    token counted too. The API by id: fightSet starts, changes and ends a fight; fightStep, fightHold and fightAct play it; fightEnd asks first; and
-   fightPlay makes a fight the one played (net.fightOn: a new fight, or the one the GM plays; when it ends, the first begun of those left). The old
-   names (net.combatSet, combatStep, combatHold, combatAct, combatEnd) stay as thin wrappers for the strip's fight on a map (fightAt). Time is
-   unchanged here: each fight still moves the clock by its rounds, as before (fold 4 gives each fight its own time) */
+   fightPlay makes a fight the one played (net.fightOn: a new fight, or the one the GM steps or plays; when it ends, the one furthest behind). The old
+   names (net.combatSet, combatStep, combatHold, combatAct, combatEnd) stay as thin wrappers for the strip's fight on a map (fightAt). Fold 4 gives
+   each fight its own time (below, at ordersMoved) */
 var _fightN = 0;   // the order the fights began in: this session's count
 net.fightOn = null;   // the fight played (its id), or null: the host's own, never sent
 function fightIds() {   // every fight's id, in the order begun (on a player's app, in the order its host sent them)
@@ -4741,12 +4757,117 @@ net.combatOfTok = function(mapId, tokId) { return orderById(fightOfTok(mapId, to
 // one round on its player's own sheet and another in the host's roll. A player's app holds its fights in the order its host began them
 net.combatRoundOf = function(mapId, tokId) { return orderById(fightOfTok(mapId, tokId) || fightsOn(mapId)[0] || null); };
 net.fightsOn = fightsOn;
+// The one judge for every character at once (fold 4: the timed effects and the second's span read many): { charId: the fight it is in }, by the very rule
+// of orderOfIn, the first begun fight whose order holds a character token of it. An object with no prototype
+function ordersOfChars(camp) {
+    var out = Object.create(null); if (!camp || !camp.items || !camp.chars) return out;
+    fightIds().forEach(function(k) {
+        var cb = net.combats[k], mp = Object.prototype.hasOwnProperty.call(camp.items, cb.mapId) ? camp.items[cb.mapId] : null; if (!mp || !Array.isArray(mp.whiteboard)) return;
+        var toks = Object.create(null); cb.rows.forEach(function(r) { if (r && typeof r.tokId === 'string' && r.tokId) toks[r.tokId] = 1; });
+        mp.whiteboard.forEach(function(w) { if (w && typeof w.id === 'string' && toks[w.id] === 1 && !!w.isChar && typeof w.charId === 'string' && w.charId && Object.prototype.hasOwnProperty.call(camp.chars, w.charId) && !(w.charId in out)) out[w.charId] = k; });
+    });
+    return out;
+}
+/* 152 fold 4 (docs/FIGHT_CLOCK_DESIGN.md sections 1 and 4): EACH FIGHT KEEPS ITS OWN TIME, and the clock reads the one furthest behind. A fight's at is a
+   time pair { s, ms } (calendarcore), the start of the round in play: the host's own, never sent (combatsFor names what it sends, and cleanFightBody
+   writes none of it; fightSet puts it back after cleaning, as it does rr and side). A new fight begins at the time of the fight played (net.fightOn),
+   else at the second; a wrap adds the round's length as it is at that moment, a step back past a round's first turn takes it off, and a roster edit
+   that sets another round moves it by the difference; an end lets its people go at its time and one round's length, so the round a fight ends in
+   counts: begun at 12:00:00 with rounds of 1 s and ended in round 3, the clock goes on from 12:00:03. THE SECOND (net.second, the host's own) is the
+   floor of the least time of the fights running: it moves on only when that least time rises, and back only for a step back or a roster edit that
+   lowered it. It is the table clock: written to the campaign's clock with the Calendar on (frame 'clock'; calendar.js second), kept in memory alone with
+   it off (frame 'mem'), the frame fixed when the first fight begins and kept until none is left, but that a Calendar switched off while fights run
+   turns it to 'mem' for good: the date then stays where it was, and no character is left ahead of a clock that never followed. With no fight
+   running, time is regular, as before.
+   ordersMoved is the ONE coordinator, called once at the end of every change of a fight's time (a start, a step that wraps or goes back, a hold that
+   wraps, a roster edit, an end): it works out the second, hands what was lived (the round a fight closed or ended in, for its fighters; those who
+   walk into a fight that is ahead, the gap up to its time; the second's move, for everyone in no fight) to calendar.js ownTime, which counts each
+   character's own span ONCE for its timed effects and its time rules, moves the clock (calendar.js second) and tells the table. The GM's own step of
+   a fight makes it the one played (fightStep's by: a player's End turn or hold never does); the one played that ends hands on to the one furthest
+   behind, since only it moves the clock. Without calendarcore at hand a fight keeps no time and nothing here moves the clock */
+net.second = null;   // while fights run: { frame: 'clock' | 'mem', s: the second, whole }; the host's own, never sent
+function timeCore() { var w = typeof window !== 'undefined' ? window : null; return w && w.wpCalendarCore && typeof w.wpCalendarCore.tAdd === 'function' && typeof w.wpCalendarCore.tCmp === 'function' && typeof w.wpCalendarCore.cleanTime === 'function' ? w.wpCalendarCore : null; }
+function campNow() { return typeof getActiveCampaign === 'function' ? getActiveCampaign() : null; }
+function calOn() { var w = typeof window !== 'undefined' ? window : null; return !!(w && w.wpVtt && typeof w.wpVtt.on === 'function' && w.wpVtt.on('calendar') === true); }
+function clockSecOf(camp) { var CC = timeCore(), ck = CC && typeof CC.cleanClock === 'function' && camp ? CC.cleanClock(camp.clock) : null; return ck ? ck.t : 0; }
+function secondNow(camp) { return net.second && typeof net.second.s === 'number' ? net.second.s : clockSecOf(camp); }
+function fightAtOf(c, camp) { var CC = timeCore(), a = CC && c ? CC.cleanTime(c.at) : null; return a || { s: secondNow(camp), ms: 0 }; }   // a fight that keeps no time yet reads the second
+function roundMs(camp) { var S = typeof SC === 'function' ? SC() : null, rs = S && typeof S.roundSecs === 'function' ? S.roundSecs(camp && camp.system) : 6; return Math.round((typeof rs === 'number' && isFinite(rs) && rs > 0 ? rs : 6) * 1000); }   // a round's length, kept to the thousandth: whole milliseconds
+function fightersOf(camp, c) { var S = typeof SC === 'function' ? SC() : null, mp = camp && camp.items && c && typeof c.mapId === 'string' && Object.prototype.hasOwnProperty.call(camp.items, c.mapId) ? camp.items[c.mapId] : null; return S && typeof S.combatChars === 'function' && mp ? S.combatChars(mp, c, camp.chars || {}).map(function(e) { return e.charId; }) : []; }   // combatChars' rule
+function fightBehind() {   // the fight furthest behind (the least time; of those, the first begun), or null
+    var CC = timeCore(), camp = campNow(), best = null, ba = null;
+    fightIds().forEach(function(k) { var a = CC ? fightAtOf(net.combats[k], camp) : null; if (best === null || (CC && CC.tCmp(a, ba) < 0)) { best = k; ba = a; } });
+    return best;
+}
+function fightGroup(camp, c, t0, t1, round, nm) {   // what a fight's fighters lived from t0 to t1, for calendar.js ownTime
+    var nmG = typeof nm === 'string' && nm ? nm : typeof mapTitleOf === 'function' ? mapTitleOf(c.mapId) : 'a map';
+    return { kind: 'fight', ids: fightersOf(camp, c), t0: t0, t1: t1, round: round, rs: roundMs(camp) / 1000, words: 'Round ' + round + ' on ' + nmG };
+}
+function fightTime(camp, had, f) {   // a fight begun (had null) or its roster changed: its own time, set on f before it is stored; what that lives, for ordersMoved
+    var CC = timeCore(); if (!CC || !f) return null;
+    var out = { groups: [], back: false };
+    if (!had) {
+        if (!net.second) net.second = { frame: calOn() ? 'clock' : 'mem', s: clockSecOf(camp) };   // the first fight: the second is the clock's, its frame fixed until none is left
+        var act = orderById(net.fightOn); f.at = act ? fightAtOf(act, camp) : { s: secondNow(camp), ms: 0 };   // brief 8: at the time of the fight played, with none at the second
+    } else {
+        var a0 = fightAtOf(had, camp), d = f.round - had.round; f.at = d ? CC.tAdd(a0, d * roundMs(camp)) : a0;   // a roster edit moves it by the rounds it sets
+        if (d > 0) out.groups.push(fightGroup(camp, f, a0, f.at, f.round - 1)); else if (d < 0) out.back = true;
+    }
+    var was = had ? fightersOf(camp, had) : [], now = fightersOf(camp, f), fresh = now.filter(function(id) { return was.indexOf(id) < 0; }), left = was.filter(function(id) { return now.indexOf(id) < 0; });
+    if (had && left.length) { var aL = fightAtOf(had, camp), gL = fightGroup(camp, had, aL, CC.tAdd(aL, roundMs(camp)), had.round); gL.ids = left; out.groups.unshift(gL); }   // those taken out live the round in play and leave at its end, as an end's people do
+    if (fresh.length) {   // those who join: a fight begins for them (Each fight starts again), and they walk in, living the time from the second up to the fight's as time outside one
+        out.fresh = fresh; var s0 = secondNow(camp);
+        if (CC.tCmp(f.at, s0) > 0) out.groups.unshift({ kind: 'out', ids: fresh, t0: { s: s0, ms: 0 }, t1: f.at, walk: true });   // walk: the fight holds them by the time it is counted, and their timed effects live the gap all the same (net.fxSpans)
+    }
+    return out;
+}
+function fightTurned(camp, c, a0, r0) {   // a step that changed the round: the fight's time moved by the round's length; the round it closed, lived by its fighters
+    var CC = timeCore(); if (!CC || !c) return null;
+    var d = c.round - r0; c.at = CC.tAdd(a0, d * roundMs(camp));
+    return d > 0 ? { groups: [fightGroup(camp, c, a0, c.at, c.round - 1)] } : { back: true };
+}
+function fightEndTime(camp, c, nm) {   // an end: the round it ends in, lived by its people up to its time and one round's length, where they leave
+    var CC = timeCore(); if (!CC || !c) return null;
+    var a0 = fightAtOf(c, camp), a1 = CC.tAdd(a0, roundMs(camp));
+    return { groups: [fightGroup(camp, c, a0, a1, c.round, nm)], last: a1 };
+}
+// The coordinator: o = { groups (what a fight's change lived), back (a correction may take the second back), last (an end's time: the second's floor
+// once no fight is left), fresh (the characters a fight begins for) }. The second first, then each span counted once (ownTime), the clock moved
+// (second), the table told; nothing on a player's app
+function ordersMoved(why, o) {
+    if (net.role !== 'host') return false;
+    o = o && typeof o === 'object' ? o : {};
+    var CC = timeCore(), camp = campNow(), w = typeof window !== 'undefined' ? window : null, cal = w && w.wpCalendar ? w.wpCalendar : null, ids = fightIds();
+    if (CC && camp) {
+        var least = null; ids.forEach(function(k) { var a = fightAtOf(net.combats[k], camp); if (least === null || CC.tCmp(a, least) < 0) least = a; });
+        var s0 = secondNow(camp), s1 = least ? CC.tFloor(least) : o.last ? CC.tFloor(o.last) : s0, back = s1 < s0 && o.back === true;
+        if (s1 < s0 && !back) s1 = s0;   // the second goes back only for a correction
+        var groups = (Array.isArray(o.groups) ? o.groups : []).filter(function(g) { return !!g && Array.isArray(g.ids) && g.ids.length > 0; });
+        if (s1 > s0) {   // the second moved on: everyone in no fight lives it
+            var inF = ordersOfChars(camp), outIds = Object.keys(camp.chars && typeof camp.chars === 'object' ? camp.chars : {}).filter(function(id) { return !inF[id]; });
+            if (outIds.length) groups.push({ kind: 'out', ids: outIds, t0: { s: s0, ms: 0 }, t1: { s: s1, ms: 0 } });
+        }
+        if (net.second && net.second.frame === 'clock' && !calOn()) net.second.frame = 'mem';   // the Calendar switched off while fights run: from now each character's own time is kept in memory alone (calendar.js memOf takes the clock's marks), until no fight is left
+        if (cal) {
+            try { if (Array.isArray(o.fresh) && o.fresh.length && typeof cal.fightBegan === 'function') cal.fightBegan(o.fresh); } catch (e) { console.error(e); }
+            try { if (groups.length && typeof cal.ownTime === 'function') cal.ownTime(groups); } catch (e) { console.error(e); }
+            try { if (typeof cal.second === 'function') cal.second(s1, back, !ids.length); } catch (e) { console.error(e); }
+        }
+        if (ids.length) { if (net.second) net.second.s = s1; else net.second = { frame: calOn() ? 'clock' : 'mem', s: s1 }; } else net.second = null;
+    }
+    try { if (typeof net.syncClock === 'function') net.syncClock(); } catch (e) { console.error(e); }
+    if (typeof broadcastCombats === 'function') broadcastCombats();
+    if (typeof combatRefresh === 'function') combatRefresh();
+    try { if (w && w.wpPills && typeof w.wpPills.sync === 'function') w.wpPills.sync(); } catch (e) {}
+    return true;
+}
+net.ordersMoved = ordersMoved;
 function newFightId() { var id; do { id = 'f_'; while (id.length < 10) id += 'abcdefghijklmnopqrstuvwxyz0123456789'.charAt(Math.floor(Math.random() * 36)); } while (orderById(id)); return id; }   // as a dated note's id is made
 // host: a fight started (fid null: a new one on combat.mapId), its roster changed (a roster edit keeps its round and its side), or ended (combat null).
 // The fight's id, or null
 function fightSet(fid, combat) {
     if (net.role !== 'host') return null;
-    var had = orderById(fid), mapId = had ? had.mapId : (combat && typeof combat === 'object' && typeof combat.mapId === 'string' && combat.mapId ? combat.mapId : null), f = null;
+    var had = orderById(fid), mapId = had ? had.mapId : (combat && typeof combat === 'object' && typeof combat.mapId === 'string' && combat.mapId ? combat.mapId : null), f = null, tg = null;
     if (combat && mapId) {
         f = cleanFightBody(combat, mapId); if (!f) return null;
         var heldBy = Object.create(null); fightsOn(mapId).forEach(function(k) { if (k !== fid) net.combats[k].rows.forEach(function(r) { if (r && typeof r.tokId === 'string') heldBy[r.tokId] = 1; }); });
@@ -4755,6 +4876,7 @@ function fightSet(fid, combat) {
         var first = !had && !fightsOn(mapId).length;   // the map's first fight: the marks are held from now
         if (!had) fid = newFightId();
         f = Object.assign({ id: fid }, f); f.n = had && typeof had.n === 'number' ? had.n : ++_fightN;
+        tg = fightTime(campNow(), had, f);   // fold 4: its own time (a new fight's, or a roster edit's), before it is stored
         net.combats[fid] = f;
         if (first && typeof marksStart === 'function') { try { marksStart(mapId); } catch (e) { console.error(e); } }   // senses S4b: everyone's marks held from the fight's start
         if (had && typeof had.rr === 'number') f.rr = had.rr;   // initiative O4: the last round the fight rolled for, and this round's side, kept through a roster edit
@@ -4762,7 +4884,6 @@ function fightSet(fid, combat) {
         if (typeof combatSides === 'function') combatSides(mapId, f, !had);   // ...and each side together (a new fight rolls the sides first)
         if (had && typeof fightReachKept === 'function') fightReachKept(had, f);   // fold 3: a roster edit keeps how far the fight has gone (rh, th, turned), put back after cleaning as rr and side are; a new fight starts with none
         if (!had || had.round !== f.round) roundChanged(mapId, f);   // G10: the first round (a roster edit keeps its round)
-        if (had && had.round !== f.round && typeof clockRounds === 'function') clockRounds(f.round - had.round);   // item 20 K2: a round edited in the roster moves the clock with it (a new fight moves nothing)
         if (!had) { net.fightOn = fid; logEvent('table', 'Combat started on ' + mapTitleOf(mapId) + ': ' + f.rows.map(function(r) { return r.name; }).join(', ')); }   // a new fight is the one played
         toast(had ? 'Combat roster updated.' : 'Combat started on ' + mapTitleOf(mapId) + ' — ' + (f.rows[f.turn] || f.rows[0]).name + ' goes first.');
     } else if (!combat) combatOver(fid, had);   // End: the one way a fight ends (fold 0), which the session's end and a deleted map share
@@ -4770,11 +4891,14 @@ function fightSet(fid, combat) {
     broadcastCombats(); combatRefresh();
     if (f && !had) { try { fxCombatEdge(mapId, f, 'bank'); } catch (e) { console.error(e); } }   // T5a: their effects' clocks stop (what ran is kept)
     if (f && !had) turnStarted(mapId, f);   // T2b: the first turn (after the broadcast: its player's note comes last)
+    if (tg) ordersMoved(had ? 'edit' : 'start', tg);   // fold 4: a round edited in the roster moves the fight's time with it; those who join walk in
     return f ? fid : null;
 }
-function fightStep(fid, dir) {   // host: that fight's next turn (dir 1) or the one before (dir -1)
+function fightStep(fid, dir, by) {   // host: that fight's next turn (dir 1) or the one before (dir -1); by 'player': a player's own End turn or hold
     if (net.role !== 'host') return;
     var c = orderById(fid); if (!c || !c.rows.length) return;
+    if (by !== 'player') net.fightOn = fid;   // fold 4: the GM's own step of a fight makes it the one played
+    var campS = campNow(), a0 = timeCore() ? fightAtOf(c, campS) : null;   // fold 4: the fight's own time before the step
     var mapId = c.mapId, t = c.turn + (dir < 0 ? -1 : 1), r0 = c.round, t0 = c.turn;
     if (t >= c.rows.length) { t = 0; c.round += 1; }
     else if (t < 0) { if (c.round > 1) { c.round -= 1; t = c.rows.length - 1; } else t = 0; }
@@ -4783,19 +4907,20 @@ function fightStep(fid, dir) {   // host: that fight's next turn (dir 1) or the 
     if (c.rows[t]) delete c.rows[t].held;   // ...and a row whose turn it is holds nothing
     if (c.round > r0 && typeof combatNewRound === 'function') { combatNewRound(mapId, c); t = c.turn; }   // initiative O4: a new round's order (rolled again, by side), the first time the fight reaches it
     if (c.round !== r0) roundChanged(mapId, c);   // G10
-    if (c.round !== r0 && typeof clockRounds === 'function') clockRounds(c.round - r0);   // item 20 K2: a round moves the clock on by its length (a step back, back); fold 2: each fight still does
+    var tg = c.round !== r0 && a0 ? fightTurned(campS, c, a0, r0) : null;   // fold 4: its own time moves by the round's length (a step back, back)
     toast((c.rows[t].name || 'Someone') + "'s turn" + (t === 0 && dir > 0 ? ' — round ' + c.round : '') + '.');
     broadcastCombats(); combatRefresh();
     if (c.round !== r0 || c.turn !== t0) turnStarted(mapId, c);   // T2b: whoever's turn it now is (nothing when a step back at the first turn moves nothing), after the broadcast
+    if (tg) ordersMoved('step', tg);   // fold 4: the round it closed counted, and the clock moved once the fight furthest behind moves on
 }
 // Initiative O3 (the owner's answer, "After the current turn"): the character whose turn it is holds it — play moves on as with Next turn and its row
 // waits, held; later in the round, when its owner or the GM presses Act, the held row goes right after whoever is acting and keeps that place (it
 // acts next). A hold not used by the round's end is lost (fightStep), and the character acts in its usual place
-function fightHold(fid) {
+function fightHold(fid, by) {   // by 'player': a player's own hold (fold 4: it makes no fight the one played)
     if (net.role !== 'host') return false;
     var c = orderById(fid), row = c ? c.rows[c.turn] : null; if (!row) return false;
     row.held = 1; toast((row.name || 'Someone') + ' holds their turn.'); logEvent('table', (row.name || 'Someone') + ' held their turn on ' + mapTitleOf(c.mapId));
-    fightStep(fid, 1);   // play moves on (it broadcasts); a hold on the round's last turn is lost at once, as fightStep clears holds at a new round
+    fightStep(fid, 1, by);   // play moves on (it broadcasts); a hold on the round's last turn is lost at once, as fightStep clears holds at a new round
     return true;
 }
 function fightAct(fid, rowId) {
@@ -4813,7 +4938,7 @@ function fightEnd(fid) {   // host: End combat, asked first; a map's other fight
     var restE = fightsOn(c.mapId).length - 1;   // the other fights on that map, which go on
     showConfirm('End combat on ' + mapTitleOf(c.mapId) + '? Round ' + c.round + ', ' + c.rows.length + ' in the order. ' + (restE > 1 ? 'The other ' + restE + ' fights there go on.' : restE === 1 ? 'The other fight there goes on.' : 'The ring and the turn strip go for everyone.'), function(yes) { if (yes) fightSet(fid, null); });
 }
-function fightPlay(fid) {   // host: that fight is the one played (the fight tracker's press, fold 8 of the design)
+function fightPlay(fid) {   // host: that fight is the one played (the fight tracker's press, fold 8 of the design; fold 4: a new fight starts at its time)
     if (net.role !== 'host' || !orderById(fid)) return false;
     if (net.fightOn !== fid) { net.fightOn = fid; combatRefresh(); }
     return true;
@@ -6434,7 +6559,7 @@ function handleMessage(msg, conn) {
         var campH = getActiveCampaign(), mapH = campH && campH.items && own(campH.items, msg.mapId) ? campH.items[msg.mapId] : null;
         var tokH = mapH && mapH.type === 'map' && Array.isArray(mapH.whiteboard) ? mapH.whiteboard.find(function(w) { return w && w.id === rowH.tokId; }) : null;
         if (!tokH || !tokH.isChar || !tokH.ownerId || tokH.ownerId !== prH.id) return;
-        if (msg.type === 'turn-hold') { if (cbH.rows[cbH.turn] === rowH) fightHold(fidH); }
+        if (msg.type === 'turn-hold') { if (cbH.rows[cbH.turn] === rowH) fightHold(fidH, 'player'); }   // 152 fold 4: a player's hold makes no fight the one played
         else fightAct(fidH, rowH.id);
         // [netcheck:turnholdmsg-end]
     } else if (msg.type === 'turn-end' && net.role === 'host') {
@@ -6452,7 +6577,7 @@ function handleMessage(msg, conn) {
         var campT = getActiveCampaign(), mapT = campT && campT.items && own(campT.items, msg.mapId) ? campT.items[msg.mapId] : null;
         var tokT = mapT && mapT.type === 'map' && Array.isArray(mapT.whiteboard) ? mapT.whiteboard.find(function(w) { return w && w.id === rowT.tokId; }) : null;
         if (!tokT || !tokT.isChar || !tokT.ownerId || tokT.ownerId !== prT.id) return;
-        fightStep(fidT, 1);
+        fightStep(fidT, 1, 'player');   // 152 fold 4: a player's End turn makes no fight the one played
         // [netcheck:turnend-end]
     } else if (msg.type === 'char-upload' && net.role === 'host') {
         // [netcheck:charupload-start]
@@ -7927,7 +8052,7 @@ function leaveSession(silent) {
     if (window.wpMusic && window.wpMusic.tableLeft) window.wpMusic.tableLeft(wasClient);
     if (window.wpFx) window.wpFx.tableLeft();
     endWaiting(wasHost);   // Onboarding F1a: waiting tokens live only while the session runs (the end's save writes them away)
-    net.targets = {}; combatAskOpen = Object.create(null); net.fightOn = null;   // fold 2: no fight is played once the table is over
+    net.targets = {}; combatAskOpen = Object.create(null); net.fightOn = null; net.second = null;   // fold 2: no fight is played once the table is over; 152 fold 4: nor is there a second of theirs
     net.combats = {}; combatAsked = {};
     net.notepad = { on: false, text: '' }; if (typeof padReset === 'function') padReset(); setTimeout(renderNotepad, 0);
     if (window.wpRenderCombatStrip) setTimeout(function() { window.wpRenderCombatStrip(); }, 0);
