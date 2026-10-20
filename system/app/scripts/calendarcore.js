@@ -147,7 +147,10 @@ function fmtSpan(cal, secs) {
 // Item 20 K2: a campaign's clock (camp.clock), cleaned: { t (world time, a whole number of seconds from 0 to 10^15; absent or no number: 0),
 // hide? (true only: the GM keeps the date from players), notes? (K3: dated notes, each { id: n_ and 8 of a-z 0-9, once; day: the day it
 // falls on, days from day 1 counted from 0; text: one line, 400 code points; vis: 'all' only, players see it, absent: the GM's alone }, at
-// most 500, in day order, a note with no day or no text dropped) }. Not an object: null (no clock yet: day 1 at 00:00)
+// most 500, in day order, a note with no day or no text dropped) }. Backlog 152 (the fight clock), the GM's own and never sent (net.js clockOut
+// builds only t and notes): top? (the highest second reached, a time pair, kept only while it is past t: after a step back), lived? (each
+// character's own time past the clock's, as cleanLived keeps it, only above top or t), rulesOff? (the NPCs whose time rules do not run by
+// themselves, the GM's Rules run switch: character ids by pattern, each once, at most 1000). Not an object: null (no clock yet: day 1 at 00:00)
 function cleanClock(v) {
     if (!isObj(v)) return null;
     var o = { t: clampT(v.t) }, seen = Object.create(null), ns = []; if (v.hide === true) o.hide = true;
@@ -160,16 +163,20 @@ function cleanClock(v) {
     });
     if (ns.length) o.notes = ns.map(function(n, i) { return [n, i]; }).sort(function(a, b) { return a[0].day - b[0].day || a[1] - b[1]; }).map(function(x) { return x[0]; });
     var acc = cleanAcc(v.acc); if (acc) o.acc = acc;   // K5: what each character's time rules have counted (the GM's own; never sent)
+    var top = cleanTime(v.top); if (top && tCmp(top, o.t) > 0) o.top = top;   // 152: the highest second reached, while the clock is under it
+    var lv = cleanLived(v.lived, o.top || o.t); if (lv) o.lived = lv;   // 152: each character's own time past the clock's
+    var off = cleanRulesOff(v.rulesOff); if (off) o.rulesOff = off;   // 152: the NPCs whose time rules the GM switched off
     return o;
 }
 // Item 20 K5: what each character's time rules have counted towards their next firing — { charId: { ruleId: seconds } }, ids by pattern, seconds
-// from 0 below the limit, at most 1000 characters of 50 rules; none: null
+// from 0 below the limit, at most 1000 characters of 100 counts (backlog 152: a rule's By the clock count, r_ and its id's tail, and its In a fight
+// count, x_ and the same tail, so 50 rules make up to 100); none: null
 function cleanAcc(v) {
     if (!isObj(v)) return null;
     var out = {}, nc = 0;
     Object.keys(v).forEach(function(c) {
         if (nc >= 1000 || !ACC_ID.test(c) || !isObj(v[c])) return;
-        var inner = {}, nr = 0; Object.keys(v[c]).forEach(function(r) { var x = v[c][r]; if (nr >= 50 || !ACC_ID.test(r) || typeof x !== 'number' || !isFinite(x) || x <= 0 || x >= LIMITS.time) return; inner[r] = Math.round(x * 1000) / 1000; nr++; });
+        var inner = {}, nr = 0; Object.keys(v[c]).forEach(function(r) { var x = v[c][r]; if (nr >= 100 || !ACC_ID.test(r) || typeof x !== 'number' || !isFinite(x) || x <= 0 || x >= LIMITS.time) return; inner[r] = Math.round(x * 1000) / 1000; nr++; });
         if (nr) { out[c] = inner; nc++; }
     });
     return nc ? out : null;
@@ -185,8 +192,10 @@ function everySecs(cal, units, every) {
 // K5 (the owner's answer: rest adds up, activity breaks it): the time rules a stretch of time fires — rules [{ id, every }], charIds, acc (what
 // each has counted, as cleanAcc keeps it), secs (the stretch), rest (true: rest). A rule during rest only counts rest, and a stretch of activity
 // clears what it had counted; any other rule counts all time. Each full interval fires once (at most 500 a stretch) and the rest carries.
-// { fires: [{ c, r, n }], acc } — a new acc, the one given left as it was
-function ruleFires(cal, units, rules, charIds, acc, secs, rest) {
+// { fires: [{ c, r, n }], acc } — a new acc, the one given left as it was. Backlog 152: an eighth argument o, a plain object whose fight is true or
+// false, counts time in a fight or out of one (ruleFiresIn); anything else, or none, is the function above exactly as it was
+function ruleFires(cal, units, rules, charIds, acc, secs, rest, o) {
+    if (fightOpt(o)) return ruleFiresIn(cal, units, rules, charIds, acc, secs, rest, o);
     var out = { fires: [], acc: {} }, prev = cleanAcc(acc) || {}; Object.keys(prev).forEach(function(c) { out.acc[c] = Object.assign({}, prev[c]); });
     if (typeof secs !== 'number' || !isFinite(secs) || !(secs > 0)) return out;
     (Array.isArray(charIds) ? charIds : []).forEach(function(c) {
@@ -205,6 +214,137 @@ function ruleFires(cal, units, rules, charIds, acc, secs, rest) {
     return out;
 }
 
+// Backlog 152 (the fight clock, docs/FIGHT_CLOCK_DESIGN.md 1 to 3): the pure core of fights that keep their own time.
+// A time that is not the clock's own whole second (a fight's, a turn order's, a character's own) is a PAIR { s, ms }: whole seconds from 0 to
+// 10^15 (as clampT) and whole milliseconds from 0 to 999, never past 10^15 seconds. A round's length is kept to the thousandth (systemcore
+// cleanTurn), so a round is a whole number of milliseconds and every sum below is exact at any size: ten rounds of 0.1 s make one second.
+var MS_MAX = 9007199254740991;   // Number.MAX_SAFE_INTEGER: a span in milliseconds is exact up to it (some 285,000 years) and held to it beyond
+// A pair, as { s, ms } (ms absent: 0) or as the [s, ms] the clock stores; anything else, or one out of its bounds, is null
+function cleanTime(v) {
+    var s, ms;
+    if (Array.isArray(v)) { if (v.length !== 2) return null; s = v[0]; ms = v[1]; }
+    else if (isObj(v)) { s = v.s; ms = v.ms === undefined ? 0 : v.ms; }
+    else return null;
+    s = whole(s, 0, LIMITS.time); ms = whole(ms, 0, 999);
+    if (s === null || ms === null || (s === LIMITS.time && ms > 0)) return null;
+    return { s: s, ms: ms };
+}
+function tRead(v) { return typeof v === 'number' ? { s: clampT(v), ms: 0 } : cleanTime(v) || { s: 0, ms: 0 }; }   // a pair, or whole seconds (the clock's t); anything else 0
+// A time moved on by dms whole milliseconds (back when below 0; a fraction rounded), held to 0 and to 10^15 seconds: a new pair
+function tAdd(t, dms) {
+    var a = tRead(t), d = typeof dms === 'number' && isFinite(dms) ? Math.max(-MS_MAX, Math.min(MS_MAX, Math.round(dms))) : 0, r = d % 1000;
+    if (r < 0) r += 1000;
+    var s = a.s + (d - r) / 1000, ms = a.ms + r;   // d - r is a whole number of seconds' milliseconds: the division is exact
+    if (ms >= 1000) { ms -= 1000; s += 1; }
+    if (s < 0) return { s: 0, ms: 0 };
+    if (s > LIMITS.time || (s === LIMITS.time && ms > 0)) return { s: LIMITS.time, ms: 0 };
+    return { s: s, ms: ms };
+}
+function tCmp(a, b) { var x = tRead(a), y = tRead(b); return x.s < y.s ? -1 : x.s > y.s ? 1 : x.ms < y.ms ? -1 : x.ms > y.ms ? 1 : 0; }   // -1, 0 or 1
+function tFloor(t) { return tRead(t).s; }   // the whole second a time falls in: what the clock's own t reads while orders run
+function tMax(a, b) { return tCmp(a, b) >= 0 ? tRead(a) : tRead(b); }
+// From a to b in milliseconds (below 0 when b is before a): exact, and held to Number.MAX_SAFE_INTEGER either way
+function tSpanMs(a, b) {
+    var x = tRead(a), y = tRead(b);
+    return Math.max(-MS_MAX, Math.min(MS_MAX, (y.s - x.s) * 1000 + (y.ms - x.ms)));   // exact wherever the answer is under the bound
+}
+// The marks of the characters whose own time is past the clock's (camp.clock.lived): { charId: [s, ms] }, ids by pattern (never a prototype's
+// name), each a time pair above floor (a pair or whole seconds; absent: any pair), at most 1000; none: null
+function cleanLived(v, floor) {
+    if (!isObj(v)) return null;
+    var f = floor === undefined ? null : tRead(floor), out = {}, n = 0;
+    Object.keys(v).forEach(function(c) {
+        if (n >= 1000 || !ACC_ID.test(c)) return;
+        var tt = cleanTime(v[c]); if (!tt || (f && tCmp(tt, f) <= 0)) return;
+        out[c] = [tt.s, tt.ms]; n++;
+    });
+    return n ? out : null;
+}
+// The GM's Rules run switch on each NPC, off (camp.clock.rulesOff): character ids by pattern, each once, in the order written, at most 1000; none: null
+function cleanRulesOff(v) {
+    if (!Array.isArray(v)) return null;
+    var out = [], seen = Object.create(null);
+    v.forEach(function(c) { if (out.length >= 1000 || typeof c !== 'string' || !ACC_ID.test(c) || seen[c] === 1) return; seen[c] = 1; out.push(c); });
+    return out.length ? out : null;
+}
+// Each character's own time (design 1): L(c), the time up to which its time rules and timed effects have counted, is its mark in lived and never
+// below base (the clock's t, or its top while a step back left the clock under it): a character with no mark reads base. A span from t0 to t1
+// counts D = max(0, t1 - max(t0, L(c))) for each character, and L(c) becomes max(L(c), t1), so nobody lives a second twice: a step back and on
+// again, a fight that ran ahead or one sheet with tokens in two fights counts each second once. ids: the characters (ids by pattern, each once).
+// { spans: { charId: seconds, to the millisecond, only those above 0 }, lived: the marks after, as cleanLived keeps them above base (an empty
+// object for none) } — the lived given is left as it was
+function livedSpans(lived, base, ids, t0, t1) {
+    var b = tRead(base), a1 = tRead(t1), marks = cleanLived(lived, b) || {}, out = { spans: {}, lived: {} }, seen = Object.create(null);
+    (Array.isArray(ids) ? ids : []).forEach(function(c) {
+        if (typeof c !== 'string' || !ACC_ID.test(c) || seen[c] === 1) return; seen[c] = 1;
+        var L = Object.prototype.hasOwnProperty.call(marks, c) ? tRead(marks[c]) : b, d = tSpanMs(tMax(t0, L), a1);
+        if (d > 0) out.spans[c] = d / 1000;
+        var nl = tMax(L, a1); marks[c] = [nl.s, nl.ms];
+    });
+    out.lived = cleanLived(marks, b) || {};
+    return out;
+}
+// How long a rule's In a fight interval is, in seconds: n rounds of rs seconds (the round's length), n minutes or hours of the calendar, or n of
+// the system's own time units ([{ key, secs }], by key in any case); 0 when it cannot be read. A round's n is worked out to the millisecond
+function fightSecs(cal, units, inFight, rs) {
+    if (!isObj(inFight) || typeof inFight.n !== 'number' || !(inFight.n > 0) || typeof inFight.u !== 'string') return 0;
+    if (inFight.u === 'round') return typeof rs === 'number' && isFinite(rs) && rs > 0 ? Math.round(inFight.n * rs * 1000) / 1000 : 0;
+    if (inFight.u === 'min' || inFight.u === 'hour') return everySecs(cal, units, inFight);
+    var per = 0; (Array.isArray(units) ? units : []).forEach(function(u) { if (!per && isObj(u) && typeof u.key === 'string' && u.key.toLowerCase() === inFight.u.toLowerCase() && typeof u.secs === 'number' && u.secs > 0) per = u.secs; });
+    return per > 0 ? inFight.n * per : 0;
+}
+// ruleFires' eighth argument: a plain object whose fight is a boolean; anything else reads as none
+function fightOpt(o) { if (!isObj(o)) return false; var pr = Object.getPrototypeOf(o); return (pr === Object.prototype || pr === null) && typeof o.fight === 'boolean'; }
+// The time rules a stretch of each character's own time fires, in a fight (o.fight true; o.rs: the round's length in seconds) or out of one
+// (o.fight false). secs is the stretch, or { charId: seconds } for characters with spans of their own (one with none counts nothing). The rest
+// gate comes first, as above. By the clock (every, its r_ count) counts unless the rule Waits in a fight (every.wait) and this is a fight; In a
+// fight (inFight, its x_ count: x_ and the rule id's tail) counts in a fight alone, through fightSecs, and holds its count out of one; its fires
+// carry x: 1. Worked out in whole milliseconds, so the counts are exact; each full interval fires once (at most 500 a stretch), the rest carries.
+// A character counts once however often it is named. { fires: [{ c, r, n, x? }], acc } — a new acc, the one given left as it was
+function ruleFiresIn(cal, units, rules, charIds, acc, secs, rest, o) {
+    var out = { fires: [], acc: {} }, prev = cleanAcc(acc) || {}, seen = Object.create(null), one = typeof secs === 'number';
+    Object.keys(prev).forEach(function(c) { out.acc[c] = Object.assign({}, prev[c]); });
+    var mineOf = function(c) { return Object.prototype.hasOwnProperty.call(out.acc, c) ? out.acc[c] : (out.acc[c] = {}); };
+    var tidy = function(c) { if (!Object.keys(out.acc[c]).length) delete out.acc[c]; };
+    var count = function(c, rid, key, per, cms, x) {
+        var perMs = Math.round(per * 1000); if (!(perMs > 0)) return;
+        var mine = mineOf(c), had = Object.prototype.hasOwnProperty.call(mine, key) ? Math.round(mine[key] * 1000) : 0;
+        var a = had + cms, k = Math.floor(a / perMs), left = a - k * perMs;
+        if (left > 0) mine[key] = left / 1000; else delete mine[key];
+        tidy(c);
+        if (k > 0) { var f = { c: c, r: rid, n: Math.min(500, k) }; if (x) f.x = 1; out.fires.push(f); }
+    };
+    (Array.isArray(charIds) ? charIds : []).forEach(function(c) {
+        if (typeof c !== 'string' || !ACC_ID.test(c) || seen[c] === 1) return; seen[c] = 1;
+        var cs = one ? secs : isObj(secs) && Object.prototype.hasOwnProperty.call(secs, c) ? secs[c] : 0;
+        if (typeof cs !== 'number' || !isFinite(cs) || !(cs > 0)) return;
+        var cms = Math.min(1e15, Math.round(cs * 1000)); if (!(cms > 0)) return;   // a stretch counts at most 10^12 seconds (each rule fires 500 at most anyway)
+        (Array.isArray(rules) ? rules : []).forEach(function(rl) {
+            if (!isObj(rl) || typeof rl.id !== 'string' || !ACC_ID.test(rl.id)) return;
+            var per = everySecs(cal, units, rl.every);
+            if (per > 0) {
+                if (rl.every.rest === true && !rest) { delete mineOf(c)[rl.id]; tidy(c); }
+                else if (!(o.fight && rl.every.wait === true)) count(c, rl.id, rl.id, per, cms, false);
+            }
+            if (o.fight && rl.id.slice(0, 2) !== 'x_') { var fp = fightSecs(cal, units, rl.inFight, o.rs); if (fp > 0) count(c, rl.id, 'x_' + rl.id.slice(2), fp, cms, true); }
+        });
+    });
+    return out;
+}
+// A fight begun takes off, for its fighters, the In a fight counts of the rules ticked Each fight starts again (inFight.fresh): rules [{ id,
+// inFight }], charIds. A new acc ({} for none), the one given left as it was
+function freshAcc(acc, charIds, rules) {
+    var prev = cleanAcc(acc) || {}, out = {}, keys = [];
+    Object.keys(prev).forEach(function(c) { out[c] = Object.assign({}, prev[c]); });
+    (Array.isArray(rules) ? rules : []).forEach(function(rl) { if (isObj(rl) && typeof rl.id === 'string' && ACC_ID.test(rl.id) && rl.id.slice(0, 2) !== 'x_' && isObj(rl.inFight) && rl.inFight.fresh === true) keys.push('x_' + rl.id.slice(2)); });
+    (Array.isArray(charIds) ? charIds : []).forEach(function(c) {
+        if (typeof c !== 'string' || !ACC_ID.test(c) || !Object.prototype.hasOwnProperty.call(out, c)) return;
+        keys.forEach(function(k) { delete out[c][k]; });
+        if (!Object.keys(out[c]).length) delete out[c];
+    });
+    return out;
+}
+
 // The editor's starting points (fresh objects: a caller may keep and change one). 'twelve': the real-world year, a leap day in February
 // every fourth year; 'days': a plain count of days (no calendar at all)
 var PRESETS = Object.freeze(['twelve', 'days']);
@@ -216,6 +356,6 @@ function preset(id) {
 
 // Names another module can import beside its own LIMITS and helpers (sheets.js)
 var CAL_LIMITS = LIMITS, calPreset = preset;
-var API = { VERSION: VERSION, LIMITS: LIMITS, DAY: DAY, PRESETS: PRESETS, cleanCalendar: cleanCalendar, cleanClock: cleanClock, cleanAcc: cleanAcc, everySecs: everySecs, ruleFires: ruleFires, dateOf: dateOf, timeOf: timeOf, periodDays: periodDays, yearDays: yearDays, dayLength: dayLength, fmtDate: fmtDate, fmtTime: fmtTime, fmtWhen: fmtWhen, fmtSpan: fmtSpan, preset: preset };
+var API = { VERSION: VERSION, LIMITS: LIMITS, DAY: DAY, PRESETS: PRESETS, cleanCalendar: cleanCalendar, cleanClock: cleanClock, cleanAcc: cleanAcc, everySecs: everySecs, ruleFires: ruleFires, cleanTime: cleanTime, tAdd: tAdd, tCmp: tCmp, tFloor: tFloor, tSpanMs: tSpanMs, cleanLived: cleanLived, cleanRulesOff: cleanRulesOff, livedSpans: livedSpans, fightSecs: fightSecs, freshAcc: freshAcc, dateOf: dateOf, timeOf: timeOf, periodDays: periodDays, yearDays: yearDays, dayLength: dayLength, fmtDate: fmtDate, fmtTime: fmtTime, fmtWhen: fmtWhen, fmtSpan: fmtSpan, preset: preset };
 if (typeof window !== 'undefined') window.wpCalendarCore = API;
-export { VERSION, LIMITS, CAL_LIMITS, calPreset, DAY, PRESETS, cleanCalendar, cleanClock, cleanAcc, everySecs, ruleFires, dateOf, timeOf, periodDays, yearDays, dayLength, fmtDate, fmtTime, fmtWhen, fmtSpan, preset };
+export { VERSION, LIMITS, CAL_LIMITS, calPreset, DAY, PRESETS, cleanCalendar, cleanClock, cleanAcc, everySecs, ruleFires, cleanTime, tAdd, tCmp, tFloor, tSpanMs, cleanLived, cleanRulesOff, livedSpans, fightSecs, freshAcc, dateOf, timeOf, periodDays, yearDays, dayLength, fmtDate, fmtTime, fmtWhen, fmtSpan, preset };

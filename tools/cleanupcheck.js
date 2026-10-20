@@ -1169,6 +1169,28 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
                 && Jt(keyed.r) === Jt({ added: 1, updated: 0, newCamps: 0 }) && Jt(Object.keys(keyed.camps)) === Jt(['c1']) && !!keyed.camps.c1.items.n && !keyed.camps.c1.items.z && !keyed.camps.c1.items.w
                 && Jt(opens) === Jt(['sub', 'top', 'n', 'top']) && Jt(noted) === Jt([['c7:1']]) && !!st7.appState.campaigns.c7
                 && ioSrc.includes("  window.wpTakeBindNotes = function() { var n = _bindNotes; _bindNotes = []; return n; };") && mainSrc.includes("          if (typeof window.wpTakeBindNotes === 'function') bindsM = window.wpTakeBindNotes() || [];"), Jt([nest, keyed.r, Object.keys(keyed.camps), opens, noted]));
+            // backlog 152, fold 1 (the fight clock): a file's Waits in a fight, In a fight and Ask me first (the system's time rules) and the clock's
+            // top, lived and rulesOff (the GM's own) come in cleaned, on Replace by the load's own normaliser and on Merge by the same cleaners: a
+            // campaign that is new takes the file's clock cleaned, a campaign already here keeps its own clock and takes the file's system cleaned
+            {
+                const fsys = () => ({ v: 1, name: 'Fc', fields: [{ id: 'f_fp', key: 'FP', label: 'F', kind: 'resource', maxFormula: '10', vis: 'all' }], combat: { turn: { secs: 1 } }, rolls: [
+                    { id: 'r_dr', label: 'Drain', apply: [{ f: 'f_fp', formula: '1' }], every: { n: 1, u: 'hour', wait: true, rest: 'no' }, inFight: { n: 1, u: 'min', fresh: true, x: '<b>' }, ask: true },
+                    { id: 'r_w2', label: 'W', apply: [{ f: 'f_fp', formula: '1' }], every: { n: 1, u: 'hour', wait: 'yes' }, inFight: { n: 0, u: 'round' }, ask: 1 },
+                    { id: 'r_rd', label: 'R', apply: [{ f: 'f_fp', formula: '1' }], every: { n: 2, u: 'round' }, inFight: { n: 2, u: 'Round' }, ask: true },
+                    { id: 'r_ch', label: 'C', apply: [{ f: 'f_fp', formula: '1', add: true }], inFight: { n: 4, u: 'round' } }] });
+                const fclock = () => JSON.parse('{"t": 100, "top": {"s": 150, "ms": 500, "x": 1}, "lived": {"c_a": [160, 250], "c_b": [140, 0], "c_c": "x", "c_d": [150, 500], "__proto__": [200, 0]}, "rulesOff": ["c_n", "c_n", "<b>", 5, "c_m", "__proto__"], "acc": {"c_a": {"r_dr": 30, "x_dr": 20}}}');
+                const rowsW = s => s && Array.isArray(s.rolls) ? s.rolls.map(r => [r.id, r.every || null, r.inFight || null, 'ask' in r ? r.ask : null]) : null;
+                const wantR = Jt([['r_dr', { n: 1, u: 'hour', wait: true }, { n: 1, u: 'min', fresh: true }, true], ['r_w2', { n: 1, u: 'hour' }, null, null], ['r_rd', null, null, null], ['r_ch', null, { n: 4, u: 'round' }, null]]);
+                const wantC = Jt({ t: 100, acc: { c_a: { r_dr: 30, x_dr: 20 } }, top: { s: 150, ms: 500 }, lived: { c_a: [160, 250] }, rulesOff: ['c_n', 'c_m'] });
+                const outW = cleanImport({ activeCampaignId: 'cF', campaigns: { cF: { id: 'cF', name: 'F', items: {}, system: fsys(), clock: fclock() } } }, depsT);
+                const mergeW = (appState, f) => { const st = { appState }; const r = new Function('state', 'window', 'cleanImportedItems', 'takeImportedLibrary', 'cleanImport', 'importDeps', mergeSrcT + '\nreturn mergeAppState;')(st, { wpSystemCore: S, wpFormula: F }, ic => cleanImportItems(ic, depsT), () => {}, cleanImport, () => depsT)(f); return { r, camps: st.appState.campaigns }; };
+                const ownClock = { t: 10, lived: { c_a: [20, 0] }, rulesOff: ['c_q'] }, hereW = () => ({ activeCampaignId: 'c1', campaigns: { c1: { id: 'c1', name: 'Mine', activeItemId: 'm0', clock: JSON.parse(Jt(ownClock)), items: { m0: { id: 'm0', type: 'map', meta: { title: 'Home' }, rooms: [], links: [], whiteboard: [] } } } } });
+                const mgW = mergeW(hereW(), { campaigns: { c1: { id: 'c1', items: {}, system: fsys(), clock: fclock() }, c3: { id: 'c3', name: 'New', items: {}, system: fsys(), clock: fclock() } } });
+                check('152 fold 1 import: a file\'s time rules and clock come in cleaned (the real load normaliser and main.js mergeAppState, run for real with the real cores): Waits in a fight and Each fight starts again only as true, a round never By the clock\'s, In a fight only by the units it takes, Ask me first only as true and only beside one of the two; the clock\'s top only as a pair past its time, each character\'s own time only past top, the NPCs whose rules are off by id each once, never a prototype\'s name; on Replace, and on Merge for a new campaign, while a campaign already here keeps its own clock and takes the file\'s system cleaned',
+                    !!outW && Jt(rowsW(outW.campaigns.cF.system)) === wantR && Jt(outW.campaigns.cF.clock) === wantC
+                    && Jt(mgW.r) === Jt({ added: 0, updated: 0, newCamps: 1 }) && Jt(rowsW(mgW.camps.c1.system)) === wantR && Jt(mgW.camps.c1.clock) === Jt(ownClock) && !!mgW.camps.c3 && Jt(rowsW(mgW.camps.c3.system)) === wantR && Jt(mgW.camps.c3.clock) === wantC && ({}).s === undefined,
+                    Jt([outW && rowsW(outW.campaigns.cF.system), outW && outW.campaigns.cF.clock, mgW.r, rowsW(mgW.camps.c1.system), mgW.camps.c1.clock, mgW.camps.c3 && mgW.camps.c3.clock]));
+            }
         }
         /* ---- Import Replace says who it bound (a found fault of 1.5.4: a file from before player ids was bound by the normaliser on Replace, and
            nothing was said, while a Merge and a load say it once; the binding is saved with the file, so no later load says it either). main.js's
