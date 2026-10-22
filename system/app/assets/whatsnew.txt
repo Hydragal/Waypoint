@@ -42,6 +42,10 @@ Calendar
   as time passes, NPCs too, with no list to answer. An NPC's summary
   comes to you alone. Ask me is still there in Settings for a GM who
   wants to say which run.
+- A time rule's run that moved nothing and rolled no dice now posts
+  nothing: no summary in chat and no Session Log line. So a rule that
+  fills a pool says nothing while the pool is full, and many NPCs at
+  their most no longer fill the chat every game hour.
 - The steps, Move and Set in the Calendar window always work. Time you
   move on while a list of time rules waits is counted once you apply
   or skip it.

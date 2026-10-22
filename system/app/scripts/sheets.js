@@ -8,7 +8,7 @@ import { getActiveCampaign } from './models.js';
 import { save, toast } from './io.js';
 import { picRef } from './safecore.js';
 import { showConfirm, showPrompt } from './dialogs.js';
-import { cleanFieldUnit, unitTail, heightWords, measureWords, unitWords, unitHead, listWords, unitOf, textWords, measureStore, rollNeedsOk, rollNeedsSays, timeRuleRun, cleanEvery, cleanInFight, droppedCounts, validPageId, LIMITS, KINDS, showsIf, rowRollNames, gmOnlyNames, applyAct, applyScope, applyRound, dueActs, combatChars, roundSecs, fxLeftNow, lastsSecs, APPLY_KINDS, TURN_UNITS, LIGHT_UNITS, RANGE_UNITS, HEIGHT_UNITS, TIME_WORDS, STORED, DEF_PROP, BAND_KINDS, IDENTITY_KINDS, LEDGER_KINDS, headerEntry, captionParts, emptySystem, uid, validKey, cleanSystem, cleanChar, validateSystem, resolveAll, hoverLines, autoLayout, applyEdit, applyStyle, cleanLooks, lookOf, lookFor, lookRule, applyEffectOp, fxText, fmtNum, budgetsOf, budgetWatch, budgetSays, needsMet, needsSays, initRoll, applyProposal, cleanUploads, sideOf, threatArc, facingCtx, facingNow, setAimSource, stanceCtx, tokenCtx, POSTURE_IDS, POSTURE_NAMES, DEFAULT_POSTURES, postureList, postureAt, autoEffectsOn, initTie, charTokenOn, cycleThreat, valueTone, TONES, activeCharOf, playableChars, ownedTokenPlan, applyOwnerOps, migrateBindings, capExpr, cleanValue, fieldById, valueOpts, applyRowOp, rowIdOf, rowDef, orphanRows, stampRows, cleanRowDef, projectRows, STAT_KEY, PALETTE_KEYS, GLYPHS, glyphPath, headerEdits, pinTargets, pinTargetsAll, hudView, hudHasContent, resetTargets, cleanListSpec, statKey, rowStat, plusText, rowPaid, itemReach, gmDerivedNames, labelGmNames, gmEffectNames, labelNames, withRound, rangeCtx, withRange, rowLvl, rowOn, cleanItemKey, charForView, secretFieldIds, gmViewFields } from './systemcore.js';
+import { cleanFieldUnit, unitTail, heightWords, measureWords, unitWords, unitHead, listWords, unitOf, textWords, measureStore, rollNeedsOk, rollNeedsSays, timeRuleRun, makeResolver, hasDice, figText, cleanEvery, cleanInFight, droppedCounts, validPageId, LIMITS, KINDS, showsIf, rowRollNames, gmOnlyNames, applyAct, applyScope, applyRound, dueActs, combatChars, roundSecs, fxLeftNow, lastsSecs, APPLY_KINDS, TURN_UNITS, LIGHT_UNITS, RANGE_UNITS, HEIGHT_UNITS, TIME_WORDS, STORED, DEF_PROP, BAND_KINDS, IDENTITY_KINDS, LEDGER_KINDS, headerEntry, captionParts, emptySystem, uid, validKey, cleanSystem, cleanChar, validateSystem, resolveAll, hoverLines, autoLayout, applyEdit, applyStyle, cleanLooks, lookOf, lookFor, lookRule, applyEffectOp, fxText, fmtNum, budgetsOf, budgetWatch, budgetSays, needsMet, needsSays, initRoll, applyProposal, cleanUploads, sideOf, threatArc, facingCtx, facingNow, setAimSource, stanceCtx, tokenCtx, POSTURE_IDS, POSTURE_NAMES, DEFAULT_POSTURES, postureList, postureAt, autoEffectsOn, initTie, charTokenOn, cycleThreat, valueTone, TONES, activeCharOf, playableChars, ownedTokenPlan, applyOwnerOps, migrateBindings, capExpr, cleanValue, fieldById, valueOpts, applyRowOp, rowIdOf, rowDef, orphanRows, stampRows, cleanRowDef, projectRows, STAT_KEY, PALETTE_KEYS, GLYPHS, glyphPath, headerEdits, pinTargets, pinTargetsAll, hudView, hudHasContent, resetTargets, cleanListSpec, statKey, rowStat, plusText, rowPaid, itemReach, gmDerivedNames, labelGmNames, gmEffectNames, labelNames, withRound, rangeCtx, withRange, rowLvl, rowOn, cleanItemKey, charForView, secretFieldIds, gmViewFields } from './systemcore.js';
 import { fileBase, charToJson, charFromJson, sheetToMarkdown, isCharFile } from './sheetexport.js';
 import { lvlsFromBox, lvlsToText } from './librarycore.js';
 import { cleanCalendar, fmtWhen, fmtDate, timeOf, calPreset, CAL_LIMITS } from './calendarcore.js';
@@ -3392,12 +3392,46 @@ function timedHook(mapId, combat, kind) {
     return done;
 }
 // [sinkcheck:timerules-start]
+// The flood fix (the owner, 2026-10-22, by prompt: "Nothing at all (Recommended)"): a time rule's run that moved nothing and rolled no dice posts no
+// summary and no Session Log line, so a hundred NPCs at their most send the GM nothing each hour. A roll whose formula holds no dice is worked out, never
+// rolled, so its run counts as rolled only where its formula holds dice (ruleDice; with no way to tell, a roll made counts). What moved is judged by what the sheet reads of each
+// value the run wrote, before it is stored and after (ruleReads, through the resolver, in the fight's round where the run had one): a pool its current
+// value, a number its total and its stored value. A value written in another form moved nothing (a full pool stored as full, a pool held to its most, a
+// number set to what it held), and a number under an effect or an item's change moved as it reads, whatever the run's own line measured from. What a run
+// can write is a pool's current value or a number's stored value (APPLY_KINDS), and nothing else of the character: no row's counter (it has no row), no
+// list and no effect. With no resolver at hand every value written counts as moved, so nothing that moved is ever left out of a summary. A figure that
+// moved is said as the sheet writes it (figText), so a number's sum of fractions reads as on the sheet
+function ruleReads(sys, c, ks, tc) {
+    if (typeof makeResolver !== 'function' || !F() || !ks.length) return null;
+    var r = makeResolver(sys, c, F(), tc), out = {};
+    ks.forEach(function(k) { var f = (Array.isArray(sys.fields) ? sys.fields : []).filter(function(x) { return x && x.id === k; })[0]; if (!f) return; var t = r(f.key), b = f.kind === 'number' ? r(f.key + '.base') : null; out[k] = { t: t, b: b, n: f.label || f.key, f: f, s: JSON.stringify([t, b]) }; });
+    return out;
+}
+function ruleMoves(sys, c, ks, pre, tc, lines) {   // the summary's lines for the values written that moved, { n, d, v } as the sheet reads them, in the run's order
+    var post = ruleReads(sys, c, ks, tc), out = [], num = function(x) { return typeof x === 'number' && isFinite(x); }, step = function(x, y) { return Math.round((y - x) * 1000) / 1000; };
+    var shown = function(f, x) { return typeof figText === 'function' ? figText(f, x) : Math.round(x * 1000) / 1000; };   // the figure as the sheet writes it, never a sum's float noise
+    ks.forEach(function(k) {
+        var a = pre[k], b = post ? post[k] : null, own = lines.filter(function(l) { return l.f === k; })[0] || null;
+        if (a && b && a.s === b.s) return;   // written in another form: nothing moved
+        if (a && b && num(a.t) && num(b.t) && a.t !== b.t) out.push({ n: b.n, d: step(a.t, b.t), v: shown(b.f, b.t) });   // what the sheet shows moved
+        else if (a && b && num(a.b) && num(b.b) && a.b !== b.b) out.push({ n: b.n, d: step(a.b, b.b), v: shown(b.f, b.b) });   // only a number's stored value moved (an automatic effect made up for it)
+        else out.push(own || { n: (b || a || { n: k }).n, d: 0, v: '' });   // a reading that is no number: the run's own line
+    });
+    return out;
+}
+function ruleDice(rule) {   // whether a time rule's roll rolls dice: its own formula holds them (one with none is worked out, never rolled); with no way to tell, it does
+    if (!rule || typeof rule.formula !== 'string' || !rule.formula) return false;
+    var p = typeof hasDice === 'function' && typeof F().parse === 'function' ? F().parse(rule.formula) : null;
+    return !p || !p.ok || !p.ast ? true : hasDice(p.ast.body);
+}
 // Item 20 K5: the time rules a stretch of the campaign's clock fired (calendar.js: after the GM's Apply, or at once when Automatic) — each fire
 // { c: charId, r: ruleId, n } run n times with the GM's full view and no token (systemcore timeRuleRun: the host makes every roll), stored, one
 // delta per character, its views redrawn; then one summary per character (net.timeCard: its player and the GM, or the GM alone for an NPC or a
 // rule that moves or reads what its player cannot see) and the Session Log's line. words: the stretch ("8 hours of rest"; a fight's round, "Round 3
 // on Docks"). Backlog 152: a rule may run By the clock, In a fight or both, and a fire In a fight (x) runs in its fight's round, so CombatRound reads
-// it: its own rd, else at ({ round }). Returns how many characters changed
+// it: its own rd, else at ({ round }). A run that moved nothing and rolled no dice adds nothing to the summary, and a character with nothing left gets
+// none (the flood fix, above). Whom a summary goes to is decided by every rule that fired, before it runs, whether it then moved, stayed quiet or was
+// held by its needs: so whether a player gets a summary never says whether a GM-only rule moved or met its needs. Returns how many characters changed
 function runTimeRules(fires, words, at) {
     var camp = getActiveCampaign(), sys = systemOf(camp), n = net(), D = window.wpDiceCore; if (!camp || !sys || !F() || !Array.isArray(fires)) return 0;
     var byChar = Object.create(null), order = [], changed = 0;
@@ -3407,19 +3441,22 @@ function runTimeRules(fires, words, at) {
         var parts = [], all = {}, gm = false;
         byChar[cid].forEach(function(fi) {
             var rule = (Array.isArray(sys.rolls) ? sys.rolls : []).filter(function(r) { return r && r.id === fi.r && (r.every || r.inFight); })[0]; if (!rule) return;
+            var acts = Array.isArray(rule.apply) ? rule : { apply: Array.isArray(rule.then) ? rule.then : [] }, reads = typeof rule.formula === 'string' ? gmOnlyNames(sys, F().names(rule.formula).map(function(x) { return { name: x }; })).length > 0 : false;
+            if (rule.vis === 'gm' || applyScope(sys, c, acts, reads, F()) === 'gm') gm = true;   // whom the summary goes to, by the rule and before it runs: a GM-only rule keeps it the GM's whether it moved, stayed quiet or was held
             var atF = fi.x === 1 ? (typeof fi.rd === 'number' && isFinite(fi.rd) ? { round: fi.rd } : at && typeof at === 'object' ? at : undefined) : undefined;   // 152: a fire In a fight reads its fight's round
             var res = timeRuleRun(sys, c, rule, fi.n, F(), D, atF), ks = Object.keys(res.values);
             if (res.held && !res.ran) return;   // 1.5.4: its needs were not met, so it was passed over
-            if (ks.length) { c.values = c.values || {}; ks.forEach(function(k) { if (JSON.stringify(c.values[k]) === JSON.stringify(res.values[k])) return; c.values[k] = res.values[k]; all[k] = res.values[k]; }); }   // only what really moved is stored and sent
-            var acts = Array.isArray(rule.apply) ? rule : { apply: Array.isArray(rule.then) ? rule.then : [] }, reads = typeof rule.formula === 'string' ? gmOnlyNames(sys, F().names(rule.formula).map(function(x) { return { name: x }; })).length > 0 : false;
-            if (rule.vis === 'gm' || applyScope(sys, c, acts, reads, F()) === 'gm') gm = true;
+            var wrote = ks.filter(function(k) { return JSON.stringify(c.values ? c.values[k] : undefined) !== JSON.stringify(res.values[k]); });   // only what really changed is stored and sent
+            var tcF = atF && typeof atF === 'object' && typeof atF.round === 'number' && isFinite(atF.round) ? { combat: { round: Math.max(0, Math.min(9999, Math.floor(atF.round))) } } : null, pre = wrote.length ? ruleReads(sys, c, wrote, tcF) : null;   // what the sheet read before, in the round timeRuleRun ran it in
+            if (ks.length) { c.values = c.values || {}; wrote.forEach(function(k) { c.values[k] = res.values[k]; all[k] = res.values[k]; }); }
+            var moved = !wrote.length ? [] : pre ? ruleMoves(sys, c, wrote, pre, tcF, res.lines) : null;   // null: no resolver to ask, so each value written counts as moved
+            if (moved !== null && !moved.length && !(res.rolls.made && ruleDice(rule))) return;   // the flood fix: it moved nothing and rolled no dice, so it says nothing
             var head = (rule.label || 'A rule') + ' \u00d7' + fi.n + (res.rolls.made ? ' (' + res.rolls.pass + ' of ' + res.rolls.made + ' succeeded)' : '');
-            var moved = res.lines.filter(function(l) { return l.d !== 0; });   // a full pool says no change
-            parts.push(head + (moved.length ? ': ' + moved.map(function(l) { return l.n + ' ' + (l.d >= 0 ? '+' : '') + l.d + ' \u2192 ' + l.v; }).join(', ') : ': no change'));
+            var lns = moved || res.lines.filter(function(l) { return l.d !== 0; });   // with no resolver, the run's own lines, as before; a roll of dice that moved nothing says no change
+            parts.push(head + (lns.length ? ': ' + lns.map(function(l) { return l.n + ' ' + (l.d >= 0 ? '+' : '') + l.d + ' \u2192 ' + l.v; }).join(', ') : ': no change'));
         });
-        if (!parts.length) return;
-        if (Object.keys(all).length) { c.updated = Date.now(); if (n && n.active && n.role === 'host' && n.syncCharDelta) n.syncCharDelta(c.id, all); renderViews(c.id); changed++; }
-        if (n && n.timeCard) n.timeCard(c, (words ? words + ' \u2014 ' : '') + (c.name || 'A character') + ': ' + parts.join('; '), gm);
+        if (Object.keys(all).length) { c.updated = Date.now(); if (n && n.active && n.role === 'host' && n.syncCharDelta) n.syncCharDelta(c.id, all); renderViews(c.id); changed++; }   // what was written is stored, sent and saved, said or not
+        if (parts.length && n && n.timeCard) n.timeCard(c, (words ? words + ' \u2014 ' : '') + (c.name || 'A character') + ': ' + parts.join('; '), gm);   // the flood fix: no part left, no summary
     });
     if (changed) { save(true); if (window.appRender) window.appRender(); }
     return changed;

@@ -311,7 +311,7 @@ function bellDone(key, apply) {   // Apply (true) or Skip: the item goes, and Ap
     }
     return true;
 }
-if (typeof window !== 'undefined') { var nkB = window.wpNoticeKinds = window.wpNoticeKinds || {}; nkB.timeask = { label: 'Apply', altLabel: 'Skip', stay: true, only: true, tip: 'Run them now, each in the round it came due. Each player gets a summary', altTip: 'Let these runs go with no rule run', still: bellStill, run: function(key) { bellDone(key, true); }, alt: function(key) { bellDone(key, false); } }; }
+if (typeof window !== 'undefined') { var nkB = window.wpNoticeKinds = window.wpNoticeKinds || {}; nkB.timeask = { label: 'Apply', altLabel: 'Skip', stay: true, only: true, tip: 'Run them now, each in the round it came due. Each player gets a summary of what moved or was rolled', altTip: 'Let these runs go with no rule run', still: bellStill, run: function(key) { bellDone(key, true); }, alt: function(key) { bellDone(key, false); } }; }
 // 152 fold 4b: the Rules run switch on each NPC (the owner's answer 1, 2026-10-19: "a Rules run switch on each NPC, on by default", placed "somewhere easy
 // to use quickly"), read and set here alone: on its token's right-click menu (whiteboard.js gmRulesModel), on its row's menu under Characters (charlist.js)
 // and beside it in the waiting list (pendPanel). On: the NPC is not listed in camp.clock.rulesOff. Off: it is, an id as the clock's cleaner keeps one.
@@ -357,7 +357,7 @@ function pendWords(cal) { return pend ? (pend.words ? pend.words : pend.live ===
 function pendPanel(body, cal) {   // 159 (the owner by prompt, 2026-10-18: "Every character, buttons on top"; "maybe a PCs and NPCs category, and sort by map location")
     var box = cel('div', 'cal-pend'), camp = getActiveCampaign(), sys = sysNow(), byC = Object.create(null), order = [];
     var top = cel('div', 'cal-pend-bar'); top.appendChild(cel('span', 'cal-pend-head', 'Time rules due \u2014 ' + pendWords(cal)));
-    top.appendChild(cbtn('cal-pend-apply', 'Apply', 'Run the ticked characters\u2019 rules now: the rolls are made for them and each player gets a summary', 'calpendapply'));
+    top.appendChild(cbtn('cal-pend-apply', 'Apply', 'Run the ticked characters\u2019 rules now: the rolls are made for them and each player gets a summary of what moved or was rolled', 'calpendapply'));
     top.appendChild(cbtn('cal-pend-skip', 'Skip', 'Let this time pass with no rules run', 'calpendskip'));
     box.appendChild(top);
     box.appendChild(cel('div', 'sys-note cal-pend-since', sinceWords(cal)));   // empty while nothing more has passed: set in place as the clock runs (sinceSync)
