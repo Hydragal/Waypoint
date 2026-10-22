@@ -2531,7 +2531,7 @@
   .cal-kind-btn.cal-kind-on, .cal-live-btn.cal-kind-on { border-color: var(--gold); color: var(--gold); font-weight: 700; }
   .cal-live { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 6px; }   /* 1.5.4: Runs / Held and the speed */
   .cal-live .field { width: auto; flex: 0 0 auto; }
-  .sys-roll-everyrow input.sys-roll-evn { width: 70px; }
+  .sys-roll-everyrow input.sys-roll-evn, .sys-roll-fightrow input.sys-roll-ifn { width: 70px; }
   .cal-notes, .cal-coming { display: flex; flex-direction: column; gap: 4px; }
   .cal-note, .cal-note-add { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
   .cal-note-txt { flex: 1 1 200px; min-width: 0; overflow-wrap: anywhere; }

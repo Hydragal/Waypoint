@@ -23,6 +23,20 @@ Your own rows
   in the row's details. Write one level a line, as 2: what it gives.
   A row you make GM only keeps its text from its player.
 
+System editor
+- A time rule on the System editor's Rolls tab has three new pieces.
+  Waits in a fight, beside By the clock, keeps its count waiting while
+  its character is in a fight. In a fight runs it every so many
+  rounds, minutes, hours or your own time units of a fight's own
+  time, and Each fight starts again begins that count anew with each
+  fight. Ask me first makes its runs wait for your word, even when
+  Time rules run at once. So a power cell can lose 1 Charge every
+  hour out of a fight and 1 every round in one. A roll can now run by
+  itself in a fight too.
+- Under each rule the editor says what Save would drop, and warns of
+  an action that would run both each round and In a fight. The Rolls
+  tab's key names During rest only and the three new ticks.
+
 Calendar
 - Time rules now run at once by default: every character's rules run
   as time passes, NPCs too, with no list to answer. An NPC's summary

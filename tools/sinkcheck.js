@@ -1606,6 +1606,34 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         BH6.onHeightInput({ className: 'field sys-height-eye', value: '1e400', dataset: {} }); const infH6 = j(dH6.combat.height); BH6.onHeightInput({ className: 'field sys-height-eye', value: '1.5', dataset: {} });
         check('item 19b H4 height box: its handlers take the tick only as true and the standing height only as a finite number (hostile text, or a number past every bound, takes the key away); Save cleans both again',
             offH6 === j({}) && hostH6 === j({ line3d: true }) && infH6 === j({ line3d: true }) && j(dH6.combat.height) === j({ line3d: true, eye: 1.5 }) && SYl.cleanHeightRules({ line3d: T, eye: 1 }, FRl) === null && j(SYl.cleanHeightRules({ line3d: true, eye: T }, FRl)) === j({ line3d: true }), j([offH6, hostH6, infH6, dH6.combat.height]));
+        // backlog 152, fold 5: the Rolls tab's time rule rows (sheets.js everyRow, fightRow and askRow, sliced by their everyrow markers) from a hostile
+        // system file: a time unit's key and label from the Combat card, and a stored By the clock, In a fight and Ask me first, reach the rows only as values and text
+        const erS = slice('sheets.js', 'everyrow');
+        const mkEv = draft0 => {
+            const made = [], htmlSet = [];
+            const fake = tag => { const e = { tag, children: [], childNodes: [], style: {}, dataset: {}, className: '', textContent: '', appendChild(k) { this.children.push(k); this.childNodes.push(k); return k; }, addEventListener() {} }; ['innerHTML', 'outerHTML'].forEach(p => Object.defineProperty(e, p, { set(v) { htmlSet.push(v); }, get() { return ''; } })); e.insertAdjacentHTML = (w, v) => { htmlSet.push(v); }; made.push(e); return e; };
+            const doc = { createElement: fake, createTextNode: t => { const n = { tag: '#text', textContent: String(t) }; made.push(n); return n; } };
+            const api = new Function('env', "'use strict';\nvar draft = env.draft, document = env.document;\n" + lineAt('function el(tag, cls, text) {') + '\n' + lineAt('function opt(value, text, selected) {') + '\n' + lineAt('function select(cls, options, value, title) {') + '\n'
+                + erS + '\nreturn { everyRow: everyRow, fightRow: fightRow, askRow: askRow, everyEdit: everyEdit };')({ draft: draft0, document: doc });
+            api.made = made; api.htmlSet = htmlSet; return api;
+        };
+        const BEv = mkEv({ combat: { turn: { units: [{ key: 'Watch', label: T, secs: 60 }, { key: 'Shift', label: P, secs: 60 }, { key: T + 'k', label: 'K', secs: 1 }, { key: P + 'k' }] } } });
+        const ruleH = { id: 'r_h', every: { n: P, u: T, rest: P, wait: T }, inFight: { n: T, u: P, fresh: T }, ask: P };
+        const rowsH = [BEv.everyRow(ruleH), BEv.fightRow(ruleH), BEv.askRow(ruleH), BEv.fightRow({ id: 'r_g', inFight: { n: 4, u: 'Shift', fresh: true } }), BEv.fightRow({ id: 'r_k', inFight: JSON.parse('{"__proto__": {"n": 3, "u": "round", "fresh": true}}') })];
+        const optsH = BEv.made.filter(e => e.tag === 'option'), boxesH = BEv.made.filter(e => e.tag === 'input'), byClsH = c => BEv.made.filter(e => typeof e.className === 'string' && e.className.split(' ').indexOf(c) >= 0);
+        const textsH = BEv.made.filter(e => e.tag === '#text' || e.tag === 'option' || e.tag === 'span').map(e => e.textContent);
+        check('152 fold 5 the Rolls tab\'s time rule rows from a hostile system file (sheets.js everyRow, fightRow and askRow, run for real on a page that records every node and any use of innerHTML): a unit\'s key and label from the Combat card reach the two unit lists only as an option\'s value and its text, a stored unit that is no unit of the system as a value and as its text with (no such unit), a stored number that is no number as an empty number box and a tick that is not true unticked; the sliced source writes no markup and makes no element but the rows\' own',
+            !/innerHTML|insertAdjacentHTML|outerHTML/.test(erS) && BEv.htmlSet.length === 0 && BEv.made.every(e => ['div', 'span', 'input', 'select', 'option', 'label', '#text'].indexOf(e.tag) >= 0)
+            && optsH.some(o => o.value === 'Watch' && o.textContent === T) && optsH.some(o => o.value === 'Shift' && o.textContent === P) && optsH.some(o => o.value === T + 'k' && o.textContent === 'K') && optsH.some(o => o.value === P + 'k' && o.textContent === P + 'k')
+            && optsH.some(o => o.value === T && o.textContent === T + ' (no such unit)' && o.selected === true) && optsH.some(o => o.value === P && o.textContent === P + ' (no such unit)' && o.selected === true)
+            && byClsH('sys-roll-evn')[0].value === '' && byClsH('sys-roll-ifn')[0].value === '' && byClsH('sys-roll-ifn')[1].value === '4' && byClsH('sys-roll-ifn')[2].value === ''
+            && ['sys-roll-evrest', 'sys-roll-evwait', 'sys-roll-evask'].every(c => byClsH(c)[0].checked === false) && j(byClsH('sys-roll-iffresh').map(x => x.checked)) === j([false, true, false])
+            && boxesH.every(b => String(b.title).indexOf('<') < 0 && String(b.title).indexOf('"') < 0) && byClsH('sys-roll-ifu').every(s => String(s.title).indexOf('<') < 0)
+            && textsH.indexOf(' Waits in a fight') >= 0 && textsH.indexOf(' Each fight starts again') >= 0 && textsH.indexOf(' Ask me first') >= 0 && textsH.indexOf('In a fight') >= 0 && rowsH.length === 5,
+            j([BEv.htmlSet, optsH.map(o => [o.value, o.textContent]), boxesH.map(b => b.value)]));
+        const rEv = {}; BEv.everyEdit(rEv, 'sys-roll-ifu', { value: T + 'x'.repeat(40) }); const cutH = rEv.inFight ? rEv.inFight.u : null; BEv.everyEdit(rEv, 'field sys-roll-ifn', { value: P }); const editH = j(rEv); BEv.everyEdit(rEv, 'sys-roll-evask', { checked: P }); BEv.everyEdit(rEv, 'sys-roll-evwait', { checked: T });
+        check('152 fold 5 the new boxes\' edits from hostile values (everyEdit, run for real): a unit is kept as text cut to 24 characters, a number that is no number takes In a fight away, a tick that is not true leaves nothing set, nor the By the clock it would have made (the review of fold 5), and Save then drops the unit (systemcore cleanInFight)',
+            typeof cutH === 'string' && cutH.length === 24 && cutH === (T + 'x'.repeat(40)).slice(0, 24) && editH === j({}) && j(rEv) === j({}) && SYl.cleanInFight({ n: 1, u: (T + 'x'.repeat(40)).slice(0, 24) }) === null && SYl.cleanInFight({ n: 1, u: P }) === null && SYl.cleanEvery({ n: 1, u: T }) === null, j([cutH, editH, rEv]));
     }
     /* ---- Senses S2b: a token's Senses block in its Properties — a sense's name comes from a system file, a token's own ranges from a save ---- */
     {

@@ -8,7 +8,7 @@ import { getActiveCampaign } from './models.js';
 import { save, toast } from './io.js';
 import { picRef } from './safecore.js';
 import { showConfirm, showPrompt } from './dialogs.js';
-import { cleanFieldUnit, unitTail, heightWords, measureWords, unitWords, unitHead, listWords, unitOf, textWords, measureStore, rollNeedsOk, rollNeedsSays, timeRuleRun, droppedCounts, validPageId, LIMITS, KINDS, showsIf, rowRollNames, gmOnlyNames, applyAct, applyScope, applyRound, dueActs, combatChars, roundSecs, fxLeftNow, lastsSecs, APPLY_KINDS, TURN_UNITS, LIGHT_UNITS, RANGE_UNITS, HEIGHT_UNITS, TIME_WORDS, STORED, DEF_PROP, BAND_KINDS, IDENTITY_KINDS, LEDGER_KINDS, headerEntry, captionParts, emptySystem, uid, validKey, cleanSystem, cleanChar, validateSystem, resolveAll, hoverLines, autoLayout, applyEdit, applyStyle, cleanLooks, lookOf, lookFor, lookRule, applyEffectOp, fxText, fmtNum, budgetsOf, budgetWatch, budgetSays, needsMet, needsSays, initRoll, applyProposal, cleanUploads, sideOf, threatArc, facingCtx, facingNow, setAimSource, stanceCtx, tokenCtx, POSTURE_IDS, POSTURE_NAMES, DEFAULT_POSTURES, postureList, postureAt, autoEffectsOn, initTie, charTokenOn, cycleThreat, valueTone, TONES, activeCharOf, playableChars, ownedTokenPlan, applyOwnerOps, migrateBindings, capExpr, cleanValue, fieldById, valueOpts, applyRowOp, rowIdOf, rowDef, orphanRows, stampRows, cleanRowDef, projectRows, STAT_KEY, PALETTE_KEYS, GLYPHS, glyphPath, headerEdits, pinTargets, pinTargetsAll, hudView, hudHasContent, resetTargets, cleanListSpec, statKey, rowStat, plusText, rowPaid, itemReach, gmDerivedNames, labelGmNames, gmEffectNames, labelNames, withRound, rangeCtx, withRange, rowLvl, rowOn, cleanItemKey, charForView, secretFieldIds, gmViewFields } from './systemcore.js';
+import { cleanFieldUnit, unitTail, heightWords, measureWords, unitWords, unitHead, listWords, unitOf, textWords, measureStore, rollNeedsOk, rollNeedsSays, timeRuleRun, cleanEvery, cleanInFight, droppedCounts, validPageId, LIMITS, KINDS, showsIf, rowRollNames, gmOnlyNames, applyAct, applyScope, applyRound, dueActs, combatChars, roundSecs, fxLeftNow, lastsSecs, APPLY_KINDS, TURN_UNITS, LIGHT_UNITS, RANGE_UNITS, HEIGHT_UNITS, TIME_WORDS, STORED, DEF_PROP, BAND_KINDS, IDENTITY_KINDS, LEDGER_KINDS, headerEntry, captionParts, emptySystem, uid, validKey, cleanSystem, cleanChar, validateSystem, resolveAll, hoverLines, autoLayout, applyEdit, applyStyle, cleanLooks, lookOf, lookFor, lookRule, applyEffectOp, fxText, fmtNum, budgetsOf, budgetWatch, budgetSays, needsMet, needsSays, initRoll, applyProposal, cleanUploads, sideOf, threatArc, facingCtx, facingNow, setAimSource, stanceCtx, tokenCtx, POSTURE_IDS, POSTURE_NAMES, DEFAULT_POSTURES, postureList, postureAt, autoEffectsOn, initTie, charTokenOn, cycleThreat, valueTone, TONES, activeCharOf, playableChars, ownedTokenPlan, applyOwnerOps, migrateBindings, capExpr, cleanValue, fieldById, valueOpts, applyRowOp, rowIdOf, rowDef, orphanRows, stampRows, cleanRowDef, projectRows, STAT_KEY, PALETTE_KEYS, GLYPHS, glyphPath, headerEdits, pinTargets, pinTargetsAll, hudView, hudHasContent, resetTargets, cleanListSpec, statKey, rowStat, plusText, rowPaid, itemReach, gmDerivedNames, labelGmNames, gmEffectNames, labelNames, withRound, rangeCtx, withRange, rowLvl, rowOn, cleanItemKey, charForView, secretFieldIds, gmViewFields } from './systemcore.js';
 import { fileBase, charToJson, charFromJson, sheetToMarkdown, isCharFile } from './sheetexport.js';
 import { lvlsFromBox, lvlsToText } from './librarycore.js';
 import { cleanCalendar, fmtWhen, fmtDate, timeOf, calPreset, CAL_LIMITS } from './calendarcore.js';
@@ -4861,9 +4861,35 @@ function refreshErrors() {
         var ev = r && typeof r === 'object' && r.every && typeof r.every === 'object' && !Array.isArray(r.every) ? r.every : null, msg = ''; if (!ev) return;
         if (!(typeof ev.n === 'number' && isFinite(ev.n) && Math.floor(ev.n) === ev.n && ev.n >= 1 && ev.n <= 1000)) msg = 'By the clock: every 1 to 1000 (a whole number), or Save drops it.';
         else if (typeof ev.u !== 'string' || !ev.u) msg = 'By the clock: pick what it counts in, or Save drops it.';
+        else if (typeof cleanEvery === 'function' && !cleanEvery(ev)) msg = 'By the clock: ' + ev.u + (ev.u.toLowerCase() === 'round' ? ' is In a fight\u2019s unit, so Save drops it.' : ' is no unit it can count in, so Save drops it.');   // backlog 152: as the cleaner reads it since fold 1, a round being In a fight's alone
         else if (['min', 'hour', 'day', 'week'].indexOf(ev.u) < 0 && evUnits[ev.u.toLowerCase()] !== 1) msg = 'By the clock: ' + ev.u + ' is no time unit of yours (the Combat card\u2019s Turns box), so it runs by nothing and players never see it.';
         if (msg) (errorsById[r.id] = Array.isArray(errorsById[r.id]) ? errorsById[r.id] : []).push({ message: msg });
     });
+    // backlog 152, fold 5: what Save drops of a rule's Waits in a fight, In a fight and Ask me first, read by the cleaner itself (systemcore
+    // cleanEvery and cleanInFight, and Ask me first kept only beside one of the two), and two warnings that drop nothing: an apply action that
+    // also runs each round or at its turn's start and In a fight runs both ways in a fight, and a rule's runs by the clock read CombatRound as 0
+    // (not said of a rule whose clock waits in a fight while it also runs In a fight: its runs by the clock fall outside fights alone, where
+    // CombatRound is 0 anyway, and its runs In a fight read the round)
+    if (typeof cleanEvery === 'function' && typeof cleanInFight === 'function') {
+        var fcF = F() && typeof F().names === 'function' ? F() : null, fcOwn = (draft.fields || []).some(function(f) { return f && typeof f.key === 'string' && f.key.toLowerCase() === 'combatround'; });   // a field of your own named CombatRound keeps the name
+        var fcReads = function(t) { if (!fcF || fcOwn || typeof t !== 'string' || !t) return false; var ns = []; try { ns = fcF.names(t) || []; } catch (e) { ns = []; } return ns.some(function(nm) { return String(nm).toLowerCase().split('.')[0] === 'combatround'; }); };
+        (Array.isArray(draft.rolls) ? draft.rolls : []).forEach(function(r) {
+            if (!r || typeof r !== 'object' || typeof r.id !== 'string') return;
+            var say = function(bag, m) { (bag[r.id] = Array.isArray(bag[r.id]) ? bag[r.id] : []).push({ message: m }); };
+            var ev = r.every, evK = cleanEvery(ev), fi = r.inFight, fiK = cleanInFight(fi), fiO = fi && typeof fi === 'object' && !Array.isArray(fi) ? fi : {};
+            if (ev && typeof ev === 'object' && ev.wait === true && !evK) say(errorsById, 'Waits in a fight: Save drops the tick with its By the clock.');
+            if (fi !== undefined && fi !== null && !fiK) {
+                if (!(typeof fiO.n === 'number' && isFinite(fiO.n) && Math.floor(fiO.n) === fiO.n && fiO.n >= 1 && fiO.n <= 1000)) say(errorsById, 'In a fight: every 1 to 1000, a whole number, or Save drops it.');
+                else if (typeof fiO.u !== 'string' || !fiO.u) say(errorsById, 'In a fight: pick what it counts in, or Save drops it.');
+                else say(errorsById, 'In a fight: ' + fiO.u + ' is no unit it can count in, so Save drops it.');
+            } else if (fiK && ['round', 'min', 'hour'].indexOf(fiK.u) < 0 && evUnits[fiK.u.toLowerCase()] !== 1) say(errorsById, 'In a fight: ' + fiK.u + ' is no time unit of yours in the Combat card\u2019s Turns box, so it runs by nothing and players never see it.');
+            if (r.ask === true && !evK && !fiK) say(errorsById, 'Ask me first: set By the clock or In a fight, or Save drops the tick.');
+            var eaW = Array.isArray(r.apply) ? (r.each === 'round' || r.each === 'turn' ? r.each : r.round === true ? 'round' : '') : '';
+            if (eaW && fiK) say(warningsById, 'In a fight: it also runs ' + (eaW === 'turn' ? 'at its turn\u2019s start' : 'each round') + ', so in a fight it runs both ways.');
+            var fcTexts = [r.needs, r.malf].concat(Array.isArray(r.apply) ? [] : [r.formula]).concat([r.apply, r.then].reduce(function(a, l) { return a.concat(Array.isArray(l) ? l.map(function(ch) { return ch && typeof ch === 'object' ? ch.formula : ''; }) : []); }, []));
+            if (evK && !(evK.wait === true && fiK) && fcTexts.some(fcReads)) say(warningsById, evK.wait === true ? 'By the clock: CombatRound reads 0 when it runs by the clock. Only runs In a fight read the round.' : 'By the clock: CombatRound reads 0 when it runs by the clock, even in a fight. Only its runs In a fight read the round.');
+        });
+    }
     // senses S2a: what Save drops or leaves out of the senses, under the Combat card's Senses box — read as the cleaner reads (systemcore
     // cleanSenses): a name left once control characters go, a range field of a number, formula, skill or pool its owner can read, a finite number
     var snO = draft.combat && draft.combat.senses && typeof draft.combat.senses === 'object' ? draft.combat.senses : null, snE = snO && Array.isArray(snO.list) ? snO.list : null, sErr = [], sKept = 0;
@@ -5150,10 +5176,12 @@ function rollRow(r) {
     top.appendChild(btnRow([['up', 'Move up', '&#9650;'], ['down', 'Move down', '&#9660;'], ['del', 'Delete this roll', '&times;']]));
     row.appendChild(top);
     var ndR = el('div', 'sys-flags sys-roll-needsrow');   // 1.5.4: what it needs before it may be used, as a list roll's
-    var ndI = input('sys-roll-needs field', typeof r.needs === 'string' ? r.needs : '', (isApply ? 'Pressed' : 'Rolled') + ' only while this formula is true for the character, such as Bleeding > 0. It may not hold dice. Leave it empty to ' + (isApply ? 'press' : 'roll') + ' at any time. By the clock' + (isApply ? ' and in a fight' : '') + ' it is passed over while it is not met.', 'Needs, such as Bleeding > 0'); ndI.maxLength = LIMITS.formula; ndR.appendChild(ndI);
+    var ndI = input('sys-roll-needs field', typeof r.needs === 'string' ? r.needs : '', (isApply ? 'Pressed' : 'Rolled') + ' only while this formula is true for the character, such as Bleeding > 0. It may not hold dice. Leave it empty to ' + (isApply ? 'press' : 'roll') + ' at any time. By the clock and in a fight it is passed over while it is not met.', 'Needs, such as Bleeding > 0'); ndI.maxLength = LIMITS.formula; ndR.appendChild(ndI);
     var ndT = input('sys-roll-needstext field', typeof r.needsText === 'string' ? r.needsText : '', 'What the greyed button says when it cannot be used', 'Not while stunned'); ndT.maxLength = LIMITS.label; ndR.appendChild(ndT);
     row.appendChild(ndR);
     row.appendChild(everyRow(r));   // item 20 K5: by the campaign's clock
+    row.appendChild(fightRow(r));   // backlog 152, fold 5: in a fight
+    row.appendChild(askRow(r));   // and whether its runs wait for your word
     row.appendChild(applyEditor(r, isApply ? 'apply' : 'then'));   // R1: a roll's consequences under it
     var err = errorCell(r.id); err.dataset.errFor = r.id; row.appendChild(err);
     return row;
@@ -6275,7 +6303,11 @@ function sensesClick(b) {
 // [sinkcheck:everyrow-start]
 // Item 20 K5 (the owner's answers of 2026-09-30): a roll or an apply action may also run by the campaign's clock (the Calendar) — every n minutes,
 // hours, days, weeks or the system's own time units (the Combat card's Turns box), during rest only or any time; the GM moves the clock as Rest
-// or Active and says which characters' rules run. Its boxes land as values; Save cleans them (systemcore cleanEvery)
+// or Active and says which characters' rules run. Its boxes land as values; Save cleans them (systemcore cleanEvery).
+// Backlog 152, fold 5 (docs/FIGHT_CLOCK_DESIGN.md 13, the builder's pieces): By the clock's Waits in a fight tick, the In a fight row (every n
+// rounds, minutes, hours or the system's own time units, and Each fight starts again) and Ask me first, so that any system can make the time
+// rules the fight clock runs. Values and text nodes only; Save cleans them (systemcore cleanEvery, cleanInFight, and Ask me first only beside
+// one of the two, in the GM's view alone)
 function everyRow(r) {
     var ev = r.every && typeof r.every === 'object' && !Array.isArray(r.every) ? r.every : null, row = el('div', 'sys-flags sys-roll-everyrow');
     row.appendChild(el('span', 'sys-num-cap', 'By the clock'));
@@ -6285,12 +6317,34 @@ function everyRow(r) {
     var cur = ev && typeof ev.u === 'string' && ev.u ? ev.u : 'day'; if (!opts.some(function(o) { return o[0] === cur; })) opts.push([cur, cur + ' (no such unit)']);
     row.appendChild(select('sys-roll-evu', opts, cur, 'What it counts in: the calendar\u2019s minutes, hours, days and weeks, or one of your time units (the Combat card\u2019s Turns box)'));
     var rl = el('label', 'sys-hover'), rc = el('input', 'sys-roll-evrest'); rc.type = 'checkbox'; rc.checked = !!(ev && ev.rest === true); rc.title = 'It counts rest only: time the GM moves on as Rest; activity starts its count again'; rl.appendChild(rc); rl.appendChild(document.createTextNode(' During rest only')); row.appendChild(rl);
+    var wl = el('label', 'sys-hover'), wc = el('input', 'sys-roll-evwait'); wc.type = 'checkbox'; wc.checked = !!(ev && ev.wait === true); wc.title = 'Its count waits while its character is in a fight, and goes on after it. A fight still breaks a rest.'; wl.appendChild(wc); wl.appendChild(document.createTextNode(' Waits in a fight')); row.appendChild(wl);
     return row;
 }
-function everyEdit(r, c, t) {   // the three boxes' edits; a unit or the rest tick before any number keeps the shown unit
+function fightRow(r) {   // In a fight: every n rounds, minutes, hours or the system's own time units of a fight's own time, and whether each fight starts its count again
+    var fi = r.inFight && typeof r.inFight === 'object' && !Array.isArray(r.inFight) ? r.inFight : null, row = el('div', 'sys-flags sys-roll-fightrow');
+    row.appendChild(el('span', 'sys-num-cap', 'In a fight'));
+    var n = el('input', 'field sys-roll-ifn'); n.type = 'number'; n.min = '1'; n.max = '1000'; n.step = '1'; n.placeholder = 'Every'; n.value = fi && typeof fi.n === 'number' && isFinite(fi.n) ? String(fi.n) : ''; n.title = 'It runs every so many of the unit beside while its character is in a fight, by the fight\u2019s own time. Leave it empty and it never runs in a fight.'; row.appendChild(n);
+    var tn = draft && draft.combat && draft.combat.turn, tus = tn && typeof tn === 'object' && Array.isArray(tn.units) ? tn.units.filter(function(u) { return u && typeof u.key === 'string' && u.key; }) : [];
+    var opts = [['round', 'rounds'], ['min', 'minutes'], ['hour', 'hours']].concat(tus.map(function(u) { return [u.key, typeof u.label === 'string' && u.label ? u.label : u.key]; }));
+    var cur = fi && typeof fi.u === 'string' && fi.u ? fi.u : 'round'; if (!opts.some(function(o) { return o[0] === cur; })) opts.push([cur, cur + ' (no such unit)']);
+    row.appendChild(select('sys-roll-ifu', opts, cur, 'What it counts in: a fight\u2019s rounds, minutes or hours, or one of your time units from the Combat card\u2019s Turns box. A round lasts as long as the Turns box says.'));
+    var fl = el('label', 'sys-hover'), fc = el('input', 'sys-roll-iffresh'); fc.type = 'checkbox'; fc.checked = !!(fi && fi.fresh === true); fc.title = 'Its count begins again with each fight. Left unticked, its count goes on from one fight to the next.'; fl.appendChild(fc); fl.appendChild(document.createTextNode(' Each fight starts again')); row.appendChild(fl);
+    return row;
+}
+function askRow(r) {   // Ask me first: its runs wait for the GM's word
+    var row = el('div', 'sys-flags sys-roll-askrow'), al = el('label', 'sys-hover'), ac = el('input', 'sys-roll-evask'); ac.type = 'checkbox'; ac.checked = r.ask === true; ac.title = 'Its runs wait for your word, even when Time rules run at once. With the Calendar on they wait in the Calendar window\u2019s list. With it off they wait in the bell in the top row.'; al.appendChild(ac); al.appendChild(document.createTextNode(' Ask me first')); row.appendChild(al);
+    return row;
+}
+function everyBare(r, k, u) { var o = r[k]; if (o && typeof o === 'object' && !Array.isArray(o) && o.u === u && Object.keys(o).length === 1) delete r[k]; }   // a tick taken off a rule that holds nothing but the shown unit takes the rule away, so no line stays under it
+function everyEdit(r, c, t) {   // the By the clock, In a fight and Ask me first boxes' edits; a unit or a tick before any number keeps the shown unit
     if (c.indexOf('sys-roll-evn') >= 0) { var v = Number(t.value); r.every = Object.assign({ u: 'day' }, r.every && typeof r.every === 'object' && !Array.isArray(r.every) ? r.every : {}); if (String(t.value).trim() && isFinite(v)) r.every.n = v; else delete r.every; return true; }
     if (c.indexOf('sys-roll-evu') >= 0) { r.every = Object.assign({}, r.every && typeof r.every === 'object' && !Array.isArray(r.every) ? r.every : {}); r.every.u = String(t.value).slice(0, 24); return true; }
-    if (c.indexOf('sys-roll-evrest') >= 0) { r.every = Object.assign({ u: 'day' }, r.every && typeof r.every === 'object' && !Array.isArray(r.every) ? r.every : {}); if (t.checked === true) r.every.rest = true; else delete r.every.rest; return true; }
+    if (c.indexOf('sys-roll-evrest') >= 0) { r.every = Object.assign({ u: 'day' }, r.every && typeof r.every === 'object' && !Array.isArray(r.every) ? r.every : {}); if (t.checked === true) r.every.rest = true; else { delete r.every.rest; everyBare(r, 'every', 'day'); } return true; }
+    if (c.indexOf('sys-roll-evwait') >= 0) { r.every = Object.assign({ u: 'day' }, r.every && typeof r.every === 'object' && !Array.isArray(r.every) ? r.every : {}); if (t.checked === true) r.every.wait = true; else { delete r.every.wait; everyBare(r, 'every', 'day'); } return true; }   // backlog 152, fold 5
+    if (c.indexOf('sys-roll-ifn') >= 0) { var vf = Number(t.value); r.inFight = Object.assign({ u: 'round' }, r.inFight && typeof r.inFight === 'object' && !Array.isArray(r.inFight) ? r.inFight : {}); if (String(t.value).trim() && isFinite(vf)) r.inFight.n = vf; else delete r.inFight; return true; }
+    if (c.indexOf('sys-roll-ifu') >= 0) { r.inFight = Object.assign({}, r.inFight && typeof r.inFight === 'object' && !Array.isArray(r.inFight) ? r.inFight : {}); r.inFight.u = String(t.value).slice(0, 24); return true; }
+    if (c.indexOf('sys-roll-iffresh') >= 0) { r.inFight = Object.assign({ u: 'round' }, r.inFight && typeof r.inFight === 'object' && !Array.isArray(r.inFight) ? r.inFight : {}); if (t.checked === true) r.inFight.fresh = true; else { delete r.inFight.fresh; everyBare(r, 'inFight', 'round'); } return true; }
+    if (c.indexOf('sys-roll-evask') >= 0) { if (t.checked === true) r.ask = true; else delete r.ask; return true; }
     return false;
 }
 // [sinkcheck:everyrow-end]
@@ -6538,7 +6592,7 @@ function onInput(e) {
         else if (c.indexOf('sys-roll-malf') >= 0) { if (t.value.trim()) r.malf = t.value.slice(0, LIMITS.formula); else delete r.malf; }   // Stage 6 HUD R3
         else if (c.indexOf('sys-roll-needstext') >= 0) { if (t.value.trim()) r.needsText = t.value.slice(0, LIMITS.label); else delete r.needsText; }   // 1.5.4: what it needs (Save cleans it)
         else if (c.indexOf('sys-roll-needs') >= 0) { if (t.value.trim()) r.needs = t.value.slice(0, LIMITS.formula); else delete r.needs; }
-        else if (c.indexOf('sys-roll-evn') >= 0) everyEdit(r, c, t);   // item 20 K5
+        else if (c.indexOf('sys-roll-evn') >= 0 || c.indexOf('sys-roll-ifn') >= 0) everyEdit(r, c, t);   // item 20 K5; backlog 152, fold 5: In a fight's number
         else return;
     } else return;
     markDirty(); patchErrors();
@@ -6662,7 +6716,7 @@ function onChange(e) {
         else if (c.indexOf('sys-roll-cost') >= 0) { if (t.value) r.cost = t.value; else delete r.cost; }   // turn-based combat T1
         else if (c.indexOf('sys-roll-each') >= 0) { delete r.round; if (t.value === 'round' || t.value === 'turn') r.each = t.value; else { delete r.each; delete r.by; } markDirty(); renderAll(); return; }   // Stage 6 HUD G10 + turn-based combat T2b
         else if (c.indexOf('sys-roll-by') >= 0) { if (t.value === 'gm' || t.value === 'owner') r.by = t.value; else delete r.by; }
-        else if (c.indexOf('sys-roll-evu') >= 0 || c.indexOf('sys-roll-evrest') >= 0) everyEdit(r, c, t);   // item 20 K5
+        else if (c.indexOf('sys-roll-evu') >= 0 || c.indexOf('sys-roll-evrest') >= 0 || c.indexOf('sys-roll-evwait') >= 0 || c.indexOf('sys-roll-ifu') >= 0 || c.indexOf('sys-roll-iffresh') >= 0 || c.indexOf('sys-roll-evask') >= 0) everyEdit(r, c, t);   // item 20 K5; backlog 152, fold 5: Waits in a fight, In a fight's unit and tick, Ask me first
         else if (c.indexOf('sys-dmg-chk') >= 0) { if (t.checked) r.dmg = true; else delete r.dmg; }   // chat cards: a damage roll
         else if (c.indexOf('sys-init-chk') >= 0) { r.init = t.checked; if (t.checked) draft.rolls.forEach(function(o) { if (o !== r) delete o.init; }); markDirty(); renderAll(); return; }
         else return;
