@@ -35,6 +35,18 @@ Calendar
   players' characters and NPCs are listed apart, by the map each
   stands on.
 - With Rest picked, the steps say of rest.
+- Each NPC has a Rules run switch, on until you switch it off.
+  Switched off, its time rules no longer run by themselves, in a fight
+  or out of one, and their runs wait unticked in the Calendar's list.
+  With the Calendar switched off they are let go, but a rule ticked
+  Ask me first still waits in the bell. You find the switch on the
+  NPC's token's right-click menu, on its row's menu under Characters,
+  and beside it in that list.
+- With the Calendar switched off, a time rule ticked Ask me first
+  waits in the bell when it comes due in a fight: one item for each
+  character and rule, with Apply and Skip. Apply runs it in the round
+  it came due, and Skip lets it go. It stays in the bell until you
+  apply or skip it.
 
 Notifications
 - A bell in the top row keeps every notice of the campaign, newest

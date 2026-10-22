@@ -6,7 +6,11 @@
    Every notice the app shows (io.js toast) is kept here as well, newest first, one list a campaign: the same notice again within a few
    seconds is one line with a count. What waits for you (an approval, time rules due) is said by its own module through wait(key, text, kind,
    arg) and stands on top, marked, with its button, for as long as the module's own test for that kind says it still waits (each module puts
-   its kinds in window.wpNoticeKinds: { label, still(arg), run(arg) }), or until it says done(key). The bell's number is what waits. The x
+   its kinds in window.wpNoticeKinds: { label, still(arg), run(arg) }), or until it says done(key). A kind may offer a second answer beside
+   its button, alt(arg) under altLabel, as the time rules that wait in a fight with the Calendar off offer Apply and Skip (backlog 152, fold
+   4b); tip and altTip are the two buttons' tooltips, and stay: true keeps the list up after its button, as the second answer always does,
+   the focus going on to the row after it. A kind whose items wait nowhere else says only: true (the time rules that wait in the bell): its
+   row has no x and Clear all leaves it, so its own answers alone take it off the list. The bell's number is what waits. The x
    takes a notice away; on what waits it takes it off the list only, since the thing itself still waits, in the Review or the Calendar, and it
    comes back if its module says it anew. Clear all asks first.
 
@@ -78,6 +82,8 @@ function add(msg, now) {
     saveSoon(cid); sync(); return l[0];
 }
 function kindOf(k) { var ks = window.wpNoticeKinds; return ks && typeof k === 'string' && Object.prototype.hasOwnProperty.call(ks, k) && ks[k] && typeof ks[k] === 'object' ? ks[k] : null; }
+// A kind whose items wait nowhere but here (only: true, with a button of its own to answer them): no x, and Clear all leaves them on the list
+function onlyHere(kind) { var k = kindOf(kind); return !!k && k.only === true && typeof k.run === 'function'; }
 // What waits for you, said by its module. soft: only where nothing is said under that key yet (a module that says it again at every redraw).
 // Said otherwise, it stands again even where an x took it off the list
 function wait(key, text, kind, arg, soft) {
@@ -113,19 +119,20 @@ function remove(id) {
     l.splice(at, 1); saveSoon(cid); sync(); return true;
 }
 function dismiss(key) {
-    var cid = campId(); if (!_wait[cid] || !_wait[cid][key]) return false;
+    var cid = campId(); if (!_wait[cid] || !_wait[cid][key] || onlyHere(_wait[cid][key].kind)) return false;
     (_gone[cid] || (_gone[cid] = Object.create(null)))[key] = true; sync(); return true;
 }
-// Clear all, after a question: every notice goes, and what waits leaves the list (it still waits where it waits)
+// Clear all, after a question: every notice goes, and what waits leaves the list (it still waits where it waits), but for what waits only here
 function clearAll(yes) {
     var cid = campId(), l = listOf(cid), w = _wait[cid];
     if (yes !== true) {
-        if (!l.length && !waiting().length) return false;
-        showConfirm('Clear all notifications? Anything still waiting for you stays waiting, in the Review and in the Calendar.', function(ok) { if (ok === true) clearAll(true); });
+        var ws = waiting(), here = ws.some(function(x) { return onlyHere(x.kind); });
+        if (!l.length && !ws.some(function(x) { return !onlyHere(x.kind); })) return false;
+        showConfirm('Clear all notifications? Anything still waiting for you stays waiting, in the Review and in the Calendar.' + (here ? ' What waits only here stays on this list until you answer it.' : ''), function(ok) { if (ok === true) clearAll(true); });
         return false;
     }
     l.length = 0; saveSoon(cid);
-    if (w) { var g = _gone[cid] || (_gone[cid] = Object.create(null)); Object.keys(w).forEach(function(key) { g[key] = true; }); }
+    if (w) { var g = _gone[cid] || (_gone[cid] = Object.create(null)); Object.keys(w).forEach(function(key) { if (!onlyHere(w[key].kind)) g[key] = true; }); }
     sync(); return true;
 }
 function pad(n) { return (n < 10 ? '0' : '') + n; }
@@ -146,8 +153,11 @@ function draw() {
         ws.forEach(function(w) {
             var row = mk('div', 'notes-item notes-wait'), txt = mk('span', 'notes-txt', w.t), k = kindOf(w.kind);
             txt.appendChild(mk('span', 'notes-when', whenWords(w.at, now))); row.appendChild(txt);
-            if (k && typeof k.run === 'function') { var go = mkBtn('tool notes-go', typeof k.label === 'string' && k.label ? k.label.slice(0, 20) : 'Open', 'Open what waits'); go.setAttribute('data-note-go', w.key); row.appendChild(go); }
-            var x = mkBtn('tool ghost notes-x', '\u00d7', 'Take this off the list. It still waits where it waits', true); x.setAttribute('data-note-off', w.key); x.setAttribute('aria-label', 'Take off the list'); row.appendChild(x);
+            var last = null;
+            if (k && typeof k.run === 'function') { var go = mkBtn('tool notes-go', typeof k.label === 'string' && k.label ? k.label.slice(0, 20) : 'Open', typeof k.tip === 'string' && k.tip ? k.tip : 'Open what waits', k.stay === true); go.setAttribute('data-note-go', w.key); row.appendChild(go); last = go; }
+            if (k && typeof k.run === 'function' && typeof k.alt === 'function') { var al = mkBtn('tool ghost notes-alt', typeof k.altLabel === 'string' && k.altLabel ? k.altLabel.slice(0, 20) : 'Skip', typeof k.altTip === 'string' && k.altTip ? k.altTip : 'Let it go', true); al.setAttribute('data-note-alt', w.key); row.appendChild(al); last = al; }   // 152 fold 4b: a kind's second answer, the list kept up
+            if (onlyHere(w.kind) && last) last.setAttribute('data-note-stop', '');   // 152 fold 4b's review: it waits nowhere else, so it has no x, and its last answer is where the focus goes on to
+            else { var x = mkBtn('tool ghost notes-x', '\u00d7', 'Take this off the list. It still waits where it waits', true); x.setAttribute('data-note-off', w.key); x.setAttribute('aria-label', 'Take off the list'); x.setAttribute('data-note-stop', ''); row.appendChild(x); }
             box.appendChild(row);
         });
     }
@@ -156,13 +166,13 @@ function draw() {
         l.forEach(function(n) {
             var row = mk('div', 'notes-item'), txt = mk('span', 'notes-txt', n.m + (n.n > 1 ? ' \u00d7' + n.n : ''));
             txt.appendChild(mk('span', 'notes-when', whenWords(n.at, now))); row.appendChild(txt);
-            var x = mkBtn('tool ghost notes-x', '\u00d7', 'Delete this notice', true); x.setAttribute('data-note-x', n.i); x.setAttribute('aria-label', 'Delete'); row.appendChild(x);
+            var x = mkBtn('tool ghost notes-x', '\u00d7', 'Delete this notice', true); x.setAttribute('data-note-x', n.i); x.setAttribute('aria-label', 'Delete'); x.setAttribute('data-note-stop', ''); row.appendChild(x);
             box.appendChild(row);
         });
     }
     if (!ws.length && !l.length) box.appendChild(mk('div', 'notes-none', 'Nothing yet.'));
     place();
-    var cl = document.getElementById('notesClear'); if (cl) cl.disabled = !ws.length && !l.length;
+    var cl = document.getElementById('notesClear'); if (cl) cl.disabled = !l.length && !ws.some(function(w) { return !onlyHere(w.kind); });   // nothing it could clear: what waits only here stays
     return true;
 }
 // The list stands under the bell and inside the window: its right edge at the bell's, else as near as the window lets it. The wrap is where it
@@ -181,15 +191,27 @@ function sync() {
     var m = document.getElementById('notesMenu'); if (m && m.hidden !== true) draw();
     return n;
 }
-// A press in the list: what waits opens, an x takes one off and the focus goes on to the row after it, Clear all asks
+// A press in the list: what waits opens (or, where its kind offers one, takes its second answer), an x takes one off and the focus goes on to the
+// row after it, as it does after a button that keeps the list up; Clear all asks
 function onPress(e) {
-    var t = e.target, at = function(s) { return t && t.closest ? t.closest(s) : null; }, go = at('[data-note-go]'), off = at('[data-note-off]'), x = at('[data-note-x]');
+    var t = e.target, at = function(s) { return t && t.closest ? t.closest(s) : null; }, go = at('[data-note-go]'), alt = at('[data-note-alt]'), off = at('[data-note-off]'), x = at('[data-note-x]');
     if (at('#notesClear')) { clearAll(); return; }
-    if (go) { var key = go.getAttribute('data-note-go'), it = (waiting().filter(function(w) { return w.key === key; })[0]) || null, k = it ? kindOf(it.kind) : null; if (k && typeof k.run === 'function') { try { k.run(it.arg); } catch (er) {} } return; }
+    if (go || alt) {
+        var btn = go || alt, key = btn.getAttribute(go ? 'data-note-go' : 'data-note-alt'), it = (waiting().filter(function(w) { return w.key === key; })[0]) || null, k = it ? kindOf(it.kind) : null, fn = k ? (go ? k.run : k.alt) : null;
+        var kept = btn.getAttribute('data-keep') != null, at0 = kept ? stops().indexOf(rowStop(btn)) : -1;
+        if (typeof fn === 'function') { try { fn(it.arg); } catch (er) {} }
+        if (kept) focusAt(at0);
+        return;
+    }
     if (!off && !x) return;
-    var rows = Array.prototype.slice.call(document.querySelectorAll('#notesList .notes-x')), pos = rows.indexOf(off || x);
+    var pos = stops().indexOf(off || x);
     if (off) dismiss(off.getAttribute('data-note-off')); else remove(x.getAttribute('data-note-x'));
-    var after = Array.prototype.slice.call(document.querySelectorAll('#notesList .notes-x')), to = after[Math.min(pos, after.length - 1)] || document.getElementById('notesClear');
+    focusAt(pos);
+}
+function stops() { return Array.prototype.slice.call(document.querySelectorAll('#notesList [data-note-stop]')); }   // each row's last stop: its x, or, for what waits only here, its last answer
+function rowStop(btn) { var r = btn.parentNode, ks = r && r.children ? Array.prototype.slice.call(r.children) : []; return ks.filter(function(c) { return !!c && typeof c.getAttribute === 'function' && c.getAttribute('data-note-stop') != null; })[0] || null; }   // the stop of a button's own row
+function focusAt(pos) {   // the stop at that place in the list as it is now, else the last, else Clear all, else the bell
+    var after = stops(), to = (pos >= 0 ? after[Math.min(pos, after.length - 1)] : null) || document.getElementById('notesClear');
     if (to && typeof to.focus === 'function' && !to.disabled) to.focus(); else { var b = document.getElementById('notesBtn'); if (b) b.focus(); }
 }
 // [lookcheck:notices-end]

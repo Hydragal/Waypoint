@@ -83,11 +83,14 @@ function charWaiting(items, charId) {
 }
 // What Find on the map says when it found no token to go to. A player's app holds only the map it is on
 function charNoToken(name, waiting, client) { return name + (waiting ? ' has a token that waits to be placed.' : client ? ' has no token on this map.' : ' has no token on a map.'); }
-// The rows of a character's menu, as the owner picked them: Sheet, HUD where the sheet has one, Find on the map, Delete sheet
-function charMenuRows(hud, del) {
+// The rows of a character's menu, as the owner picked them: Sheet, HUD where the sheet has one, Find on the map, Delete sheet. Backlog 152 fold 4b (the
+// owner's answer 1, 2026-10-19: a Rules run switch on each NPC, "placed somewhere easy to use quickly"): after Find on the map, an NPC's Rules run as a
+// tick row where it has the switch. rules: which way it stands, true or false (calendar.js rulesRun); anything else, no row
+function charMenuRows(hud, del, rules) {
     var rows = [{ act: 'sheet', text: 'Sheet\u2026' }];
     if (hud) rows.push({ act: 'hud', text: 'HUD\u2026' });
     rows.push({ rule: true }, { act: 'find', text: 'Find on the map' });
+    if (rules === true || rules === false) rows.push({ act: 'rules', text: 'Rules run', tick: rules });
     if (del) rows.push({ rule: true }, { act: 'delete', text: 'Delete sheet\u2026', red: true });
     return rows;
 }
@@ -150,15 +153,17 @@ function menuFor(id, x, y) {
             else if (act === 'hud') { if (!away() && S2.hudFor(cid)) S2.openHud(cid); }
             else if (act === 'find') findOf(cid);
             else if (act === 'delete') { if (S2.askDeleteSheet) S2.askDeleteSheet(cid); }
+            else if (act === 'rules') { var C2 = window.wpCalendar, now = !foreign() && C2 && typeof C2.rulesRun === 'function' ? C2.rulesRun(cid) : null; if (typeof now === 'boolean' && typeof C2.setRulesRun === 'function') C2.setRulesRun(cid, !now); }   // 152 fold 4b: the switch the other way, as it stands at the press
         });
     }
     while (_menu.firstChild) _menu.removeChild(_menu.firstChild);
     _menu.dataset.char = id;
     // Delete only where the sheet module will take it: a player's own whole sheet while their link is up, the GM's where the campaign can be written
     var client = foreign(), del = client ? !!(linkUp() && c.ownerId && c.ownerId === window.wpNet.myId && !c.partial) : !!(window.wpCanPersistLocal && window.wpCanPersistLocal());
-    charMenuRows(!!(S.hudFor && S.hudFor(id)), del).forEach(function(r) {
+    var Cal = window.wpCalendar, rules = !client && Cal && typeof Cal.rulesRun === 'function' ? Cal.rulesRun(id) : null;   // 152 fold 4b: the GM's alone, and only where calendar.js says the character has the switch
+    charMenuRows(!!(S.hudFor && S.hudFor(id)), del, rules).forEach(function(r) {
         var d = document.createElement(r.rule ? 'div' : 'button');
-        if (r.rule) d.className = 'menu-divider'; else { d.type = 'button'; if (r.red) d.className = 'danger'; d.dataset.act = r.act; d.setAttribute('role', 'menuitem'); d.appendChild(document.createTextNode(r.text)); }
+        if (r.rule) d.className = 'menu-divider'; else { d.type = 'button'; if (r.red) d.className = 'danger'; d.dataset.act = r.act; d.setAttribute('role', r.tick === true || r.tick === false ? 'menuitemcheckbox' : 'menuitem'); if (r.tick === true || r.tick === false) { d.setAttribute('aria-checked', r.tick ? 'true' : 'false'); d.title = 'Ticked, this NPC\u2019s time rules run by themselves as time passes. Unticked, they do not'; } d.appendChild(document.createTextNode((r.tick === true ? '\u2713 ' : '') + r.text)); }
         _menu.appendChild(d);
     });
     _menu.style.display = 'flex';

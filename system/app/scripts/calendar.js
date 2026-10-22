@@ -160,8 +160,9 @@ function ownTime(groups) {   // the one counter: each group's spans, once, to th
 // NPC's summary to the GM alone), but an NPC whose rules the GM switched off (camp.clock.rulesOff, the Rules run switch) has its fires listed,
 // unticked, in a fight or out of one. The rules asked for are counted into the list, or, while one waits, queued behind it and counted once it is
 // answered: the list keeps only their counts, never taking back a count the others made since (keepAsked). With the Calendar off In a fight alone
-// counts, in a fight, and nothing waits: there is no window to answer it in. A rule ticked Ask me first then is counted and never run, as an NPC's
-// whose rules are off: it waits for the GM's word, in a fight too (the owner's answer), and nothing can give that word. only: a stretch that waited, counted now for the rules it asked for alone
+// counts, in a fight, and no list waits: there is no window to answer it in. An NPC's whose rules are off is then counted and never run, and a rule
+// ticked Ask me first is counted and its runs wait in the bell for the GM's word (fold 4b, bellUp; the owner's answer of 2026-10-20: "In the bell").
+// only: a stretch that waited, counted now for the rules it asked for alone
 function groupRules(camp, sys, g, spans, only) {
     var mode = timeMode(camp), fight = g.kind === 'fight', cal = clockOn(); if (!sys || mode === 'off' || tablePaused() || (!fight && !cal)) return false;
     var rules = clockRules(sys); if (!cal) rules = rules.filter(function(r) { return !!r.inFight; }).map(function(r) { var m = { id: r.id, label: r.label, inFight: r.inFight }; if (r.ask === true) m.ask = true; return m; });   // By the clock needs the Calendar, as it always has
@@ -175,7 +176,7 @@ function groupRules(camp, sys, g, spans, only) {
         rn.fires.forEach(function(f) { rd(f); if (!off(f.c)) go.push(f); else if (cal) list.push(f); });
         if (go.length && window.wpSheets && window.wpSheets.runTimeRules) window.wpSheets.runTimeRules(go, groupWords(g), fight && typeof g.round === 'number' ? { round: g.round } : undefined);
     }
-    if (later.length && !cal) { var rx = firesOf(camp, sys, later, g, spans); commitAcc(rx.acc, g.live === true); heldFollow(later, rx.acc); }   // the Calendar off: counted, its fires never run
+    if (later.length && !cal) { var rx = firesOf(camp, sys, later, g, spans); commitAcc(rx.acc, g.live === true); heldFollow(later, rx.acc); if (rx.fires.length) bellUp(camp, sys, rx.fires.map(rd), groupWords(g)); }   // the Calendar off: counted, and its runs wait in the bell for the GM's word (fold 4b)
     else if (later.length && pend) queueStretch(camp, g, spans, later, rules);   // 159: a list waits for the GM's word, and this time is judged once it is answered
     else if (later.length) {
         var rl = firesOf(camp, sys, later, g, spans);
@@ -207,9 +208,9 @@ function heldFollow(rules, acc) {
     pend.ids.forEach(function(c) { ks.forEach(function(k) { var v = hasOwn(acc, c) && hasOwn(acc[c], k) ? acc[c][k] : undefined; if (v === undefined) { if (hasOwn(pend.acc, c)) delete pend.acc[c][k]; } else { if (!hasOwn(pend.acc, c)) pend.acc[c] = {}; pend.acc[c][k] = v; } }); });
 }
 function keysOf(rules) { var ks = []; rules.forEach(function(r) { ks.push(r.id, 'x_' + r.id.slice(2)); }); return ks; }   // a rule's two counts: By the clock (its id) and In a fight (x_ and its tail)
-function offOf(camp) {   // the GM's Rules run switch, off (camp.clock.rulesOff): an NPC's alone, a player's character is never held by it
+function offOf(camp) {   // the GM's Rules run switch, off (camp.clock.rulesOff): an NPC's alone, by the sheet's own NPC tick as rulesRun reads it, so a player's character, or one with no player yet, is never held by it
     var ck = clockOf(camp), set = Object.create(null); (ck && Array.isArray(ck.rulesOff) ? ck.rulesOff : []).forEach(function(id) { set[id] = 1; });
-    return function(c) { return set[c] === 1 && !isPc(hasOwn(camp.chars, c) ? camp.chars[c] : null); };
+    return function(c) { var ch = hasOwn(camp.chars, c) ? camp.chars[c] : null; return set[c] === 1 && !!ch && typeof ch === 'object' && ch.npc === true; };
 }
 function groupWords(g) { return typeof g.words === 'string' && g.words ? g.words : spanWords(sysCal(), g.secs, g.rest, g.live); }
 var PEND_FIRES = 2000;
@@ -253,8 +254,94 @@ function keepAsked(camp, p) {   // a list answered: the counts of the rules it a
     if (!p.acc || !Array.isArray(p.keys) || !p.keys.length) return;
     var ck = clockOf(camp) || { t: 0 }; commitAcc(layAsked(JSON.parse(JSON.stringify(ck.acc || {})), p));
 }
-// 160: time rules due, as the bell's list knows them (notices.js): they wait while a list waits for the campaign on screen; Open opens the Calendar
-if (typeof window !== 'undefined') { var nkT = window.wpNoticeKinds = window.wpNoticeKinds || {}; nkT.time = { label: 'Open', still: function() { pendFor(getActiveCampaign()); return !!pend; }, run: function() { openWin(); } }; }
+// 160: time rules due, as the bell's list knows them (notices.js): they wait while a list waits for the campaign on screen; Open opens the Calendar.
+// 152 fold 4b's review: a list made while the Calendar was on still waits, whole, once it is switched off, but no window opens then: Open says how to
+// reach it, where it did nothing at all
+var TIME_OFF = 'These time rules wait in the Calendar, which is switched off. Switch it on in Settings \u25b8 VTT features to apply or skip them.';
+if (typeof window !== 'undefined') { var nkT = window.wpNoticeKinds = window.wpNoticeKinds || {}; nkT.time = { label: 'Open', still: function() { pendFor(getActiveCampaign()); return !!pend; }, run: function() { if (!clockOn()) { toast(TIME_OFF); return; } openWin(); } }; }
+// 152 fold 4b (the owner's answer of 2026-10-20, by prompt: "In the bell (Recommended)"): with the Calendar off no window can give the GM's word, so a run
+// of a rule ticked Ask me first that comes due in a fight waits in the bell (notices.js) under Waiting for you, one item a character and rule with its
+// count. Apply (the kind's run) runs what waits through sheets.js runTimeRules, each run in the round it came due, as the list's Apply does; Skip (its
+// second answer, alt) lets it go. Its counts were kept as they were counted, as a list's are once it is answered, so neither moves a count. What waits is
+// this machine's memory, kept for the campaign it was counted in (bellQ, by the campaign's id) and never stored, as the bell's rule says; a character or a
+// rule that is gone takes its item with it. With the Calendar on nothing of this is asked: the list holds the run, and the bell's time kind says what is due.
+// It waits nowhere but the bell, so its kind says only (notices.js): its row has no x and Clear all leaves it, and Apply and Skip alone take it off the list
+var bellQ = Object.create(null), BELL_CAMPS = 40, BELL_ITEMS = 200, BELL_RUNS = 60;
+function bellOf(id, make) {
+    if (typeof id !== 'string' || !id) return null;
+    if (!bellQ[id] && make === true) { bellQ[id] = Object.create(null); var ks = Object.keys(bellQ); if (ks.length > BELL_CAMPS) delete bellQ[ks[0]]; }
+    return bellQ[id] || null;
+}
+function bellItem(camp, key) { var b = camp ? bellOf(camp.id) : null; return b && typeof key === 'string' && hasOwn(b, key) ? b[key] : null; }
+function bellWords(camp, sys, it) {   // "Kael: Brace waits for your word. 2 runs, the first due in Round 2 on Docks." (notices.js cuts it to one line)
+    var ch = hasOwn(camp.chars, it.c) ? camp.chars[it.c] : null, rl = clockRules(sys).filter(function(r) { return r.id === it.r; })[0], n = 0, w = it.runs.length ? it.runs[0].w : '';
+    it.runs.forEach(function(x) { n += x.n; });
+    return (ch && typeof ch.name === 'string' && ch.name ? ch.name : 'A character') + ': ' + (rl && typeof rl.label === 'string' && rl.label ? rl.label : 'A rule') + ' waits for your word. '
+        + (n === 1 ? '1 run' + (w ? ', due in ' + w : '') : n + ' runs' + (w ? ', the first due in ' + w : '')) + '.';
+}
+function bellUp(camp, sys, fires, w) {   // fires { c, r, n, x?, rd? } that came due in one stretch, its words w: each joins its character and rule's item. true where the bell holds them
+    var N = typeof window !== 'undefined' ? window.wpNotices : null; if (!camp || isPlayer() || !N || typeof N.wait !== 'function' || !Array.isArray(fires) || !fires.length) return false;
+    var b = bellOf(camp.id, true), said = [], fresh = false, ww = typeof w === 'string' ? w : '';
+    fires.forEach(function(f) {
+        if (!f || typeof f.c !== 'string' || typeof f.r !== 'string' || !(typeof f.n === 'number' && f.n > 0)) return;
+        var key = 'timeask:' + f.c + ':' + f.r, it = hasOwn(b, key) ? b[key] : null, rdN = typeof f.rd === 'number' && isFinite(f.rd) ? f.rd : null, xN = f.x === 1 ? 1 : 0;
+        if (!it) { if (Object.keys(b).length >= BELL_ITEMS) return; it = b[key] = { c: f.c, r: f.r, runs: [] }; fresh = true; }
+        var same = it.runs.filter(function(q) { return q.rd === rdN && q.w === ww && q.x === xN; })[0];
+        if (same) same.n = Math.min(500, same.n + f.n); else if (it.runs.length < BELL_RUNS) it.runs.push({ n: Math.min(500, f.n), rd: rdN, w: ww, x: xN }); else { var last = it.runs[it.runs.length - 1]; last.n = Math.min(500, last.n + f.n); }
+        if (said.indexOf(key) < 0) said.push(key);
+    });
+    said.forEach(function(key) { N.wait(key, bellWords(camp, sys, b[key]), 'timeask', key); });   // said anew each time a run comes due, so an item the x took off the list comes back with it
+    if (fresh) toast('Time rules wait for your word. Apply or skip them in the bell in the top row.');
+    return said.length > 0;
+}
+function bellStill(key) {   // the bell asks whether an item still waits: one whose character or rule is gone goes with it
+    var camp = getActiveCampaign(), it = bellItem(camp, key); if (!it) return false;
+    var sys = sysNow(); if (!sys) return true;   // no system read yet: nothing is judged gone
+    if (hasOwn(camp.chars, it.c) && camp.chars[it.c] && clockRules(sys).some(function(r) { return r.id === it.r; })) return true;
+    delete bellOf(camp.id)[key]; return false;
+}
+function bellDone(key, apply) {   // Apply (true) or Skip: the item goes, and Apply runs what waited, each run in the round it came due. true where there was one
+    var camp = getActiveCampaign(); if (!camp || isPlayer()) return false;
+    var it = bellItem(camp, key); if (it) delete bellOf(camp.id)[key];
+    if (typeof window !== 'undefined' && window.wpNotices && typeof window.wpNotices.done === 'function') window.wpNotices.done(key);
+    if (!it) return false;
+    if (apply === true && window.wpSheets && window.wpSheets.runTimeRules) {
+        var w0 = it.runs.length ? it.runs[0].w : '', one = it.runs.every(function(q) { return q.w === w0; });
+        window.wpSheets.runTimeRules(it.runs.map(function(q) { var f = { c: it.c, r: it.r, n: q.n }; if (q.x === 1) f.x = 1; if (q.rd !== null) f.rd = q.rd; return f; }), w0 ? (one ? w0 : 'Since ' + w0) : '');
+    }
+    return true;
+}
+if (typeof window !== 'undefined') { var nkB = window.wpNoticeKinds = window.wpNoticeKinds || {}; nkB.timeask = { label: 'Apply', altLabel: 'Skip', stay: true, only: true, tip: 'Run them now, each in the round it came due. Each player gets a summary', altTip: 'Let these runs go with no rule run', still: bellStill, run: function(key) { bellDone(key, true); }, alt: function(key) { bellDone(key, false); } }; }
+// 152 fold 4b: the Rules run switch on each NPC (the owner's answer 1, 2026-10-19: "a Rules run switch on each NPC, on by default", placed "somewhere easy
+// to use quickly"), read and set here alone: on its token's right-click menu (whiteboard.js gmRulesModel), on its row's menu under Characters (charlist.js)
+// and beside it in the waiting list (pendPanel). On: the NPC is not listed in camp.clock.rulesOff. Off: it is, an id as the clock's cleaner keeps one.
+// Saved, the GM's own and never sent (net.js clockOut builds only the time and the notes players may see). rulesRun answers null where there is no
+// switch: a player's app, the stream window, a campaign this machine may not write, a character that is no NPC by its sheet's own NPC tick (a player's, or
+// one with no player yet, which the Characters section lists among the players: offOf never holds either), a character that is
+// not there or whose id the cleaner would not keep, or a system with no time rule, where the switch would do nothing
+function rulesRun(id) {
+    var camp = getActiveCampaign(), n = net(); if (!camp || isPlayer() || (n && n.stream) || (typeof window !== 'undefined' && (window.wpStream || (typeof window.wpCanPersistLocal === 'function' && window.wpCanPersistLocal() !== true)))) return null;
+    if (typeof id !== 'string' || !hasOwn(camp.chars, id) || !camp.chars[id] || typeof camp.chars[id] !== 'object' || camp.chars[id].npc !== true || !clockRules(sysNow()).length) return null;
+    var k = cleanClock({ t: 0, rulesOff: [id] }); if (!k || !Array.isArray(k.rulesOff) || k.rulesOff[0] !== id) return null;
+    return !offOf(camp)(id);
+}
+function setRulesRun(id, on) {   // true where it changed: saved, said in the Session Log under Time and in a notice, and each tick of it in the window set again
+    var was = rulesRun(id); if (was === null || was === (on === true)) return false;
+    var camp = getActiveCampaign(), ck = clockOf(camp) || { t: 0 }, nc = Object.assign({}, ck), list = (Array.isArray(ck.rulesOff) ? ck.rulesOff : []).filter(function(c) { return c !== id; });
+    if (on !== true) list.push(id);
+    if (list.length) nc.rulesOff = list; else delete nc.rulesOff;
+    var cl = cleanClock(nc) || { t: ck.t };
+    if ((Array.isArray(cl.rulesOff) && cl.rulesOff.indexOf(id) >= 0) === (on === true)) { toast('At most 1000 NPCs can have their time rules switched off.'); return false; }   // the cleaner's bound
+    camp.clock = cl;
+    var ch = camp.chars[id], said = (typeof ch.name === 'string' && ch.name ? ch.name : 'An NPC') + (on === true ? '\u2019s time rules run by themselves again.' : '\u2019s time rules no longer run by themselves.');
+    if (net() && net().logEvent) net().logEvent('time', said);
+    save(); runSync(); toast(said); return true;
+}
+function runSync() {   // the window's Rules run ticks, set in place, so a half-typed amount or note stays
+    var b = document.getElementById('calendarBody'); if (!b) return;
+    var walk = function(nd) { Array.prototype.forEach.call(nd.children || [], function(k) { if (k.classList && k.classList.contains('cal-pend-run') && k.dataset && typeof k.dataset.char === 'string') { var on = rulesRun(k.dataset.char) === true; if (k.checked !== on) k.checked = on; } walk(k); }); };
+    walk(b);
+}
 function sinceWords(cal) { var s = livePend + pendQ.reduce(function(a, q) { return a + q.s; }, 0); return s > 0 ? fmtSpan(cal, s) + ' more has passed since. It is counted once you apply or skip these.' : ''; }
 function sinceSync() { var b = document.getElementById('calendarBody'), sn = b && b.querySelector ? b.querySelector('.cal-pend-since') : null; if (sn) { var sw = sinceWords(sysCal()); if (sn.textContent !== sw) sn.textContent = sw; } }
 function mapName(m) { var t = m && m.meta && typeof m.meta.title === 'string' ? m.meta.title.trim() : ''; return t || 'A map'; }
@@ -285,9 +372,12 @@ function pendPanel(body, cal) {   // 159 (the owner by prompt, 2026-10-18: "Ever
             here.sort(function(a, b) { return nm(a).localeCompare(nm(b)); });
             list.appendChild(cel('div', 'cal-pend-map', mk ? 'On ' + mapName(wh.items[mk]) : 'On no map'));
             here.forEach(function(cid) {
-                var row = cel('label', 'cal-pend-row'), tick = cel('input', 'cal-pend-tick'); tick.type = 'checkbox'; tick.dataset.char = cid; tick.checked = pend.on[cid] === true; row.appendChild(tick);
-                row.appendChild(cel('span', 'cal-pend-name', nm(cid)));
-                row.appendChild(cel('span', 'cal-pend-rules', byC[cid].map(function(f) { var rl = clockRules(sys).filter(function(r) { return r.id === f.r; })[0]; return (rl && rl.label ? rl.label : 'A rule') + ' \u00d7' + f.n; }).join(', ')));
+                var row = cel('div', 'cal-pend-row'), pk = cel('label', 'cal-pend-pick'), tick = cel('input', 'cal-pend-tick'); tick.type = 'checkbox'; tick.dataset.char = cid; tick.checked = pend.on[cid] === true; pk.appendChild(tick);
+                pk.appendChild(cel('span', 'cal-pend-name', nm(cid)));
+                pk.appendChild(cel('span', 'cal-pend-rules', byC[cid].map(function(f) { var rl = clockRules(sys).filter(function(r) { return r.id === f.r; })[0]; return (rl && rl.label ? rl.label : 'A rule') + ' \u00d7' + f.n; }).join(', ')));
+                row.appendChild(pk);
+                var rr = rulesRun(cid);   // 152 fold 4b: beside each NPC, its Rules run switch (the owner's answer 1)
+                if (typeof rr === 'boolean') { var rw = cel('label', 'cal-pend-runs'), rt = cel('input', 'cal-pend-run'); rt.type = 'checkbox'; rt.dataset.char = cid; rt.checked = rr; rw.title = 'Ticked, this NPC\u2019s time rules run by themselves as time passes. Unticked, they do not, and its runs wait here unticked'; rw.appendChild(rt); rw.appendChild(document.createTextNode(' Rules run')); row.appendChild(rw); }
                 list.appendChild(row);
             });
         });
@@ -532,6 +622,7 @@ function onWinChange(e) {
     else if (tg.classList.contains('cal-live-rate')) { if (!isPlayer()) setRate(Number(tg.value)); }   // 1.5.4: the running clock's speed
     else if (tg.classList.contains('cal-note-vis') && tg.dataset) noteVis(tg.dataset.note, tg.checked === true);   // K3
     else if (tg.classList.contains('cal-pend-tick') && tg.dataset && pend && typeof tg.dataset.char === 'string' && Object.prototype.hasOwnProperty.call(pend.on, tg.dataset.char)) pend.on[tg.dataset.char] = tg.checked === true;   // K5
+    else if (tg.classList.contains('cal-pend-run') && tg.dataset && typeof tg.dataset.char === 'string') { if (!setRulesRun(tg.dataset.char, tg.checked === true)) tg.checked = rulesRun(tg.dataset.char) === true; }   // 152 fold 4b: the Rules run switch, put back where it was not kept
 }
 // [sinkcheck:calendarwin-end]
 function openWin() { var m = document.getElementById('calendarModal'); if (!m || !shown(getActiveCampaign())) return; view = null; pick = null; m.style.display = 'flex'; renderWin(); }
@@ -590,5 +681,5 @@ function fightBegan(ids) {
     if (typeof setInterval === 'function') setInterval(function() { try { liveTick(Date.now()); } catch (e) {} }, 1000);   // 1.5.4: the running clock's look at the wall clock
 })();
 
-window.wpCalendar = { refresh: refresh, ownTime: ownTime, second: second, fightBegan: fightBegan, open: openWin, close: closeWin, moveTo: moveTo };
-export { refresh, ownTime, second, fightBegan, openWin, closeWin, moveTo };
+window.wpCalendar = { refresh: refresh, ownTime: ownTime, second: second, fightBegan: fightBegan, open: openWin, close: closeWin, moveTo: moveTo, rulesRun: rulesRun, setRulesRun: setRulesRun };
+export { refresh, ownTime, second, fightBegan, openWin, closeWin, moveTo, rulesRun, setRulesRun };

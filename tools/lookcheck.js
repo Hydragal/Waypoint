@@ -2035,7 +2035,7 @@ const swSrc = sliceOf(setSrc, 'viewswitch'), cornerSrc = sliceOf(mainSrc, 'corne
             const camp = { activeItemId: 'm1', chars: o.chars || CH(), items: o.items || IT(), players: {} };
             const S = { canOpen: id => { log.push('canOpen ' + id); return o.refuse !== true; }, openSheet: id => log.push('openSheet ' + id), hudFor: () => o.hud === true, openHud: id => log.push('openHud ' + id), charById: (id, c) => (Object.prototype.hasOwnProperty.call(c.chars, id) ? c.chars[id] : null),
                 askDeleteSheet: id => log.push('ask ' + id), deleteCharacter: id => log.push('DELETE ' + id), addCharacter: (nm, npc) => { log.push('add ' + nm + (npc === true ? ' as an NPC' : '')); if (o.noAdd) return null; const c = { id: 'c_new', name: nm, npc: npc === true }; camp.chars = Object.assign({}, camp.chars, { c_new: c }); return c; } };
-            const win = { wpSheets: S, wpNet: o.net || null, wpVtt: { on: () => true }, wpCanPersistLocal: () => o.write !== false, wpFocusCharacter: k => log.push('focus ' + k), appRender: () => log.push('render'), appRestoreCamera: () => log.push('camera'), wpClampMenu: (m, x, y) => log.push('clamp ' + x + ',' + y) };
+            const win = { wpSheets: S, wpNet: o.net || null, wpVtt: { on: () => true }, wpCalendar: o.cal, wpCanPersistLocal: () => o.write !== false, wpFocusCharacter: k => log.push('focus ' + k), appRender: () => log.push('render'), appRestoreCamera: () => log.push('camera'), wpClampMenu: (m, x, y) => log.push('clamp ' + x + ',' + y) };
             const store = { v: {}, getItem(k) { return Object.prototype.hasOwnProperty.call(this.v, k) ? this.v[k] : null; }, setItem(k, v) { this.v[k] = String(v); }, removeItem(k) { delete this.v[k]; } };
             const api = new Function('document', 'window', 'getActiveCampaign', 'getActiveMap', 'localStorage', 'toast', 'showPrompt', 'navigateToMap', 'updateSidebarNav', 'panelJudge', 'state', 'showConfirm', cSl + '\n' + wSl + '\nreturn { sync: sync, wire: wire, menu: function() { return _menu; } };')(
                 doc, win, () => camp, () => camp.items[camp.activeItemId], store, t => toasts.push(t), (title, def, cb) => { asked = { title, def, cb }; }, id => { log.push('nav ' + id); camp.activeItemId = id; }, () => log.push('panel'), n => log.push('judge ' + n), st, (title, cb, opts) => { qAsked = { title, cb, opts }; });
@@ -2096,6 +2096,22 @@ const swSrc = sliceOf(setSrc, 'viewswitch'), cornerSrc = sliceOf(mainSrc, 'corne
         const DN = wworld({ net: { active: false, role: 'client', foreign: true, myId: 'p1' }, hud: true }); DN.take(); DN.fire(DN.box, 'click', DN.ev({ target: DN.row('c_a') })); const dnClick = DN.take();
         DN.rc('c_a', 1, 1); const dnActs = DN.acts(); DN.press('hud'); const dnHud = DN.take(); DN.rc('c_a', 1, 1); DN.press('sheet'); const dnSheet = DN.take();
         cw.player = [upStart, upRows, upActs, upDel, upPartial, upHidden, upWaiting, upPlus, dnClick, dnActs, dnHud, dnSheet, upOpen, upOther];
+        // 152 fold 4b (the owner's answer 1, 2026-10-19: a Rules run switch on each NPC, "placed somewhere easy to use quickly"): a tick row on an NPC's
+        // menu, whose state calendar.js answers and which calendar.js alone sets, here a switch of the suite's own that writes down what it is asked
+        try {   // a part of its own: where the switch's code is not there it fails its own check alone
+        const calSt = { c_n1: true }, calLog = [], cal = { rulesRun: id => { calLog.push('ask ' + id); return Object.prototype.hasOwnProperty.call(calSt, id) ? calSt[id] : null; }, setRulesRun: (id, on) => { calLog.push('set ' + id + ' ' + on); calSt[id] = on; return true; } };
+        const RR = wworld({ cal, hud: true }); RR.take(); calLog.splice(0);
+        RR.rc('c_n1', 3, 4); const rrBtn = RR.api.menu().kids.find(k => k.dataset.act === 'rules');
+        const rrOn = [RR.acts(), rrBtn.tag, rrBtn.attrs.role, rrBtn.attrs['aria-checked'], rrBtn.kids.map(k => k.text).join(''), rrBtn.title.length > 30, RR.api.menu().kids.filter(k => k.dataset.act && k.dataset.act !== 'rules').map(k => k.attrs.role), calLog.splice(0)];
+        RR.press('rules'); const rrPress = [calLog.splice(0), RR.shown(), J(calSt)];
+        RR.rc('c_n1', 3, 4); const rrBtn2 = RR.api.menu().kids.find(k => k.dataset.act === 'rules'), rrOff = [rrBtn2.attrs['aria-checked'], rrBtn2.kids.map(k => k.text).join('')]; calLog.splice(0);
+        RR.press('rules'); const rrBack = [calLog.splice(0), J(calSt)];
+        RR.rc('c_a', 1, 1); const rrPc = [RR.acts(), calLog.splice(0)];
+        RR.rc('c_n1', 1, 1); calLog.splice(0); delete calSt.c_n1; RR.press('rules'); const rrGone = calLog.splice(0);   // the switch went between the right-click and the press
+        const RRp = wworld({ net: { active: true, role: 'client', foreign: true, myId: 'p1' }, hud: true, cal }); RRp.take(); calLog.splice(0); RRp.rc('c_a', 1, 1); const rrUp = [RRp.acts(), calLog.splice(0)];
+        const RRd = wworld({ net: { active: false, role: 'client', foreign: true, myId: 'p1' }, hud: true, cal }); RRd.take(); RRd.rc('c_a', 1, 1); const rrDown = [RRd.acts(), calLog.splice(0)];
+        cw.rules = [J([C.charMenuRows(true, true, true), C.charMenuRows(false, false, false), [C.charMenuRows(false, false, 'yes'), C.charMenuRows(false, false, null), C.charMenuRows(false, false, 1), C.charMenuRows(false, false)].map(rs => rs.map(r => r.act || '-'))]), rrOn, rrPress, rrOff, rrBack, rrPc, rrGone, rrUp, rrDown];
+        } catch (e) { cw.rules = ['not run', String(e && e.stack || e)]; }
     } catch (e) { cwerr = String(e && e.stack || e); }
     const NOLINK = 'You are not connected to the table right now.', NOSHEET = 'A sheet cannot be made here. This campaign is not yours to change.';
     check('a character\'s row is the section\'s own, run for real on a page that keeps every listener (what the review found: the tree had bound its own click to these rows): the row wears a class of its own and none of the tree\'s; a click, Enter and Space open the sheet through the sheet module\'s own judge, any other key is left alone and none is taken off the list itself; the fold opens and shuts the NPCs and is kept for this computer; the list holds three listeners and the plus one, and the module has the panel judged at its start',
@@ -2112,6 +2128,11 @@ const swSrc = sliceOf(setSrc, 'viewswitch'), cornerSrc = sliceOf(mainSrc, 'corne
         && J(cw.gm2) === J([['sheet', '-', 'find'], [['clamp 1,1', NOSHEET], null, null], ['canOpen c_a', 'That sheet cannot be opened here.']])
         && J(cw.player) === J(['panel | judge 1', [true, false, false], ['sheet', 'hud', '-', 'find', '-', 'delete'], 'clamp 1,1 | ask c_a', ['sheet', 'hud', '-', 'find'], ['clamp 1,1', 'Aria has no token on this map.'], 'Aria has a token that waits to be placed.', [['', NOSHEET], null, null],
             ['', NOLINK], ['sheet', 'hud', '-', 'find'], ['clamp 1,1', NOLINK], ['clamp 1,1', NOLINK], 'canOpen c_a | openSheet c_a | clamp 1,1 | openHud c_a', ['sheet', 'hud', '-', 'find']]), cwerr || J([cw.plus, cw.gm2, cw.player]));
+    check('152 fold 4b an NPC\'s Rules run switch on its row\'s menu under Characters (charlist.js charMenuRows and the menu, run for real; the owner\'s answer 1, 2026-10-19: a Rules run switch on each NPC, "placed somewhere easy to use quickly"): after Find on the map, a tick row in fixed words, ticked by a mark and by aria-checked while its rules run, asked of calendar.js for the very character right-clicked; a press sets it the other way through calendar.js and puts the menu away; no row for a player\'s character, which calendar.js gives no switch; a switch gone by the press sets nothing; on a player\'s app, its link up or down, nothing is asked and no row is offered',
+        !cwerr && J(cw.rules) === J([J([[{ act: 'sheet', text: 'Sheet\u2026' }, { act: 'hud', text: 'HUD\u2026' }, { rule: true }, { act: 'find', text: 'Find on the map' }, { act: 'rules', text: 'Rules run', tick: true }, { rule: true }, { act: 'delete', text: 'Delete sheet\u2026', red: true }], [{ act: 'sheet', text: 'Sheet\u2026' }, { rule: true }, { act: 'find', text: 'Find on the map' }, { act: 'rules', text: 'Rules run', tick: false }], [['sheet', '-', 'find'], ['sheet', '-', 'find'], ['sheet', '-', 'find'], ['sheet', '-', 'find']]]),
+            [['sheet', 'hud', '-', 'find', 'rules', '-', 'delete'], 'button', 'menuitemcheckbox', 'true', '\u2713 Rules run', true, ['menuitem', 'menuitem', 'menuitem', 'menuitem'], ['ask c_n1']], [['ask c_n1', 'set c_n1 false'], false, '{"c_n1":false}'], ['false', 'Rules run'], [['ask c_n1', 'set c_n1 true'], '{"c_n1":true}'],
+            [['sheet', 'hud', '-', 'find', '-', 'delete'], ['ask c_a']], ['ask c_n1'], [['sheet', 'hud', '-', 'find', '-', 'delete'], []], [['sheet', 'hud', '-', 'find'], []]])
+        && count(cSrc, "    var Cal = window.wpCalendar, rules = !client && Cal && typeof Cal.rulesRun === 'function' ? Cal.rulesRun(id) : null;") === 1 && count(cSrc, 'C2.setRulesRun(cid, !now)') === 1, cwerr || J(cw.rules));
     // what a joined player's panel holds (sidebar.js), and the tree's own rows
     let pb = '', pberr = '';
     try {
@@ -2987,7 +3008,7 @@ const swSrc = sliceOf(setSrc, 'viewswitch'), cornerSrc = sliceOf(mainSrc, 'corne
         const match = (n, sel) => sel.split(',').some(s => { s = s.trim(); if (s[0] === '#') return n.attrs.id === s.slice(1) || n.id === s.slice(1); const a = /^\[([a-z-]+)\]$/.exec(s); return a ? n.tag !== '#text' && Object.prototype.hasOwnProperty.call(n.attrs, a[1]) : false; });
         const walk = (n, f, out) => { (n.children || []).forEach(k => { if (f(k)) out.push(k); walk(k, f, out); }); return out; };
         const doc = { activeElement: null, createElement: t => mk(t), createTextNode: t => mk('#text', t), getElementById: id => reg[id] || null,
-            querySelectorAll: sel => sel === '#notesList .notes-x' ? walk(reg.notesList, k => (' ' + k.className + ' ').indexOf(' notes-x ') >= 0, []) : [] };
+            querySelectorAll: sel => sel === '#notesList .notes-x' ? walk(reg.notesList, k => (' ' + k.className + ' ').indexOf(' notes-x ') >= 0, []) : sel === '#notesList [data-note-stop]' ? walk(reg.notesList, k => !!k.attrs && Object.prototype.hasOwnProperty.call(k.attrs, 'data-note-stop'), []) : [] };
         ['notesList', 'notesBadge', 'notesMenu', 'notesClear', 'notesBtn'].forEach(id => { reg[id] = mk(id === 'notesList' ? 'div' : 'button'); reg[id].id = id; reg[id].attrs.id = id; });
         reg.notesMenu.hidden = true; reg.notesMenu.appendChild(reg.notesClear); reg.notesMenu.appendChild(reg.notesList); reg.notesBadge.style.display = 'none';
         return { doc, reg, walk };
@@ -3049,6 +3070,49 @@ const swSrc = sliceOf(setSrc, 'viewswitch'), cornerSrc = sliceOf(mainSrc, 'corne
         J(rowsD.map(r => r.split(':')[0])) === J(['rm-label notes-sec', 'notes-item notes-wait', 'rm-label notes-sec', 'notes-item', 'notes-item']) && rowsD[0].indexOf('Waiting for you') > 0 && rowsD[2].indexOf('Earlier') > 0
         && rowsD[1].indexOf('Pat asks for another change.') > 0 && rowsD[3].indexOf('Moved on 1 hour') > 0 && rowsD[4].indexOf(HOST) > 0 && tagsD.every(t => ['div', 'span', 'button', '#text'].indexOf(t) >= 0)
         && goB.length === 1 && goB[0].textContent === 'Review' && ranD === J([['review', 'c1']]) && J(afterX) === J([[HOST], true]) && afterOff === 0, J([rowsD, ranD, afterX]));
+    // 152 fold 4b: a kind may offer a second answer beside its button (alt under altLabel, each with a tooltip of its own), as the time rules that wait in
+    // the bell with the Calendar off do (calendar.js, kind timeask): Apply and Skip keep the list up and the focus goes on to the row after them
+    const kindsB = { ask: { label: 'Apply', altLabel: 'Skip', stay: true, tip: 'Run them now', altTip: 'Let them go', still: a => WB.left.indexOf(a) >= 0, run: a => { WB.ran.push(['run', a]); WB.left = WB.left.filter(x => x !== a); WB.api.done(a); }, alt: a => { WB.ran.push(['alt', a]); WB.left = WB.left.filter(x => x !== a); WB.api.done(a); } },
+        plain: { label: 'Open', run: a => WB.ran.push(['open', a]) }, half: { label: 'Go', alt: a => WB.ran.push(['half', a]) } };
+    const WB = world({ kinds: kindsB }); WB.left = ['k1a', 'k1b'];
+    WB.api.wait('k1a', 'Kael: Brace waits for your word.', 'ask', 'k1a'); WB.api.wait('k1b', 'Unit 7: Brace waits for your word.', 'ask', 'k1b'); WB.api.wait('p', 'Open me.', 'plain', 'p'); WB.api.wait('h', 'Half a kind.', 'half', 'h');
+    WB.P.reg.notesMenu.hidden = false; WB.api.draw();
+    const listB = WB.P.reg.notesList, btnsB = WB.P.walk(listB, k => k.tag === 'button', []).map(b => [b.className, b.textContent, b.title, Object.prototype.hasOwnProperty.call(b.attrs, 'data-keep')]);
+    const altB = WB.P.walk(listB, k => k.attrs['data-note-alt'] !== undefined, []); WB.api.onPress({ target: altB[0] }); const bAlt = [J(WB.ran), WB.api.waiting().map(w => w.key), WB.P.doc.activeElement && WB.P.doc.activeElement.attrs['data-note-off']];
+    const goK = WB.P.walk(listB, k => k.attrs['data-note-go'] === 'k1b', [])[0]; WB.api.onPress({ target: goK }); const bGo = [J(WB.ran), WB.api.waiting().map(w => w.key), WB.P.doc.activeElement && WB.P.doc.activeElement.attrs['data-note-off']];
+    const focusWas = WB.P.doc.activeElement, goP = WB.P.walk(listB, k => k.attrs['data-note-go'] === 'p', [])[0]; WB.api.onPress({ target: goP }); const bPlain = [J(WB.ran.slice(-1)), WB.P.doc.activeElement === focusWas];
+    check('152 fold 4b a kind of what waits may offer a second answer beside its button (notices.js, run for real): Apply and Skip in the kind\'s own words and tooltips, both keeping the list up; Skip takes the kind\'s second answer and Apply its first, and the focus goes on to the row after it, which now stands in its place; a kind with no second answer draws one button with the tooltip it always had and keeps nothing up, and a kind with a second answer and no first draws neither',
+        J(btnsB) === J([['tool notes-go', 'Apply', 'Run them now', true], ['tool ghost notes-alt', 'Skip', 'Let them go', true], ['tool ghost notes-x', '\u00d7', 'Take this off the list. It still waits where it waits', true], ['tool notes-go', 'Apply', 'Run them now', true], ['tool ghost notes-alt', 'Skip', 'Let them go', true], ['tool ghost notes-x', '\u00d7', 'Take this off the list. It still waits where it waits', true],
+            ['tool notes-go', 'Open', 'Open what waits', false], ['tool ghost notes-x', '\u00d7', 'Take this off the list. It still waits where it waits', true], ['tool ghost notes-x', '\u00d7', 'Take this off the list. It still waits where it waits', true]])
+        && J(bAlt) === J([J([['alt', 'k1a']]), ['k1b', 'p', 'h'], 'k1b']) && J(bGo) === J([J([['alt', 'k1a'], ['run', 'k1b']]), ['p', 'h'], 'p']) && J(bPlain) === J([J([['open', 'p']]), true]),
+        J([btnsB, bAlt, bGo, bPlain]));
+    // 152 fold 4b's review: a kind whose items wait nowhere but the bell (only: true, as the time rules that wait there with the Calendar off) has no x,
+    // and Clear all leaves it on the list, so its own answers alone take it off; the question says so; a kind that says only with no button of its own
+    // keeps its x; an x and Clear all elsewhere are as they were (the check before, and the one on Clear all after)
+    let ob4 = ''; try {
+    const kindsO = { here: { label: 'Apply', altLabel: 'Skip', stay: true, only: true, still: a => WO.left.indexOf(a) >= 0, run: a => { WO.ran.push(['run', a]); WO.left = WO.left.filter(x => x !== a); WO.api.done(a); }, alt: a => { WO.ran.push(['alt', a]); WO.left = WO.left.filter(x => x !== a); WO.api.done(a); } },
+        plain: { label: 'Open', run: a => WO.ran.push(['open', a]) }, bare: { only: true } };
+    const WO = world({ kinds: kindsO }); WO.left = ['oa', 'ob'];
+    WO.api.wait('oa', 'Kael: Brace waits for your word.', 'here', 'oa'); WO.api.wait('p', 'Open me.', 'plain', 'p'); WO.api.wait('ob', 'Unit 7: Brace waits for your word.', 'here', 'ob'); WO.api.wait('nr', 'No answer of its own.', 'bare', 'nr');
+    WO.P.reg.notesMenu.hidden = false; WO.api.draw();
+    const listO = WO.P.reg.notesList, rowsO = WO.P.walk(listO, k => / notes-wait$/.test(k.className), []).map(r => r.children.filter(c => c.tag === 'button').map(b => [b.textContent, b.attrs['data-note-stop'] !== undefined]));
+    const skO = WO.P.walk(listO, k => k.attrs['data-note-alt'] === 'oa', [])[0]; WO.api.onPress({ target: skO }); const oSkip = [J(WO.ran), WO.api.waiting().map(w => w.key), WO.P.doc.activeElement && WO.P.doc.activeElement.attrs['data-note-off']];
+    const apO = WO.P.walk(listO, k => k.attrs['data-note-go'] === 'ob', [])[0]; WO.api.onPress({ target: apO }); const oApply = [J(WO.ran), WO.api.waiting().map(w => w.key), WO.P.doc.activeElement && WO.P.doc.activeElement.attrs['data-note-off']];
+    WO.left.push('oc'); WO.api.wait('oc', 'Kael: Brace waits for your word.', 'here', 'oc'); WO.api.add('one', 1);
+    const oOff = [WO.api.dismiss('oc'), WO.api.waiting().map(w => w.key), WO.api.dismiss('nr'), WO.api.waiting().map(w => w.key)];
+    WO.api.wait('nr', 'No answer of its own.', 'bare', 'nr');
+    WO.api.onPress({ target: WO.P.reg.notesClear }); const oQ = WO.asked.map(a => a[0]); WO.asked[0][1](true); const oYes = [WO.api.listOf('k1').length, WO.api.waiting().map(w => w.key)];
+    WO.api.draw(); const oAfter = [WO.P.reg.notesClear.disabled, WO.api.clearAll(), WO.asked.length, WO.api.waiting().map(w => w.key)];
+    check('152 fold 4b\'s review: a kind whose items wait nowhere but the bell (notices.js only, run for real; the time rules that wait there with the Calendar off) has no x, its last answer standing where the focus goes on to; Skip and Apply take it off and the focus goes on to the row after it; the x refuses it while it takes another off; Clear all asks in words that say what waits only here stays, deletes every notice, takes the rest off the list and leaves it on, and with nothing else to clear is off and asks nothing; a kind that says only with no button of its own keeps its x; Help says so',
+        J(rowsO) === J([[['Apply', false], ['Skip', true]], [['Open', false], ['\u00d7', true]], [['Apply', false], ['Skip', true]], [['\u00d7', true]]])
+        && J(oSkip) === J([J([['alt', 'oa']]), ['p', 'ob', 'nr'], 'p']) && J(oApply) === J([J([['alt', 'oa'], ['run', 'ob']]), ['p', 'nr'], 'nr'])
+        && J(oOff) === J([false, ['p', 'nr', 'oc'], true, ['p', 'oc']])
+        && J(oQ) === J(['Clear all notifications? Anything still waiting for you stays waiting, in the Review and in the Calendar. What waits only here stays on this list until you answer it.']) && J(oYes) === J([0, ['oc']])
+        && J(oAfter) === J([true, false, 1, ['oc']])
+        && ix.includes('<li>&times; takes a notice away. <b>Clear all</b> asks first. A thing that waits still waits in the Review or the Calendar. Time rules that wait only in the bell stay there until you apply or skip them.</li>'),
+        J([rowsO, oSkip, oApply, oOff, oQ, oYes, oAfter]));
+    } catch (e) { ob4 = String(e && e.stack || e); }
+    if (ob4) check('152 fold 4b\'s review: a kind whose items wait nowhere but the bell (notices.js only, run for real) could be run', false, ob4);
     const WP = world({}), wrapAt = (l, r) => { WP.P.reg.notesMenuWrap = { getBoundingClientRect: () => ({ left: l, right: r }) }; WP.win.innerWidth = 800; return WP.api.place() ? WP.P.reg.notesMenu.style.left + '|' + WP.P.reg.notesMenu.style.right : 'no'; };
     const pl = [wrapAt(100, 128), wrapAt(752, 780), wrapAt(400, 428), (() => { WP.win.innerWidth = 300; WP.P.reg.notesMenuWrap = { getBoundingClientRect: () => ({ left: 10, right: 38 }) }; WP.api.place(); return WP.P.reg.notesMenu.style.left; })(), (() => { delete WP.P.reg.notesMenuWrap; return WP.api.place(); })()];
     check('the list stands inside the window wherever the bell is (notices.js place, run for real): its right edge at the bell\'s where there is room, else 8 px in from the window\'s edge, never wider than the window less 16; with no wrap in the page nothing is placed',
@@ -3068,7 +3132,7 @@ const swSrc = sliceOf(setSrc, 'viewswitch'), cornerSrc = sliceOf(mainSrc, 'corne
         && /setTimeout\(function\(\)\{ document\.getElementById\('toast'\)\.className=''; \}, 3000\);\n\n    \}\n\n    if \(window\.wpNotices && typeof window\.wpNotices\.add === 'function'\) \{ try \{ window\.wpNotices\.add\(msg\); \} catch \(e\) \{\} \}/.test(ioN.replace(/\r\n/g, '\n'))
         && trN.includes("var MENUS = ['campMenu', 'moreMenu', 'notesMenu'];") && trN.includes("&& row.getAttribute('data-keep') == null) menuSet(id, false);") && esN.includes("var ESC_ROW_MENUS = ['campMenu', 'moreMenu', 'notesMenu'];")
         && shN.includes("window.wpNotices.wait('appr:' + charId, t, k, [charId, k, upK]);") && shN.includes("nkA.review = { label: 'Review', still:") && shN.includes("nkA.sheet = { label: 'Open', still:") && shN.includes("'review', [u.charId, 'review', null], true); });")
-        && caN.includes("window.wpNotices.wait('time', 'Time rules are due: ' + pendWords(sysCal()) + '.', 'time', null);") && caN.includes("window.wpNotices.done('time');") && caN.includes("nkT.time = { label: 'Open', still: function() { pendFor(getActiveCampaign()); return !!pend; }, run: function() { openWin(); } };")
+        && caN.includes("window.wpNotices.wait('time', 'Time rules are due: ' + pendWords(sysCal()) + '.', 'time', null);") && caN.includes("window.wpNotices.done('time');") && caN.includes("nkT.time = { label: 'Open', still: function() { pendFor(getActiveCampaign()); return !!pend; }, run: function() { if (!clockOn()) { toast(TIME_OFF); return; } openWin(); } };")
         && mnN.includes("if (window.wpNotices) window.wpNotices.sync();"));
 }
 

@@ -9389,6 +9389,33 @@ pendingChecks.push((async () => {
     const snRk = SAk(gmK({ t: 500, hold: true, rate: 10 }), 'u_p').campaigns.k1.clock, rRk = runK({ type: 'clock', campId: 'k_1', clock: { t: 77, hold: true, rate: 60 } }, 'host1');
     check('the running clock on the wire (1.5.4): the GM\'s hold and speed are the host\'s own \u2014 the clock message and the join snapshot carry the time alone, and a change of either sends nothing \u2014 and a player\'s app keeps neither from a host that sends them',
         sentRk === j([{ type: 'clock', campId: 'k_r', clock: { t: 600 } }]) && sentRk2 === 1 && j(snRk) === j({ t: 500 }) && j(rRk[0]) === j({ t: 77 }), j([sentRk, sentRk2, snRk, rRk]));
+    // 152 fold 4b: the Rules run switch on each NPC (camp.clock.rulesOff) is the GM's own: set by calendar.js's real setRulesRun, saved, and in no message
+    // a player is sent: a save's sync, the clock message, the join snapshot and the stream window carry the time and the notes players may see alone
+    {
+        const SxR = await import(url('systemcore.js'));
+        const calR = fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', 'calendar.js'), 'utf8').replace(/\r\n/g, '\n'), cutR = (a, b) => { const i = calR.indexOf(a), k = calR.indexOf(b, i + 1); if (i < 0 || k < 0) throw new Error('netcheck: calendar.js slice ' + a); return calR.slice(i, k); };
+        const notesR = [{ id: 'n_bbbbbbbb', day: 0, text: 'Market day', vis: 'all' }, { id: 'n_cccccccc', day: 1, text: 'Unit 7 wakes', vis: 'gm' }];
+        const campR = { id: 'k_1', vtt: { cal: true }, clock: { t: 600, notes: notesR }, chars: { c_kael: { id: 'c_kael', name: 'Kael', ownerId: 'u_a' }, c_unit7: { id: 'c_unit7', name: 'Unit 7', npc: true } } }, sysR = { rolls: [{ id: 'r_tick', label: 'Tick', apply: [], every: { n: 1, u: 'hour' } }] };
+        const hR = hostK(campR), outR = { saves: 0, toasts: [], log: [] }; hR.net.logEvent = (k, t) => outR.log.push([k, t]);
+        let calApi = null, rerr = '';
+        try {
+            calApi = new Function('document', 'window', 'getActiveCampaign', 'save', 'saveView', 'toast', 'roundSecs', 'cleanCalendar', 'cleanClock', 'cleanAcc', 'ruleFires', 'livedSpans', 'freshAcc', 'tCmp', 'tSpanMs', 'dateOf', 'timeOf', 'periodDays', 'dayLength', 'fmtDate', 'fmtWhen', 'fmtSpan', 'CAL_LIMITS', 'net', 'sysNow',
+                "'use strict';\n" + cutR('// [sinkcheck:calendarwin-start]', '// [sinkcheck:calendarwin-end]') + cutR('function openWin()', '(function wire()') + '\nreturn { setRulesRun: setRulesRun, rulesRun: rulesRun };')(
+                { getElementById: () => null }, { wpVtt: { on: () => true, campaignOn: vttK.campaignOn } }, () => campR, () => { outR.saves++; hR.net.syncClock(); }, () => {}, t => outR.toasts.push(t), SxR.roundSecs, CCx.cleanCalendar, CCx.cleanClock, CCx.cleanAcc, CCx.ruleFires, CCx.livedSpans, CCx.freshAcc, CCx.tCmp, CCx.tSpanMs, CCx.dateOf, CCx.timeOf, CCx.periodDays, CCx.dayLength, CCx.fmtDate, CCx.fmtWhen, CCx.fmtSpan, CCx.CAL_LIMITS, () => hR.net, () => sysR);
+        } catch (e) { rerr = String(e && e.stack || e); }
+        hR.net.syncClock(); const beforeR = j(hR.sent.a);   // the table told of the clock as it stands
+        let offR = null, keptR = null, afterOffR = null, msgR = null, snapR = null, streamR = null, onR = null, goneR = null;
+        try {
+            offR = calApi.setRulesRun('c_unit7', false); keptR = j(campR.clock.rulesOff || null); afterOffR = j(hR.sent.a); msgR = j(hR.net.clockMessage());
+            snapR = j(SAk(gmK(JSON.parse(j(campR.clock))), 'u_a').campaigns.k1.clock); streamR = j(SAk(gmK(JSON.parse(j(campR.clock)))).campaigns.k1.clock);
+            onR = calApi.setRulesRun('c_unit7', true); goneR = 'rulesOff' in campR.clock;
+        } catch (e) { rerr = rerr || String(e && e.stack || e); }
+        const SEEN = { t: 600, notes: [{ id: 'n_bbbbbbbb', day: 0, text: 'Market day' }] };
+        check('152 fold 4b the Rules run switch on each NPC is the GM\'s own (calendar.js setRulesRun, net.syncClock, clockOut and the join snapshot\'s sanitizeAppState, each run for real): switched off it is saved in camp.clock.rulesOff and the save tells the table nothing new; the clock message carries the time and the notes players may see and no NPC\'s switch, and so do the join snapshot and the stream window; switched on again it leaves no key and sends nothing',
+            !rerr && offR === true && keptR === j(['c_unit7']) && outR.saves === 2 && beforeR === j([{ type: 'clock', campId: 'k_1', clock: SEEN }]) && afterOffR === beforeR && j(hR.sent.a) === beforeR
+            && msgR === j({ type: 'clock', campId: 'k_1', clock: SEEN }) && snapR === j(SEEN) && streamR === j(SEEN) && !/rulesOff|c_unit7/.test(beforeR + msgR + snapR + streamR + j(hR.sent.w)) && onR === true && goneR === false,
+            rerr || j([offR, keptR, beforeR, afterOffR, msgR, snapR, streamR, onR, goneR]));
+    }
     // a round of a fight: the real combatStep, over stubs, with the calendar watched. 152 fold 4 (moved on purpose): a round no longer tells the clock its
     // rounds; each fight keeps its own time (at), and the coordinator hands the clock the floor of the least time of the fights (calendar.js second)
     const SxK = await import(url('systemcore.js')), csK = fnSrc('net.combatStep = function', '// [netcheck:turnhold-start]', 'combatStep');
@@ -15196,7 +15223,7 @@ pendingChecks.push((async () => {
     const row = (tokId, name) => ({ id: 'r' + tokId, name, tokId, init: 0, src: null });
     const mkT = o => {
         o = o || {};
-        const out = { toasts: [], logs: [], runs: [], errs: [], saves: 0, views: 0 };
+        const out = { toasts: [], logs: [], runs: [], errs: [], saves: 0, views: 0, notes: [] };
         const camp = { id: 'k', clock: { t: 43200 }, system: { fields: [{ id: 'f_fx', key: 'Effects', kind: 'effects' }], effects: [{ id: 'e_c', name: 'Charge', dur: '30 seconds', mods: [] }], combat: { turn: { secs: o.rs || 1 } }, rolls: o.rolls || [{ id: 'r_tick', label: 'Tick', apply: [], inFight: { n: 1, u: 'round' } }] },
             items: { mDocks: { id: 'mDocks', type: 'map', meta: { title: 'Docks' }, whiteboard: [tok('t_kael', 'c_kael', 'u_a'), tok('t_u7', 'c_u7'), tok('t_crate', 'c_crate', null, { isChar: false })] },
                 mBridge: { id: 'mBridge', type: 'map', meta: { title: 'Bridge' }, whiteboard: [tok('t_sela', 'c_sela', 'u_b'), tok('t_u9', 'c_u9')] } },
@@ -15204,7 +15231,7 @@ pendingChecks.push((async () => {
                 c_sela: { id: 'c_sela', name: 'Sela', ownerId: 'u_b', values: {} }, c_u9: { id: 'c_u9', name: 'Unit 9', npc: true, values: {} }, c_rook: { id: 'c_rook', name: 'Rook', ownerId: 'u_c', values: fxv(30) } } };
         const mk = p => ({ peer: p, open: true, sent: [], send(m) { packCheck(m); this.sent.push(JSON.parse(J(m))); } }), conns = [mk('pA'), mk('pB')];
         const net = { active: true, role: 'host', myId: 'u_gm', conns, roster: { pA: { id: 'u_a', name: 'Pat', location: 'mDocks' }, pB: { id: 'u_b', name: 'Bea', location: 'mBridge' } }, combats: {}, targets: {}, turnSpent: {}, paused: false, syncCharDelta() {} };
-        const win = { wpVtt: { on: k => (k === 'calendar' ? o.calendar !== false : true) }, wpCalendarCore: Cx,
+        const win = { wpVtt: { on: k => (k === 'calendar' ? o.calendar !== false : true) }, wpCalendarCore: Cx, wpNotices: { wait: (k, t, kind) => { out.notes.push(['wait', k, t, kind]); return true; }, done: k => { out.notes.push(['done', k]); return true; } },
             wpSheets: { roundHook() {}, turnHook() {}, charChanged() {}, runTimeRules: (fires, words, at) => { out.runs.push([fires.map(f => f.c + ':' + f.r + (f.x ? ':x' : '') + ':' + f.n), words, at === undefined ? null : at]); return fires.length; } } };
         const env = { net, window: win, getActiveCampaign: () => camp, SC: () => Sx, own: H.own, toast: t => out.toasts.push(t), logEvent: (k, t) => out.logs.push(t), render() {}, console: { error: e => out.errs.push(String(e && e.stack || e)) }, showConfirm: (t, cb) => cb(true), sendFailed: e => { throw e; },
             anyFog: () => false, fogDrop: () => null, broadcast: () => {}, marksStart() {}, marksEnd() {}, renderNotepad() {}, ensurePlayerToken() {}, peerPaused: () => false, allow: () => true, saveRemoteSoon() {}, pushChat() {}, _lastSent: {} };
@@ -15333,14 +15360,15 @@ pendingChecks.push((async () => {
     check('152 fold 4 (the review) Each fight starts again (calendar.js fightBegan, asked by the coordinator): a fight ended in its first round leaves Kael and Unit 7 a second counted on both rules; a new fight for Kael takes his count off the rule ticked so and keeps the other, Unit 7 untouched; Unit 7 added to it loses that count too',
         frA === J({ c_kael: { x_f: 1, x_k: 1 }, c_u7: { x_f: 1, x_k: 1 } }) && frB === J({ c_kael: { x_k: 1 }, c_u7: { x_f: 1, x_k: 1 } }) && frC === J({ c_kael: { x_k: 1 }, c_u7: { x_k: 1 } }), J([frA, frB, frC]));
     // the Calendar off: an NPC whose rules are switched off runs nothing and nothing is listed, since no window could answer it; a rule ticked Ask me first
-    // is counted and never run, as it waits for the GM's word and nothing can give it
+    // is counted, and its runs wait in the bell for the GM's word (fold 4b, the owner's answer 4: "In the bell"; moved on purpose: they ran for nobody)
     const Lxw = mkT({ calendar: false }); Lxw.camp.clock.rulesOff = ['c_u7']; const lx1 = Lxw.net.fightSet(null, docks([row('t_kael', 'Kael'), row('t_u7', 'Unit 7')])); Lxw.net.fightStep(lx1, 1); Lxw.net.fightStep(lx1, 1);
     const lxx = [Lxw.out.runs, Lxw.cal.st().pend, Lxw.out.toasts.filter(t => /^Time rules are due/.test(t)).length];
     const Axw = mkT({ calendar: false, rolls: [{ id: 'r_tick', label: 'Brace', apply: [], inFight: { n: 2, u: 'round' }, ask: true }] }), ax1 = Axw.net.fightSet(null, docks([row('t_kael', 'Kael'), row('t_u7', 'Unit 7')]));
     Axw.net.fightStep(ax1, 1); Axw.net.fightStep(ax1, 1); const axA = J(Axw.camp.clock.acc || null); Axw.net.fightStep(ax1, 1); Axw.net.fightStep(ax1, 1);
-    const axx = [axA, Axw.out.runs.length, Axw.cal.st().pend, J(Axw.camp.clock.acc || null), Axw.out.toasts.filter(t => /^Time rules are due/.test(t)).length];
-    check('152 fold 4 (the review) the Calendar off in a fight: an NPC whose rules are switched off runs nothing and nothing waits, Kael\'s rule run alone; a rule ticked Ask me first is counted, a round each for Kael and Unit 7, and when it comes due it runs for nobody and nothing waits, since no window could give the GM\'s word',
-        J(lxx) === J([[[['c_kael:r_tick:x:1'], 'Round 1 on Docks', { round: 1 }]], null, 0]) && J(axx) === J([J({ c_kael: { x_tick: 1 }, c_u7: { x_tick: 1 } }), 0, null, 'null', 0]), J([lxx, axx]));
+    const axx = [axA, Axw.out.runs.length, Axw.cal.st().pend, J(Axw.camp.clock.acc || null), Axw.out.toasts.filter(t => /^Time rules are due/.test(t)).length, Axw.out.notes.filter(n => /^timeask:/.test(n[1])).map(n => n.slice(0, 3)), Axw.out.toasts.filter(t => /wait for your word/.test(t)).length];
+    check('152 fold 4 (the review) the Calendar off in a fight: an NPC whose rules are switched off runs nothing and nothing waits, Kael\'s rule run alone, and nothing of it goes to the bell; a rule ticked Ask me first is counted, a round each for Kael and Unit 7, and when it comes due it runs for nobody and no list waits, since no window could give the GM\'s word: its runs wait in the bell, an item for Kael and one for Unit 7 with the round they came due, said in a notice once (fold 4b, moved on purpose: they ran for nobody and nothing waited)',
+        J(lxx) === J([[[['c_kael:r_tick:x:1'], 'Round 1 on Docks', { round: 1 }]], null, 0]) && !Lxw.out.notes.some(n => /^timeask:/.test(n[1]))
+        && J(axx) === J([J({ c_kael: { x_tick: 1 }, c_u7: { x_tick: 1 } }), 0, null, 'null', 0, [['wait', 'timeask:c_kael:r_tick', 'Kael: Brace waits for your word. 1 run, due in Round 2 on Docks.'], ['wait', 'timeask:c_u7:r_tick', 'Unit 7: Brace waits for your word. 1 run, due in Round 2 on Docks.']], 1]), J([lxx, axx]));
     const rd4 = f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8').replace(/\r\n/g, '\n'), help4 = rd4('system/app/index.html'), notes4 = ['WHATSNEW.txt', 'system/app/assets/whatsnew.txt'].map(rd4);
     check('152 fold 4 (the review, source): Help\'s combat entry and both release notes say that a new fight starts at the time of the fight you play, the one you last started or stepped, and that the one furthest behind is played once that fight ends, where they said the fight you last stepped; the owner\'s example names its rounds as 1 second long, in Help and both notes',
         help4.includes('A new fight starts at the time of the fight you play, which is the one you last started or stepped. When that fight ends, the one furthest behind is the one you play.') && !help4.includes('the fight you last stepped')

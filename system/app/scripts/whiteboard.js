@@ -8605,6 +8605,18 @@ function gmFightPut(n, map, fid, add, out) {   // that fight with the tokens add
     n.fightSet(fid, { mapId: map.id, round: c.round, turn: at >= 0 ? at : Math.min(c.turn, rows.length - 1), rows: rows });
     return true;
 }
+// 152 fold 4b: the Rules run switch on an NPC's token (the owner's answer 1, 2026-10-19: "a Rules run switch on each NPC, on by default", placed
+// "somewhere easy to use quickly"), a tick row among the GM's own: on the menu of ONE character token that is shown, as Target is, on the machine that
+// owns the campaign, hosted or not, since time rules run at both. Whether there is a switch, and which way it stands, is calendar.js's alone
+// (window.wpCalendar.rulesRun: an NPC's, in a system with a time rule; never a player's character), and it is set there alone (setRulesRun). Never on a
+// player's app, its link up or between attempts, nor in the stream window. Fixed words only: nothing of a token or a character is written into the menu
+function gmRulesModel(items) {
+    var n = window.wpNet, C = window.wpCalendar; if (window.wpStream || (n && (n.foreign || (n.active && n.role === 'client'))) || !C || typeof C.rulesRun !== 'function' || !Array.isArray(items) || items.length !== 1) return null;
+    var w = items[0]; if (!w || typeof w !== 'object' || !w.isChar || w.waiting || w.hidden || typeof w.charId !== 'string' || !w.charId) return null;
+    var on = C.rulesRun(w.charId); return on === true || on === false ? { charId: w.charId, on: on } : null;
+}
+function gmRulesHtml(m) { return m ? '<div class="menu-item cm-gm-rules" role="menuitemcheckbox" aria-checked="' + (m.on ? 'true' : 'false') + '" title="Ticked, this NPC&rsquo;s time rules run by themselves as time passes. Unticked, they do not. With the Calendar on, its runs wait unticked in the Calendar&rsquo;s list">' + (m.on ? '&#10003; ' : '') + '&#8987; Rules run</div>' : ''; }
+function gmRulesDo(m) { var C = window.wpCalendar; return !!(m && C && typeof C.setRulesRun === 'function' && C.setRulesRun(m.charId, !m.on) === true); }   // the press: the switch the other way
 // T while pointing at a token, for the GM at a hosted table: the same pointer as the menu's Target
 function gmCanTarget(tok) { var n = window.wpNet; return !!(tok && tok.isChar && !tok.hidden && !tok.waiting && n && n.active && n.role === 'host' && !window.wpStream); }
 function gmTarget(tok, mapId) { var n = window.wpNet; if (!gmCanTarget(tok) || !n.setTarget || typeof mapId !== 'string') return false; n.setTarget(tok.id, mapId, tok.charName || tok.name); return true; }
@@ -8698,6 +8710,7 @@ document.addEventListener('contextmenu', function(e) {
             if (sheetTop) { html += '<div class="menu-item cm-sheet">&#128203; ' + (firstItem.charId ? 'Sheet&hellip;' : 'New character sheet&hellip;') + '</div>'; if (firstItem.charId && window.wpSheets.hudFor && window.wpSheets.hudFor(firstItem.charId)) html += '<div class="menu-item cm-hud">&#12336; HUD&hellip;</div>'; }
             var selNow = state.selWbIds && state.selWbIds.length ? state.selWbIds : (state.selWbId ? [state.selWbId] : []), selAs = isWb && selNow.length === 1 ? am.whiteboard.find(function(x) { return x.id === selNow[0]; }) : null;   // 158: the one token selected, which may target the token under the pointer
             var gmF = isWb ? gmFightModel(am, selectedIds.map(function(sid) { return am.whiteboard.find(function(x) { return x.id === sid; }); }).filter(Boolean), selAs) : null; html += gmFightHtml(gmF);   // the GM's own Target, Start combat, Add to the fight
+            var gmR = isWb ? gmRulesModel(selectedIds.map(function(sid) { return am.whiteboard.find(function(x) { return x.id === sid; }); }).filter(Boolean)) : null; html += gmRulesHtml(gmR);   // 152 fold 4b: an NPC's Rules run switch
             
             if (isWb) {
                 if (selectedIds.length > 1) {
@@ -8810,6 +8823,7 @@ document.addEventListener('contextmenu', function(e) {
             cMenu.style.display = 'flex';
             placeMenu(cMenu, e);
             Array.prototype.forEach.call(cMenu.querySelectorAll('.cm-gm-fight'), function(rw) { rw.addEventListener('click', function(ce) { ce.stopPropagation(); cMenu.style.display = 'none'; gmFightDo(am, gmF, rw.dataset.fight); }); });
+            Array.prototype.forEach.call(cMenu.querySelectorAll('.cm-gm-rules'), function(rw) { rw.addEventListener('click', function(ce) { ce.stopPropagation(); cMenu.style.display = 'none'; gmRulesDo(gmR); }); });   // 152 fold 4b
 
             // Elevation / posture rows (character tokens, when the toggles are on)
             if (isWb) wireStanceMenu(cMenu, selectedIds.map(function(sid) { return am.whiteboard.find(function(x) { return x.id === sid; }); }), function() { save(); render(); });
