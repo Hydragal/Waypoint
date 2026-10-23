@@ -998,7 +998,33 @@ if(_el_fileIn) _el_fileIn.addEventListener('change', function(e) {
       var s2 = document.getElementById('setWelcomePref'); if (s2) s2.value = v;
   }
   // [tutorialcheck:wclaunch-end]
-  function hideWelcome() { wcLaunchStoreOnce(); var w = document.getElementById('welcomeScreen'); if (w) w.style.display = 'none'; }
+  function hideWelcome() { wcLaunchStoreOnce(); var w = document.getElementById('welcomeScreen'); if (w) w.style.display = 'none'; if (typeof wcGate === 'function') wcGate(document, false); }   // 1.5.5: and the app behind a website's join page is back
+  // [tutorialcheck:wcweb-start]
+  // 1.5.5: Waypoint on a website whose plan joins tables and nothing else (webmode.js; the owner, 2026-10-23: "jut the welcome screen being
+  // available for now with an option to join and nothing else"). There the welcome is the way to a table and the one screen before it: it
+  // always shows, opens on Join a game, and never comes up over a table, since it has no way back to one. Its other choices are put away
+  // by the style sheet (body.web-join). On this computer, and there until the site's answer is in, every one of these answers as before:
+  // a website's page is join-only from the start (webmode.js knows one by its address)
+  function wcJoinOnly() { var W = typeof window !== 'undefined' ? window.wpWebMode : null; return !!(W && typeof W.joinOnly === 'function' && W.joinOnly() === true); }
+  function wcAtTable() { var n = typeof window !== 'undefined' ? window.wpNet : null; return !!(n && (n.active || n.foreign)); }
+  // whether the welcome comes up at the start: pref the stored choice, named whether the profile has a name
+  function wcAtLaunch(pref, named) { if (wcJoinOnly()) return true; if (pref === 'never') return false; return !(pref === 'first' && named); }
+  // While the join page is up it is the page: the app behind it is put away (style.css body.web-join.web-gate > .app), so no key or press
+  // reaches a control of the GM's or of a campaign behind it. Set only on such a website, taken off whenever the welcome goes (hideWelcome)
+  function wcGate(doc, on) { var b = doc && doc.body; if (b && b.classList && typeof b.classList.toggle === 'function') b.classList.toggle('web-gate', !!on && wcJoinOnly()); }
+  // The welcome opened on Join a game: the words of a table just lost stay in its line, and the focus goes to the name while there is
+  // none, else to the room code. Answers whether it did, which it does only on such a website
+  function wcJoinFirst(doc) {
+      if (!wcJoinOnly()) return false;
+      var mv = doc.getElementById('wcMain'), jv = doc.getElementById('wcJoinView'), go = doc.getElementById('wcJoinGo');
+      if (mv) mv.style.display = 'none'; if (jv) jv.style.display = 'flex'; if (go) go.disabled = false;
+      wcGate(doc, true);
+      var nm = doc.getElementById('wcNameInput'), code = doc.getElementById('wcJoinCode');
+      var to = nm && !(nm.value || '').trim() ? nm : (code || nm);
+      if (to) setTimeout(function() { try { to.focus(); } catch (e) {} }, 60);
+      return true;
+  }
+  // [tutorialcheck:wcweb-end]
   // [tutorialcheck:wcseed-start]
   // The campaign the app seeds into an empty save ("Default Campaign" with one empty map) is not one to continue (the owner's word, 2026-10-01: a
   // fresh Waypoint lists none): it stays off the welcome's list until something is put in it — a room, a drawing, a planner or a page — or it is
@@ -1057,6 +1083,7 @@ if(_el_fileIn) _el_fileIn.addEventListener('change', function(e) {
   window.wpDefaultAvatar = wpDefaultAvatar;
   function showWelcome() {
       var w = document.getElementById('welcomeScreen'); if (!w) return;
+      if (wcJoinOnly() && wcAtTable()) return;   // 1.5.5: on a website whose plan joins tables alone, never over a table (it has no way back to one)
       var mainV = document.getElementById('wcMain'); if (mainV) mainV.style.display = 'flex';   // always open on the main view (not a stale Join sub-screen)
       var joinV = document.getElementById('wcJoinView'); if (joinV) joinV.style.display = 'none';
       if (window.wpNet) window.wpNet.fromWelcome = false;   // clean slate: the Join sub-screen sets this when it drives a join
@@ -1069,6 +1096,7 @@ if(_el_fileIn) _el_fileIn.addEventListener('change', function(e) {
       wcLaunchRow(!welcomePrefSet());   // the one-time choice: on the welcome only until it has been stored once
       if (window.wpFaces) window.wpFaces.paintRows();   // Onboarding F1b: the token face row
       w.style.display = 'flex';
+      if (wcJoinFirst(document)) return;   // 1.5.5: such a website's welcome is Join a game, and lists no campaign
       (function ensureContinue(tries) {   // load() is async; retry the campaign list until it arrives (no-op once loaded, e.g. on reopen)
           renderWcContinue();
           var have = Object.keys((state.appState && state.appState.campaigns) || {}).length;
@@ -1139,11 +1167,10 @@ if(_el_fileIn) _el_fileIn.addEventListener('change', function(e) {
       var brand = document.getElementById('headerBrand'); if (brand) brand.addEventListener('click', showWelcome);
   })();
   (function maybeShowWelcome() {
-      if (/[?&]stream=1/.test(location.search)) return;   // the stream window mirrors the table: never the welcome over its map (as the tour stays out of it)
-      var pref = welcomePref();
-      if (pref === 'never') return;
-      if (pref === 'first' && (wcProfile().name || '').trim()) return;
-      showWelcome();
+      if (/[?&]stream=1/.test(location.search) && !wcJoinOnly()) return;   // the stream window mirrors the table: never the welcome over its map (as the tour stays out of it). 1.5.5: a website's join-only page opens no stream window (stream.js) and is the join page
+      if (wcAtLaunch(welcomePref(), !!(wcProfile().name || '').trim())) showWelcome();   // at once, as before: a desktop by its stored choice, a website's page always (1.5.5, webmode.js knows one by its address)
+      var W = window.wpWebMode;   // 1.5.5: where only the site's answer can say it is join-only (the dev server's test switch), the join page comes up once it does
+      if (!wcJoinOnly() && W && W.ready && typeof W.ready.then === 'function') W.ready.then(function() { if (wcJoinOnly()) showWelcome(); }, function() {});
   })();
 
 
@@ -1480,6 +1507,7 @@ if(_el_fileIn) _el_fileIn.addEventListener('change', function(e) {
         document.addEventListener('keydown', function(e) {
             if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
                 if (window.wpNet && window.wpNet.active && window.wpNet.role === 'client') return;
+                if (window.wpWebMode && typeof window.wpWebMode.joinOnly === 'function' && window.wpWebMode.joinOnly() === true) return;   // 1.5.5: a website's plan that joins tables alone has no map, page or room of the player's own to jump to (webmode.js), at a table or on the join page
                 e.preventDefault();
                 cmdkOpen();
             }

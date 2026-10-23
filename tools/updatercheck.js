@@ -1088,6 +1088,26 @@ process.on('exit', code => { if (!summed && !code) { console.log(NL + 'FAIL     
                 && /From Waypoint 1\.5\.0 on, updates like this one install themselves\./.test(introCore) && /cannot take that update by itself/.test(introNormal) && /Nothing has downloaded yet/.test(introNormal)
                 && /id="setUpdateInstallerBtn"[^>]*>Get Installer<\/button>/.test(group) && /installs itself/.test(rd), j([ups.length, step.length, introCore.length, introNormal.length]));
         }
+        /* ---- 1.5.5, a plan-aware mode: on a website the deploy is the update (webmode.js). The launch's quiet check and the snapshots list are never
+           asked on a website whose plan joins tables alone, and the Updates part of Settings is put away there; a desktop asks them as before.
+           settings.js's launch statement and loadSnapshots, each run for real on a page of plain objects ---- */
+        {
+            const stW = read('system/app/scripts/settings.js'), cssW = read('system/app/style.css');
+            const lA = stW.indexOf('setTimeout(function() {\n    var Wu = window.wpWebMode;'), lB = stW.indexOf('\n}, 5000);', lA), launchW = lA >= 0 && lB > lA ? stW.slice(lA, lB + '\n}, 5000);'.length) : '';
+            const runLaunch = async W => { const timers = [], log = [];
+                try { new Function('setTimeout', 'window', 'checkUpdates', 'checkShell', launchW)((fn, ms) => timers.push([fn, ms]), { wpWebMode: W }, (force, quiet) => { log.push('check:' + force + ':' + quiet); return Promise.resolve(); }, () => { log.push('shell'); }); } catch (e) { return 'threw: ' + e.message; }
+                const waits = timers.map(t => t[1]).join(); timers.forEach(t => t[0]()); for (let i = 0; i < 6; i++) await new Promise(r => setImmediate(r)); return waits + '|' + log.join(); };
+            const sA = stW.indexOf('async function loadSnapshots() {'), sB = stW.indexOf('\n}\n', sA), snapW = sA >= 0 && sB > sA ? stW.slice(sA, sB + 3) + 'return loadSnapshots;' : '';
+            const runSnaps = async W => { const asked = [], list = { innerHTML: 'Loading' };
+                try { const ls = new Function('ui', 'fetch', 'window', 'showInstallerSteps', 'coreInfo', 'esc', 'snapLabel', 'fmtBytes', snapW)(id => (id === 'setSnapList' ? list : null), u => { asked.push(u); return Promise.resolve({ ok: true, json: () => Promise.resolve([]) }); }, { wpWebMode: W }, () => {}, () => ({}), s => s, () => '', () => ''); await ls(); } catch (e) { return 'threw: ' + e.message; }
+                return asked.join() + '|' + list.innerHTML.replace(/<[^>]*>/g, ''); };
+            const jo = { ready: Promise.resolve({ mode: 'join-only', plan: 'player', can: ['join'] }), joinOnly: () => true }, full = { ready: Promise.resolve({ mode: 'full', plan: '', can: [] }), joinOnly: () => false };
+            const lw = [await runLaunch(jo), await runLaunch(full), await runLaunch(undefined), await runLaunch({ ready: Promise.resolve(null), joinOnly: () => false })];
+            const sw = [await runSnaps(jo), await runSnaps(full), await runSnaps(undefined)];
+            check('1.5.5 plan-aware mode: on a website whose plan joins tables alone the launch\'s quiet update check is never asked (the site\'s word waited for, the deploy being the update) and the snapshots list asks for nothing, the Updates part of Settings put away by the style sheet; a desktop asks both as before, the check once 5 s after launch and then the core',
+                j(lw) === j(['5000|', '5000|check:false:true,shell', '5000|check:false:true,shell', '5000|check:false:true,shell']) && sw[0] === '|Loading' && sw[1] === '/api/backups|No snapshots yet — one is taken at every launch.' && sw[2] === sw[1]
+                && /body\.web-join #settingsModal \.set-group\[data-group="updates"\]/.test(cssW) && /body\.web-join #settingsModal \.set-snaps,/.test(cssW) && /<div class="set-snaps"[^>]*>\s*<div class="set-field-label">Snapshots of the save<\/div>\s*<div id="setSnapList"/.test(read('system/app/index.html')) && /body\.web-join #updateBtn, body\.web-join #updateBanner, body\.web-join #installerModal/.test(cssW), j([lw, sw]));
+        }
         /* ---- the dev server never updates the source tree it runs from (the outside audit, 2026-10-01) ----
            A scratch copy of the dev server and of the shell's files, with its own system/app and a public key made here, run as a
            child process against a signed mock release that is newer than it: never the repository's own tools/dev-server.js,

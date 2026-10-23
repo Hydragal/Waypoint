@@ -617,6 +617,7 @@ function fmtBytes(n) { return n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : M
 function snapLabel(b) { return /before-restore/.test(b.file) ? 'before a restore' : b.kept ? 'taken by hand' : 'at launch'; }
 async function loadSnapshots() {
     var list = ui('setSnapList'); if (!list) return;
+    var Ws = window.wpWebMode; if (Ws && typeof Ws.joinOnly === 'function' && Ws.joinOnly() === true) return;   // 1.5.5: a website's plan that joins tables alone keeps no save to snapshot, and the list is put away (webmode.js)
     var rows = null;
     try { var r = await fetch('/api/backups', { cache: 'no-store' }); if (r.ok) rows = await r.json(); } catch (e) {}
     if (!Array.isArray(rows)) {
@@ -1056,7 +1057,13 @@ if (_updNotes) _updNotes.addEventListener('click', function() {
     document.getElementById('legalModal').style.display = 'flex';
 });
 window.wpCheckUpdates = checkUpdates;
-setTimeout(function() { checkUpdates(false, true).then(function() { checkShell(); }); }, 5000);   // quiet launch check (cached 15 min by the shell), then: is the core older than this app?
+setTimeout(function() {
+    var Wu = window.wpWebMode;   // 1.5.5: on a website the deploy is the update: no check is asked there, and the Updates part is put away (webmode.js)
+    (Wu && Wu.ready && typeof Wu.ready.then === 'function' ? Wu.ready : Promise.resolve(null)).then(function(k) {
+        if (k && k.mode !== 'full') return;
+        checkUpdates(false, true).then(function() { checkShell(); });   // quiet launch check (cached 15 min by the shell), then: is the core older than this app?
+    });
+}, 5000);
 
 var _verBtn = ui('setVersionBtn');
 if (_verBtn) _verBtn.addEventListener('click', function() { if (window.wpShowWhatsNew) window.wpShowWhatsNew(this.dataset.version || ''); });

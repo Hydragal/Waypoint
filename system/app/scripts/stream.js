@@ -11,7 +11,13 @@ import { net } from './net.js';
 import { characterList, locateCharacter } from './models.js';
 import { esc } from './safecore.js';
 
-const on = new URLSearchParams(location.search).get('stream') === '1';
+// [netcheck:streamweb-start]
+// 1.5.5: the stream window is the GM's. A website's plan that joins tables alone opens none (webmode.js), and the page is the join page: a website's
+// page knows it is one from the start. Where only the site's answer can say it (the dev server's test switch), a stream window already open asks
+// for nothing once it has
+function streamWebJoin() { var W = typeof window !== 'undefined' ? window.wpWebMode : null; return !!(W && typeof W.joinOnly === 'function' && W.joinOnly() === true); }
+// [netcheck:streamweb-end]
+const on = new URLSearchParams(location.search).get('stream') === '1' && !streamWebJoin();
 if (on) {
     window.wpStream = true;
     document.body.classList.add('stream-mode', 'net-client');
@@ -67,6 +73,7 @@ if (on) {
     document.addEventListener('mousemove', function(e) { if (bar && bar.classList.contains('hidden') && e.clientX < 60 && e.clientY < 60) bar.classList.remove('hidden'); });
 
     async function tick() {
+        if (streamWebJoin()) return;   // 1.5.5: nothing is asked of a website that joins tables alone
         var data;
         try { data = await (await fetch('/api/data', { cache: 'no-store' })).json(); } catch (e) { return; }
         if (!data || !data.campaigns || !Object.keys(data.campaigns).length) return;

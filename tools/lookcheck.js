@@ -3137,5 +3137,25 @@ const swSrc = sliceOf(setSrc, 'viewswitch'), cornerSrc = sliceOf(mainSrc, 'corne
         && mnN.includes("if (window.wpNotices) window.wpNotices.sync();"));
 }
 
+// 1.5.5, a plan-aware mode (the owner, 2026-10-23, and the standing word: "lets not remove functionality with these updates, that critical"): a
+// website's Player plan puts things out of sight and takes none out of the page. Every rule that names web-join is scoped by the body's one word; the
+// page carries no such word and no script but webmode.js writes it, so a desktop, which is never told a plan, shows every control as before; every id the
+// rule names is a control of the page, there once, and the inventories of the play map, the data map and the top row are whole. While the join page is up
+// the app behind it is put away under web-join and web-gate together, which only main.js writes; no rule of it leans on :has(), which a browser that does
+// not know it would drop whole, taking every one of its hides with it
+{
+    const scripts = fs.readdirSync(path.join(app, 'scripts')).filter(f => f.endsWith('.js'));
+    const writers = scripts.filter(f => /['"]web-join['"]/.test(read('scripts/' + f)));
+    const rulesW = css.replace(/\/\*[\s\S]*?\*\//g, '').split('\n').filter(l => /web-join/.test(l));   // the rules themselves, the style sheet's words about them left out
+    const scoped = rulesW.every(l => l.replace(/body\.web-join(?:\.web-gate)?\s/g, '').indexOf('web-join') < 0 && l.indexOf(':has(') < 0);
+    const gateW = scripts.filter(f => /['"]web-gate['"]/.test(read('scripts/' + f))), gateRules = rulesW.filter(l => /web-gate/.test(l));
+    const named = (css.match(/body\.web-join #[A-Za-z][\w-]*/g) || []).map(s => s.slice(s.indexOf('#') + 1)).filter((v, i, a) => a.indexOf(v) === i);
+    let wm = ''; try { wm = read('scripts/webmode.js'); } catch (e) { wm = ''; }   // a module that is not there fails the check, not the suite
+    check('1.5.5 plan-aware mode removes nothing: a website\'s Player plan puts the welcome\'s other choices, the GM\'s parts and the save\'s out of sight under the body\'s one word web-join, which the page never carries and only webmode.js writes (and only for a join-only answer); every id the style sheet names under it is a control of the page, there once; the play map\'s, the data map\'s and the top row\'s inventories stand whole',
+        J(writers) === J(['webmode.js']) && /document\.body\.classList\.toggle\('web-join', _known\.mode === 'join-only'\)/.test(wm) && /if \(!_local\) \{ try \{ if \(typeof document !== 'undefined' && document\.body\) document\.body\.classList\.add\('web-join'\); \} catch \(e\) \{\} \}/.test(wm) && rulesW.length >= 2 && scoped && named.length >= 20
+        && J(gateW) === J(['main.js']) && J(gateRules) === J(['  body.web-join.web-gate > .app, body.web-join.web-gate > .app * { visibility: hidden !important; transition: none !important; }']) && !/class="[^"]*\bweb-gate\b/.test(ix)
+        && named.every(id => count(ix, 'id="' + id + '"') === 1) && !/class="[^"]*\bweb-join\b/.test(ix) && INVENTORY.every(id => count(ix, 'id="' + id + '"') === 1), J([writers, rulesW.length, scoped, named.filter(id => count(ix, 'id="' + id + '"') !== 1), gateW, gateRules]));
+}
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed.');
 if (fail) process.exit(1);

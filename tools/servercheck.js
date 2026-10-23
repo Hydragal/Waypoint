@@ -877,7 +877,8 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         /* ---- the dev server itself, as a child process on a scratch saves folder ---- */
         const startDev = async (savesX, env) => {
             const portX = await new Promise(r => { const s = http.createServer(); s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => r(p)); }); });
-            const childX = require('child_process').spawn(process.execPath, [path.join(__dirname, 'dev-server.js'), savesX, String(portX)], { stdio: ['ignore', 'pipe', 'pipe'], env: Object.assign({}, process.env, { WAYPOINT_LAUNCH_SECRET: '' }, env || {}) });
+            const envX = Object.assign({}, process.env, { WAYPOINT_LAUNCH_SECRET: '' }, env || {}); Object.keys(envX).forEach(k => { if (envX[k] === null) delete envX[k]; });   // null: not set at all in the child
+            const childX = require('child_process').spawn(process.execPath, [path.join(__dirname, 'dev-server.js'), savesX, String(portX)], { stdio: ['ignore', 'pipe', 'pipe'], env: envX });
             const up = await new Promise(resolve => { let out = ''; const t = setTimeout(() => resolve(false), 15000); childX.stdout.on('data', c => { out += c; if (/Waypoint dev server/.test(out)) { clearTimeout(t); resolve(true); } }); childX.on('exit', () => { clearTimeout(t); resolve(false); }); });
             const stop = async () => { try { childX.kill(); } catch (e) {} await new Promise(r => { const t = setTimeout(r, 2000); childX.on('exit', () => { clearTimeout(t); r(); }); if (childX.exitCode !== null) { clearTimeout(t); r(); } }); };
             return { port: portX, up, stop };
@@ -995,6 +996,130 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
                     dg.up && closed.every(r => r.status === 403) && /the table key/.test(saveAfter) && picAfter && noBackup === 2 && open.every(r => r.status === 200) && /the table key/.test(open[0].body) && /held keys/.test(open[1].body) && rdF(path.join(savesG, 'data.json')) === '{"mine":true}' && still.every(r => r.status === 403),
                     j([dg.up, closed.map(r => r.status), open.map(r => r.status), still.map(r => r.status), noBackup]));
             } finally { await dg.stop(); try { fs.rmSync(savesG, { recursive: true, force: true }); } catch (e) {} }
+        }
+
+        // 1.5.5, a plan-aware mode (the owner, 2026-10-23: "a plan-aware mode, read from the site's /api/version answer, with the Player plan
+        // join-only"). The dev server's test switch, WAYPOINT_WEB_CAN, read by it alone, adds to /api/version the web key a website's play host adds;
+        // without it the answer is as it was. webmode.js webCaps, the app's one judge of that answer, run for real on what the dev server answers and
+        // on hostile answers; and the module's one read of the answer, run on a page of plain objects
+        {
+            const savesW = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-devW-'));
+            const wmPath = path.join(__dirname, '..', 'system', 'app', 'scripts', 'webmode.js');
+            let WM = null; try { WM = await import(require('url').pathToFileURL(wmPath).href); } catch (e) { WM = null; }
+            const caps = (a, w) => (WM && typeof WM.webCaps === 'function' ? WM.webCaps(a, w) : { mode: 'no webCaps', plan: '', can: [] });
+            const runsW = [['none', { WAYPOINT_WEB_CAN: null, WAYPOINT_WEB_PLAN: null }], ['join', { WAYPOINT_WEB_CAN: 'join', WAYPOINT_WEB_PLAN: null }],
+                ['more', { WAYPOINT_WEB_CAN: ' join, host ,Bad,x!y,,campaigns', WAYPOINT_WEB_PLAN: 'Game Master 2' }], ['bare', { WAYPOINT_WEB_CAN: '', WAYPOINT_WEB_PLAN: '<b>gm</b>' }]];
+            const gotW = {};
+            try {
+                for (const [nm, env] of runsW) {
+                    const d = await startDev(savesW, env);
+                    try { const r = await hit(d.port, 'GET', '/api/version'); let b = null; try { b = JSON.parse(r.body); } catch (e) { b = null; } gotW[nm] = { up: d.up, status: r.status, body: b }; } finally { await d.stop(); }
+                }
+            } finally { try { fs.rmSync(savesW, { recursive: true, force: true }); } catch (e) {} }
+            const bW = nm => (gotW[nm] && gotW[nm].body) || {}, keysW = nm => Object.keys(bW(nm)).join();
+            const allUp = runsW.every(r => gotW[r[0]] && gotW[r[0]].up && gotW[r[0]].status === 200), sameV = runsW.every(r => bW(r[0]).version === bW('none').version && bW(r[0]).shell === bW('none').shell);
+            check('1.5.5 plan-aware mode (the dev server run for real): with no WAYPOINT_WEB_CAN /api/version answers its version and its shell and nothing more, as before; with WAYPOINT_WEB_CAN=join it adds web { plan: player, can: [join] }, the version and the shell as they were; the words are the lower-case ones named, comma-separated, a plan WAYPOINT_WEB_PLAN gives if it is a plain name, else player, and set to nothing the switch still adds web with nothing it can',
+                allUp && sameV && /-dev$/.test(bW('none').version || '') && keysW('none') === 'version,shell' && keysW('join') === 'version,shell,web' && j(bW('join').web) === j({ plan: 'player', can: ['join'] })
+                && j(bW('more').web) === j({ plan: 'Game Master 2', can: ['join', 'host', 'campaigns'] }) && j(bW('bare').web) === j({ plan: 'player', can: [] }), j(gotW));
+            const verRoute = (main.match(/if \(url\.pathname === '\/api\/version'\) \{\n[^\n]*\n[^\n]*\n\s*\}/) || [''])[0];
+            check('1.5.5 plan-aware mode: the shell never sends a web key and reads no switch for one (main.js\'s /api/version is its version and its shell, as before); the dev server reads WAYPOINT_WEB_CAN in one place and adds web only where it is set',
+                /return res\.end\(JSON\.stringify\(\{ version: appVersion\(\), shell: SHELL_VERSION \}\)\);/.test(verRoute) && !/WAYPOINT_WEB|\bweb\s*:/.test(main) && (dev.match(/process\.env\.WAYPOINT_WEB_CAN/g) || []).length === 1
+                && /JSON\.stringify\(WEB_FIELD \? \{ version: v \+ '-dev', shell: shellPkg\.version, web: WEB_FIELD \} : \{ version: v \+ '-dev', shell: shellPkg\.version \}\)/.test(dev), verRoute);
+            // webCaps on what the dev server answered. On a page of this computer (where.local true): full with no web key, join-only with one,
+            // whatever the words. On a website's page: join-only whatever it answered (fail closed). The plan for display alone
+            const LOC = { local: true }, SITE = { local: false };
+            const onDev = runsW.map(r => caps(bW(r[0]), LOC)), onSite = runsW.map(r => caps(bW(r[0]), SITE));
+            const wantDev = [{ mode: 'full', plan: '', can: [] }, { mode: 'join-only', plan: 'player', can: ['join'] }, { mode: 'join-only', plan: 'Game Master 2', can: ['join', 'host', 'campaigns'] }, { mode: 'join-only', plan: 'player', can: [] }];
+            check('1.5.5 plan-aware mode (webmode.js webCaps run for real on the dev server\'s answers): on a page of this computer no web key is the full app and any web key is join-only, the one mode this release has for a website, whatever it can and whatever its plan is called; on a website\'s page every answer is join-only, the one with no web key too; can keeps the words the app knows, each once, and the plan is a plain name or nothing',
+                j(onDev) === j(wantDev) && j(onSite) === j([{ mode: 'join-only', plan: '', can: [] }].concat(wantDev.slice(1))), j([onDev, onSite]));
+            // hostile answers: on a page of this computer what reads as no web key is full (a desktop never loses a thing); every web key is
+            // join-only; on a website's page everything is join-only (fail closed); nothing throws
+            const fullW = [null, undefined, 0, 1, '', 'web', true, [], ['web'], Object.assign([], { web: 1 }), { version: '1.5.5' }, { version: '1.5.5', shell: '1.5.0' }, Object.create({ web: { can: ['join'] } }), { webx: 1 }, { Web: 1 }, { WEB: { can: [] } }, { error: 'unauthorized' }, '<html>502 Bad Gateway</html>',
+                new Proxy({}, { getOwnPropertyDescriptor() { throw new Error('asked'); } })];
+            const joinW = [{ web: null }, { web: undefined }, { web: false }, { web: 0 }, { web: '' }, { web: 'player' }, { web: [] }, { web: ['join'] }, { web: {} }, { web: { plan: 'player' } }, { web: { can: 'join' } }, { web: { can: [] } },
+                { web: { plan: 'player', can: ['join'] } }, { web: { plan: 'gm', can: ['join', 'host', 'campaigns', 'uploads', 'files', 'backups'] } }, JSON.parse('{"web":{"can":["join"],"__proto__":{"plan":"x"}}}'),
+                Object.defineProperty({}, 'web', { enumerable: true, get() { throw new Error('read'); } }), { web: Object.defineProperty({ plan: 'player' }, 'can', { enumerable: true, get() { throw new Error('read'); } }) }];
+            const tryC = (a, w) => { try { return caps(a, w); } catch (e) { return 'threw'; } };
+            const fullOut = fullW.map(a => tryC(a, LOC)), siteFull = fullW.map(a => tryC(a, SITE)), joinOut = joinW.map(a => tryC(a, LOC)), joinSite = joinW.map(a => tryC(a, SITE));
+            // what says the page is this computer's: an own key local that is true, and nothing else; anything else is a website's page
+            const whereW = [undefined, null, 0, 1, true, 'local', [], [true], {}, { local: 'true' }, { local: 1 }, { local: false }, Object.create({ local: true }),
+                Object.defineProperty({}, 'local', { enumerable: true, get() { throw new Error('read'); } }), new Proxy({}, { getOwnPropertyDescriptor() { throw new Error('asked'); } })];
+            const whereOut = whereW.map(w => { const r = tryC({ version: '1.5.5', shell: '1.5.0' }, w); return r === 'threw' ? r : r.mode; });
+            const plans = ['player', '<b>', 'a'.repeat(40), 'a'.repeat(41), ' lead', 'Game-Master_2', 5, null, 'x\ny'].map(p => caps({ web: { plan: p, can: ['join'] } }, LOC).plan);
+            const longCan = Array(100000).fill('join'); longCan[70] = 'host';
+            const cans = [caps({ web: { can: ['join', 'join', 'host', 'HOST', 'x', 5, null, {}, ['join'], 'campaigns'] } }, LOC).can, caps({ web: { can: ['host', 'join'] } }, LOC).can, caps({ web: { can: longCan } }, SITE).can, caps({ web: { can: ['constructor', '__proto__', 'toString', 'join'] } }, LOC).can];
+            const r1 = caps({ web: { can: ['join'] } }, LOC), r2 = caps({ web: { can: ['join'] } }, LOC); r1.can.push('host'); r1.mode = 'full';
+            const byPlan = ['player', 'gm', 'Game Master', 'admin', 'owner', ''].map(p => j(caps({ web: { plan: p, can: ['join', 'host'] } }, LOC)).replace(/"plan":"[^"]*",/, ''));
+            let seedW = 7, threw = 0, odd = 0; const rnd = () => { seedW = (seedW * 1103515245 + 12345) & 0x7fffffff; return seedW / 0x7fffffff; };
+            const junk = depth => { const t = rnd(); if (depth > 3 || t < 0.2) return [null, undefined, 0, -1, 1e308, NaN, '', 'join', 'web', true, false][Math.floor(rnd() * 11)]; if (t < 0.5) { const a = []; for (let i = Math.floor(rnd() * 5); i > 0; i--) a.push(junk(depth + 1)); return a; } const o = {}; for (let i = Math.floor(rnd() * 4); i > 0; i--) o[['web', 'plan', 'can', 'version', 'x'][Math.floor(rnd() * 5)]] = junk(depth + 1); return o; };
+            for (let i = 0; i < 3000; i++) { const a = junk(0); const hasWeb = !!a && typeof a === 'object' && !Array.isArray(a) && Object.prototype.hasOwnProperty.call(a, 'web');
+                [[LOC, hasWeb ? 'join-only' : 'full'], [SITE, 'join-only']].forEach(([w, want]) => { try { const r = caps(a, w); if (r.mode !== want || !Array.isArray(r.can) || typeof r.plan !== 'string' || r.can.some(x => WM.WEB_CAN.indexOf(x) < 0)) odd++; } catch (e) { threw++; } }); }
+            check('1.5.5 plan-aware mode (webCaps run for real on hostile answers): on a page of this computer no answer, no object, an array, an error page, an object with no own web key (one it only inherits, another spelling) and one that cannot even be asked are the full app; on a website\'s page every one of them is join-only (fail closed); a web key of any kind is join-only on both, one that cannot be read giving no plan and no words; only an own key local that is true says the page is this computer\'s; a plan is a plain name of 40 characters at most; can is read 64 words deep, keeps the words the app knows, each once, in the order given; each answer is a fresh object; the plan\'s name decides nothing; 3,000 seeded answers judged alike on both and nothing thrown; the words are join, host, campaigns, uploads, files and backups',
+                !!WM && fullOut.every(r => j(r) === j({ mode: 'full', plan: '', can: [] })) && siteFull.every(r => j(r) === j({ mode: 'join-only', plan: '', can: [] }))
+                && joinOut.every(r => r !== 'threw' && r.mode === 'join-only') && j(joinSite) === j(joinOut) && j(joinOut[12]) === j({ mode: 'join-only', plan: 'player', can: ['join'] }) && j(joinOut[13].can) === j(['join', 'host', 'campaigns', 'uploads', 'files', 'backups'])
+                && j(joinOut[14]) === j({ mode: 'join-only', plan: '', can: ['join'] }) && j(joinOut[15]) === j({ mode: 'join-only', plan: '', can: [] }) && j(joinOut[16]) === j({ mode: 'join-only', plan: '', can: [] })
+                && j(whereOut) === j(whereW.map(() => 'join-only')) && caps({ version: '1.5.5' }, { local: true }).mode === 'full' && caps({ version: '1.5.5' }).mode === 'join-only'
+                && j(plans) === j(['player', '', 'a'.repeat(40), '', '', 'Game-Master_2', '', '', '']) && j(cans) === j([['join', 'host', 'campaigns'], ['host', 'join'], ['join'], ['join']])
+                && j(r2) === j({ mode: 'join-only', plan: '', can: ['join'] }) && byPlan.every(s => s === byPlan[0]) && threw === 0 && odd === 0 && j(WM.WEB_CAN) === j(['join', 'host', 'campaigns', 'uploads', 'files', 'backups']),
+                j([fullOut, siteFull, joinOut, whereOut, plans, cans, r2, byPlan, threw, odd]));
+            // which page is this computer's (webLocal): the names the shell and the dev server are reached by, as the address bar writes them, and
+            // no other; the shell loads http://localhost:<port>, and both servers answer those names alone
+            const hostsT = ['localhost', '127.0.0.1', '[::1]'], hostsF = ['::1', 'LOCALHOST', 'localhost.', 'localhost:3999', ' localhost', '127.0.0.2', '127.1', '0.0.0.0', '[::]', 'play.example.test', 'example.localhost', 'localhost.example.test', '', null, undefined, 5, ['localhost'], { toString: () => 'localhost' }];
+            const localOut = WM && typeof WM.webLocal === 'function' ? [hostsT.map(h => WM.webLocal(h)), hostsF.map(h => WM.webLocal(h))] : [[], []];
+            check('1.5.5 plan-aware mode (webmode.js webLocal run for real): a page of this computer is one served under localhost, 127.0.0.1 or [::1] as the address bar writes them, the names the shell\'s server and the dev server answer alone (LOCAL_HOSTS, the same list in both), and the shell loads its page from localhost; any other name, a name with a port or a dot more, another spelling and anything that is no text is a website\'s',
+                localOut[0].length === 3 && localOut[0].every(v => v === true) && localOut[1].length === hostsF.length && localOut[1].every(v => v === false) && j(WM.WEB_LOCAL) === j(hostsT)
+                && /const LOCAL_HOSTS = \['localhost', '127\.0\.0\.1', '\[::1\]'\];/.test(main) && /const LOCAL_HOSTS = \['localhost', '127\.0\.0\.1', '\[::1\]'\];/.test(dev) && /win\.loadURL\(`http:\/\/localhost:\$\{port\}`\)/.test(main), j(localOut));
+            // the module's one read of the answer (webmode.js run on a page of plain objects, with a clock of the suite's own): asked once as the
+            // module loads, with no cache. On a page of this computer nothing is known before the answer is in (the mode null, join-only false, no
+            // word on the body); a desktop's answer leaves the app whole, a Player plan's puts web-join on the body, a fetch that fails, an answer
+            // that is no JSON or one that does not come within WEB_WAIT_MS is the full app, and any web key is join-only. A website's page is join-only
+            // from the moment the module runs, the body's word written at once, whatever its answer then says or if it says nothing. The mode is
+            // settled once: an answer that comes after the wait changes nothing. net.js reads the version from the same answer
+            const wmSrc = (() => { try { return fs.readFileSync(wmPath, 'utf8').replace(/\r\n/g, '\n'); } catch (e) { return ''; } })();
+            const settleW = async () => { for (let i = 0; i < 8; i++) await new Promise(r => setImmediate(r)); };
+            const bootW = async (answer, how, host) => {
+                const calls = [], list = new Set(), win = {}, timers = [];
+                const body = { classList: { toggle(c, on) { if (on) list.add(c); else list.delete(c); return !!on; }, add(c) { list.add(c); } } };
+                const setT = (fn, ms) => { timers.push({ fn, ms, live: true }); return timers.length; }, clearT = id => { if (timers[id - 1]) timers[id - 1].live = false; };
+                let release = null;
+                const fetchW = (u, o) => { calls.push(u + '|' + (o && o.cache)); if (how === 'reject') return Promise.reject(new Error('offline'));
+                    if (how === 'hang' || how === 'late') return new Promise(r => { release = () => r({ json: () => Promise.resolve(answer) }); });
+                    return Promise.resolve({ json: () => (how === 'badjson' ? Promise.reject(new SyntaxError('not json')) : Promise.resolve(answer)) }); };
+                const loc = host === null ? undefined : { hostname: host === undefined ? 'localhost' : host };
+                let mod = null; try { mod = new Function('window', 'fetch', 'document', 'location', 'setTimeout', 'clearTimeout', wmSrc.replace(/^export /gm, '') + '\nreturn { webReady: webReady, webAnswer: webAnswer, WEB_WAIT_MS: WEB_WAIT_MS };')(win, fetchW, { body }, loc, setT, clearT); } catch (e) { return 'threw: ' + e.message; }
+                const before = [win.wpWebMode.mode(), win.wpWebMode.joinOnly(), list.has('web-join'), win.wpWebMode.local()];
+                if (how === 'hang' || how === 'late') { await settleW(); timers.filter(t => t.live).forEach(t => { t.live = false; t.fn(); }); }
+                const k = await mod.webReady, same = k === (await win.wpWebMode.ready), canC = win.wpWebMode.can(); canC.push('host');
+                if (how === 'late' && release) { release(); await settleW(); }
+                const ans = how === 'hang' ? 'not in' : await win.wpWebMode.answer;
+                return { calls, before, after: [win.wpWebMode.mode(), win.wpWebMode.joinOnly(), win.wpWebMode.plan(), win.wpWebMode.can(), list.has('web-join')], same, waits: timers.map(t => t.ms), open: timers.filter(t => t.live).length, ans, sameAns: win.wpWebMode.answer === mod.webAnswer, waitMs: mod.WEB_WAIT_MS };
+            };
+            const DESK = { version: '1.5.5', shell: '1.5.0' }, PLAYER = { version: '1.5.5', shell: '1.5.0', web: { plan: 'player', can: ['join'] } }, SITEH = 'play.example.test';
+            const bootOut = [await bootW(DESK), await bootW(PLAYER), await bootW(null, 'reject'), await bootW(null, 'badjson'), await bootW({ web: 'x' }), await bootW(DESK, 'hang'), await bootW(PLAYER, 'late'),
+                await bootW(DESK, '', SITEH), await bootW(PLAYER, '', SITEH), await bootW(null, 'reject', SITEH), await bootW(null, 'badjson', SITEH), await bootW(DESK, 'hang', SITEH), await bootW(PLAYER, 'late', SITEH), await bootW(DESK, '', null), await bootW(DESK, '', '127.0.0.1'), await bootW(DESK, '', '[::1]')];
+            const oneCall = j(['/api/version|no-store']), FULL = j(['full', false, '', [], false]), SITEJ = j(['join-only', true, '', [], true]);
+            const atHome = j([null, false, false, true]), siteBefore = j(['join-only', true, true, false]);
+            check('1.5.5 plan-aware mode (webmode.js run on a page of plain objects): the answer is asked once as the module loads, with no cache, and net.js is handed the same read (the answer as JSON, or nothing); on a page of this computer nothing is known before it is in, a desktop\'s answer leaves the app whole and the body as it was, a Player plan\'s puts web-join on the body, a fetch that fails, an answer that is no JSON or one that does not come within 4 s is the full app, and any web key is join-only; a website\'s page is join-only and wears web-join from the moment the module runs, and stays so whatever it is answered, if it is answered at all; the mode is settled once, so an answer that comes after the wait changes nothing; a wait whose answer came is called off; the module reads nothing else and imports nothing',
+                bootOut.every(o => typeof o === 'object' && j(o.calls) === oneCall && o.same === true && o.sameAns === true && o.waitMs === 4000 && j(o.waits) === j([4000]) && o.open === 0)
+                && [0, 1, 2, 3, 4, 5, 6, 14, 15].every(i => j(bootOut[i].before) === atHome) && [7, 8, 9, 10, 11, 12, 13].every(i => j(bootOut[i].before) === siteBefore)
+                && j(bootOut[0].after) === FULL && j(bootOut[1].after) === j(['join-only', true, 'player', ['join'], true]) && j(bootOut[2].after) === FULL && j(bootOut[3].after) === FULL && j(bootOut[4].after) === j(['join-only', true, '', [], true])
+                && j(bootOut[5].after) === FULL && j(bootOut[6].after) === FULL && j(bootOut[14].after) === FULL && j(bootOut[15].after) === FULL
+                && j(bootOut[7].after) === SITEJ && j(bootOut[8].after) === j(['join-only', true, 'player', ['join'], true]) && [9, 10, 11, 12, 13].every(i => j(bootOut[i].after) === SITEJ)
+                && j(bootOut[0].ans) === j(DESK) && j(bootOut[1].ans) === j(PLAYER) && bootOut[2].ans === null && bootOut[3].ans === null && j(bootOut[6].ans) === j(PLAYER)
+                && (wmSrc.match(/fetch\(/g) || []).length === 1 && !/^\s*import\b/m.test(wmSrc) && !/\bimport\(/.test(wmSrc), j(bootOut));
+            // net.js takes the app's version from that one read (its wpVersionReady statement run for real): with webmode.js loaded it asks the
+            // server for version.json alone, and without it asks for both as before; the version is the newer of the two either way
+            const netW = (() => { try { return fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', 'net.js'), 'utf8').replace(/\r\n/g, '\n'); } catch (e) { return ''; } })();
+            const vrA = netW.indexOf('window.wpVersionReady = Promise.all(['), vrB = netW.indexOf('\n});\n', vrA), vrSrc = vrA >= 0 && vrB > vrA ? netW.slice(vrA, vrB + 4) : '';
+            const cmpA = netW.indexOf('function versionCmp(a, b) {'), cmpSrc = cmpA >= 0 ? netW.slice(cmpA, netW.indexOf('\n}\n', cmpA) + 3) : '';
+            const runVer = async (wm, files) => { const asked = [], fired = [];
+                const fetchV = u => { asked.push(u); return Promise.resolve({ json: () => Promise.resolve(files[u]) }); };
+                try { const win = { wpWebMode: wm }; const p = new Function('window', 'fetch', 'document', 'CustomEvent', 'var APP_VERSION = null;\n' + cmpSrc + '\n' + vrSrc + '\nreturn window.wpVersionReady;')(win, fetchV, { dispatchEvent: e => fired.push(e.detail) }, function(t, o) { this.detail = o && o.detail; });
+                    const v = await p; return [v, asked.join(), fired.join(), win.wpAppVersion].join('|'); } catch (e) { return 'threw: ' + e.message; } };
+            const FILES = { '/api/version': { version: '1.5.5', shell: '1.5.0' }, 'version.json': { version: '1.5.6' } };
+            const verOut = [await runVer({ answer: Promise.resolve({ version: '1.5.7', shell: '1.5.0', web: { plan: 'player', can: ['join'] } }) }, FILES), await runVer({ answer: Promise.resolve(null) }, FILES), await runVer(undefined, FILES), await runVer({ answer: 'not a promise' }, FILES)];
+            check('1.5.5 plan-aware mode: net.js reads the app\'s version from the one read webmode.js made of /api/version (its wpVersionReady run for real), so a page asks for it once; with no such read it asks for it itself, as before; the newer of the answer\'s version and version.json\'s is the app\'s either way',
+                !!vrSrc && j(verOut) === j(['1.5.7|version.json|1.5.7|1.5.7', '1.5.6|version.json|1.5.6|1.5.6', '1.5.6|/api/version,version.json|1.5.6|1.5.6', '1.5.6|/api/version,version.json|1.5.6|1.5.6']), j(verOut));
         }
 
         // the dev server's /private/ (2026-10-18): the folder Waypoint-private beside the repository (an outside sheet reader of the owner's own, never in
@@ -1178,6 +1303,12 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
                 check('cluster V (the shell\'s own request handling, main.js run for real): the shell makes a secret at launch and, once the app is ready, has every request to its own origin carry it and no request to any other address; a request without it — any other program on this machine, another account, a browser — is answered 403 before anything else: the save is not read, not replaced by a plain-text POST, no backup deleted, no update started, not even a ping answered; a wrong value is refused; with it the app\'s own page is served as before, and the old gate still stands behind it',
                     built === '' && !!listener && /^[0-9a-f]{64}$/.test(SS || '') && elsewhere.every(v => v === undefined) && closed.every(r => r.status === 403) && untouched && open.every(r => r.status === 200) && /the table key/.test(open[0].body) && /held keys/.test(open[3].body) && still.every(r => r.status === 403),
                     j([built, !!listener, SS && SS.length, elsewhere, closed.map(r => r.status), untouched, open.map(r => r.status), still.map(r => r.status)]));
+                // 1.5.5, the plan-aware mode: the shell's own /api/version, run for real, is its version and its shell and nothing more, so the
+                // app's one judge of it (webmode.js webCaps) leaves a desktop whole
+                let verS = null; try { verS = JSON.parse(open[4].body); } catch (e) { verS = null; }
+                let capsS = null; try { capsS = (await import(require('url').pathToFileURL(path.join(__dirname, '..', 'system', 'app', 'scripts', 'webmode.js')).href)).webCaps(verS, { local: /win\.loadURL\(`http:\/\/localhost:\$\{port\}`\)/.test(main) }); } catch (e) { capsS = String(e && e.message); }
+                check('1.5.5 plan-aware mode (the shell\'s own request handling, main.js run for real): /api/version answers the app\'s version and the shell\'s and nothing more, no web key, and the shell loads its page from localhost, so the app reads it as the full app (webmode.js webCaps)',
+                    open[4].status === 200 && !!verS && Object.keys(verS).join() === 'version,shell' && verS.version === '1.5.0' && verS.shell === '1.5.0' && j(capsS) === j({ mode: 'full', plan: '', can: [] }), j([open[4].body, capsS]));
                 // the log: bounded, and a failed append answered
                 const lg1 = await T('POST', '/api/log', 'cleanup: 2 kept', withS()), logText = rdF(path.join(savesS, 'error.log')) || '', lgBig = await T('POST', '/api/log', null, withS({ 'Content-Length': 64 * 1024 + 1 }));
                 fs.rmSync(path.join(savesS, 'error.log')); fs.mkdirSync(path.join(savesS, 'error.log')); const lgFail = await T('POST', '/api/log', 'no room', withS()), alive = await T('GET', '/api/ping', undefined, withS()); fs.rmdirSync(path.join(savesS, 'error.log')); fs.writeFileSync(path.join(savesS, 'error.log'), 'a line' + NL);
