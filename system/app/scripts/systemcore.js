@@ -1591,9 +1591,10 @@ function cleanSections(list, ctx) {
         if (s.collapsible) sec.collapsible = true;                          // Stage 2: a collapsible <details> section
         if (validPageId(s.chip) && (!pages || pages[s.chip] === 1)) sec.chip = s.chip;   // Stage 5f: a handbook chip in the header (a page the players' view can open)
         if (s.pinned) sec.pinned = true;                                    // Stage 5d: a dashboard section — stays above the tab strip on every tab
-        if (s.open === false) sec.open = false;                            // default open; store only an explicit "closed by default"
+        if (s.open === false && sec.collapsible) sec.open = false;          // default open; store only an explicit "closed by default" (1.5.5: Starts closed), only on a collapsible section: a fixed one is always open
         if (typeof s.meta === 'string' && fieldIds[s.meta]) sec.meta = s.meta;   // a field whose value shows in the section header (e.g. a points total)
         if (typeof s.parent === 'string' && SECTION_ID.test(s.parent) && s.parent !== s.id) sec.parent = s.parent;   // nest under another section (the render enforces one level)
+        if (sec.parent && s.first === true) sec.first = true;   // 1.5.5: a sub-section set Before its fields stands before its parent's own fields (true only, only beside a parent)
         var secStyle = cleanSecStyle(s.style); if (secStyle) sec.style = secStyle;   // Stage 3: per-section colors (accent/bg/border)
         var secIcon = cleanIcon(s.icon); if (secIcon) sec.icon = secIcon;   // Stage 5g: an icon before the title
         if (typeof s.pin === 'string' && groupIds[s.pin] === 1) sec.pin = s.pin;   // Stage 6 look fold: a band group's Pin in the header

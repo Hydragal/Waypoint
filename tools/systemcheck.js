@@ -11230,7 +11230,7 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         // Help, the integration guide and both release notes
         const relB9 = '- Bigger systems. A list can carry up to 24 stats, 12 columns, 8 rolls' + NL + '  and 8 counters, and an action or a roll up to 8 changes. An item holds' + NL + '  up to 32 stats. A system holds up to 400 fields, and a sheet or its' + NL + '  HUD up to 60 sections and 400 placements.' + NL
             + '- A list\'s highest and lowest. Formulas read Weapons.max.Acc, the' + NL + '  highest Acc one row has, and Weapons.min.Acc, the lowest. A column' + NL + '  reads the same way, as Skills.max.Parry. Weapons.on.max.Acc and' + NL + '  Weapons.on.min.Acc read only the rows switched on. With no row they' + NL + '  read 0.' + NL;
-        const rel9 = t => { const a = t.indexOf('Character sheets' + NL), b = t.indexOf(NL + NL, a); return a >= 0 && b > a && t.slice(a, b + 1).indexOf(relB9) >= 0 && t.indexOf(relB9) < t.indexOf('Calendar' + NL, t.indexOf('WAYPOINT 1.5.4')); };
+        const rel9 = t => { const a = t.indexOf('Character sheets' + NL, t.indexOf('WAYPOINT 1.5.4')) /* moved on purpose (1.5.5): 1.5.5's notes have a Character sheets part of their own */, b = t.indexOf(NL + NL, a); return a >= 0 && b > a && t.slice(a, b + 1).indexOf(relB9) >= 0 && t.indexOf(relB9) < t.indexOf('Calendar' + NL, t.indexOf('WAYPOINT 1.5.4')); };
         check('409 Help, the integration guide and both release notes: Help names the four forms (each row its own figure whatever its quantity, a column alike, the rows switched on, 0 with no row, none for a choice or a counter) and says a key cannot be on, max or min; the caps in Help and the guide; both notes in the 1.5.4 Character sheets part, word for word',
             ix9.indexOf('<li>Formulas also read a list&rsquo;s <b>highest and lowest</b>. Weapons.max.Acc is the highest Acc one row has, and Weapons.min.Acc the lowest. Each row gives its own figure, whatever its quantity. A column reads the same way, as Skills.max.Parry. Weapons.on.max.Acc and Weapons.on.min.Acc read only the rows switched on. With no row they read 0. A choice and a counter have no highest or lowest.</li>') > 0
             && ix9.indexOf('It cannot be on, max or min. Formulas use those words for the whole list.') > 0 && /A list can also carry up to twenty-four <b>stats<\/b>/.test(ix9) && /<b>Rolls<\/b>, eight at most,/.test(ix9) && /<b>Counters<\/b>, eight at most,/.test(ix9) && /It makes up to eight changes\./.test(ix9) && /<b>\+ Then&hellip;<\/b> changes, up to eight,/.test(ix9)
@@ -11796,7 +11796,7 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         const inspE = fs.readFileSync(path.join(app, 'scripts', 'inspector.js'), 'utf8');
         check('the website\'s own forms, said: Help says each in the Fields and Lists entries, in plain words, after the unit of a figure, the caption and the columns\' boxes; both release notes say each among the character sheets, the same words in both, and the step of a piece\'s Height and Ground height; a piece\'s Height and Ground height boxes in Properties step half a yard in both settings (the stance\'s own yard step, halved), from the figure each shows (no min, so the figure shown is the step\'s base, as the stance\'s own height box steps)',
             HELPE.every(h => ixE.split(h).length === 2) && ixE.indexOf(HELPE[0]) > ixE.indexOf('<li>A unit of <b>yd</b>') && ixE.indexOf(HELPE[3]) > ixE.indexOf('<b>{&plusmn;formula}</b>') && ixE.indexOf(HELPE[4]) > ixE.indexOf('<li>Each column has a label, a unit, value names')
-            && notesE.every(t => NOTEE.every(nt => t.split(nt).length === 2) && t.indexOf(NOTEE[0]) > t.indexOf('\nCharacter sheets\n') && t.indexOf(NOTEE[0]) < t.indexOf('\nCalendar\n', t.indexOf('WAYPOINT 1.5.4')))
+            && notesE.every(t => NOTEE.every(nt => t.split(nt).length === 2) && t.indexOf(NOTEE[0]) > t.indexOf('\nCharacter sheets\n', t.indexOf('WAYPOINT 1.5.4')) && t.indexOf(NOTEE[0]) < t.indexOf('\nCalendar\n', t.indexOf('WAYPOINT 1.5.4')))   /* moved on purpose (1.5.5): 1.5.4's part, past 1.5.5's own */
             && inspE.includes('id="wbHeight" step="\' + (Sh && Sh.ydStep ? Sh.ydStep() / 2 : 0.5) + \'"') && inspE.includes('id="wbGround" step="\' + (St && St.ydStep ? St.ydStep() / 2 : 0.5) + \'"'), j([HELPE.map(h => ixE.split(h).length), notesE.map(t => NOTEE.map(nt => t.split(nt).length))]));
     }
     {   // 1.5.5 (the owner at the table, 2026-10-18): "lets allow it, but i approve the change after review", and "there should also be a pop up
@@ -12022,6 +12022,229 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             !!capL && capL[2] === true && heldNow === 1 && j(rvLog) === j([['c_a', null], 'held', 'held', 'held', ['c_a', null], ['c_b', 'skipme']]) && /function renderViews\(charId, skip\) \{\n    if \(typeof _chgNow === 'number' && _chgNow > 0 && typeof chgDefer === 'function'\) \{ chgDefer\(charId, skip\); return; \}/.test(shA),
             j([typeof RVz === 'string' ? RVz : 'ok', rvLog, heldNow]));
 
+    }
+    /* ---- 1.5.5, the money display fold (docs/MONEY_DISPLAY_PLAN.md, "Fold for 1.5.5"): a row's level box fits its figure; a section can
+       start closed; a sub-section can stand before its parent's own fields. Each is open to every system and changes nothing where a system
+       does not use it. Invented names only (Kael, Docks, Pebbles, Coin Pouch) ---- */
+    {
+        const shM = fs.readFileSync(path.join(app, 'scripts', 'sheets.js'), 'utf8').replace(/\r\n/g, NL), cssM = fs.readFileSync(path.join(app, 'style.css'), 'utf8').replace(/\r\n/g, NL);
+        const cutM = (a, b) => { const i = shM.indexOf(a), k = i < 0 ? -1 : shM.indexOf(b, i + 1); if (i < 0 || k < 0) throw new Error('money fold slice: ' + a); return shM.slice(i, k); };
+        const hasCls = (e, c) => (' ' + e.className + ' ').indexOf(' ' + c + ' ') >= 0;
+        const mkEl = (tag, cls, text) => {   // an element of plain objects: children, a class list, a style, events, a text that clears its children when set
+            const e = { tag: tag, className: cls || '', children: [], style: { setProperty() {}, removeProperty() {} }, dataset: {}, on: {}, hidden: false, scrollTop: 0, _t: text === undefined || text === null ? '' : String(text) };
+            Object.defineProperty(e, 'textContent', { get() { return e.children.length ? e.children.map(k => k.textContent).join('') : e._t; }, set(v) { e.children = []; e._t = String(v); } });
+            Object.defineProperty(e, 'childNodes', { get() { return e.children; } });
+            e.classList = { add: c => { if (!hasCls(e, c)) e.className = (e.className + ' ' + c).trim(); }, contains: c => hasCls(e, c), toggle: (c, on) => { if (on) e.classList.add(c); else e.className = e.className.split(' ').filter(x => x !== c).join(' '); } };
+            e.appendChild = x => { e.children.push(x); return x; }; e.insertBefore = x => { e.children.unshift(x); return x; }; e.addEventListener = (k, f) => { e.on[k] = f; };
+            return e;
+        };
+        const optM = (v, t, s) => { const o = mkEl('option', null, t); o.value = v; if (s) o.selected = true; return o; };
+
+        // 1. a row's level box fits its figure (sheets.js lvlRoom, lvlFit and lvlCtl, run for real on a page of plain objects)
+        let lvT = null, lvErr = '';
+        try {
+            const lvSrc = cutM('function lvlRoom(', '// F4b: a row\'s switch');
+            const commitsL = [], LV = new Function('el', 'opt', 'rowLvl', 'rowIdOf', 'fmtNum', 'commitItem', lvSrc + '\nreturn { lvlRoom: lvlRoom, lvlFit: lvlFit, lvlCtl: lvlCtl };')(mkEl, optM, S.rowLvl, S.rowIdOf, S.fmtNum, (c, f, q) => commitsL.push(q));
+            const specOf = lvl => S.cleanListSpec({ lvl: lvl }, true), fld = { id: 'f_kit', key: 'Kit', label: 'Kit', kind: 'item-list' }, ch = { id: 'c_k', name: 'Kael', values: {} };
+            const box = (lvl, rowLv, editable) => { const w = LV.lvlCtl({ id: 'w_1', defId: 'i_pebbles', qty: 1, lvl: rowLv }, { name: 'Pebbles' }, ch, fld, specOf(lvl), editable === undefined ? true : editable); return w.children[0]; };
+            const W = b => b.style.width || '';
+            const R5 = { label: 'Rank', min: 0, max: 99999 };
+            const small = box(R5, 20), big = box(R5, 10015), neg = box({ label: 'Rank', min: -9999, max: 9999 }, -1234), dec = box({ label: 'Rank', min: 0, max: 1000, step: 0.25 }, 12.5), decS = box({ label: 'Rank', min: 0, max: 1000, step: 0.25 }, 3);
+            const typed = box(R5, 20), steps = [];
+            [['123', 'input'], ['12345', 'input'], ['1234567', 'input'], ['12', 'input']].forEach(p => { typed.value = p[0]; typed.on[p[1]](); steps.push(W(typed)); });
+            const open = box({ label: 'Rank' }, 7); open.value = '99999999999999999999'; open.on.input(); const openW = W(open);
+            const fine = box({ label: 'Rank', step: 0.000001 }, 1); fine.value = '1'.repeat(40); fine.on.input(); const fineW = W(fine);
+            const back = box(R5, 10015); back.value = ''; back.on.input(); const backE = W(back); back.on.change(); const backT = [back.value, W(back), commitsL.length, backE];
+            const sent = box(R5, 10015); sent.value = '77'; sent.on.input(); const sentW = W(sent); sent.on.change();
+            const hostile = LV.lvlRoom({ min: -1e300, max: 1e300, step: 1e-12 }, 'x'.repeat(100)), junk = [LV.lvlRoom(null, '123456'), LV.lvlRoom({}, null), LV.lvlRoom({ max: 'big' }, 12345), LV.lvlRoom({ min: NaN, max: Infinity }, '-123456789')];
+            const noStyle = (() => { try { LV.lvlFit({ value: '123456789' }, R5); LV.lvlFit(null, R5); LV.lvlFit({ value: '123456', style: 'x' }, R5); LV.lvlFit({ value: '123456', style: null }, R5); return true; } catch (e) { return e.message; } })();
+            const names = box({ label: 'Rank', min: 1, labels: ['Low', 'High'] }, 2), ro = LV.lvlCtl({ id: 'w_1', qty: 1, lvl: 10015 }, { name: 'Pebbles' }, ch, fld, specOf(R5), false);
+            lvT = { small: W(small), big: W(big), neg: W(neg), dec: W(dec), decS: W(decS), steps, openW, fineW, backT, sentW, sentC: JSON.stringify(commitsL), hostile, junk, noStyle, inputOn: typeof small.on.input, names: [names.tag, typeof names.style.width], ro: [ro.children[0].tag, ro.children[0].textContent] };
+        } catch (e) { lvErr = e.message; }
+        check('1.5.5 a row\'s level box fits its figure (sheets.js lvlRoom, lvlFit and lvlCtl, run for real on a page of plain objects): a box of 4 characters or fewer writes no width, so it is the style sheet\'s 58 px as it was; past 4 it grows one character each, counting a minus sign and the step\'s decimals (10015, -1234 and 12.5 on a step of 0.25 take 58 px and one character more; 3 on that step none)',
+            !!lvT && lvT.small === '' && lvT.big === 'calc(58px + 1ch)' && lvT.neg === 'calc(58px + 1ch)' && lvT.dec === 'calc(58px + 1ch)' && lvT.decS === '' && lvT.inputOn === 'function'
+            && /\n  \.sheet-item-lvl input\.sheet-item-lvlin \{ width: 58px; flex: none; padding: 2px 4px; text-align: center; \}\n/.test(cssM), lvErr || j(lvT));
+        check('1.5.5 the level box follows the figure as it is typed (an input listener that only resizes: nothing is sent), held to the longest figure the level\'s own min and max allow (a max of 99999: five characters however much is typed), to the level\'s own limit of a million where it has no bounds, and to 16 at most; a box emptied by typing goes back to 58 px, and put back by its change it shows the level and its width again; a change still sends its one set op',
+            !!lvT && j(lvT.steps) === j(['', 'calc(58px + 1ch)', 'calc(58px + 1ch)', '']) && lvT.openW === 'calc(58px + 4ch)' && lvT.fineW === 'calc(58px + 11ch)'
+            && j(lvT.backT) === j(['10015', 'calc(58px + 1ch)', 0, '']) && lvT.sentW === '' && lvT.sentC === j([{ op: 'set', rowId: 'w_1', facts: { lvl: 77 } }]), lvErr || j(lvT));
+        check('1.5.5 a hostile or huge figure cannot make the box absurd, and a box with no style object is left alone: 16 characters at most whatever the level\'s spec or the text says, 4 at least for junk; no style, a style that is no object and no box throw nothing; a level with names is the select it was and a level that cannot be changed is its text, with no width of their own',
+            !!lvT && lvT.hostile === 16 && j(lvT.junk) === j([6, 4, 5, 8]) && lvT.noStyle === true && j(lvT.names) === j(['select', 'undefined']) && j(lvT.ro) === j(['span', '10015']), lvErr || j(lvT));
+        check('1.5.5 the rich table\'s level column holds the same box, so it follows its figure; the table gives the column no width of its own',
+            /var lTd = el\('td', 'sheet-itcol-lvl'\), lcT = lvlCtl\(entry, def, c, f, spec, chg\); if \(lcT\) lTd\.appendChild\(lcT\);/.test(shM) && !/\.sheet-itcol-lvl[^{]*\{[^}]*width/.test(cssM)
+            && /\n    i\.addEventListener\('input', function\(\) \{ lvlFit\(i, L\); \}\);[^\n]*\n    lvlFit\(i, L\);\n    w\.appendChild\(i\); return w;\n\}\nfunction lvlText\(/.test(shM));
+
+        // 2 and 3: the cleaner, the same in both views
+        const MSYS = { v: 1, name: 'Docks kit', fields: [
+            { id: 'f_coin', key: 'Coins', kind: 'number' }, { id: 'f_pouch', key: 'Pouch', kind: 'number' }, { id: 'f_rope', key: 'Rope', kind: 'number' }, { id: 'f_lamp', key: 'Lamp', kind: 'number' }, { id: 'f_gear', key: 'Gear', kind: 'number' }, { id: 'f_note', key: 'Note', kind: 'text' }, { id: 'f_cp', key: 'Coin_Pouch', kind: 'number' } ],
+            sheet: { sections: [
+                { id: 's_main', title: 'Docks', cols: 2, collapsible: true, open: false, fields: [{ id: 'f_coin', w: 1 }] },
+                { id: 's_cur', title: 'Purse', parent: 's_main', first: true, collapsible: true, open: false, fields: [{ id: 'f_pouch', w: 1 }] },
+                { id: 's_kit', title: 'Kit', parent: 's_main', fields: [{ id: 'f_rope', w: 1 }] },
+                { id: 's_tool', title: 'Tools', parent: 's_main', first: true, fields: [{ id: 'f_lamp', w: 1 }] },
+                { id: 's_bare', title: 'Bare', fields: [] },
+                { id: 's_inner', title: 'Inner', parent: 's_bare', first: true, fields: [{ id: 'f_gear', w: 1 }] },
+                { id: 's_plain', title: 'Plain', collapsible: true, fields: [{ id: 'f_note', w: 1 }] },
+                { id: 's_fixed', title: 'Fixed', open: false, fields: [{ id: 'f_cp', w: 1 }] },
+                { id: 's_orph', title: 'Orphan', first: true, fields: [] },
+                { id: 's_yes', title: 'Yes', parent: 's_main', first: 'yes', fields: [] },
+                { id: 's_one', title: 'One', parent: 's_main', first: 1, open: 0, collapsible: true, fields: [] },
+                { id: 's_self', title: 'Self', parent: 's_self', first: true, fields: [] },
+                { id: 's_bad', title: 'Bad', parent: 'not an id!', first: true, fields: [] },
+                { id: 's_rich', title: 'Pebbles', parent: 's_main', first: true, collapsible: true, open: false, style: { accent: '#112233' }, icon: 'K', showIf: 'Coins > 0', inline: true, fields: [] } ],
+                hud: { tabs: [], sections: [
+                    { id: 's_hmain', title: 'Pack', collapsible: true, open: false, fields: [{ id: 'f_coin', w: 1 }] },
+                    { id: 's_hcur', title: 'Purse', parent: 's_hmain', first: true, fields: [{ id: 'f_pouch', w: 1 }] },
+                    { id: 's_hkit', title: 'Kit', parent: 's_hmain', fields: [{ id: 'f_rope', w: 1 }] } ] } } };
+        const cG = cleanSystem(MSYS, { F, gmView: true }), cP = cleanSystem(MSYS, { F, gmView: false }), secOf = (s, id) => s.sheet.sections.find(x => x.id === id) || s.sheet.hud.sections.find(x => x.id === id);
+        const keysOf = id => Object.keys(secOf(cG, id));
+        check('1.5.5 the cleaner: open false is kept only on a collapsible section (Starts closed), so a fixed section, which is always open, keeps none, and 0 is no false; first is kept only as true and only beside a parent the cleaner keeps (never beside one that names the section itself or no section id), written right after it and before every key that follows a parent (its colours, its icon, its show-if, its inline rows), on the sheet and on the HUD; the players\' view holds the very same sections; cleaned again, nothing moves',
+            secOf(cG, 's_main').open === false && secOf(cG, 's_cur').open === false && !('open' in secOf(cG, 's_fixed')) && !('open' in secOf(cG, 's_plain')) && !('open' in secOf(cG, 's_one'))
+            && secOf(cG, 's_cur').first === true && secOf(cG, 's_tool').first === true && secOf(cG, 's_inner').first === true && secOf(cG, 's_hcur').first === true
+            && !('first' in secOf(cG, 's_orph')) && !('first' in secOf(cG, 's_yes')) && !('first' in secOf(cG, 's_one')) && !('first' in secOf(cG, 's_kit')) && !('first' in secOf(cG, 's_main'))
+            && keysOf('s_cur').indexOf('first') === keysOf('s_cur').indexOf('parent') + 1 && j(keysOf('s_cur')) === j(['id', 'title', 'cols', 'fields', 'collapsible', 'open', 'parent', 'first'])
+            && ['s_self', 's_bad'].every(id => !('first' in secOf(cG, id)) && !('parent' in secOf(cG, id)))
+            && j(keysOf('s_rich')) === j(['id', 'title', 'cols', 'fields', 'collapsible', 'open', 'parent', 'first', 'style', 'icon', 'showIf', 'inline'])
+            && j(cP.sheet) === j(cG.sheet) && j(cleanSystem(cG, { F, gmView: true }).sheet) === j(cG.sheet) && j(cleanSystem(cP, { F, gmView: false }).sheet) === j(cP.sheet), j([cG.sheet.sections, cG.sheet.hud]));
+        // a system that uses none of this cleans byte for byte as before: the starters in both views and a system of nested, collapsible,
+        // pinned and tabbed sections, by the hashes the cleaner before this fold gave (worked out on a scratch copy of 1.5.5's 7f63dda2)
+        const hM = o => require('crypto').createHash('sha256').update(JSON.stringify(o)).digest('hex').slice(0, 16);
+        const NONE = { v: 1, name: 'Docks kit', fields: [
+            { id: 'f_coin', key: 'Coins', kind: 'number' }, { id: 'f_pouch', key: 'Pouch', kind: 'number' }, { id: 'f_rope', key: 'Rope', kind: 'number' }, { id: 'f_lamp', key: 'Lamp', kind: 'number' }, { id: 'f_gear', key: 'Gear', kind: 'number' }, { id: 'f_note', key: 'Note', kind: 'text' } ],
+            sheet: { tabs: [{ id: 't_a', label: 'Kit' }], sections: [
+                { id: 's_main', title: 'Docks', cols: 2, collapsible: true, meta: 'f_coin', fields: [{ id: 'f_coin', w: 1 }] },
+                { id: 's_cur', title: 'Purse', parent: 's_main', collapsible: true, fields: [{ id: 'f_pouch', w: 1 }] },
+                { id: 's_kit', title: 'Kit', parent: 's_main', fields: [{ id: 'f_rope', w: 1 }] },
+                { id: 's_tool', title: 'Tools', parent: 's_main', pinned: true, fields: [{ id: 'f_lamp', w: 1 }] },
+                { id: 's_plain', title: 'Plain', collapsible: true, tab: 't_a', fields: [{ id: 'f_gear', w: 'row' }] },
+                { id: 's_fixed', title: 'Fixed', fields: [{ id: 'f_note', w: 1 }] } ],
+                hud: { tabs: [], sections: [{ id: 's_hm', title: 'Pack', collapsible: true, fields: [{ id: 'f_coin', w: 1 }] }, { id: 's_hc', title: 'Purse', parent: 's_hm', fields: [{ id: 'f_pouch', w: 1 }] }] } } };
+        const pinsM = {}; [['d20', d20], ['3d6', g3d6], ['none', NONE]].forEach(([n, s]) => { pinsM[n] = [hM(cleanSystem(s, { F, gmView: true })), hM(cleanSystem(s, { F, gmView: false }))]; });
+        check('1.5.5 a system that uses none of it cleans byte for byte as before: the d20 and 3d6 starters in both views and a system of nested, collapsible, pinned and tabbed sections with a HUD, by the hashes the cleaner gave before this fold',
+            j(pinsM) === j({ d20: ['8dc662673f58bf48', 'c9c9efa2abb0b675'], '3d6': ['4304a54a60ddddcb', 'c571cb18d44d94fe'], none: ['aef346f8fd431a7c', 'aef346f8fd431a7c'] }), j(pinsM));
+
+        // 2 and 3 drawn: sheets.js buildSections, run for real on a page of plain objects (the sheet, the print, the HUD, a window of its own)
+        let bsT = null, bsErr = '';
+        try {
+            const bsA = shM.indexOf('function buildSections('), bsSrcM = shM.slice(bsA, shM.indexOf('\n}\n', bsA) + 3);
+            const DEPS = ['F', 'PIN_GID', '_fxView', '_lockNow', '_rfClearing', '_secOpen', 'accentInk', 'applyLook', 'autoLayout', 'bandInto', 'el', 'facingNode', 'fieldNode', 'frameFlowTop', 'hbKey', 'hbNode', 'headerBlocks', 'hudButton', 'iconNode', 'imgSrc', 'inlineRow', 'linkNode', 'pageChip', 'pinChip', 'pinNode', 'pinTargetsAll', 'renderSheet', 'resetChip', 'rollNode', 'rollerNode', 'sbxFill', 'sbxKeep', 'sbxView', 'showsIf', 'stanceNode', 'syncFramePad', 'viewLocked'];
+            const nul = () => null, BSf = memo => new Function(...DEPS, bsSrcM + '\nreturn buildSections;')(() => F, /^g_/, 'sheet', false, false, memo, () => '#000000', () => {}, S.autoLayout, () => {}, mkEl, nul, f => mkEl('div', 'sheet-field', f.key), () => 0, nul, nul, () => {}, nul, () => mkEl('span'), x => x, () => {}, nul, nul, nul, nul, S.pinTargetsAll, () => {}, nul, nul, nul, undefined, undefined, undefined, S.showsIf, nul, () => {}, () => false);
+            const chB = { id: 'c_k', name: 'Kael', ownerId: '', values: { f_coin: 3 } };
+            const draw = (sys, vctx, memo) => { const body = mkEl('div', 'sheet-body'); BSf(memo || {})(body, sys, chB, S.resolveAll(sys, chB, F, null), true, false, () => {}, vctx); return body; };
+            const nameOf = n => { const t = n.children.find(k => hasCls(k, 'sheet-sec-title')), s = t ? t.children.find(k => hasCls(k, 'sheet-sec-name')) : null; return s ? s.textContent : ''; };
+            const shape = n => n.children.map(k => hasCls(k, 'sheet-sec-title') ? 'title' : hasCls(k, 'sheet-grid') ? 'grid:' + k.children.map(x => x.textContent).join('+') : hasCls(k, 'sheet-subsection') ? 'sub:' + nameOf(k) : '?' + k.className);
+            const tops = body => body.children.filter(k => hasCls(k, 'sheet-section'));
+            const look = body => tops(body).map(n => [nameOf(n), n.tag, n.tag === 'details' ? n.open : null, shape(n)]);
+            const subOf = (n, name) => n.children.find(k => hasCls(k, 'sheet-subsection') && nameOf(k) === name);
+            const noFirst = JSON.parse(j(MSYS)); noFirst.sheet.sections.forEach(s => { delete s.first; }); noFirst.sheet.hud.sections.forEach(s => { delete s.first; });
+            const cN = cleanSystem(noFirst, { F, gmView: true });
+            const sheetV = draw(cG, { campId: 'k_1', view: 'sheet', preview: false }), printV = draw(cG, { campId: 'k_1', view: 'sheet', preview: false, print: true });
+            const hudV = draw(S.hudView(cG), { campId: 'k_1', view: 'hud', preview: false }), oldV = draw(cN, { campId: 'k_1', view: 'sheet', preview: false });
+            const kept = draw(cG, { view: 'sheet' }, { s_main: true, s_cur: true }), keptH = draw(S.hudView(cG), { view: 'hud' }, { 'h:s_hmain': true, s_hmain: false });
+            bsT = { sheet: look(sheetV), purse: (() => { const p = subOf(tops(sheetV)[0], 'Purse'); return p ? [p.tag, p.open] : null; })(), print: look(printV), hud: look(hudV), old: look(oldV), kept: [tops(kept)[0].open, subOf(tops(kept)[0], 'Purse').open], keptH: tops(keptH)[0].open };
+        } catch (e) { bsErr = e.message; }
+        check('1.5.5 a sub-section set Before its fields is drawn before its parent\'s own fields, in the order the sub-sections have, and every other sub-section after them as before (sheets.js buildSections, run for real on a page of plain objects): Docks reads its title, Purse, Tools, its own Coins, then Kit; a parent with no fields of its own still stands for a sub-section set first',
+            !!bsT && j(bsT.sheet[0]) === j(['Docks', 'details', false, ['title', 'sub:Purse', 'sub:Tools', 'grid:Coins', 'sub:Kit']]) && j(bsT.sheet[1]) === j(['Bare', 'div', null, ['title', 'sub:Inner']]) && bsT.sheet.length === 4, bsErr || j(bsT));
+        check('1.5.5 Starts closed: a collapsible section with open false is drawn folded, a sub-section too, and a collapsible one without it open; the reader\'s own fold still wins, on the sheet and in the HUD under its own key; printed, every section is open and the order is the same',
+            !!bsT && j(bsT.purse) === j(['details', false]) && j(bsT.sheet[2]) === j(['Plain', 'details', true, ['title', 'grid:Note']]) && j(bsT.sheet[3]) === j(['Fixed', 'div', null, ['title', 'grid:Coin_Pouch']])
+            && j(bsT.kept) === j([true, true]) && bsT.keptH === true
+            && j(bsT.print.map(x => [x[0], x[1], x[3]])) === j(bsT.sheet.map(x => [x[0], 'div', x[3]])), bsErr || j(bsT));
+        check('1.5.5 the HUD draws through the same renderer, so its sub-sections stand where they are set; a system with no sub-section set first draws every sub-section after its parent\'s own fields, in their order, exactly as before',
+            !!bsT && j(bsT.hud) === j([['Pack', 'details', false, ['title', 'sub:Purse', 'grid:Coins', 'sub:Kit']]])
+            && j(bsT.old[0]) === j(['Docks', 'details', false, ['title', 'grid:Coins', 'sub:Purse', 'sub:Kit', 'sub:Tools']]) && j(bsT.old[1]) === j(['Bare', 'div', null, ['title', 'sub:Inner']]), bsErr || j(bsT));
+        const srcViews = (shM.match(/buildSections\(/g) || []).length, popM = fs.readFileSync(path.join(app, 'scripts', 'popout.js'), 'latin1');
+        check('1.5.5 every view of a sheet draws through that renderer: the panel, a window of its own (renderSheetInto, which popout.js asks), the HUD, the Layout preview and a print; a parent\'s own fields after a sub-section set first stand 6 px under it',
+            srcViews === 6 && /function renderSheetInto\(container, charId, camp\) \{[\s\S]{0,1200}?buildSections\(container, sys, c,/.test(shM) && /WS\.renderSheetInto\(body, charId, camp\)/.test(popM)
+            && cssM.includes('\n  .sheet-section.sheet-subsection + .sheet-grid { margin-top: 6px; }'), srcViews);
+        // the readable page keeps every sub-section after its parent's own fields, as before this fold (sheetexport.js sheetToMarkdown, run
+        // for real). Found by review: on the page a sub-section has no edge of its own, so a parent's own fields written after one set first
+        // read as that sub-section's
+        let mdT = null, mdErr = '';
+        try {
+            const XM = await import(url('sheetexport.js')), chK = { id: 'c_k', name: 'Kael', values: { f_coin: 3, f_pouch: 4, f_rope: 5, f_lamp: 6 } };
+            const mdOf = sys => XM.sheetToMarkdown(sys, chK, S.resolveAll(sys, chK, F, null), { F, gm: true });
+            const nf = JSON.parse(j(MSYS)); nf.sheet.sections.forEach(s => { delete s.first; }); nf.sheet.hud.sections.forEach(s => { delete s.first; });
+            const mdF = mdOf(cG), mdN = mdOf(cleanSystem(nf, { F, gmView: true }));
+            const at = ['**Coins:**', '**Purse**', '**Pouch:**', '**Kit**', '**Rope:**', '**Tools**', '**Lamp:**'].map(w => mdF.indexOf(w));
+            mdT = { at, same: mdF === mdN, once: ['**Coins:**', '**Purse**', '**Kit**', '**Tools**'].map(w => mdF.split(w).length - 1) };
+        } catch (e) { mdErr = e.message; }
+        check('1.5.5 the readable page keeps every sub-section after its parent\'s own fields, as before: Docks writes its own Coins, then Purse, Kit and Tools in their order, each once, and the page is byte for byte the one the same system with no sub-section set first gives',
+            !!mdT && mdT.same && mdT.at.every((x, k) => x >= 0 && (k === 0 || x > mdT.at[k - 1])) && j(mdT.once) === j([1, 1, 1, 1]), mdErr || j(mdT));
+
+        // 2 and 3 in the System editor: the section row's two selects and their handler (sheets.js secCollapSel, secFirstSel and onLayoutChange, run for real)
+        let edT = null, edErr = '';
+        try {
+            const selSrc = cutM('function select(cls, options, value, title)', '\n') + NL, rowSrc = cutM('// [systemcheck:secrow-start]', '// [systemcheck:secrow-end]');
+            const ED = new Function('el', 'opt', selSrc + rowSrc + '\nreturn { secCollapSel: secCollapSel, secFirstSel: secFirstSel, secRefocus: secRefocus };')(mkEl, optM);
+            const sel = s => s ? [s.className, s.children.map(o => [o.value, o.textContent, !!o.selected]), s.title] : null;
+            const chgA = shM.indexOf('function onLayoutChange(t) {'), chgSrc = shM.slice(chgA, shM.indexOf('\n}\n', chgA) + 3);
+            const secs = [{ id: 's_main', title: 'Docks', fields: [] }, { id: 's_cur', title: 'Purse', parent: 's_main', fields: [] }], log = [];
+            const ONP = ['layoutSections', 'markDirty', 'renderPreview', 'renderLayout', 'PIN_GID', 'LIMITS', 'toast', 'draft', 'pageOptions', 'ui', 'document', 'secRefocus'];
+            const ON = new Function(...ONP, chgSrc + '\nreturn onLayoutChange;')(() => secs, () => log.push('dirty'), () => log.push('preview'), () => log.push('layout'), /^g_/, S.LIMITS, () => {}, { fields: [], rolls: [] }, () => [], () => null, undefined, ED.secRefocus);
+            const fire = (sid, cls, value) => { log.length = 0; const r = ON({ className: cls, value: value, classList: { contains: c => cls.split(' ').indexOf(c) >= 0 }, closest: s => (s === '.sys-sec' ? { dataset: { sid: sid } } : null) }); return [r, log.join(',')]; };
+            const st = id => j(secs.find(s => s.id === id));
+            const steps = [];
+            steps.push([fire('s_main', 'sys-sec-collap', 'closed'), st('s_main')]);
+            steps.push([fire('s_main', 'sys-sec-collap', '1'), st('s_main')]);
+            steps.push([fire('s_main', 'sys-sec-collap', 'closed'), st('s_main')]);
+            steps.push([fire('s_main', 'sys-sec-collap', ''), st('s_main')]);
+            steps.push([fire('s_cur', 'sys-sec-first', '1'), st('s_cur')]);
+            steps.push([fire('s_cur', 'sys-sec-first', ''), st('s_cur')]);
+            steps.push([fire('s_cur', 'sys-sec-first', '1'), fire('s_cur', 'sys-sec-parent', ''), st('s_cur')]);
+            steps.push([fire('s_cur', 'sys-sec-parent', 's_main'), st('s_cur')]);
+            steps.push([fire('s_main', 'sys-sec-first', '1'), st('s_main')]);
+            // found by review: a change of Under draws the tab again, and the Under list takes the focus back, so one arrow key no longer
+            // drops the focus to the page. A row of plain objects stands for each section's row as drawn anew
+            const focused = [], mkRow = (sid, kind) => ({ kind, dataset: { sid }, classList: { contains: c => (kind === 'sec' ? ['sys-row', 'sys-sec'] : ['sys-row', 'sys-tab']).indexOf(c) >= 0 },
+                querySelector: q => (q === 'select.sys-sec-parent' || q === 'select.sys-sec-first' ? { focus: o => focused.push([sid, kind, q, !!o && o.preventScroll === true]) } : null) });
+            const rootR = { children: [] }, docR = { activeElement: null }, secsR = [{ id: 's_main', title: 'Docks', fields: [] }, { id: 's_pack', title: 'Pack', fields: [] }, { id: 's_cur', title: 'Purse', parent: 's_main', first: true, fields: [] }];
+            const ONR = new Function(...ONP, chgSrc + '\nreturn onLayoutChange;')(() => secsR, () => {}, () => {}, () => { rootR.children = [mkRow('s_cur', 'tab')].concat(secsR.map(s => mkRow(s.id, 'sec'))); }, /^g_/, S.LIMITS, () => {}, { fields: [], rolls: [] }, () => [], id => (id === 'sysLayoutSecs' ? rootR : null), docR, ED.secRefocus);
+            const fireR = (sid, value, had) => { focused.length = 0; const t = { className: 'sys-sec-parent', value, classList: { contains: c => c === 'sys-sec-parent' }, closest: s => (s === '.sys-sec' ? { dataset: { sid } } : null) }; docR.activeElement = had ? t : null; ONR(t); return [focused.slice(), j(secsR.find(s => s.id === sid))]; };
+            const refocus = [fireR('s_cur', 's_pack', true), fireR('s_cur', '', true), fireR('s_cur', 's_main', false)];
+            const junkR = [ED.secRefocus(null, 's_cur', 'sys-sec-parent'), ED.secRefocus({ children: [mkRow('s_cur', 'sec')] }, null, 'sys-sec-parent'), ED.secRefocus({}, 's_cur', 'sys-sec-parent'), ED.secRefocus({ children: [null, {}, mkRow('s_cur', 'tab')] }, 's_cur', 'sys-sec-parent')];
+            // found by review: removing a section, and the HUD's copy of the sheet's sections, leave no first on a section they leave at the top
+            // level (sheets.js onLayoutClick, run for real: its secdel branch and the HUD's Copy the sheet's sections)
+            const clkA = shM.indexOf('function onLayoutClick(b) {'), clkSrc = shM.slice(clkA, shM.indexOf('\n}\n', clkA) + 3);
+            const CLP = ['ui', 'layoutView', 'renderLayout', 'cleanSystem', 'draft', 'F', 'LIMITS', 'autoLayout', 'uid', 'clone', 'markDirty', 'toast', 'showConfirm', 'layoutSections', 'layoutRoot', 'sheetList', 'layoutTabs', 'draftHasHud'];
+            const delSecs = [{ id: 's_main', title: 'Docks', fields: [] }, { id: 's_cur', title: 'Purse', parent: 's_main', first: true, fields: [] }, { id: 's_kit', title: 'Kit', parent: 's_main', fields: [] }, { id: 's_pack', title: 'Pack', fields: [] }, { id: 's_tool', title: 'Tools', parent: 's_pack', first: true, fields: [] }];
+            const DR = { v: 1, name: 'Docks kit', fields: [{ id: 'f_coin', key: 'Coins', kind: 'number' }], sheet: { sections: [{ id: 's_main', title: 'Docks', fields: [{ id: 'f_coin', w: 1 }] }, { id: 's_cur', title: 'Purse', parent: 's_main', first: true, fields: [] }, { id: 's_lost', title: 'Lost', parent: 's_gone', first: true, fields: [] }] } };
+            const hudRoot = { sections: [] }; let nU = 0;
+            const CL = view => new Function(...CLP, clkSrc + '\nreturn onLayoutClick;')(() => null, view, () => {}, cleanSystem, DR, () => F, S.LIMITS, S.autoLayout, p => p + 'c' + (++nU), o => JSON.parse(JSON.stringify(o)), () => {}, () => {}, (q, cb) => cb(true), () => (view === 'hud' ? hudRoot.sections : delSecs), () => hudRoot, () => [], () => [], () => false);
+            CL('sheet')({ id: '', dataset: { act: 'secdel' }, closest: s => (s === '.sys-sec' ? { dataset: { sid: 's_main' } } : null) });
+            CL('hud')({ id: 'sysLayoutAuto', dataset: {}, closest: () => null });
+            const lostCl = cleanSystem(DR, { F, gmView: true }).sheet.sections.find(s => s.id === 's_lost');
+            const SL = [{ id: 's_main' }, { id: 's_nest', parent: 's_main' }, { id: 's_x', parent: 's_x' }];
+            edT = { fixed: sel(ED.secCollapSel({ id: 's_a' })), coll: sel(ED.secCollapSel({ collapsible: true })), closed: sel(ED.secCollapSel({ collapsible: true, open: false })), stray: sel(ED.secCollapSel({ open: false })),
+                top: sel(ED.secFirstSel({ id: 's_a' }, SL)), after: sel(ED.secFirstSel({ parent: 's_main' }, SL)), before: sel(ED.secFirstSel({ parent: 's_main', first: true }, SL)), steps,
+                gone: sel(ED.secFirstSel({ parent: 's_gone', first: true }, SL)), nest: sel(ED.secFirstSel({ parent: 's_nest', first: true }, SL)), self: sel(ED.secFirstSel(SL[2], SL)), noList: sel(ED.secFirstSel({ parent: 's_main' })),
+                refocus, junkR, del: j(delSecs), copies: hudRoot.sections.map(s => [s.id, s.parent || null, s.first === true]), lostCl: !!lostCl && lostCl.parent === 's_gone' && lostCl.first === true };
+        } catch (e) { edErr = e.message; }
+        const COLLAP_TIP = 'A collapsible section the reader can fold away. Starts closed: folded when the sheet opens, until the reader opens it', FIRST_TIP = 'Where this sub-section stands in the section it is under: after that section’s own fields, or before them';
+        check('1.5.5 the System editor\'s section row (sheets.js secCollapSel and secFirstSel, run for real): the fold list offers Fixed, Collapsible and Starts closed, Starts closed picked for a collapsible section with open false; beside Under, only while the section is nested, After its fields and Before its fields, each with its tooltip',
+            !!edT && j(edT.fixed) === j(['sys-sec-collap', [['', 'Fixed', true], ['1', 'Collapsible', false], ['closed', 'Starts closed', false]], COLLAP_TIP]) && j(edT.coll[1].map(o => o[2])) === j([false, true, false]) && j(edT.closed[1].map(o => o[2])) === j([false, false, true]) && j(edT.stray[1].map(o => o[2])) === j([true, false, false])
+            && edT.top === null && j(edT.after) === j(['sys-sec-first', [['', 'After its fields', true], ['1', 'Before its fields', false]], FIRST_TIP]) && j(edT.before[1].map(o => o[2])) === j([false, true]), edErr || j(edT));
+        const stepsWant = [[[true, 'dirty,preview'], j({ id: 's_main', title: 'Docks', fields: [], collapsible: true, open: false })], [[true, 'dirty,preview'], j({ id: 's_main', title: 'Docks', fields: [], collapsible: true })], [[true, 'dirty,preview'], j({ id: 's_main', title: 'Docks', fields: [], collapsible: true, open: false })], [[true, 'dirty,preview'], j({ id: 's_main', title: 'Docks', fields: [] })],
+            [[true, 'dirty,preview'], j({ id: 's_cur', title: 'Purse', parent: 's_main', fields: [], first: true })], [[true, 'dirty,preview'], j({ id: 's_cur', title: 'Purse', parent: 's_main', fields: [] })],
+            [[true, 'dirty,preview'], [true, 'dirty,layout'], j({ id: 's_cur', title: 'Purse', fields: [] })], [[true, 'dirty,layout'], j({ id: 's_cur', title: 'Purse', fields: [], parent: 's_main' })], [[true, 'dirty,preview'], j({ id: 's_main', title: 'Docks', fields: [] })]];
+        check('1.5.5 the handler (onLayoutChange, run for real): Starts closed writes collapsible true and open false, Collapsible collapsible true with no open key, Fixed neither; Before its fields writes first true and After its fields none; moved back to Top level a section loses its first, and a change of Under draws the row again so the second list comes and goes; a section at the top level takes no first',
+            !!edT && j(edT.steps) === j(stepsWant), edErr || j(edT && edT.steps));
+        check('1.5.5 the row wires the two selects: the fold list in place of the old two choices, and After or Before its fields right after Under; the dispatcher reads each by its exact class token, which no other token holds or is held by',
+            /\n        top\.appendChild\(secCollapSel\(sec\)\);[^\n]*\n        top\.appendChild\(select\('sys-sec-inline',/.test(shM) && /'Nest this section under another one \(one level\)'\)\);\n        var secFs = secFirstSel\(sec, secs\); if \(secFs\) top\.appendChild\(secFs\);[^\n]*\n        top\.appendChild\(btnRow\(\[\['secup',/.test(shM)
+            && !/select\('sys-sec-collap', \[\['', 'Fixed'\], \['1', 'Collapsible'\]\]/.test(shM)
+            && (() => { const disp = (shM.match(/c\.indexOf\('sys-[a-z0-9-]+'\)/g) || []).map(m => m.slice(11, -2)), cls = new Set(shM.match(/sys-[a-z0-9-]+/g) || []); return ['sys-sec-first', 'sys-sec-collap'].every(n => disp.every(t => t === n || n.indexOf(t) < 0) && [...cls].every(o => o === n || o.indexOf(n) < 0)); })());
+        check('1.5.5, found by review: After or Before its fields is offered only where the sheet nests the section, as buildSections\' childParent judges (sheets.js secFirstSel, run for real): never for a parent that is gone, one that is itself nested, the section itself or with no layout handed in; a removed section\'s sub-sections stand at the top level and keep no first while every other section keeps its own, and the HUD\'s copy of the sheet\'s sections keeps no first where it leaves out a parent (the cleaner keeps one beside a parent that names no section)',
+            !!edT && edT.gone === null && edT.nest === null && edT.self === null && edT.noList === null
+            && edT.del === j([{ id: 's_cur', title: 'Purse', parent: 's_main', fields: [] }, { id: 's_kit', title: 'Kit', parent: 's_main', fields: [] }, { id: 's_pack', title: 'Pack', fields: [] }, { id: 's_tool', title: 'Tools', parent: 's_pack', first: true, fields: [] }])
+            && j(edT.copies) === j([['s_c1', null, false], ['s_c2', 's_c1', true], ['s_c3', null, false]]) && edT.lostCl === true
+            && /function childParent\(sec\) \{ return \(sec\.parent && byIdSec\[sec\.parent\] && !byIdSec\[sec\.parent\]\.parent\) \? sec\.parent : null; \}/.test(shM),
+            edErr || j(edT && [edT.gone, edT.nest, edT.self, edT.noList, edT.del, edT.copies, edT.lostCl]));
+        check('1.5.5, found by review: a change of Under draws the Layout tab again, and the Under list of that section\'s row as drawn anew takes the focus back without a scroll, so its arrow keys go on stepping through it (onLayoutChange and secRefocus, run for real): only where it had the focus, only in a section\'s row, and a root, a row or an id that is none finds nothing',
+            !!edT && j(edT.refocus) === j([[[['s_cur', 'sec', 'select.sys-sec-parent', true]], j({ id: 's_cur', title: 'Purse', parent: 's_pack', first: true, fields: [] })], [[['s_cur', 'sec', 'select.sys-sec-parent', true]], j({ id: 's_cur', title: 'Purse', fields: [] })], [[], j({ id: 's_cur', title: 'Purse', fields: [], parent: 's_main' })]])
+            && j(edT.junkR) === j([null, null, null, null]), edErr || j(edT && [edT.refocus, edT.junkR]));
+        // said: Help's Layout entry and both release notes
+        const ixM = fs.readFileSync(path.join(app, 'index.html'), 'utf8').replace(/\r\n/g, NL), notesM = [fs.readFileSync(path.join(app, '..', '..', 'WHATSNEW.txt'), 'utf8'), fs.readFileSync(path.join(app, 'assets', 'whatsnew.txt'), 'utf8')].map(t => t.replace(/\r\n/g, NL));
+        check('1.5.5 said: Help\'s Layout entry names Starts closed and Before its fields; both release notes say the three things under 1.5.5, the level box as a fix',
+            ixM.includes('Pick <b>Starts closed</b> and it is folded when the sheet opens, until the reader opens it.') && ixM.includes('Pick <b>Before its fields</b> on its row and it stands above them instead.')
+            && notesM.every(t => { const i5 = t.indexOf('WAYPOINT 1.5.5'), i4 = t.indexOf('WAYPOINT 1.5.4'), a = t.indexOf('Starts closed'), b = t.indexOf('Before its fields'), c = t.indexOf('level box now grows'); return i5 >= 0 && [a, b, c].every(x => x > i5 && x < i4); }));
     }
     summed = true;
     console.log(NL + pass + ' passed, ' + fail + ' failed.');

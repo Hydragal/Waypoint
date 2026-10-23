@@ -1687,10 +1687,11 @@ function buildSections(body, sys, c, all, gm, own, rerender, vctx) {   // rerend
             if (plOff) node.classList.add('sheet-showif-off');
             grid.appendChild(node);
         });
+        var kids = 0, subs = !isChild && children[sec.id] ? children[sec.id] : [];
+        subs.forEach(function(ch) { if (ch.first !== true) return; var cf = renderOneSection(ch, true); if (cf) { s.appendChild(cf); kids++; } });   // 1.5.5: a sub-section set Before its fields stands before the parent's own fields, in the order the sub-sections have
         var hasOwn = Array.prototype.some.call(grid.childNodes, function(n) { return !n.hidden; });   // 5h: a player's dial with facing off is a hidden placeholder
         if (hasOwn) s.appendChild(grid);
-        var kids = 0;
-        if (!isChild && children[sec.id]) children[sec.id].forEach(function(ch) { var ce = renderOneSection(ch, true); if (ce) { s.appendChild(ce); kids++; } });   // sub-sections after the parent's own fields
+        subs.forEach(function(ch) { if (ch.first === true) return; var ce = renderOneSection(ch, true); if (ce) { s.appendChild(ce); kids++; } });   // sub-sections after the parent's own fields
         if (secOff) s.classList.add('sheet-showif-off');
         return (hasOwn || kids) ? s : null;
     }
@@ -1732,6 +1733,27 @@ function placementLabel(pl, byId, rollById) {
     if (pl.kind === 'heading') return 'Heading'; if (pl.kind === 'divider') return 'Divider'; if (pl.kind === 'portrait') return 'Portrait'; if (pl.kind === 'link') return 'Handbook link'; if (pl.kind === 'search') return 'Handbook search'; if (pl.kind === 'text') return 'Rules text'; if (pl.kind === 'roller') return 'Custom roller'; if (pl.kind === 'facing') return 'Facing dial'; if (pl.kind === 'stance') return 'Stance (posture & elevation)'; if (pl.kind === 'pin') return 'Pin button'; if (pl.kind === 'hud') return 'HUD button';
     return null;
 }
+// [systemcheck:secrow-start]
+// 1.5.5: a section's fold. Fixed, Collapsible, or Starts closed: collapsible, and folded when the sheet opens until the reader opens it
+function secCollapSel(sec) { return select('sys-sec-collap', [['', 'Fixed'], ['1', 'Collapsible'], ['closed', 'Starts closed']], sec.collapsible ? (sec.open === false ? 'closed' : '1') : '', 'A collapsible section the reader can fold away. Starts closed: folded when the sheet opens, until the reader opens it'); }
+// 1.5.5: where a sub-section stands in the section it is under, after that section's own fields or before them; offered only while nested
+// as the sheet nests it (buildSections' childParent): its parent a section of this layout that is not itself nested. A parent removed, or
+// one itself nested, leaves the section at the top level on the sheet, where its Under list reads Top level and nothing is offered here
+function secFirstSel(sec, secs) { var p = sec && sec.parent && Array.isArray(secs) ? secs.find(function(o) { return o && o.id === sec.parent; }) : null; return p && !p.parent ? select('sys-sec-first', [['', 'After its fields'], ['1', 'Before its fields']], sec.first === true ? '1' : '', 'Where this sub-section stands in the section it is under: after that section\u2019s own fields, or before them') : null; }
+// 1.5.5: a list whose change draws the Layout tab again keeps the focus: the same list of that section's row, as drawn anew, takes it
+// back, so its arrow keys go on stepping through it (a closed list changes at each arrow key). The row is found by comparing its section's
+// id, never by putting the id in a selector, and only a section's row is looked in
+function secRefocus(root, sid, cls) {
+    var rows = root && root.children; if (!rows || typeof sid !== 'string' || typeof cls !== 'string') return null;
+    for (var k = 0; k < rows.length; k++) {
+        var r = rows[k]; if (!r || !r.dataset || r.dataset.sid !== sid || !r.classList || !r.classList.contains('sys-sec') || typeof r.querySelector !== 'function') continue;
+        var s = r.querySelector('select.' + cls); if (!s || typeof s.focus !== 'function') return null;
+        try { s.focus({ preventScroll: true }); } catch (e) { s.focus(); }
+        return s;
+    }
+    return null;
+}
+// [systemcheck:secrow-end]
 function renderLayout() {
     var root = ui('sysLayoutSecs'); if (!root || !draft) return;
     var secs = layoutSections(), byId = {}, rollById = {}, placed = {}, onSheet = {}, hudOn = layoutView === 'hud';
@@ -1953,11 +1975,12 @@ function renderLayout() {
         top.appendChild(input('sys-sec-title field', sec.title, 'The section\'s title on the sheet (empty = none)', 'Section title'));
         top.appendChild(select('sys-sec-cols', [[1, '1 column'], [2, '2 columns'], [3, '3 columns'], [4, '4 columns']], Math.max(1, Math.min(4, sec.cols || 1)), 'Fields per row in this section'));
         if (tabs.length) top.appendChild(select('sys-sec-tab', [['', 'No tab']].concat(tabs.map(function(t) { return [t.id, t.label || 'Tab']; })), sec.tab || '', 'Which tab this section appears on'));
-        top.appendChild(select('sys-sec-collap', [['', 'Fixed'], ['1', 'Collapsible']], sec.collapsible ? '1' : '', 'A collapsible section the reader can fold away'));
+        top.appendChild(secCollapSel(sec));   // 1.5.5: Fixed, Collapsible or Starts closed
         top.appendChild(select('sys-sec-inline', [['', 'Stacked fields'], ['1', 'Inline rows']], sec.inline ? '1' : '', 'Each field on one line: label and value on the left, its Roll on the right (numbers, formulas, skills, toggles, selects, text); their stat tiles draw as rows here (a pool and a slider keep their own look)'));   // HUD frame (HF4a)
         top.appendChild(select('sys-sec-pinned', [['', 'On its tab'], ['1', 'Above the tabs']], sec.pinned ? '1' : '', 'A dashboard section: stays above the tab strip on every tab (and comes first on a stacked sheet)'));
         top.appendChild(select('sys-sec-meta', [['', 'No count']].concat(draft.fields.map(function(f) { return [f.id, f.label || f.key || '(field)']; })), sec.meta || '', 'A field whose value shows in the section header (e.g. a running total)'));
         top.appendChild(select('sys-sec-parent', [['', 'Top level']].concat(secs.filter(function(o) { return o.id !== sec.id && !o.parent; }).map(function(o) { return [o.id, 'Under: ' + (o.title || '(untitled)')]; })), sec.parent || '', 'Nest this section under another one (one level)'));
+        var secFs = secFirstSel(sec, secs); if (secFs) top.appendChild(secFs);   // 1.5.5: After or Before its fields, only while nested
         top.appendChild(btnRow([['secup', 'Move this section up', '&#9650;'], ['secdown', 'Move this section down', '&#9660;'], ['secdel', 'Remove this section (its fields go back to the list)', '&times;']]));
         row.appendChild(top);
         var styleRow = el('div', 'sys-sec-style');   // Stage 3: per-section colors
@@ -2080,7 +2103,7 @@ function onLayoutChange(t) {
     var sec = layoutSections().find(function(s) { return s.id === lsec.dataset.sid; }); if (!sec) return true;
     if (t.classList.contains('sys-sec-showif') || t.classList.contains('sys-pl-showif')) { renderLayout(); return true; }   // Stage 6 HUD C8: its note, once the box is left
     if (t.classList.contains('sys-sec-tab')) { if (t.value) sec.tab = t.value; else delete sec.tab; markDirty(); renderPreview(); return true; }
-    if (t.classList.contains('sys-sec-collap')) { if (t.value) sec.collapsible = true; else delete sec.collapsible; markDirty(); renderPreview(); return true; }
+    if (t.classList.contains('sys-sec-collap')) { if (t.value) sec.collapsible = true; else delete sec.collapsible; if (t.value === 'closed') sec.open = false; else delete sec.open; markDirty(); renderPreview(); return true; }   // 1.5.5: Starts closed is collapsible with open false; Collapsible and Fixed hold no open key
     if (t.classList.contains('sys-sec-inline')) { if (t.value) sec.inline = true; else delete sec.inline; markDirty(); renderPreview(); return true; }   // HUD frame (HF4a)
     if (t.classList.contains('sys-sec-resetall')) { if (t.checked) sec.resetAll = true; else delete sec.resetAll; markDirty(); renderLayout(); return true; }   // HUD frame (HF4b): its text box comes and goes
     if (t.classList.contains('sys-sec-chip')) { if (t.value) sec.chip = t.value; else delete sec.chip; markDirty(); renderPreview(); return true; }   // Stage 5f
@@ -2090,7 +2113,8 @@ function onLayoutChange(t) {
     if (c.indexOf('sys-pl-page') >= 0) { var plp = t.closest('.sys-pl'), plk = plp ? (sec.fields || [])[+plp.dataset.pi] : null; if (plk && plk.kind === 'link') { plk.page = t.value; markDirty(); renderLayout(); } return true; }   // Stage 5f: a link's page
     if (t.classList.contains('sys-sec-pinned')) { if (t.value) sec.pinned = true; else delete sec.pinned; markDirty(); renderPreview(); return true; }
     if (t.classList.contains('sys-sec-meta')) { if (t.value) sec.meta = t.value; else delete sec.meta; markDirty(); renderPreview(); return true; }
-    if (t.classList.contains('sys-sec-parent')) { if (t.value) sec.parent = t.value; else delete sec.parent; markDirty(); renderPreview(); return true; }
+    if (t.classList.contains('sys-sec-parent')) { var hadF = typeof document !== 'undefined' && !!document && document.activeElement === t; if (t.value) sec.parent = t.value; else { delete sec.parent; delete sec.first; } markDirty(); renderLayout(); if (hadF) secRefocus(ui('sysLayoutSecs'), sec.id, 'sys-sec-parent'); return true; }   // 1.5.5: back at the top level a section holds no first. The tab is drawn again, so After or Before its fields comes and goes and every Under list offers what is top level now, and the Under list takes the focus back, so its arrow keys go on stepping through it
+    if (t.classList.contains('sys-sec-first')) { if (t.value && sec.parent) sec.first = true; else delete sec.first; markDirty(); renderPreview(); return true; }   // 1.5.5: Before its fields
     if (t.classList.contains('sys-sec-cols')) { sec.cols = Math.max(1, Math.min(4, Number(t.value) || 1)); markDirty(); renderPreview(); return true; }
     if (t.classList.contains('sys-sec-stripe')) { if (sec.style) { if (t.checked) delete sec.style.stripe; else sec.style.stripe = false; markDirty(); renderPreview(); } return true; }   // Stage 5g
     if (t.classList.contains('sys-sec-accent') || t.classList.contains('sys-sec-bg') || t.classList.contains('sys-sec-border')) {   // Stage 3: per-section colors
@@ -2119,7 +2143,7 @@ function onLayoutClick(b) {
         var doCopy = function() {
             var idMap = {}, copies = [];
             srcS.slice(0, LIMITS.sections).forEach(function(s0) { idMap[s0.id] = uid('s_'); });
-            srcS.slice(0, LIMITS.sections).forEach(function(s0) { var cp = clone(s0); cp.id = idMap[s0.id]; delete cp.tab; if (cp.parent) { if (idMap[cp.parent]) cp.parent = idMap[cp.parent]; else delete cp.parent; } cp.fields = (cp.fields || []).filter(function(p) { return !(p && p.kind === 'hud'); }); copies.push(cp); });
+            srcS.slice(0, LIMITS.sections).forEach(function(s0) { var cp = clone(s0); cp.id = idMap[s0.id]; delete cp.tab; if (cp.parent) { if (idMap[cp.parent]) cp.parent = idMap[cp.parent]; else { delete cp.parent; delete cp.first; } } cp.fields = (cp.fields || []).filter(function(p) { return !(p && p.kind === 'hud'); }); copies.push(cp); });
             layoutRoot().sections = copies; markDirty(); renderLayout(); toast('The HUD now has a copy of the sheet\u2019s sections, on its first tab: trim them, and put them on the HUD\u2019s own tabs.');
         };
         if (layoutSections().length) showConfirm('Replace the HUD\u2019s sections with a copy of the sheet\u2019s? The HUD\u2019s title, tabs, band and ledger are kept.', function(yes) { if (yes) doCopy(); }); else doCopy();
@@ -2159,7 +2183,7 @@ function onLayoutClick(b) {
     var sec = secs[si], plr = b.closest('.sys-pl');
     if (act === 'secup' && si > 0) { secs.splice(si, 1); secs.splice(si - 1, 0, sec); }
     else if (act === 'secdown' && si < secs.length - 1) { secs.splice(si, 1); secs.splice(si + 1, 0, sec); }
-    else if (act === 'secdel') { secs.splice(si, 1); }
+    else if (act === 'secdel') { secs.splice(si, 1); secs.forEach(function(o) { if (o && o.parent === sec.id) delete o.first; }); }   // 1.5.5: its sub-sections stand at the top level now, and keep no Before its fields
     else if (act === 'secstyleclr') { delete sec.style; }   // Stage 3: remove the section's colors
     else if (plr) {
         var list = sec.fields || [], pi = +plr.dataset.pi, pl = list[pi]; if (!pl) return true;
@@ -2262,6 +2286,25 @@ function gmItemBits(host, def, entry, gm, sw) {   // sw (F4b): the list has a sw
     else if (def.eq === 'bound') { var eb = el('span', 'sheet-chip sheet-item-bound', 'stays on'); eb.title = 'Only you switch it off: a player\u2019s attempt fails' + (def.eqMsg ? ' with \u201c' + def.eqMsg + '\u201d' : '') + ' (just after it goes on, it still comes off)'; host.appendChild(eb); }
     else if (def.eq === 'curse') { var ec = el('span', 'sheet-chip sheet-item-curse', 'curse (on)'); ec.title = 'Curse on contact: if the player switches it off, it looks off to them and stays on, out of their sight'; host.appendChild(ec); }
 }
+// 1.5.5: a row's level box fits its figure. The characters it makes room for: the figure's own, a minus sign, its whole digits and the
+// decimals of the level's step (and of its minimum, which the grid starts from), or what is typed where that is longer. Never under 4, which
+// the style sheet's 58 px holds, never past the longest figure the level's own min and max allow (a bound left out is the level's own limit,
+// a million either way), and never past 16, so a stored or typed figure of any size makes no box wider than that
+function lvlRoom(L, typed) {
+    var num = function(x) { return typeof x === 'number' && isFinite(x); }, decs = function(v) { for (var k = 0; k < 12; k++) { var s = Math.abs(v) * Math.pow(10, k); if (Math.abs(s - Math.round(s)) < 1e-9 * Math.max(1, s)) return k; } return 12; };
+    var d = Math.max(L && num(L.step) && L.step > 0 ? decs(L.step) : 0, L && num(L.min) ? decs(L.min) : 0);
+    var fig = function(n) { if (!num(n)) return 0; var a = Math.abs(n); return (n < 0 ? 1 : 0) + (a >= 1e15 ? 16 : String(Math.floor(a)).length) + (d ? d + 1 : 0); };
+    var most = Math.max(fig(L && num(L.min) ? L.min : -1e6), fig(L && num(L.max) ? L.max : 1e6));
+    var t = typed === undefined || typed === null ? '' : String(typed).trim(), n = Math.max(t === '' ? 0 : fig(Number(t)), t.length);
+    return Math.max(4, Math.min(n, most, 16));
+}
+// ...and the box follows it: nothing written for 4 characters or fewer, so the box is the style sheet's 58 px as it always was; past 4, one
+// character more for each (the 58 px already hold the padding, the browser's own arrows and 4 characters). Display only: nothing is stored
+function lvlFit(i, L) {
+    if (!i || !i.style || typeof i.style !== 'object') return;
+    var n = lvlRoom(L, i.value);
+    if (n > 4) i.style.width = 'calc(58px + ' + (n - 4) + 'ch)'; else if (i.style.width) i.style.width = '';
+}
 // Stage 6 F4b: a row's level — a number box, or a dropdown when the level has names (they count from its minimum); text when it cannot be
 // changed. One set op per change (the host judges it again)
 function lvlCtl(entry, def, c, f, spec, editable) {
@@ -2277,7 +2320,9 @@ function lvlCtl(entry, def, c, f, spec, editable) {
     }
     var i = el('input', 'field sheet-item-lvlin'); i.type = 'number'; i.value = String(lv); i.title = L.label; i.dataset.fid = f.id; i.dataset.part = 'lvl-' + rid;
     if (L.min !== undefined) i.min = String(L.min); if (L.max !== undefined) i.max = String(L.max); i.step = String(L.step || 1);
-    i.addEventListener('change', function() { var n = Number(i.value); if (String(i.value).trim() === '' || !isFinite(n)) { i.value = String(lv); return; } commitItem(c, f, { op: 'set', rowId: rid, facts: { lvl: n } }); });
+    i.addEventListener('change', function() { var n = Number(i.value); if (String(i.value).trim() === '' || !isFinite(n)) { i.value = String(lv); lvlFit(i, L); return; } commitItem(c, f, { op: 'set', rowId: rid, facts: { lvl: n } }); });
+    i.addEventListener('input', function() { lvlFit(i, L); });   // 1.5.5: the box follows the figure as it is typed, and only resizes
+    lvlFit(i, L);
     w.appendChild(i); return w;
 }
 function lvlText(L, lv) { var i = lv - (L.min || 0); return Array.isArray(L.labels) && i >= 0 && i === Math.floor(i) && i < L.labels.length && L.labels[i] ? L.labels[i] : fmtNum(lv); }

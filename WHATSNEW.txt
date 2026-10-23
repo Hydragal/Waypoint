@@ -36,6 +36,17 @@ System editor
 - Under each rule the editor says what Save would drop, and warns of
   an action that would run both each round and In a fight. The Rolls
   tab's key names During rest only and the three new ticks.
+- A section on the Layout tab can start closed. Pick Starts closed
+  beside Fixed and Collapsible: the section is folded when the sheet
+  opens, until the reader opens it.
+- A sub-section can stand before the fields of the section it is
+  under. Pick Before its fields beside Under on its row. Left at After
+  its fields, it stands after them as before.
+
+Character sheets
+- A row's level box now grows to fit a long figure, so a level of
+  10015 no longer shows as 1001. A box of four figures or fewer looks
+  as it did.
 
 Calendar
 - Time rules now run at once by default: every character's rules run
