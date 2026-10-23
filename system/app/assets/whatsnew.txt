@@ -42,6 +42,16 @@ System editor
 - A sub-section can stand before the fields of the section it is
   under. Pick Before its fields beside Under on its row. Left at After
   its fields, it stands after them as before.
+- An item list can now stand in more than one place on the sheet and in
+  the HUD, each place showing some of its categories, such as Weapons
+  in one section and Armor in another. On the Layout tab, place the
+  list again and press By category on each place to tick what it
+  shows. A row of a category no place names shows in the list's first
+  place that shows every row. Formulas, totals and counts still read
+  the whole list, and its totals show once, in that same place. Adding
+  from a place opens on its first category, and a custom row made
+  there takes that category. Players never see a category that only
+  GM-only things carry.
 
 Character sheets
 - A row's level box now grows to fit a long figure, so a level of
@@ -79,6 +89,11 @@ Calendar
   character and rule, with Apply and Skip. Apply runs it in the round
   it came due, and Skip lets it go. It stays in the bell until you
   apply or skip it.
+
+Journal
+- Your Journal now saves one file at a time. When a table sent you
+  several handouts at once, as when you join, a save could fail and
+  leave a page out until the next save.
 
 Notifications
 - A bell in the top row keeps every notice of the campaign, newest
@@ -144,10 +159,11 @@ Going back to 1.5.4
 - Restore the previous version back to 1.5.4 keeps your campaign, but
   its next save drops what 1.5.5 added: a row's own Description and By
   level text, the choice Players ask, the GM approves, Waits in a fight,
-  In a fight and Ask me first, Before its fields, the clock's own marks
-  and each NPC's Rules run switch. Updating again does not bring them
-  back. In 1.5.4 a campaign's Time rules may read Ask me again, so
-  check them in Settings.
+  In a fight and Ask me first, Before its fields, a list placed in more
+  than one place by category, the clock's own marks and each NPC's
+  Rules run switch. Updating again does not bring them back. In 1.5.4 a
+  campaign's Time rules may read Ask me again, so check them in
+  Settings.
 - Launch copies made before that save keep what 1.5.5 added, in
   saves/backups, until ten newer launches replace them. To keep a copy
   until you delete it, press Snapshot the Save Now in Settings >

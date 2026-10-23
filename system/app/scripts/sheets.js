@@ -8,7 +8,7 @@ import { getActiveCampaign } from './models.js';
 import { save, toast } from './io.js';
 import { picRef } from './safecore.js';
 import { showConfirm, showPrompt } from './dialogs.js';
-import { cleanFieldUnit, unitTail, heightWords, measureWords, unitWords, unitHead, listWords, unitOf, textWords, measureStore, rollNeedsOk, rollNeedsSays, timeRuleRun, ruleRunCtx, chainsShallow, makeResolver, hasDice, figText, cleanEvery, cleanInFight, droppedCounts, validPageId, LIMITS, KINDS, showsIf, rowRollNames, gmOnlyNames, applyAct, applyScope, applyRound, dueActs, combatChars, roundSecs, fxLeftNow, lastsSecs, APPLY_KINDS, TURN_UNITS, LIGHT_UNITS, RANGE_UNITS, HEIGHT_UNITS, TIME_WORDS, STORED, DEF_PROP, BAND_KINDS, IDENTITY_KINDS, LEDGER_KINDS, headerEntry, captionParts, emptySystem, uid, validKey, cleanSystem, cleanChar, validateSystem, resolveAll, hoverLines, autoLayout, applyEdit, applyStyle, cleanLooks, lookOf, lookFor, lookRule, applyEffectOp, fxText, fmtNum, budgetsOf, budgetWatch, budgetSays, needsMet, needsSays, initRoll, applyProposal, cleanUploads, sideOf, threatArc, facingCtx, facingNow, setAimSource, stanceCtx, tokenCtx, POSTURE_IDS, POSTURE_NAMES, DEFAULT_POSTURES, postureList, postureAt, autoEffectsOn, initTie, charTokenOn, cycleThreat, valueTone, TONES, activeCharOf, playableChars, ownedTokenPlan, applyOwnerOps, migrateBindings, capExpr, cleanValue, fieldById, valueOpts, applyRowOp, rowIdOf, rowDef, orphanRows, stampRows, cleanRowDef, projectRows, STAT_KEY, PALETTE_KEYS, GLYPHS, glyphPath, headerEdits, pinTargets, pinTargetsAll, hudView, hudHasContent, resetTargets, cleanListSpec, statKey, rowStat, plusText, rowPaid, itemReach, gmDerivedNames, labelGmNames, gmEffectNames, labelNames, withRound, rangeCtx, withRange, rowLvl, rowOn, cleanItemKey, charForView, secretFieldIds, gmViewFields } from './systemcore.js';
+import { catHome, catPlace, cleanPlaceCats, catSplits, cleanFieldUnit, unitTail, heightWords, measureWords, unitWords, unitHead, listWords, unitOf, textWords, measureStore, rollNeedsOk, rollNeedsSays, timeRuleRun, ruleRunCtx, chainsShallow, makeResolver, hasDice, figText, cleanEvery, cleanInFight, droppedCounts, validPageId, LIMITS, KINDS, showsIf, rowRollNames, gmOnlyNames, applyAct, applyScope, applyRound, dueActs, combatChars, roundSecs, fxLeftNow, lastsSecs, APPLY_KINDS, TURN_UNITS, LIGHT_UNITS, RANGE_UNITS, HEIGHT_UNITS, TIME_WORDS, STORED, DEF_PROP, BAND_KINDS, IDENTITY_KINDS, LEDGER_KINDS, headerEntry, captionParts, emptySystem, uid, validKey, cleanSystem, cleanChar, validateSystem, resolveAll, hoverLines, autoLayout, applyEdit, applyStyle, cleanLooks, lookOf, lookFor, lookRule, applyEffectOp, fxText, fmtNum, budgetsOf, budgetWatch, budgetSays, needsMet, needsSays, initRoll, applyProposal, cleanUploads, sideOf, threatArc, facingCtx, facingNow, setAimSource, stanceCtx, tokenCtx, POSTURE_IDS, POSTURE_NAMES, DEFAULT_POSTURES, postureList, postureAt, autoEffectsOn, initTie, charTokenOn, cycleThreat, valueTone, TONES, activeCharOf, playableChars, ownedTokenPlan, applyOwnerOps, migrateBindings, capExpr, cleanValue, fieldById, valueOpts, applyRowOp, rowIdOf, rowDef, orphanRows, stampRows, cleanRowDef, projectRows, STAT_KEY, PALETTE_KEYS, GLYPHS, glyphPath, headerEdits, pinTargets, pinTargetsAll, hudView, hudHasContent, resetTargets, cleanListSpec, statKey, rowStat, plusText, rowPaid, itemReach, gmDerivedNames, labelGmNames, gmEffectNames, labelNames, withRound, rangeCtx, withRange, rowLvl, rowOn, cleanItemKey, charForView, secretFieldIds, gmViewFields } from './systemcore.js';
 import { fileBase, charToJson, charFromJson, sheetToMarkdown, isCharFile } from './sheetexport.js';
 import { lvlsFromBox, lvlsToText } from './librarycore.js';
 import { cleanCalendar, fmtWhen, fmtDate, timeOf, calPreset, CAL_LIMITS } from './calendarcore.js';
@@ -1754,8 +1754,118 @@ function secRefocus(root, sid, cls) {
     return null;
 }
 // [systemcheck:secrow-end]
+// [systemcheck:placecatsui-start]
+// 1.5.5: a list placed once a category, on the Layout tab, for the sheet and the HUD alike. An item list placed in a section has By category,
+// which opens a row of ticks under it: the list's own categories (those its picker offers, else those of the items, the core entries and,
+// on the GM's machine, the library's, as a row's form offers them) and any the place names already. A category another place of the same
+// list shows is greyed here. What Save keeps of the places is said under each, by the cleaner's own rule (catSplits)
+var _plCatOpen = typeof WeakSet === 'function' ? new WeakSet() : null;
+function placeCatNames(f, sysD) {
+    var out = [], seen = Object.create(null), push = function(x) { var t = typeof x === 'string' ? x.trim() : ''; if (!t || seen[t.toLowerCase()]) return; seen[t.toLowerCase()] = 1; out.push(t); };
+    var sp = f && f.list && typeof f.list === 'object' ? f.list : null;
+    if (sp && Array.isArray(sp.cats) && sp.cats.length) sp.cats.forEach(push); else if (typeof catChoices === 'function') catChoices(sysD).forEach(push);
+    return out;
+}
+function placeCatBtn(pl) {   // shown while the place names no category; one that names some shows its ticks
+    if (!pl || (Array.isArray(pl.cats) && pl.cats.length)) return null;
+    var open = !!(_plCatOpen && _plCatOpen.has(pl)), b = el('button', 'tool ghost sys-btn sys-pl-cats' + (open ? ' on' : ''), 'By category');
+    b.dataset.act = 'plcats'; b.setAttribute('aria-expanded', open ? 'true' : 'false'); b.title = 'Show only some of the list\u2019s categories in this place. Place the list again for the others';
+    return b;
+}
+// The categories players never see, by the cleaner's own test of the players' view (systemcore cleanSystem, placeCatsSeen): one that no item,
+// core entry or library entry they may see carries, where the library says only GM-only things carry it or cannot say. A test of a name
+function placeCatGm(sysD) {
+    var vis = Object.create(null), gm = Object.create(null), LBk = window.wpLibrary, lcs = null, put = function(m, c) { var t = typeof c === 'string' ? c.trim().toLowerCase() : ''; if (t) m[t] = 1; };
+    if (typeof isClient === 'function' && !isClient() && LBk && typeof LBk.catsFor === 'function') lcs = LBk.catsFor();
+    if (!lcs || typeof lcs !== 'object') lcs = null;
+    ((sysD && sysD.items) || []).concat((sysD && sysD.core) || []).forEach(function(it) { if (it && typeof it === 'object') put(it.vis === 'gm' ? gm : vis, it.category); });
+    if (lcs) { (Array.isArray(lcs.show) ? lcs.show : []).forEach(function(c) { put(vis, c); }); (Array.isArray(lcs.hide) ? lcs.hide : []).forEach(function(c) { put(gm, c); }); }
+    return function(c) { var l = typeof c === 'string' ? c.trim().toLowerCase() : ''; return !!l && vis[l] !== 1 && (!lcs || gm[l] === 1); };
+}
+function placeCatRow(pl, sid, pi, names, taken, home, many, hides, gmCat) {   // taken: the categories another place of this list shows, by lower case; home: the list's home place (catHome), where the rows no place names stand; many: the list stands in more than one place; hides: no place of the list shows every row, so the home place may hide some; gmCat: a test of the names players never see (placeCatGm)
+    var row = el('div', 'sys-pl-catrow'); row.dataset.sid = sid; row.dataset.pi = String(pi);
+    row.appendChild(el('span', 'sys-num-cap', 'Shows'));
+    var mine = (Array.isArray(pl.cats) ? pl.cats : []).filter(function(x) { return typeof x === 'string' && x.trim(); }).map(function(x) { return x.trim(); }), low = mine.map(function(x) { return x.toLowerCase(); }), shown = (names || []).slice();
+    mine.forEach(function(x) { if (!shown.some(function(y) { return y.toLowerCase() === x.toLowerCase(); })) shown.push(x); });   // one no item has any more stays tickable
+    if (!shown.length) row.appendChild(el('span', 'sys-note', 'Give items a category to choose which rows this place shows.'));
+    shown.forEach(function(x) {
+        var lx = x.toLowerCase(), on = low.indexOf(lx) >= 0, lb = el('label', 'sys-list-cat'), cb = el('input', 'sys-pl-catcb'); cb.type = 'checkbox'; cb.checked = on; cb.dataset.cat = x;
+        if (!on && taken && taken[lx] === 1) { cb.disabled = true; lb.title = 'Another place of this list shows it'; }
+        else if (!on && low.length >= LIMITS.placeCats) { cb.disabled = true; lb.title = 'At most ' + LIMITS.placeCats + ' categories a place'; }
+        lb.appendChild(cb); lb.appendChild(document.createTextNode(' ' + x));
+        if (typeof gmCat === 'function' && gmCat(x)) { lb.appendChild(el('small', 'sys-pl-catgm', 'GM only')); if (!lb.title) lb.title = 'Only GM-only things carry this category, so players do not see it here'; }
+        row.appendChild(lb);
+    });
+    row.appendChild(el('span', 'sys-note', many && home ? 'Rows of a category no place shows stand here.' + (hides ? ' This place may hide some of them.' : '') : !low.length ? 'None ticked: every row.' : 'Place the list again for its other categories.'));
+    return row;
+}
+// A tick: that category on this place, or off it. The last one off leaves no key, so the place shows every row, as before
+function placeCatTick(pl, name, on) {
+    if (!pl || typeof pl !== 'object' || typeof name !== 'string' || !name.trim()) return;
+    var cur = (Array.isArray(pl.cats) ? pl.cats : []).filter(function(x) { return typeof x === 'string'; }), lx = name.trim().toLowerCase(), at = -1;
+    cur.forEach(function(x, i) { if (at < 0 && x.trim().toLowerCase() === lx) at = i; });
+    if (on && at < 0 && cur.length < LIMITS.placeCats) cur.push(name.trim());
+    if (!on && at >= 0) cur.splice(at, 1);
+    if (cur.length) pl.cats = cur; else delete pl.cats;
+}
+// What Save does with the places of each item list of one layout, by the cleaner's own rule: { 'sectionId:index': [{ message }] }. A list
+// placed once with no categories, and a list whose places all hold, say nothing
+function placeCatSays(secs, fields) {
+    var out = {}, kinds = Object.create(null), names = Object.create(null), list = Array.isArray(secs) ? secs : [], by = Object.create(null);
+    (Array.isArray(fields) ? fields : []).forEach(function(f) { if (f && typeof f.id === 'string') { kinds[f.id] = f.kind; names[f.id] = f.label || f.key || 'This list'; } });
+    var ok = catSplits(list, kinds), say = function(k, m) { (out[k] = out[k] || []).push({ message: m }); };
+    list.forEach(function(s) { if (!s || typeof s.id !== 'string') return; (Array.isArray(s.fields) ? s.fields : []).forEach(function(p, pi) { if (p && typeof p.id === 'string' && kinds[p.id] === 'item-list') (by[p.id] = by[p.id] || []).push({ k: s.id + ':' + pi, p: p }); }); });
+    Object.keys(by).forEach(function(id) {
+        var ps = by[id], nm = names[id];
+        ps.forEach(function(x) { var n = Object.create(null), cnt = 0; (Array.isArray(x.p.cats) ? x.p.cats : []).forEach(function(c) { var l = typeof c === 'string' ? c.trim().toLowerCase() : ''; if (l && !n[l]) { n[l] = 1; cnt++; } }); if (cnt > LIMITS.placeCats) say(x.k, 'A place shows at most ' + LIMITS.placeCats + ' categories, so Save keeps the first ' + LIMITS.placeCats + '.'); });
+        if (ok[id] === 1 || ps.length < 2) return;
+        var cs = ps.map(function(x) { return cleanPlaceCats(x.p.cats); }), why;
+        if (cs.some(function(c) { return !c; })) why = 'Each place of ' + nm + ' needs categories of its own.';
+        else { var seen = Object.create(null), twice = ''; cs.forEach(function(c) { c.forEach(function(x) { var l = x.toLowerCase(); if (seen[l] && !twice) twice = x; seen[l] = 1; }); }); why = 'Two places of ' + nm + ' show ' + (twice || 'one category') + '.'; }
+        ps.forEach(function(x, i) { say(x.k, why + (i === 0 ? ' So Save keeps only this place, and it shows every row.' : ' So Save drops this place.')); });
+    });
+    return out;
+}
+// ...under each place, for both layouts, in errorsById ('plc:' and the layout, the section's id and the place's index)
+function placeCatErrs() {
+    Object.keys(errorsById).forEach(function(k) { if (k.indexOf('plc:') === 0) delete errorsById[k]; });
+    if (!draft) return;
+    [['sheet', draft.sheet], ['hud', draft.sheet && draft.sheet.hud]].forEach(function(lv) {
+        var lay = lv[1]; if (!lay || typeof lay !== 'object' || !Array.isArray(lay.sections)) return;
+        var said = placeCatSays(lay.sections, draft.fields); Object.keys(said).forEach(function(k) { errorsById['plc:' + lv[0] + ':' + k] = said[k]; });
+    });
+}
+// The ticks under a place (while it names a category, or By category is open) and what Save does with it
+function placeCatPart(host, pl, sec, pi, f, secs) {
+    var open = (Array.isArray(pl.cats) && pl.cats.length > 0) || !!(_plCatOpen && _plCatOpen.has(pl));
+    if (open) {
+        var taken = Object.create(null), firstP = null, n = 0;
+        (secs || []).forEach(function(s) { (s && Array.isArray(s.fields) ? s.fields : []).forEach(function(p) { if (!p || p.id !== pl.id) return; n++; if (!firstP) firstP = p; if (p === pl) return; (Array.isArray(p.cats) ? p.cats : []).forEach(function(x) { if (typeof x === 'string' && x.trim()) taken[x.trim().toLowerCase()] = 1; }); }); });
+        var specP = f && f.list && typeof f.list === 'object' ? f.list : null, homeP = typeof catHome === 'function' ? catHome(secs, pl.id, specP) : firstP;   // the place the rows no place names stand in, as the sheet reads it
+        host.appendChild(placeCatRow(pl, sec.id, pi, placeCatNames(f, draft), taken, homeP === pl, n > 1, typeof catHome === 'function' && catHome(secs, pl.id, specP, true) === null, typeof placeCatGm === 'function' ? placeCatGm(draft) : null));
+    }
+    var k = 'plc:' + layoutView + ':' + sec.id + ':' + pi, ec = errorCell(k); ec.dataset.errFor = k; host.appendChild(ec);
+}
+// A list placed again opens the ticks of each of its places, so that each can name its categories
+function placeCatAgain(secs, pl, fields) {
+    var f = pl && typeof pl.id === 'string' ? (fields || []).find(function(x) { return x && x.id === pl.id; }) : null; if (!f || f.kind !== 'item-list' || !_plCatOpen) return false;
+    var had = false; (secs || []).forEach(function(s) { (s && Array.isArray(s.fields) ? s.fields : []).forEach(function(p) { if (p && p.id === pl.id) { had = true; _plCatOpen.add(p); } }); });
+    if (had) _plCatOpen.add(pl);
+    return had;
+}
+// After the tab is drawn again: the same tick takes the focus back (found by comparing, never by a selector), else the first tick, else By category
+function placeCatRefocus(root, sid, pi, cat) {
+    var rows = root && typeof root.querySelectorAll === 'function' ? root.querySelectorAll('.sys-pl-catrow') : [], hit = null, foc = function(x) { try { x.focus({ preventScroll: true }); } catch (e) { x.focus(); } return x; };
+    Array.prototype.forEach.call(rows, function(r) { if (hit || !r.dataset || r.dataset.sid !== sid || r.dataset.pi !== String(pi)) return; var cbs = r.querySelectorAll('input.sys-pl-catcb'); Array.prototype.forEach.call(cbs, function(cb) { if (!hit && !cb.disabled && (typeof cat !== 'string' || cb.dataset.cat === cat)) hit = cb; }); });
+    if (hit) return foc(hit);
+    var prs = root && typeof root.querySelectorAll === 'function' ? root.querySelectorAll('.sys-pl') : [];
+    Array.prototype.forEach.call(prs, function(p) { if (hit || !p.dataset || p.dataset.sid !== sid || p.dataset.pi !== String(pi)) return; hit = p.querySelector('button.sys-pl-cats'); });
+    return hit ? foc(hit) : null;
+}
+// [systemcheck:placecatsui-end]
 function renderLayout() {
     var root = ui('sysLayoutSecs'); if (!root || !draft) return;
+    if (typeof placeCatErrs === 'function') placeCatErrs();   // 1.5.5: what Save does with a list's places, as the tab now stands
     var secs = layoutSections(), byId = {}, rollById = {}, placed = {}, onSheet = {}, hudOn = layoutView === 'hud';
     draft.fields.forEach(function(f) { byId[f.id] = f; }); draft.rolls.forEach(function(r) { rollById[r.id] = r; });
     secs.forEach(function(s) { (s.fields || []).forEach(function(p) { if (p.id) placed[p.id] = 1; }); });
@@ -1766,7 +1876,7 @@ function renderLayout() {
     var tbAuto = ui('sysLayoutAuto'), tbClear = ui('sysLayoutClear'), tbNote = ui('sysLayoutNote');
     if (tbAuto) { tbAuto.textContent = hudOn ? 'Copy the sheet\u2019s sections' : 'Start from the automatic layout'; tbAuto.title = hudOn ? 'Put a copy of the sheet\u2019s sections (or the automatic layout\u2019s) on the HUD\u2019s first tab, to trim and re-tab' : 'Copy the automatic layout (one section per kind, then the rolls) as a starting point'; }
     if (tbClear) { tbClear.textContent = hudOn ? 'Remove the HUD' : 'Use the automatic layout'; tbClear.title = hudOn ? 'Take the HUD away (its button goes from every sheet and menu; the sheet is untouched)' : 'Remove your layout and let the sheet arrange itself'; }
-    if (tbNote) { if (!tbNote.dataset.sheetText) tbNote.dataset.sheetText = tbNote.textContent; tbNote.textContent = hudOn ? 'The HUD is a second window for each character, with its own tabs, sections, band and ledger. A field can be on the sheet and here; within the HUD it appears once. Players get a HUD button once it holds something they can see.' : tbNote.dataset.sheetText; }
+    if (tbNote) { if (!tbNote.dataset.sheetText) tbNote.dataset.sheetText = tbNote.textContent; tbNote.textContent = hudOn ? 'The HUD is a second window for each character, with its own tabs, sections, band and ledger. A field can be on the sheet and here. Within the HUD it appears once, but an item list can stand in several places by category. Players get a HUD button once it holds something they can see.' : tbNote.dataset.sheetText; }
     if (hudOn) {
         var hudBox = el('div', 'sys-tabmgr sys-hudbox'); hudBox.appendChild(el('div', 'sys-tabmgr-head', 'HUD title (optional)'));
         hudBox.appendChild(input('sys-hud-title field', layoutRoot().title, 'Shown under the name in the HUD\u2019s head (e.g. Combat HUD)', 'HUD'));
@@ -2047,11 +2157,14 @@ function renderLayout() {
             var wb = el('button', 'tool ghost sys-btn sys-pl-w', pl.w === 'row' ? 'Full row' : '1 column'); wb.dataset.act = 'plw'; wb.title = 'Width: one column of the section, or the full row'; pr.appendChild(wb);
             var plf = pl.id ? (draft.fields || []).find(function(x) { return x.id === pl.id; }) : null, plOn = plf && plf.kind === 'item-list' && plf.list && plf.list.on && typeof plf.list.on === 'object' ? plf.list.on : null;
             if (plOn || (pl.on && plf && plf.kind === 'item-list')) { var ob = el('button', 'tool ghost sys-btn sys-pl-on', pl.on ? 'Only ' + (plOn ? String(plOn.label || 'on').toLowerCase() : 'switched on') : 'All rows'); ob.dataset.act = 'plon'; ob.title = plOn ? 'Every row of the list, or only the rows switched on (' + (plOn.label || 'On') + '), e.g. the HUD\u2019s readied weapons' : 'Its list has no switch now, so every row shows: click to clear it'; pr.appendChild(ob); }   // F4b (review: kept while set, so it can be cleared)
+            if (plf && plf.kind === 'item-list' && typeof placeCatBtn === 'function') { var pcB = placeCatBtn(pl); if (pcB) pr.appendChild(pcB); }   // 1.5.5: By category
             pr.appendChild(btnRow([['plup', 'Move up', '&#9650;'], ['pldown', 'Move down', '&#9660;'], ['pldel', 'Take off the sheet (the field stays defined)', '&times;']]));
             list.appendChild(pr);
+            if (plf && plf.kind === 'item-list' && typeof placeCatPart === 'function') placeCatPart(list, pl, sec, pi, plf, secs);   // 1.5.5: its categories, and what Save does with it
         });
         row.appendChild(list);
         var addRow = el('div', 'sys-row-main sys-pl-addrow'), opts = [['', 'Add to this section\u2026']], inHdr = headerEdits(draft, hudOn ? (draft.sheet && draft.sheet.hud) || null : undefined);
+        draft.fields.forEach(function(f) { if (placed[f.id] && f.kind === 'item-list') opts.push(['f:' + f.id, (f.label || f.key || '(field)') + ' again, for other categories']); });   // 1.5.5: a list placed once a category
         draft.fields.forEach(function(f) { if (!placed[f.id]) opts.push(['f:' + f.id, (f.label || f.key || '(field)') + (f.key ? ' (' + f.key + ')' : '') + (inHdr[f.id] === 1 ? ' (in the header)' : '') + (hudOn && onSheet[f.id] ? ' (on the sheet)' : '')]); });   // Stage 6: the GM is told a field is already edited in the header
         draft.rolls.forEach(function(r) { opts.push(['r:' + r.id, rollPick(r)]); });
         opts.push(['k:heading', 'Heading'], ['k:text', 'Rules text'], ['k:roller', 'Custom roller'], ['k:divider', 'Divider'], ['k:portrait', 'Portrait'], ['k:facing', 'Facing dial'], ['k:stance', 'Stance (posture & elevation)']);
@@ -2102,6 +2215,7 @@ function onLayoutChange(t) {
     var c = t.className || '', lsec = t.closest && t.closest('.sys-sec'); if (!lsec) return false;
     var sec = layoutSections().find(function(s) { return s.id === lsec.dataset.sid; }); if (!sec) return true;
     if (t.classList.contains('sys-sec-showif') || t.classList.contains('sys-pl-showif')) { renderLayout(); return true; }   // Stage 6 HUD C8: its note, once the box is left
+    if (t.classList.contains('sys-pl-catcb') && typeof placeCatTick === 'function') { var pcr = t.closest('.sys-pl-catrow'), pcp = pcr ? (sec.fields || [])[+pcr.dataset.pi] : null; if (pcp && typeof t.dataset.cat === 'string') { placeCatTick(pcp, t.dataset.cat, t.checked); if (_plCatOpen) _plCatOpen.add(pcp); markDirty(); renderLayout(); placeCatRefocus(ui('sysLayoutSecs'), sec.id, +pcr.dataset.pi, t.dataset.cat); } return true; }   // 1.5.5: a place's categories
     if (t.classList.contains('sys-sec-tab')) { if (t.value) sec.tab = t.value; else delete sec.tab; markDirty(); renderPreview(); return true; }
     if (t.classList.contains('sys-sec-collap')) { if (t.value) sec.collapsible = true; else delete sec.collapsible; if (t.value === 'closed') sec.open = false; else delete sec.open; markDirty(); renderPreview(); return true; }   // 1.5.5: Starts closed is collapsible with open false; Collapsible and Fixed hold no open key
     if (t.classList.contains('sys-sec-inline')) { if (t.value) sec.inline = true; else delete sec.inline; markDirty(); renderPreview(); return true; }   // HUD frame (HF4a)
@@ -2131,6 +2245,7 @@ function onLayoutChange(t) {
         else if (kind === 'r') { if (draft.rolls.some(function(r) { return r.id === id; })) pl = { roll: id, w: 1 }; }
         else if (kind === 'p') { if (PIN_GID.test(id) && (draft.sheet && Array.isArray(draft.sheet.bandGroups) ? draft.sheet.bandGroups : []).some(function(g) { return g && g.id === id; })) pl = { kind: 'pin', g: id, w: 1 }; }   // Stage 6
         else if (kind === 'k') { pl = { kind: id, w: id === 'portrait' || id === 'link' || id === 'facing' || id === 'stance' || id === 'hud' ? 1 : 'row' }; if (id === 'heading' || id === 'hud' || id === 'text') pl.text = ''; if (id === 'link') { var firstPage = pageOptions('', null)[0]; pl.text = ''; pl.page = firstPage ? firstPage[0] : ''; } }
+        if (pl && kind === 'f' && typeof placeCatAgain === 'function') placeCatAgain(layoutSections(), pl, draft.fields);   // 1.5.5: a list placed again opens the category ticks of each of its places
         if (pl) { sec.fields.push(pl); markDirty(); renderLayout(); }
         return true;
     }
@@ -2187,6 +2302,7 @@ function onLayoutClick(b) {
     else if (act === 'secstyleclr') { delete sec.style; }   // Stage 3: remove the section's colors
     else if (plr) {
         var list = sec.fields || [], pi = +plr.dataset.pi, pl = list[pi]; if (!pl) return true;
+        if (act === 'plcats' && typeof placeCatRefocus === 'function') { if (_plCatOpen) { if (_plCatOpen.has(pl)) _plCatOpen.delete(pl); else _plCatOpen.add(pl); } renderLayout(); placeCatRefocus(ui('sysLayoutSecs'), sec.id, pi); return true; }   // 1.5.5: By category opens or closes the ticks (the draft is unchanged)
         if (act === 'plw') pl.w = pl.w === 'row' ? 1 : 'row';
         else if (act === 'plif') { if (typeof pl.showIf === 'string') delete pl.showIf; else pl.showIf = ''; }   // Stage 6 HUD C8: a show-if box for this placement
         else if (act === 'plon') { if (pl.on) delete pl.on; else pl.on = true; }   // F4b: only the rows switched on
@@ -2381,6 +2497,17 @@ function noteToggle(line, entry, c, f) {
 }
 // F4b: a list's picker — the items of its categories (every one when it names none), a group per category; on a list with no quantity that
 // holds an item once, one already carried is greyed. Returns how many it offers
+// 1.5.5: a list placed once a category opens its pickers on the placement's first category. A list cannot open part way down, so the
+// sheet's own list puts that category's group first, after its first line; the library's picker opens on that category's chip (libpicker
+// opts.cat), which the list it was opened from carries. Nothing else of adding changes
+function catLead(sel, cat) {
+    var lc = typeof cat === 'string' ? cat.trim().toLowerCase() : '', kids = sel && sel.children ? Array.prototype.slice.call(sel.children) : [], g = null;
+    kids.forEach(function(k) { if (!g && k && String(k.tagName || '').toLowerCase() === 'optgroup' && String(k.label || '').trim().toLowerCase() === lc) g = k; });
+    if (!g || !lc || typeof sel.insertBefore !== 'function') return false;
+    var top = kids[0] && String(kids[0].tagName || '').toLowerCase() === 'option' && kids[0].value === '' ? kids[0] : null;
+    sel.insertBefore(g, top ? top.nextSibling : kids[0]); return true;
+}
+function catOf(a) { var v = a && a.dataset ? a.dataset.cat : null; return typeof v === 'string' && v ? v : null; }
 function pickerInto(sel, items, spec, carried, cantOf) {   // cantOf (126b): why this character may not take an item yet, in words; none, or no words: it may
     var cats = Array.isArray(spec.cats) ? spec.cats.map(function(x) { return String(x).toLowerCase(); }) : null, groups = [], byCat = Object.create(null), loose = [], have = Object.create(null), n = 0;
     if (spec.noQty && !spec.multi) carried.forEach(function(r) { if (r && typeof r.defId === 'string' && r.hid !== 1) have[r.defId] = 1; });
@@ -2554,12 +2681,12 @@ function colChips(host, spec, cells) {
     spec.cols.forEach(function(cc, i) { var v = cells[i]; if (cc.hide === true || !v) return; var ch = el('span', 'sheet-chip sheet-item-col' + (v.error ? ' sheet-item-colerr' : '')); ch.appendChild(el('small', null, cc.label)); ch.appendChild(document.createTextNode(' ' + (typeof colShown === 'function' ? colShown(cc, v) : v.text + (cc.unit && !v.error ? ' ' + cc.unit : '')) + (typeof plusText === 'function' ? plusText(v) : ''))); if (v.error) ch.title = v.error; host.appendChild(ch); });
 }
 // F5a1: the totals under a list — each stat shown on the row and each column marked Total, summed over the rows carried (a kept curse is not)
-function totalsLine(wrap, spec, foot) {
+function totalsLine(wrap, spec, foot, cap) {   // cap (1.5.5): its caption, Total where none is given
     var parts = [];
     (Array.isArray(spec.stats) ? spec.stats : []).forEach(function(s) { if (foot[s.key]) parts.push({ lab: s.label, t: foot[s.key], c: s }); });   // 1.5.4: a stat's unit too
     (Array.isArray(spec.cols) ? spec.cols : []).forEach(function(cc) { if (foot[cc.key]) parts.push({ lab: cc.label, t: foot[cc.key], c: cc }); });
     if (!parts.length) return;
-    var tl = el('div', 'sheet-item-totals'); tl.appendChild(el('span', 'sheet-item-totals-cap', 'Total'));
+    var tl = el('div', 'sheet-item-totals'); tl.appendChild(el('span', 'sheet-item-totals-cap', cap || 'Total'));
     parts.forEach(function(p) { var sp = el('span', 'sheet-chip sheet-item-total'); sp.appendChild(el('small', null, p.lab)); sp.appendChild(document.createTextNode(' ' + (typeof colShown === 'function' ? colShown(p.c, p.t, true) : p.t.text + (p.c && p.c.unit && !p.t.error ? ' ' + p.c.unit : '')))); if (p.t.error) sp.title = p.t.error; tl.appendChild(sp); });
     wrap.appendChild(tl);
 }
@@ -3258,14 +3385,17 @@ function fieldNodeBody(f, c, e, gm, own, sysArg, plc) {   // plc (F4b): the sect
         box.appendChild(wrapE); return box;
     }
     if (k === 'item-list') {
-        var sysI = sysArg || systemOf(getActiveCampaign()), carried = Array.isArray(raw) ? raw : [];
+        var sysI = sysArg || systemOf(getActiveCampaign()), carried = Array.isArray(raw) ? raw : [], rowsI = carried, resI = e;   // 1.5.5: rowsI, the rows this placement draws; carried, every row of the list, which the pickers read
         var specI = f.list || null, onOnly = !!(plc && plc.on === true && specI && specI.on), emptyI = onOnly ? 'Nothing ' + String(specI.on.label || 'on').toLowerCase() + '.' : '';   // F4b: a placement that shows only the rows switched on (the HUD's readied weapons)
-        if (onOnly) carried = carried.filter(function(r) { return rowOn(specI, r); });
+        if (onOnly) rowsI = rowsI.filter(function(r) { return rowOn(specI, r); });
+        var catT = typeof catPlace === 'function' ? catPlace(sysI && sysI.sheet ? sysI.sheet.sections : null, plc, specI) : null, catAt = catT ? plc.cats[0] : '';   // 1.5.5: a list placed once a category, as the cleaner kept it (the layout drawn is sysI's: the HUD's own in the HUD)
+        if (catT) { rowsI = rowsI.filter(function(r) { var dc = rowDef(sysI, r); return catT(dc && dc.def ? dc.def.category : ''); }); if (e && e.foot) resI = Object.assign({}, e, { foot: null }); }   // the rows of its categories, and in the list's first placement those of a category no placement names; the list's totals read the whole list, so they are drawn once, below
         var gmThrows = sysI && sysI.combat && sysI.combat.blastRoller === 'gm';
         var canThrow = (gm || (own && !gmThrows && !!facingTarget(c))) && !c.partial;   // who-rolls='gm' means only the GM throws; a player throws from the character whose token they hold here (never a kept one)
         var wrap = el('div', 'sheet-items' + (f.table ? ' sheet-items-table' : ''));
-        if (f.table) itemTableInto(wrap, f, c, carried, sysI, canThrow, playOk, gm, emptyI, e, editOk);   // Stage 4: rich table (F5a1: e, its columns' cells and totals)
-        else itemListInto(wrap, f, c, carried, sysI, canThrow, playOk, gm, emptyI, e, editOk);            // the plain carried list (as before)
+        if (f.table) itemTableInto(wrap, f, c, rowsI, sysI, canThrow, playOk, gm, emptyI, resI, editOk);   // Stage 4: rich table (F5a1: e, its columns' cells and totals)
+        else itemListInto(wrap, f, c, rowsI, sysI, canThrow, playOk, gm, emptyI, resI, editOk);            // the plain carried list (as before)
+        if (catT && catT.home && carried.length && specI && e && e.foot && (!f.table || f.table.footer)) totalsLine(wrap, specI, e.foot, 'Whole list');   // 1.5.5: the whole list's totals, once, under its home placement (catHome), where its rows would show them
         var custOK = !!specI && (gm || specI.custom === true);   // F4c3: + Custom… — the GM's on any list shaped in the Lists tab, a player's where it takes custom rows
         var libOK = gm && !!window.wpLibPicker && !!(window.wpLibrary && window.wpLibrary.size && window.wpLibrary.size() > 0);   // Stage 6 library L2c: the GM's machine offers the campaign's library too
         if (!gm && window.wpLibPicker && window.wpNet && window.wpNet.libManifest) { var lmP = window.wpNet.libManifest(); libOK = !!lmP && lmP.packs.some(function(p) { return p.count > 0; }); }   // L3b: a player, the packs the host lets them see
@@ -3274,9 +3404,10 @@ function fieldNodeBody(f, c, e, gm, own, sysArg, plc) {   // plc (F4b): the sect
             var cantI = !gm && typeof cantTake === 'function' ? function(it) { return cantTake(sysI, c, it); } : null;   // 126b: an item this character may not take yet is greyed out for its player and says why; the GM is never stopped
             if (specI) nPick = pickerInto(add, sysI.items || [], specI, carried, cantI);   // F4b: the list's categories, grouped
             else sysI.items.forEach(function(it) { var oI = opt(it.id, (iconText(it.icon) ? iconText(it.icon) + ' ' : '') + it.name + (it.category ? ' — ' + it.category : '')), whyI = cantI ? cantI(it) : ''; if (whyI) { oI.disabled = true; oI.title = whyI; } add.appendChild(oI); });
+            if (catAt && typeof catLead === 'function') { catLead(add, catAt); add.dataset.cat = catAt; }   // 1.5.5: a placement by category opens its pickers on its first category
             if (libOK) add.appendChild(opt('__lib', '📚 From the library…'));   // L2c: the picker (libpicker.js)
             if (custOK) add.appendChild(opt('__custom', '+ Custom…'));   // F4c3: a blank row of the character's own, its form open on its name (in the view it was chosen in)
-            add.addEventListener('change', function() { if (add.value === '__lib') { add.value = ''; openLibPicker(add, c, f, specI, carried); return; } if (add.value === '__custom') { var nr = uid('w_'); _rowForm = { charId: c.id, fieldId: f.id, rowId: nr, view: vwP, typed: {}, focus: 'name' }; commitItem(c, f, { op: 'custom', rowId: nr, def: {} }); return; } if (add.value) commitItem(c, f, { op: 'add', defId: add.value, rowId: uid('w_'), qty: 1 }); });   // Stage 6 F4a: a new row's id from here (the host never mints)
+            add.addEventListener('change', function() { if (add.value === '__lib') { add.value = ''; openLibPicker(add, c, f, specI, carried); return; } if (add.value === '__custom') { var nr = uid('w_'); _rowForm = { charId: c.id, fieldId: f.id, rowId: nr, view: vwP, typed: {}, focus: 'name' }; commitItem(c, f, { op: 'custom', rowId: nr, def: catAt ? { category: catAt } : {} }); return; } if (add.value) commitItem(c, f, { op: 'add', defId: add.value, rowId: uid('w_'), qty: 1 }); });   // Stage 6 F4a: a new row's id from here (the host never mints)
             if (nPick !== 0 || custOK || libOK) wrap.appendChild(add);   // F4b: none of the list's categories has an item: no picker (F4c3: unless it takes custom rows)
         }
         box.appendChild(wrap); return box;
@@ -3290,7 +3421,7 @@ function openLibPicker(anchor, c, f, spec, carried) {
     var LB = window.wpLibrary, LP = window.wpLibPicker, camp = getActiveCampaign(); if (!LB || !LP || !camp || !camp.library) return;
     var once = null; if (spec && spec.noQty && !spec.multi) { once = Object.create(null); carried.forEach(function(r) { if (r && typeof r.defId === 'string' && r.hid !== 1) once[r.defId] = 1; }); }
     var labels = {}; (spec && Array.isArray(spec.stats) ? spec.stats : []).forEach(function(s) { if (s && typeof s.key === 'string' && s.hide !== true) labels[s.key] = s.label || s.key; });
-    LP.open({ anchor: anchor, title: 'Add to ' + (f.label || f.key || 'the list'), cats: spec && Array.isArray(spec.cats) && spec.cats.length ? spec.cats : null, once: once, noQty: !!(spec && spec.noQty), labels: labels, gm: true, needs: function(e) { var cpN = getActiveCampaign(), chN = cpN && cpN.chars ? cpN.chars[c.id] : null, syN = systemOf(cpN); return chN && syN ? needsMet(syN, chN, e, false, F()).missing : []; },   // 126b: the GM is told, never stopped
+    LP.open({ anchor: anchor, cat: typeof catOf === 'function' ? catOf(anchor) : null, title: 'Add to ' + (f.label || f.key || 'the list'), cats: spec && Array.isArray(spec.cats) && spec.cats.length ? spec.cats : null, once: once, noQty: !!(spec && spec.noQty), labels: labels, gm: true, needs: function(e) { var cpN = getActiveCampaign(), chN = cpN && cpN.chars ? cpN.chars[c.id] : null, syN = systemOf(cpN); return chN && syN ? needsMet(syN, chN, e, false, F()).missing : []; },   // 126b: the GM is told, never stopped
         source: { packs: function() { return (camp.library && camp.library.packs) || []; }, entries: function(pid) { return LB.entriesOf(pid); } },
         onAdd: function(ids, qty) { var cp = getActiveCampaign(), ch = cp && cp.chars ? cp.chars[c.id] : null, sy = systemOf(cp), ff = sy ? fieldById(sy, f.id) : null; if (cp !== camp || !ch || !ff) return; ids.forEach(function(id) { commitItem(ch, ff, { op: 'add', defId: id, rowId: uid('w_'), qty: qty }); }); } });
 }
@@ -3302,7 +3433,7 @@ function openLibPickerPlayer(anchor, c, f, spec) {
     var packs = man.packs.filter(function(p) { return p.count > 0; }), total = packs.reduce(function(n, p) { return n + p.count; }, 0), done = false;
     var labels = {}; (spec && Array.isArray(spec.stats) ? spec.stats : []).forEach(function(s) { if (s && typeof s.key === 'string' && s.hide !== true) labels[s.key] = s.label || s.key; });
     var asEntry = function(r) { var o = { id: r[0], key: r[1], name: r[2], category: r[3], icon: r[4], tags: r[5] }; if (Array.isArray(r[7])) o.needs = r[7]; if (typeof r[8] === 'string') o.needsIf = r[8]; return o; };   // 126b: a row's needs, so the picker greys it before the entry is opened
-    LP.open({ anchor: anchor, title: 'Add to ' + (f.label || f.key || 'the list'), cats: spec && Array.isArray(spec.cats) ? spec.cats : null, once: null, noQty: !!(spec && spec.noQty), labels: labels, gm: false, needs: function(e) { var cpN = getActiveCampaign(), chN = charById(c.id, cpN), syN = systemOf(cpN); return chN && syN ? needsMet(syN, chN, e, true, F()).missing : []; },   // 126b: what their character does not meet, by the needs their copy of the entry names (the host judges the rest)
+    LP.open({ anchor: anchor, cat: typeof catOf === 'function' ? catOf(anchor) : null, title: 'Add to ' + (f.label || f.key || 'the list'), cats: spec && Array.isArray(spec.cats) ? spec.cats : null, once: null, noQty: !!(spec && spec.noQty), labels: labels, gm: false, needs: function(e) { var cpN = getActiveCampaign(), chN = charById(c.id, cpN), syN = systemOf(cpN); return chN && syN ? needsMet(syN, chN, e, true, F()).missing : []; },   // 126b: what their character does not meet, by the needs their copy of the entry names (the host judges the rest)
         source: {
             packs: function() { return packs; },
             entries: function(pid) { return N.libRows(pid).map(asEntry); },
@@ -4699,6 +4830,7 @@ function saveDraft() {
 function refreshErrors() {
     errorsById = {}; warningsById = {};
     if (!draft || !F()) return;
+    if (typeof placeCatErrs === 'function') placeCatErrs();   // 1.5.5: what Save does with a list's places in the Layout tab
     var seenKey = Object.create(null);
     draft.fields.forEach(function(f) {
         var errs = [];

@@ -24,6 +24,18 @@ var safeId = function(s) { return String(s || '').replace(/[^A-Za-z0-9_-]/g, '')
 /* ================= player side: the Journal ================= */
 function journalPath(campId, file) { return '/saves/' + JOURNAL_DIR + '/' + safeId(campId) + '/' + file; }
 function lsKey(campId) { return 'journal_' + safeId(campId); }   // fallback store (no shell endpoint) — not a wp_ key, never mirrored
+// One save of a file at a time (1.5.5, found live at a player's join: two saves of one journal file in the same moment, the second answered
+// 500, since two moves onto one file collide on Windows, and only the next save wrote it whole). Each save of one path waits for the one
+// before it, so the last one written is the newest. Saves of different paths run as they did. work: the save, a function giving a promise
+var _saving = Object.create(null);
+function inTurn(rel, work) {
+    var prev = _saving[rel] || Promise.resolve(), next = prev.then(function() {}, function() {}).then(work);
+    _saving[rel] = next;
+    var done = function() { if (_saving[rel] === next) delete _saving[rel]; };
+    next.then(done, done);
+    return next;
+}
+function saveFile(rel, init) { return inTurn(rel, function() { return fetch('/api/upload-exact?path=' + encodeURIComponent(rel), init); }); }
 
 // An index is a file on disk (this app wrote it, but a saves folder can be copied from anywhere): what is read back is taken as data.
 // Its rows are objects, its names are text, and it is the journal of the key it was read by, whatever it says of itself
@@ -45,7 +57,7 @@ async function readIndex(campId) {
 async function writeIndex(campId, idx) {
     var body = JSON.stringify(idx), ok = false;
     try {
-        var r = await fetch('/api/upload-exact?path=' + encodeURIComponent(JOURNAL_DIR + '/' + safeId(campId) + '/journal.json'), { method: 'POST', body: body });
+        var r = await saveFile(JOURNAL_DIR + '/' + safeId(campId) + '/journal.json', { method: 'POST', body: body });
         ok = r.ok;
     } catch (e) {}
     if (ok) { journalWrote(campId, body.length); try { localStorage.removeItem(lsKey(campId)); } catch (e) {} return true; }   // the file holds it: a copy here would only fill the browser's storage (readIndex never reaches it while the file is there)
@@ -55,7 +67,7 @@ async function writeIndex(campId, idx) {
 // Every change to a journal goes through one queue per campaign: read, change, write, in order.
 // Two handouts arriving close together (replays come 0.4 s apart) used to read the same index and
 // the later write dropped the earlier entry — and its notes with it, on the next replay.
-var indexQueues = {};
+var indexQueues = Object.create(null);   // 1.5.5: by the file each queue reads and writes (safeId), so two spellings of one key share one queue
 // [netcheck:notesave-start]
 // A note's save waits half a second after the last key. A redraw of the Journal inside that wait read the index from disk, where the typing
 // was not yet written, and drew the older words, which the next key then saved over the new (the owed review, 2026-10-09). Every waiting
@@ -74,19 +86,19 @@ function flushNotes() {
 }
 // [netcheck:notesave-end]
 function withIndex(campId, change) {
-    var prev = indexQueues[campId] || Promise.resolve();
+    var qk = safeId(campId), prev = indexQueues[qk] || Promise.resolve();
     var next = prev.catch(function() {}).then(async function() {
         var idx = await readIndex(campId);
         var r = await change(idx);
         if (r !== false) { idx.updated = Date.now(); await writeIndex(campId, idx); }
         return idx;
     });
-    indexQueues[campId] = next;
+    indexQueues[qk] = next;
     return next;
 }
 async function putFile(campId, file, bytes, mime) {
     try {
-        var r = await fetch('/api/upload-exact?path=' + encodeURIComponent(JOURNAL_DIR + '/' + safeId(campId) + '/' + file), { method: 'POST', headers: { 'Content-Type': mime }, body: bytes });
+        var r = await saveFile(JOURNAL_DIR + '/' + safeId(campId) + '/' + file, { method: 'POST', headers: { 'Content-Type': mime }, body: bytes });
         if (r.ok) { if (_jDisk) _jDisk.n += bytes.length; return journalPath(campId, file); }
     } catch (e) {}
     // fallback: keep the picture inside the index as a data URL (small ones only)
@@ -165,11 +177,13 @@ async function readRegistry() {
     try { JSON.parse(localStorage.getItem('journal_registry') || '[]').forEach(function(k) { keys[safeId(k)] = true; }); } catch (e) {}
     delete keys['']; return keys;
 }
-async function registerJournal(key) {
-    var keys = await readRegistry(); keys[safeId(key)] = true;
-    var list = Object.keys(keys);
-    try { await fetch('/api/upload-exact?path=' + encodeURIComponent(JOURNAL_DIR + '/journals.json'), { method: 'POST', body: JSON.stringify({ keys: list }) }); } catch (e) {}
-    try { localStorage.setItem('journal_registry', JSON.stringify(list.slice(-200))); } catch (e) {}   // the 200 newest here; the file holds them all
+function registerJournal(key) {   // 1.5.5: read, added to and written in turn with every other save of the registry, so no journal's key is lost
+    return inTurn(JOURNAL_DIR + '/journals.json', async function() {
+        var keys = await readRegistry(); keys[safeId(key)] = true;
+        var list = Object.keys(keys);
+        try { await fetch('/api/upload-exact?path=' + encodeURIComponent(JOURNAL_DIR + '/journals.json'), { method: 'POST', body: JSON.stringify({ keys: list }) }); } catch (e) {}
+        try { localStorage.setItem('journal_registry', JSON.stringify(list.slice(-200))); } catch (e) {}   // the 200 newest here; the file holds them all
+    });
 }
 // Every campaign that has a journal on this machine
 async function listJournals() {

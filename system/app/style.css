@@ -3704,6 +3704,9 @@
   .sheet-roller-row .sheet-roller-label { flex: 1 1 0; min-width: 0; }
   .sheet-roller-row .sheet-roller-go { flex: none; width: auto; padding: 0 14px; }   /* not the full-width roll button: the boxes keep their room */
   .sys-pl-rtext { width: 100%; min-height: 4.5em; resize: vertical; font: inherit; }
+  .sys-pl-catrow { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; font-size: 12px; padding: 0 4px 4px 22px; }   /* 1.5.5: a list placed once a category: the categories a place shows */
+  .sys-pl .sys-pl-cats.on { color: var(--gold); }
+  .sys-pl-catrow .sys-pl-catgm { margin-left: 4px; color: var(--dim); font-size: 11px; }   /* a category only GM-only things carry: players do not see it here */
   .sheet-hb { display: flex; flex-direction: column; gap: 6px; min-width: 0; }   /* Stage 6 HUD H12: the handbook search */
   .sheet-hb-bar { display: flex; align-items: center; gap: 6px; min-width: 0; }
   .sheet-hb-bar .sheet-hb-q { flex: 1; min-width: 0; }

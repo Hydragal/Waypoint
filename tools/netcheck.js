@@ -1004,6 +1004,28 @@ pendingChecks.push((async () => {
         JSON.stringify(Object.keys(forP.campaigns)) === '["k1"]' && forP.campaigns.k1.items.m1.whiteboard.length === 1 && JSON.stringify(Object.keys(forStream.campaigns)) === '["k1"]' && !/Secret game|orc_m2|p2/.test(JSON.stringify(forP)) && forP._schema === 2
         && JSON.stringify(odd.campaigns) === '{}' && JSON.stringify(none.campaigns) === '{}' && JSON.stringify(Object.keys(kept.campaigns)) === '["k1","k2"]', JSON.stringify([Object.keys(forP.campaigns), Object.keys(forStream.campaigns), odd.campaigns, none.campaigns]));
 }
+// 1.5.5, a list placed once a category (the review of that fold): a placement's categories in the join snapshot and the stream window are judged as a
+// list's own are (Stage 6 F4b), so a category only GM-only things carry never reaches a player — the real sanitizeAppState with the real systemcore
+pendingChecks.push((async () => {
+    const T = '1.5.5 a list placed once a category on the wire (the real sanitizeAppState with the real systemcore, the formula engine and the library\'s word, catsFor): the join snapshot and the stream window carry a placement\'s categories as the players\' view judges a list\'s own, so one a GM-only item carries and one the library calls GM-only are nowhere in either, a placement left with none goes, and one a library entry players may see carries stays; a player\'s app cleaning it again keeps it byte for byte; the GM\'s own system is left as it was';
+    try {
+        const url = f => 'file:///' + path.resolve(path.join(__dirname, '..', 'system', 'app', 'scripts', f)).replace(/[\\]/g, '/');
+        const Sx = await import(url('systemcore.js')), Fx = await import(url('formula.js'));
+        const saSrcC = src.slice(src.indexOf('var POSTURE_SET = '), src.indexOf('function sanitizeItem(')) + '\n' + siSrc() + '\n' + fnSrc('function sanitizeAppState(', '\nfunction fogNow()', 'sanitizeAppState');
+        const win = { wpSystemCore: Sx, wpFormula: Fx, wpLibrary: { catsFor: () => ({ show: ['Charms'], hide: ['Smuggled Relics'] }) } };
+        const SAc = new Function('own', 'window', 'fxLib', 'itemLib', 'withHoverLines', 'fogCopyFor', 'fogPartyCopy', "'use strict';\n" + saSrcC + '\nreturn sanitizeAppState;')(H.own, win, () => ({}), () => ({}), v => v, it => it, it => it);
+        const sys = () => ({ v: 1, name: 'Docks kit', rolls: [], items: [{ id: 'i_blade', name: 'Blade', category: 'Weapons' }, { id: 'i_coat', name: 'Coat', category: 'Armor' }, { id: 'i_gem', name: 'Gem', category: 'Hidden Stash', vis: 'gm' }],
+            fields: [{ id: 'f_gear', key: 'Gear', label: 'Gear', kind: 'item-list' }],
+            sheet: { sections: [{ id: 's_a', title: 'Arms', fields: [{ id: 'f_gear', w: 'row', cats: ['Weapons'] }] }, { id: 's_b', title: 'Wear', fields: [{ id: 'f_gear', w: 'row', cats: ['Armor', 'Hidden Stash'] }] },
+                { id: 's_c', title: 'Loot', fields: [{ id: 'f_gear', w: 'row', cats: ['Smuggled Relics'] }] }, { id: 's_d', title: 'Kit', fields: [{ id: 'f_gear', w: 'row', cats: ['Charms'] }] }] } });
+        const gm = () => ({ activeCampaignId: 'k1', _schema: 2, campaigns: { k1: { id: 'k1', name: 'Hosted', activeItemId: null, items: {}, system: sys() } } });
+        const kept = gm(), forP = SAc(kept, 'u_p'), forS = SAc(gm());
+        const pv = forP.campaigns.k1.system, cli = Sx.cleanSystem(JSON.parse(j(pv)), { F: Fx, gmView: false, libCats: {}, needShown: true });
+        const lay = s => s.sheet.sections.map(x => [x.id, x.fields.map(p => p.id + (p.cats ? ':' + p.cats.join('+') : ''))]);
+        check(T, !!pv && j(lay(pv)) === j([['s_a', ['f_gear:Weapons']], ['s_b', ['f_gear:Armor']], ['s_c', []], ['s_d', ['f_gear:Charms']]]) && j(lay(forS.campaigns.k1.system)) === j(lay(pv))
+            && !/Hidden Stash|Smuggled Relics/.test(j([forP, forS])) && j(cli.sheet) === j(pv.sheet) && j(kept.campaigns.k1.system) === j(sys()), j([pv && lay(pv), cli && lay(cli)]));
+    } catch (e) { check(T, false, 'threw: ' + (e && e.stack || e)); }
+})());
 // item 21 V1: the campaign's video library is the GM's alone — the real sanitizeAppState leaves it out of the join snapshot and the stream window
 {
     const saSrcV = src.slice(src.indexOf('var POSTURE_SET = '), src.indexOf('function sanitizeItem(')) + '\n' + siSrc() + '\n' + fnSrc('function sanitizeAppState(', '\nfunction fogNow()', 'sanitizeAppState');
@@ -9917,6 +9939,51 @@ pendingChecks.push((async () => {
     };
     const gmMsg = (id, text, more) => Object.assign({ type: 'handout', campId: 'camp1', gmId: 'u_gm', campaign: 'The Camp', gm: 'Gina', id, kind: 'text', title: 'T ' + id, caption: '', text, tags: [] }, more || {});
     const shMsg = (id, text, who, whoId, more) => gmMsg(id, text, Object.assign({ sharedBy: who, sharedById: whoId, sharedNotes: '' }, more || {}));
+    // 1.5.5: the Journal saves one file at a time (found live at a player's join: two saves of one journal file in the same moment, the second
+    // answered 500, as two moves onto one file collide on Windows, and only the next save wrote it whole). The Journal's receiving side, run for
+    // real on a shell of the suite's own whose save of a file stays under way a few milliseconds and answers 500 to a second save of that path
+    // while one is under way, as the core did; a save of another path runs beside it
+    pendingChecks.push((async () => {
+        const mkSlow = () => {
+            const files = new Map(), busy = new Map(), log = [], ls = new Map();
+            const localStorage = { getItem: k => (ls.has(k) ? ls.get(k) : null), setItem: (k, v) => { ls.set(k, String(v)); }, removeItem: k => { ls.delete(k); } };
+            const fetch = (u, init) => {
+                u = String(u);
+                if (u.indexOf('/api/upload-exact?path=') === 0) {
+                    const p = decodeURIComponent(u.slice('/api/upload-exact?path='.length)); log.push('start ' + p);
+                    if (busy.has(p)) { log.push('500 ' + p); return Promise.resolve({ ok: false, status: 500 }); }
+                    busy.set(p, 1);
+                    return new Promise(res => setTimeout(() => { busy.delete(p); files.set(p, init.body); log.push('end ' + p); res({ ok: true, status: 200 }); }, 4));
+                }
+                if (u.indexOf('/saves/images/journal/') === 0) { const p = 'images/journal/' + u.slice('/saves/images/journal/'.length); if (!files.has(p)) return Promise.resolve({ ok: false, status: 404 }); const b = files.get(p); return Promise.resolve({ ok: true, headers: { get: () => String(String(b).length) }, json: async () => JSON.parse(String(b)) }); }
+                return Promise.resolve({ ok: false, status: 404 });
+            };
+            const env = { fetch, localStorage, document: { getElementById: () => null }, toast: () => {}, esc: s => String(s), showHandout: () => {}, handoutPopup: () => false, window: {}, FileReader: function() {}, Blob: function() {}, Date: { now: () => 1700000000000 } };
+            const names = Object.keys(env);
+            const api = new Function(...names, "'use strict';\n" + journalSrc + '\nreturn { writeIndex: writeIndex, readIndex: readIndex, withIndex: withIndex, registerJournal: registerJournal, readRegistry: readRegistry };')(...names.map(n => env[n]));
+            return { api, files, log, ls };
+        };
+        // two saves of one journal's index at once: both go through, one after the other, and the file holds the newer
+        const A = mkSlow(), okA = await Promise.all([A.api.writeIndex('camp1__gm', { campId: 'camp1__gm', entries: [{ id: 'older' }] }), A.api.writeIndex('camp1__gm', { campId: 'camp1__gm', entries: [{ id: 'newer' }] })]);
+        const readA = await A.api.readIndex('camp1__gm'), pA = 'images/journal/camp1__gm/journal.json';
+        // a save of another journal's index runs beside them
+        const B = mkSlow(); await Promise.all([B.api.writeIndex('camp1__gm', { entries: [{ id: 'a' }] }), B.api.writeIndex('camp2__gm', { entries: [{ id: 'b' }] })]);
+        // two journals registered at once: the registry is read, added to and written in turn, so it keeps both
+        const C = mkSlow(); await Promise.all([C.api.registerJournal('camp1__gm'), C.api.registerJournal('camp2__gm'), C.api.registerJournal('camp3__gm')]);
+        const regC = JSON.parse(String(C.files.get('images/journal/journals.json') || '{}')).keys || [];
+        // two changes of one index under two spellings of its key (safeId makes them one file): read, changed and written in turn, so neither is lost
+        const D = mkSlow(); await Promise.all([D.api.withIndex('camp1__gm', idx => { idx.entries.push({ id: 'one' }); }), D.api.withIndex('camp1__gm!', idx => { idx.entries.push({ id: 'two' }); })]);
+        const readD = await D.api.readIndex('camp1__gm');
+        const order = log => { const s = log.filter(x => x.indexOf('journal.json') > 0 || x.indexOf('journals.json') > 0); return s.join(' | '); };
+        check('1.5.5 the Journal saves one file at a time (handouts.js, its journal slice run for real on a shell of the suite\'s own that answers 500 to a second save of a path while one is under way, as the core did on Windows): two saves of one journal\'s index at once both go through, the second starting only once the first has ended, so the file holds the newer and nothing falls back to the browser\'s storage; a save of another journal\'s index runs beside them; three journals registered at once are all kept in the registry; two changes of one index under two spellings of its key are read, changed and written in turn, so neither is lost',
+            j(okA) === j([true, true]) && !A.log.some(x => x.indexOf('500 ') === 0) && j(readA.entries) === j([{ id: 'newer' }]) && A.ls.size === 0
+            && order(A.log) === 'start ' + pA + ' | end ' + pA + ' | start ' + pA + ' | end ' + pA
+            && B.log[0] === 'start images/journal/camp1__gm/journal.json' && B.log[1] === 'start images/journal/camp2__gm/journal.json' && !B.log.some(x => x.indexOf('500 ') === 0)
+            && j(regC.slice().sort()) === j(['camp1__gm', 'camp2__gm', 'camp3__gm']) && !C.log.some(x => x.indexOf('500 ') === 0)
+            && j(readD.entries.map(e => e.id).sort()) === j(['one', 'two']) && !D.log.some(x => x.indexOf('500 ') === 0)
+            && hoT.includes("function saveFile(rel, init) { return inTurn(rel, function() { return fetch('/api/upload-exact?path=' + encodeURIComponent(rel), init); }); }") && hoT.split("fetch('/api/upload-exact").length === 3,
+            j([okA, A.log, readA.entries, A.ls.size, B.log, regC, C.log, readD.entries]));
+    })());
     // item 35, fold 2b: a shared note's look. On the host (relayShare, run for real with lookcore): by its shape alone until the text is cut,
     // counted with the words it styles, cleaned for the text as relayed. In the reader's Journal (receiveTextHandout, run for real): cleaned again
     pendingChecks.push((async () => {
@@ -15433,7 +15500,7 @@ pendingChecks.push((async () => {
         notes5.every(t => t.includes('- The steps, Move and Set no longer wait for a list of time rules. Time you move on while a list waits is counted once you apply or skip it.') && !/always work/.test(t)
             && t.includes('wants to say which run. A campaign set to Ask me before 1.5.5 now runs at once. Pick Ask me again in Settings to keep it.')
             && t.includes('A step back is a correction, and nothing counts twice. After a step back, nothing counts again for its fighters until that fight passes the furthest it reached. After you move the clock back, nothing counts again until the clock passes the latest time it reached. Until then no timed effect runs out and no time rule counts.')
-            && t.includes("Going back to 1.5.4 - Restore the previous version back to 1.5.4 keeps your campaign, but its next save drops what 1.5.5 added: a row's own Description and By level text, the choice Players ask, the GM approves, Waits in a fight, In a fight and Ask me first, Before its fields, the clock's own marks and each NPC's Rules run switch. Updating again does not bring them back. In 1.5.4 a campaign's Time rules may read Ask me again, so check them in Settings. - Launch copies made before that save keep what 1.5.5 added, in saves/backups, until ten newer launches replace them. To keep a copy until you delete it, press Snapshot the Save Now in Settings > Advanced before you restore.")
+            && t.includes("Going back to 1.5.4 - Restore the previous version back to 1.5.4 keeps your campaign, but its next save drops what 1.5.5 added: a row's own Description and By level text, the choice Players ask, the GM approves, Waits in a fight, In a fight and Ask me first, Before its fields, a list placed in more than one place by category, the clock's own marks and each NPC's Rules run switch. Updating again does not bring them back. In 1.5.4 a campaign's Time rules may read Ask me again, so check them in Settings. - Launch copies made before that save keep what 1.5.5 added, in saves/backups, until ten newer launches replace them. To keep a copy until you delete it, press Snapshot the Save Now in Settings > Advanced before you restore.")
             && !t.includes('The launch copies in saves/backups keep them') && !t.includes('After a step back, or after you move the clock back'))
         && help5.includes('Moving the clock back and on again counts nothing twice. After you move the clock back, nothing counts again until it passes the latest time it reached. Until then no timed effect runs out and no time rule counts.')
         && help5.includes('While the table is paused none run. A campaign set to Ask me before 1.5.5 now runs at once. Pick Ask me again to keep it.')

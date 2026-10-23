@@ -18,7 +18,7 @@ function isOpen() { return !!st; }
 function close() { if (!st) return; clearTimeout(st.timer); clearTimeout(st.getTimer); document.removeEventListener('mousedown', st.outside, true); if (st.pop.parentNode) st.pop.parentNode.removeChild(st.pop); var a = st.opts.anchor; st = null; if (a && a.isConnected) try { a.focus({ preventScroll: true }); } catch (e) {} }
 function gmOnly(x) { return x.e.vis === 'gm' || x.p.vis === 'gm'; }
 
-// opts: { anchor, title, cats (the list's categories — an empty list offers none — or null: every category), once (entry ids already carried on a list that holds each once), noQty,
+// opts: { anchor, title, cats (the list's categories — an empty list offers none — or null: every category), cat (1.5.5: the category it opens on, or none), once (entry ids already carried on a list that holds each once), noQty,
 //         labels (stat key -> the list's label), gm, source: { packs() -> [{ id, name, icon, vis }], entries(packId) -> [entry] },
 //         onAdd(ids, qty, packOf) } — source may add load(progress) -> Promise, get(entry, pack, done), status() -> text (a player's, over the wire)
 function open(opts) {
@@ -27,6 +27,7 @@ function open(opts) {
     var cats = Array.isArray(opts.cats) ? opts.cats.map(lc) : null;
     var pop = el('div', 'lib-pick'); pop.setAttribute('role', 'dialog'); pop.setAttribute('aria-label', 'Add from the library');
     st = { pop: pop, opts: opts, cats: cats, all: [], rows: [], hi: -1, picked: map(), q: '', pack: '', cat: null, timer: null, outside: null, full: map(), getTimer: null };   // cat: null every category ('' is "no category"); full: entries fetched for the preview
+    st.want = typeof opts.cat === 'string' && opts.cat.trim() ? lc(opts.cat.trim()) : '';   // 1.5.5: the category it opens on (a list placed once a category)
     buildAll();
     var head = el('div', 'lib-pick-head'); head.appendChild(el('b', null, opts.title || 'Add from the library'));
     var x = el('button', 'tool ghost lib-pick-x', '×'); x.type = 'button'; x.title = 'Close (Esc)'; x.addEventListener('click', close); head.appendChild(x); pop.appendChild(head);
@@ -63,6 +64,13 @@ function buildAll() {
     (src.packs() || []).forEach(function(p) { (src.entries(p.id) || []).forEach(function(e) { if (!e || typeof e.id !== 'string') return; if (cats && cats.indexOf(lc(e.category)) < 0) return; all.push({ e: e, p: p, hay: entryHay(e) }); }); });
     all.sort(function(a, b) { return byName(a.e.category || '', b.e.category || '') || byName(a.e.name, b.e.name); });
     st.all = all;
+    wantCat();
+}
+// 1.5.5: a list placed once a category opens the picker on that category's chip (opts.cat, matched ignoring case), once an entry of it is
+// there: a player's library comes a page at a time. A press on a category chip settles it, so entries that come later never move the reader
+function wantCat() {
+    if (!st.want || st.cat !== null) return;
+    for (var i = 0; i < st.all.length; i++) { var k = st.all[i].e.category || ''; if (lc(k) === st.want) { st.cat = k; st.want = ''; return; } }
 }
 function status() { var t = typeof st.opts.source.status === 'function' ? st.opts.source.status() : ''; st.els.hint.textContent = t || 'Enter adds · Shift+Enter adds and stays open · Ctrl-click picks several'; }
 function place() {
@@ -84,8 +92,8 @@ function chipsDraw() {
     }
     if (catsSeen.length > 1) {
         if (packs.length > 1) box.appendChild(el('span', 'lib-pick-sep'));
-        chip(box, 'Every category', st.cat === null, function() { st.cat = null; chipsDraw(); filter(); });
-        catsSeen.forEach(function(k) { chip(box, (k || 'No category') + ' ' + cn[k], st.cat === k, function() { st.cat = st.cat === k ? null : k; chipsDraw(); filter(); }); });
+        chip(box, 'Every category', st.cat === null, function() { st.cat = null; st.want = ''; chipsDraw(); filter(); });
+        catsSeen.forEach(function(k) { chip(box, (k || 'No category') + ' ' + cn[k], st.cat === k, function() { st.cat = st.cat === k ? null : k; st.want = ''; chipsDraw(); filter(); }); });
     }
     box.style.display = box.childNodes.length ? '' : 'none';
 }

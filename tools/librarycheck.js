@@ -460,6 +460,51 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             && lbT.includes("    var sig = camp.id + '|' + p.rev + '|' + hashText(JSON.stringify(fields)) + '|' + needSig(packId), m = _pidx[packId]; if (m && m.sig === sig) return m;") && lbT.split('needSig(').length === 3,
             j([s0, sigOne, sigTwo, sigTwoHidden, sigTwoSys, noCamp]));
     }
+    /* ---- 1.5.5, a list placed once a category: the library's picker opens on the placement's first category (libpicker.js buildAll and wantCat,
+       run for real): on that category's chip once an entry of it is there, matched ignoring case; a player's library comes a page at a time, so a
+       later page may bring it; a press on a category chip settles it, so entries that come later never move the reader ---- */
+    {
+        const pkQ = require('fs').readFileSync(path.join(app, 'scripts', 'libpicker.js'), 'utf8').replace(/\r\n/g, '\n'), shQ = require('fs').readFileSync(path.join(app, 'scripts', 'sheets.js'), 'utf8').replace(/\r\n/g, '\n');
+        const bA = pkQ.indexOf('function buildAll() {'), bZ = pkQ.indexOf('function status() {'), bSrc = bA > 0 && bZ > bA ? pkQ.slice(bA, bZ) : '';
+        const runQ = (want, pages, press) => {
+            let page = 0; const st = { cats: null, want: want, cat: null, opts: { source: { packs: () => [{ id: 'p_1', name: 'Pack' }], entries: () => pages.slice(0, page + 1).reduce((a, p) => a.concat(p), []) } } };
+            const B = new Function('st', 'entryHay', 'byName', 'lc', bSrc + '\nreturn buildAll;')(st, e => String(e.name).toLowerCase(), (a, b) => String(a).localeCompare(String(b)), s => String(s || '').toLowerCase());
+            const seen = []; B(); seen.push(st.cat);
+            for (page = 1; page < pages.length; page++) { if (press && press[page - 1]) press[page - 1](st); B(); seen.push(st.cat); }
+            return [seen, st.want];
+        };
+        const E = (id, c) => ({ id, name: id, category: c });
+        const first = runQ('armor', [[E('i_a', 'Weapons'), E('i_b', 'Armor')]]), later = runQ('armor', [[E('i_a', 'Weapons')], [E('i_b', 'ARMOR')]]), none = runQ('', [[E('i_b', 'Armor')]]);
+        const pressed = runQ('armor', [[E('i_a', 'Weapons')], [E('i_b', 'Armor')]], [st => { st.cat = null; st.want = ''; }]), noneThere = runQ('trinkets', [[E('i_a', 'Weapons')], [E('i_b', 'Armor')]]);
+        check('1.5.5 the library\'s picker opens on a placement\'s first category (libpicker.js buildAll and wantCat, run for real): the chip of that category is picked once an entry of it is there, matched ignoring case and kept in the library\'s own spelling, on the first page or a later one; with none asked, every category as before; a press on a chip before it came settles it; a category no entry has leaves every category; open() reads opts.cat, the two category chips settle it, and the sheet hands the picker the category its list to add carries',
+            bSrc.length > 200 && j(first) === j([['Armor'], '']) && j(later) === j([[null, 'ARMOR'], '']) && j(none) === j([[null], '']) && j(pressed) === j([[null, null], '']) && j(noneThere) === j([[null, null], 'trinkets'])
+            && pkQ.includes("    st.want = typeof opts.cat === 'string' && opts.cat.trim() ? lc(opts.cat.trim()) : '';") && (pkQ.match(/st\.want = ''; chipsDraw\(\); filter\(\);/g) || []).length === 2
+            && (shQ.match(/LP\.open\(\{ anchor: anchor, cat: typeof catOf === 'function' \? catOf\(anchor\) : null, title:/g) || []).length === 2 && shQ.includes("            if (catAt && typeof catLead === 'function') { catLead(add, catAt); add.dataset.cat = catAt; }"),
+            j([first, later, none, pressed, noneThere]));
+    }
+    /* ---- 1.5.5, the review of a list placed once a category: the chips themselves (libpicker.js chip, chipsDraw, buildAll and wantCat, run for
+       real on a page of plain objects): a press on Every category, or on a category's chip, before the category asked for came, settles it ---- */
+    {
+        const pkC = require('fs').readFileSync(path.join(app, 'scripts', 'libpicker.js'), 'utf8').replace(/\r\n/g, '\n');
+        const cA = pkC.indexOf('function buildAll() {'), cZ = pkC.indexOf('function status() {'), dA = pkC.indexOf('function chip(parent, text, on, fn) {'), dZ = pkC.indexOf('// the rows shown: the entries that pass the chips');
+        const srcC = cA > 0 && cZ > cA && dA > 0 && dZ > dA ? pkC.slice(cA, cZ) + '\n' + pkC.slice(dA, dZ) : '';
+        const elC = (tag, cls, text) => { const e = { tag, className: cls || '', textContent: text === undefined ? '' : String(text), children: [], on: {}, style: {}, type: '' }; Object.defineProperty(e, 'childNodes', { get() { return e.children; } }); e.appendChild = k => { e.children.push(k); return k; }; e.addEventListener = (k, f) => { e.on[k] = f; }; return e; };
+        const runC = (pages, presses) => {
+            let page = 0; const box = elC('div', 'lib-pick-chips'); Object.defineProperty(box, 'textContent', { get() { return ''; }, set() { box.children = []; } });
+            const st = { cats: null, want: 'armor', cat: null, pack: '', els: { chips: box }, opts: { source: { packs: () => [{ id: 'p_1', name: 'Pack' }], entries: () => pages.slice(0, page + 1).reduce((a, p) => a.concat(p), []) } } };
+            const K = new Function('st', 'entryHay', 'byName', 'lc', 'el', 'map', 'filter', srcC + '\nreturn { buildAll, chipsDraw };')(st, e => String(e.name).toLowerCase(), (a, b) => String(a).localeCompare(String(b)), s => String(s || '').toLowerCase(), elC, () => Object.create(null), () => {});
+            const seen = []; K.buildAll(); K.chipsDraw(); seen.push(st.cat);
+            (presses || []).forEach(label => { const b = box.children.find(x => x.textContent.indexOf(label) === 0); if (b) b.on.click(); seen.push(st.cat); });
+            for (page = 1; page < pages.length; page++) { K.buildAll(); K.chipsDraw(); seen.push(st.cat); }
+            return [seen, st.want, box.children.filter(x => x.className.split(' ').indexOf('on') >= 0).map(x => x.textContent)];
+        };
+        const E = (id, c) => ({ id, name: id, category: c }), P1 = [E('i_a', 'Weapons'), E('i_t', 'Tools')], P2 = [E('i_b', 'Armor')];
+        const plainC = runC([P1, P2]), everyC = runC([P1, P2], ['Every category']), oneC = runC([P1, P2], ['Weapons']), twiceC = runC([P1, P2], ['Weapons', 'Weapons']);
+        check('1.5.5 the library\'s picker\'s chips, pressed for real (libpicker.js chip, chipsDraw, buildAll and wantCat on a page of plain objects; the review of this fold): with nothing pressed it opens on the category asked for once an entry of it comes; a press on Every category before then settles it, so the later page moves nothing; a press on a category\'s chip shows that one and a second press on it shows every category again, and either way the later page moves nothing; the chip that is on is the one shown',
+            srcC.length > 400 && j(plainC) === j([[null, 'Armor'], '', ['Armor 1']]) && j(everyC) === j([[null, null, null], '', ['Every category']])
+            && j(oneC) === j([[null, 'Weapons', 'Weapons'], '', ['Weapons 1']]) && j(twiceC) === j([[null, 'Weapons', null, null], '', ['Every category']]),
+            j([plainC, everyC, oneC, twiceC]));
+    }
     /* ---- 126b: a player's row greys out the moment its entry comes in full (found live: the row and Add waited for the next redraw) ---- */
     {
         const pkS = require('fs').readFileSync(path.join(app, 'scripts', 'libpicker.js'), 'utf8').replace(/\r\n/g, '\n');

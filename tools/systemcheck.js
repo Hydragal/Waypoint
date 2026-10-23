@@ -2012,7 +2012,7 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             }
             check('F4c3 + Custom… and the tick (pinned): the GM\'s on any shaped list, a player\'s where it takes custom rows, drawn even with no library items, never on a plain list; choosing it makes a blank row with its form open on the name, in the view it was chosen in; the Lists card\'s Custom rows tick writes list.custom; the client sends a custom op\'s def',
                 /var custOK = !!specI && \(gm \|\| specI\.custom === true\);/.test(shT) && /if \(editOk && _fxLive && sysI && \(\(sysI\.items && sysI\.items\.length\) \|\| custOK \|\| libOK\) && !onOnly\)/.test(shT) && /if \(custOK\) add\.appendChild\(opt\('__custom', '\+ Custom…'\)\);/.test(shT)
-                && /if \(add\.value === '__custom'\) \{ var nr = uid\('w_'\); _rowForm = \{ charId: c\.id, fieldId: f\.id, rowId: nr, view: vwP, typed: \{\}, focus: 'name' \}; commitItem\(c, f, \{ op: 'custom', rowId: nr, def: \{\} \}\); return; \}/.test(shT)
+                && /if \(add\.value === '__custom'\) \{ var nr = uid\('w_'\); _rowForm = \{ charId: c\.id, fieldId: f\.id, rowId: nr, view: vwP, typed: \{\}, focus: 'name' \}; commitItem\(c, f, \{ op: 'custom', rowId: nr, def: catAt \? \{ category: catAt \} : \{\} \}\); return; \}/.test(shT)
                 && /if \(nPick !== 0 \|\| custOK \|\| libOK\) wrap\.appendChild\(add\);/.test(shT) && /checkLabel\('sys-list-custom', sp\.custom === true, 'Custom rows',[^\n]*any shaped list'\)\);/.test(shT) && /else if \(c\.indexOf\('sys-list-custom'\) >= 0\) \{ if \(t\.checked\) lsc\.custom = true; else delete lsc\.custom; \}/.test(shT));
         }
         // ---- Stage 6 F5a1: list columns, totals and addressed rows (the resolver, the players' view, the GM's roll names, the validator, the sheet) ----
@@ -2102,7 +2102,7 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
                 && j(find5(cardA, 'sys-list-colhide').map(x => x.checked)) === j([false, true, false]) && j(find5(cardA, 'sys-list-colfoot').map(x => x.checked)) === j([true, true, false]) && find5(cardA, 'sys-list-coladd')[0].disabled === false && find5(six, 'sys-list-coladd')[0].disabled === true
                 && /^Formulas read Skills\.count, Skills\.qty, Skills\.Rel, Skills\.Diff, Skills\.Cost, Skills\.Twice, Skills\.Band \(the list’s totals\); Skills\.on\.… the same over the rows switched on; Skills\.<key>\.lvl/.test(find5(cardA, 'sys-list-names')[0].textContent)
                 && /else if \(lcc\.indexOf\('sys-list-colformula'\) >= 0\) cD\.formula = t\.value\.slice\(0, LIMITS\.formula\);/.test(shT) && /if \(cact === 'coladd'\) \{ if \(cArr\.length >= LIMITS\.listCols\)/.test(shT) && /var chK = c\.indexOf\('sys-list-colhide'\) >= 0 \? 'hide' : 'foot';/.test(shT)
-                && /itemListInto\(wrap, f, c, carried, sysI, canThrow, playOk, gm, emptyI, e, editOk\);/.test(shT) && /itemTableInto\(wrap, f, c, carried, sysI, canThrow, playOk, gm, emptyI, e, editOk\);/.test(shT),
+                && /itemListInto\(wrap, f, c, rowsI, sysI, canThrow, playOk, gm, emptyI, resI, editOk\);/.test(shT) && /itemTableInto\(wrap, f, c, rowsI, sysI, canThrow, playOk, gm, emptyI, resI, editOk\);/.test(shT),   // 1.5.5 (a list placed once a category): the rows its placement shows, and the field's entry with its totals drawn once
                 j([find5(cardA, 'sys-list-colkey').map(x => x.value), find5(cardA, 'sys-list-names')[0].textContent]));
         }
         // ---- owed review F5a1 (a1): list names and GM-only values — a GM-only core entry, a kept curse, a choice naming a GM-only value, a GM-only effect through a list name, a GM-only row out of scope; a dotted list key; a players' list with no categories left; the fold's untested lines ----
@@ -12526,6 +12526,297 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         check('1.5.5 said: Help\'s Layout entry names Starts closed and Before its fields; both release notes say the three things under 1.5.5, the level box as a fix',
             ixM.includes('Pick <b>Starts closed</b> and it is folded when the sheet opens, until the reader opens it.') && ixM.includes('Pick <b>Before its fields</b> on its row and it stands above them instead.')
             && notesM.every(t => { const i5 = t.indexOf('WAYPOINT 1.5.5'), i4 = t.indexOf('WAYPOINT 1.5.4'), a = t.indexOf('Starts closed'), b = t.indexOf('Before its fields'), c = t.indexOf('level box now grows'); return i5 >= 0 && [a, b, c].every(x => x > i5 && x < i4); }));
+    }
+    /* ---- 1.5.5, a list placed once a category (the owner, 2026-10-23, by prompt: "A new builder option (Recommended)", said to them as "A general
+       option: a list can be placed as several folds, each showing some of its categories. Any system can use it, and one list stays underneath").
+       The cleaner in both views, the rule for a list placed more than once, the real sheet drawing three placements of one list on the sheet, a
+       print, a window of its own, the Layout preview and the HUD, the readable page, and the Layout tab's control. Invented names only ---- */
+    {
+        const crypto = require('crypto'), hQ = v => crypto.createHash('sha256').update(typeof v === 'string' ? v : j(v)).digest('hex').slice(0, 16);
+        const shQ = fs.readFileSync(path.join(app, 'scripts', 'sheets.js'), 'utf8').replace(/\r\n/g, NL), SEQ = await import(url('sheetexport.js'));
+        const cutQ = (a, b) => { const i = shQ.indexOf(a), k = i < 0 ? -1 : shQ.indexOf(b, i + 1); if (i < 0 || k < 0) throw new Error('placecats slice: ' + a); return shQ.slice(i, k); };
+        const ITEMS = [{ id: 'i_blade', name: 'Blade', category: 'Weapons', stats: { Wt: 3 } }, { id: 'i_coat', name: 'Coat', category: 'Armor', stats: { Wt: 10 } }, { id: 'i_rope', name: 'Rope', category: 'Tools', stats: { Wt: 2 } },
+            { id: 'i_lamp', name: 'Lamp', category: 'Tools', stats: { Wt: 4 } }, { id: 'i_pebbles', name: 'Pebbles', category: '', stats: { Wt: 1 } }, { id: 'i_pouch', name: 'Coin Pouch', category: 'Pouches', stats: { Wt: 1 } }];
+        const GEAR = (more) => Object.assign({ id: 'f_gear', key: 'Gear', label: 'Gear', kind: 'item-list', list: { on: { label: 'Readied' }, stats: [{ key: 'Wt', label: 'Wt', show: true }], cols: [{ key: 'Load', label: 'Load', formula: 'Row.Wt', foot: true }] } }, more || {});
+        const rawQ = more => ({ v: 1, name: 'Docks kit', rolls: [], items: JSON.parse(j(ITEMS)), fields: [GEAR(more), { id: 'f_coin', key: 'Coins', label: 'Coins', kind: 'number' }, { id: 'f_vault', key: 'Vault', label: 'Vault', kind: 'item-list', vis: 'gm' }],
+            sheet: { sections: [
+                { id: 's_arms', title: 'Arms', fields: [{ id: 'f_gear', w: 'row', cats: ['Weapons', ' weapons ', 7, '', null, 'W'.repeat(60)] }, { id: 'f_vault', w: 'row', cats: ['Secret'] }] },
+                { id: 's_wear', title: 'Wear', fields: [{ id: 'f_gear', w: 'row', cats: ['Armor', 'Pouches'] }, { id: 'f_coin', w: 1, cats: ['Armor'] }] },
+                { id: 's_kit', title: 'Kit', fields: [{ id: 'f_gear', w: 'row', on: true, cats: ['tools'] }, { id: 'f_vault', w: 'row', cats: ['Other'] }] } ],
+              hud: { tabs: [], sections: [{ id: 's_h1', title: 'Ready', fields: [{ id: 'f_gear', w: 'row', cats: ['Weapons'] }] }, { id: 's_h2', title: 'Worn', fields: [{ id: 'f_gear', w: 'row', cats: ['Armor'] }] }] } } });
+        const gQ = cleanSystem(rawQ(), { F, gmView: true }), pQ = cleanSystem(rawQ(), { F, gmView: false }), WS = 'W'.repeat(40);
+        const fieldsOf = sh => sh.sections.map(s => [s.id, s.fields]);
+        const wantG = [['s_arms', [{ id: 'f_gear', w: 'row', cats: ['Weapons', WS] }, { id: 'f_vault', w: 'row', cats: ['Secret'] }]], ['s_wear', [{ id: 'f_gear', w: 'row', cats: ['Armor', 'Pouches'] }, { id: 'f_coin', w: 1 }]], ['s_kit', [{ id: 'f_gear', w: 'row', on: true, cats: ['tools'] }, { id: 'f_vault', w: 'row', cats: ['Other'] }]]];
+        const wantH = [['s_h1', [{ id: 'f_gear', w: 'row', cats: ['Weapons'] }]], ['s_h2', [{ id: 'f_gear', w: 'row', cats: ['Armor'] }]]];
+        const tenQ = cleanSystem(Object.assign(rawQ(), { sheet: { sections: [{ id: 's_a', fields: [{ id: 'f_gear', cats: ['A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9', 'A10'] }] }] } }), { F, gmView: true }).sheet.sections[0].fields[0];
+        check('1.5.5 a list placed once a category, the cleaner (systemcore cleanSections, cleanPlaceCats and catSplits, run for real): an item list may stand in more than one placement of a layout where each names its categories (cats), each name a cleaned text cut to the category\'s 40 characters, each once ignoring case, eight at most (LIMITS.placeCats), anything that is no text passed over; a placement of any other kind keeps no cats; the HUD is a layout of its own; the players\' view is the GM\'s less the GM-only list, and with no word of the library a category no item players see carries is left out, as a list\'s own categories are (the 40 W\'s here); cleaned again it is the same',
+            S.LIMITS.placeCats === 8 && j(fieldsOf(gQ.sheet)) === j(wantG) && j(fieldsOf(gQ.sheet.hud)) === j(wantH)
+            && j(fieldsOf(pQ.sheet)) === j(wantG.map(s => [s[0], s[1].filter(p => p.id !== 'f_vault').map(p => s[0] === 's_arms' ? Object.assign({}, p, { cats: ['Weapons'] }) : p)])) && j(fieldsOf(pQ.sheet.hud)) === j(wantH)
+            && j(fieldsOf(cleanSystem(rawQ(), { F, gmView: false, libCats: {} }).sheet)) === j(wantG.map(s => [s[0], s[1].filter(p => p.id !== 'f_vault')]))
+            && j(cleanSystem(gQ, { F, gmView: true }).sheet) === j(gQ.sheet) && j(cleanSystem(pQ, { F, gmView: false }).sheet) === j(pQ.sheet)
+            && j(tenQ.cats) === j(['A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8']) && S.cleanPlaceCats([]) === null && S.cleanPlaceCats('Weapons') === null && S.cleanPlaceCats([' ', '\u0001']) === null,
+            j([fieldsOf(gQ.sheet), fieldsOf(pQ.sheet), tenQ]));
+        const layQ = secs => cleanSystem(Object.assign(rawQ(), { sheet: { sections: secs } }), { F, gmView: true }).sheet.sections.map(s => s.fields);
+        const noCats = layQ([{ id: 's_a', fields: [{ id: 'f_gear', w: 'row', cats: ['Weapons'] }] }, { id: 's_b', fields: [{ id: 'f_gear', w: 'row' }] }, { id: 's_c', fields: [{ id: 'f_gear', w: 'row', cats: ['Armor'] }] }]);
+        const twice = layQ([{ id: 's_a', fields: [{ id: 'f_gear', w: 'row', cats: ['Weapons', 'Armor'] }] }, { id: 's_b', fields: [{ id: 'f_gear', w: 'row', cats: ['armor'] }] }]);
+        const numTwice = layQ([{ id: 's_a', fields: [{ id: 'f_coin', w: 1, cats: ['A'] }, { id: 'f_coin', w: 1, cats: ['B'] }] }]);
+        const oneOnly = layQ([{ id: 's_a', fields: [{ id: 'f_gear', w: 'row', cats: ['Weapons'] }] }]);
+        // the bound: the first LIMITS.placements placements of item lists are read for the rule; a later one is kept only where it names categories
+        // no earlier kept placement of the list names, so what is kept holds the rule whatever lies past that
+        const bigSecs = [{ id: 's_a', fields: [{ id: 'f_gear', w: 'row', cats: ['X'] }] }, { id: 's_b', fields: Array.from({ length: 399 }, () => ({ id: 'f_vault', w: 1 })) }, { id: 's_c', fields: [{ id: 'f_gear', w: 'row' }, { id: 'f_gear', w: 'row', cats: ['Y'] }, { id: 'f_gear', w: 'row', cats: ['x', 'Z'] }] }];
+        const bigQ = cleanSystem(Object.assign(rawQ(), { sheet: { sections: bigSecs } }), { F, gmView: true }), bigF = bigQ.sheet.sections.map(s => s.fields);
+        check('1.5.5 a list placed more than once keeps every placement only where each names categories of its own and no category is named by two of them; else its first placement alone, with no categories, exactly as before: a placement that names none, a category named twice in any case, a number field placed twice whatever it names; a list placed once may name its categories; past the placements the rule reads, a later placement is kept only where it names categories no kept placement of the list names, and the result is cleaned again the same',
+            j(noCats) === j([[{ id: 'f_gear', w: 'row' }], [], []]) && j(twice) === j([[{ id: 'f_gear', w: 'row' }], []]) && j(numTwice) === j([[{ id: 'f_coin', w: 1 }]]) && j(oneOnly) === j([[{ id: 'f_gear', w: 'row', cats: ['Weapons'] }]])
+            && j(bigF[0]) === j([{ id: 'f_gear', w: 'row', cats: ['X'] }]) && j(bigF[1]) === j([{ id: 'f_vault', w: 1 }]) && j(bigF[2]) === j([{ id: 'f_gear', w: 'row', cats: ['Y'] }]) && j(cleanSystem(bigQ, { F, gmView: true }).sheet) === j(bigQ.sheet),
+            j([noCats, twice, numTwice, oneOnly, bigF[0], bigF[2]]));
+        const LQ = gQ.sheet.sections, armsP = LQ[0].fields[0], wearP = LQ[1].fields[0], kitP = LQ[2].fields[0], tA = S.catPlace(LQ, armsP), tW = S.catPlace(LQ, wearP);
+        const BS = 'B'.repeat(40), L40 = layQ([{ id: 's_a', fields: [{ id: 'f_gear', w: 'row', cats: ['Weapons'] }] }, { id: 's_b', fields: [{ id: 'f_gear', w: 'row', cats: ['B'.repeat(60)] }] }]).map(fs => ({ fields: fs })), tA40 = S.catPlace(L40, L40[0].fields[0]), tB40 = S.catPlace(L40, L40[1].fields[0]);
+        check('1.5.5 which rows a placement shows (systemcore catPlace, run for real): a row of a category a placement names stands in that placement alone, by the list\'s own reading of a category (its first 40 characters, ignoring case), on the list\'s home placement and on any other; a row of a category no placement names, and a row with none, stand in the list\'s home placement, here its first; a placement that names no category, one not in the layout and no layout at all show every row',
+            tA('Weapons') && tA('WEAPONS') && !tA('Armor') && tA('') && tA('Trinkets') && tA(undefined) && tA.home === true && tW('armor') && tW('Pouches') && !tW('') && !tW('Weapons') && tW.home === false && S.catPlace(LQ, kitP)('Tools') && !S.catPlace(LQ, kitP)('Trinkets')
+            && tA(WS + 'and more') && j(L40[1].fields[0].cats) === j([BS]) && tB40(BS + 'x') && tB40(BS.toLowerCase() + 'and more') && !tA40(BS + 'x') && tA40('Trinkets') && !tB40('Trinkets')
+            && S.catPlace(LQ, JSON.parse(j(armsP))) === null && S.catPlace(LQ, LQ[1].fields[1]) === null && S.catPlace(null, armsP) === null && S.catPlace(LQ, null) === null);
+        // the home placement (the review of this fold): the rows no placement names, and the whole list's totals, stand in the list's first
+        // placement that shows every row: never one set to the rows switched on while the list has a switch, nor one with a show-if of its own,
+        // of its section or of the section that section stands under as the renderer nests it; with none such, the first
+        const specOn = GEAR().list, PLh = (cats, more) => Object.assign({ id: 'f_gear', w: 'row', cats: cats }, more || {});
+        const homeOf = (secs, spec) => { const h = S.catHome(secs, 'f_gear', spec); let at = ''; secs.forEach(s => s.fields.forEach((p, i) => { if (p === h) at = s.id + ':' + i; })); return at; };
+        const H1 = [{ id: 's_a', fields: [PLh(['Weapons'], { on: true })] }, { id: 's_b', fields: [{ id: 'f_coin' }, PLh(['Armor'])] }];
+        const H2 = [{ id: 's_a', fields: [PLh(['Weapons'], { showIf: 'Coins > 0' })] }, { id: 's_b', fields: [PLh(['Armor'])] }];
+        const H2b = [{ id: 's_a', fields: [PLh(['Weapons'], { showIf: '   ' })] }, { id: 's_b', fields: [PLh(['Armor'])] }];
+        const H3 = [{ id: 's_a', showIf: 'Coins > 0', fields: [PLh(['Weapons'])] }, { id: 's_b', fields: [PLh(['Armor'])] }];
+        const H4 = [{ id: 's_p', showIf: 'Coins > 0', fields: [] }, { id: 's_a', parent: 's_p', fields: [PLh(['Weapons'])] }, { id: 's_b', fields: [PLh(['Armor'])] }];
+        const H5 = [{ id: 's_q', fields: [] }, { id: 's_p', parent: 's_q', showIf: 'Coins > 0', fields: [] }, { id: 's_a', parent: 's_p', fields: [PLh(['Weapons'])] }, { id: 's_b', fields: [PLh(['Armor'])] }];   // s_p stands under another, so s_a stands at the top and s_p's show-if is not its own
+        const H6 = [{ id: 's_a', fields: [PLh(['Weapons'], { on: true })] }, { id: 's_b', fields: [PLh(['Armor'], { showIf: 'Coins > 0' })] }];
+        const hTa = S.catPlace(H1, H1[0].fields[0], specOn), hTb = S.catPlace(H1, H1[1].fields[1], specOn), hNa = S.catPlace(H1, H1[0].fields[0], {});
+        check('1.5.5 the list\'s home placement (systemcore catHome, and catPlace by it, run for real; the review of this fold): the rows of a category no placement names, and the whole list\'s totals, stand in the list\'s first placement that shows every row, so never in one set to the rows switched on while the list has a switch, nor in one with a show-if of its own, of its section or of the section it stands under, a show-if of blanks being none; a section nested under one that is itself nested stands at the top, as the sheet draws it; where every placement may hide rows, the first, which the strict reading answers as none; a list with no switch reads Only switched on as nothing; a list not placed, and no layout, have none',
+            homeOf(H1, specOn) === 's_b:1' && homeOf(H1, {}) === 's_a:0' && homeOf(H1, null) === 's_a:0' && homeOf(H1, undefined) === 's_b:1'
+            && homeOf(H2, specOn) === 's_b:0' && homeOf(H2b, specOn) === 's_a:0' && homeOf(H3, specOn) === 's_b:0' && homeOf(H4, specOn) === 's_b:0' && homeOf(H5, specOn) === 's_a:0'
+            && homeOf(H6, specOn) === 's_a:0' && S.catHome(H6, 'f_gear', specOn, true) === null && S.catHome(H1, 'f_gear', specOn, true) === H1[1].fields[1] && S.catHome(H1, 'f_none', specOn) === null && S.catHome(null, 'f_gear') === null
+            && !hTa('Tools') && hTb('Tools') && !hTa('') && hTb('') && hTa('Weapons') && !hTb('Weapons') && hTa.home === false && hTb.home === true && hNa('Tools') && hNa.home === true,
+            j([homeOf(H1, specOn), homeOf(H1, {}), homeOf(H2, specOn), homeOf(H2b, specOn), homeOf(H3, specOn), homeOf(H4, specOn), homeOf(H5, specOn), homeOf(H6, specOn)]));
+
+        // the real sheet: buildSections with the real fieldNode and the real item widgets, on a page of plain objects
+        const hasQ = (e, c) => (' ' + e.className + ' ').indexOf(' ' + c + ' ') >= 0;
+        const mkQ = (tag, cls, text) => {
+            const e = { tag: tag, tagName: String(tag).toUpperCase(), className: cls || '', children: [], style: { setProperty() {}, removeProperty() {} }, dataset: {}, on: {}, hidden: false, scrollTop: 0, title: '', value: '', type: '', disabled: false, checked: false, _t: text === undefined || text === null ? '' : String(text) };
+            Object.defineProperty(e, 'textContent', { get() { return e.children.length ? e.children.map(k => k.textContent).join('') : e._t; }, set(v) { e.children = []; e._t = String(v); } });
+            Object.defineProperty(e, 'childNodes', { get() { return e.children; } });
+            e.classList = { add: c => { if (!hasQ(e, c)) e.className = (e.className + ' ' + c).trim(); }, contains: c => hasQ(e, c), toggle: (c, on) => { if (on) e.classList.add(c); else e.className = e.className.split(' ').filter(x => x !== c).join(' '); } };
+            e.appendChild = x => { if (x && typeof x === 'object') x.parentNode = e; e.children.push(x); return x; };
+            e.insertBefore = (x, ref) => { if (ref === x) return x; const o = e.children.indexOf(x); if (o >= 0) e.children.splice(o, 1); if (x && typeof x === 'object') x.parentNode = e; const at = ref ? e.children.indexOf(ref) : -1; if (at < 0) e.children.push(x); else e.children.splice(at, 0, x); return x; };
+            Object.defineProperty(e, 'nextSibling', { get() { const p = e.parentNode; if (!p) return null; const i = p.children.indexOf(e); return i >= 0 && i + 1 < p.children.length ? p.children[i + 1] : null; } });
+            e.addEventListener = (k, f) => { e.on[k] = f; };
+            return e;
+        };
+        const optQ = (v, t, s) => { const o = mkQ('option', null, t); o.value = v; if (s) o.selected = true; return o; }, docQ = { createTextNode: t => ({ tag: '#text', textContent: String(t), children: [] }) };
+        const itQ = cutQ('// ---- item-list widgets', '// 5h: an effect\'s changes as short text'), fxQ = cutQ('function fxMark(', '// 5h: a character\'s status effects'), fnQ = cutQ('function signTone(', '// A roll from a sheet button:');
+        const bsA = shQ.indexOf('function buildSections('), bsQ = shQ.slice(bsA, shQ.indexOf('\n}\n', bsA) + 3);
+        const drawQ = (sys, ch, vctx, live, cm) => {
+            const deps = ['el', 'iconNode', 'rowDef', 'rowIdOf', 'rowLvl', 'rowOn', 'commitItem', 'opt', 'fmtNum', 'iconText', 'LIMITS', '_fxLive', 'document', 'renderViews', 'closeHud', 'closeSheet', 'window', 'systemOf', 'getActiveCampaign', 'facingTarget', 'uid', 'F', 'fxText', 'canRoll', 'sheetRoll', 'commit', 'valueTone', 'TONE_CLASS', 'rowStat', 'rowPaid', '_fxView', 'catPlace', 'plusText'];
+            const FNq = new Function(...deps, itQ + fxQ + fnQ + '\nreturn fieldNode;')(mkQ, (v, cls) => mkQ('span', cls, v), S.rowDef, S.rowIdOf, S.rowLvl, S.rowOn, cm || (() => {}), optQ, S.fmtNum, v => v || '', S.LIMITS, live === undefined ? true : live, docQ, () => {}, () => {}, () => {}, {}, () => sys, () => null, () => null, p => p + 'new', () => F, S.fxText, () => true, () => {}, () => {}, S.valueTone, {}, S.rowStat, S.rowPaid, 'sheet', S.catPlace, S.plusText);
+            const DEPS = ['F', 'PIN_GID', '_fxView', '_lockNow', '_rfClearing', '_secOpen', 'accentInk', 'applyLook', 'autoLayout', 'bandInto', 'el', 'facingNode', 'fieldNode', 'frameFlowTop', 'hbKey', 'hbNode', 'headerBlocks', 'hudButton', 'iconNode', 'imgSrc', 'inlineRow', 'linkNode', 'pageChip', 'pinChip', 'pinNode', 'pinTargetsAll', 'renderSheet', 'resetChip', 'rollNode', 'rollerNode', 'sbxFill', 'sbxKeep', 'sbxView', 'showsIf', 'stanceNode', 'syncFramePad', 'viewLocked'];
+            const nul = () => null, body = mkQ('div', 'sheet-body');
+            new Function(...DEPS, bsQ + '\nreturn buildSections;')(() => F, /^g_/, 'sheet', false, false, {}, () => '#000000', () => {}, S.autoLayout, () => {}, mkQ, nul, FNq, () => 0, nul, nul, () => {}, nul, () => mkQ('span'), x => x, () => {}, nul, nul, nul, nul, S.pinTargetsAll, () => {}, nul, nul, nul, undefined, undefined, undefined, S.showsIf, nul, () => {}, () => false)(body, sys, ch, S.resolveAll(sys, ch, F, null), true, false, () => {}, vctx);
+            return body;
+        };
+        const walkQ = (n, p, acc) => { if (p(n)) acc.push(n); (n.children || []).forEach(k => walkQ(k, p, acc)); return acc; }, byCls = (n, c) => walkQ(n, x => typeof x.className === 'string' && hasQ(x, c), []);
+        const titleQ = n => { const t = n.children.find(k => hasQ(k, 'sheet-sec-title')); return t ? t.textContent : ''; };
+        const rowsQ = body => body.children.filter(k => hasQ(k, 'sheet-section')).map(s => [titleQ(s), byCls(s, 'sheet-item-name').map(x => x.textContent).concat(byCls(s, 'sheet-itcol-name').filter(x => x.tag === 'td').map(x => x.textContent)), byCls(s, 'sheet-item-totals').map(x => x.textContent), byCls(s, 'sheet-itft').map(x => x.textContent),
+            byCls(s, 'sheet-item-add').map(a => [a.dataset.cat || '', a.children.slice(0, 3).map(o => o.tag + ':' + (o.label || o.textContent))])]);
+        const chQ = { id: 'c_k', name: 'Kael', ownerId: '', values: { f_gear: [{ id: 'w_b', defId: 'i_blade', qty: 1, on: true }, { id: 'w_c', defId: 'i_coat', qty: 1 }, { id: 'w_p', defId: 'i_pebbles', qty: 2 }, { id: 'w_r', defId: 'i_rope', qty: 1, on: true },
+            { id: 'w_l', defId: 'i_lamp', qty: 1 }, { id: 'w_x', qty: 1, def: { name: 'Odd', category: 'Trinkets', vis: 'all' } }, { id: 'w_o', defId: 'i_pouch', qty: 1 }] } };
+        const noVault = r => { r.fields = r.fields.filter(f => f.id !== 'f_vault'); return r; }, gD = cleanSystem(noVault(rawQ()), { F, gmView: true });   // drawn: the list alone (the GM-only list's places go with it)
+        const footQ = S.resolveAll(gD, chQ, F, null).f_gear.foot, wholeQ = 'Whole listWt ' + footQ.Wt.text + 'Load ' + footQ.Load.text;
+        let dQ = null, dErr = '';
+        try {
+            const tQ = cleanSystem(noVault(rawQ({ table: { columns: ['category'], footer: true } })), { F, gmView: true });
+            dQ = { sheet: rowsQ(drawQ(gD, chQ, { campId: 'k_1', view: 'sheet', preview: false })), print: rowsQ(drawQ(gD, chQ, { campId: 'k_1', view: 'sheet', preview: false, print: true })), preview: rowsQ(drawQ(gD, chQ, { campId: 'k_1', view: 'sheet', preview: true }, false)),
+                hud: rowsQ(drawQ(S.hudView(gD), chQ, { campId: 'k_1', view: 'hud', preview: false })), table: rowsQ(drawQ(tQ, chQ, { campId: 'k_1', view: 'sheet', preview: false })),
+                win: rowsQ(drawQ(gD, chQ, { campId: 'k_1', view: 'sheet', preview: false }, false)) };   // a window of its own: as sheets.js renderSheetInto draws, with nothing live
+        } catch (e) { dErr = e.stack || e.message; }
+        const addA = [['Weapons', ['option:+ Add item…', 'optgroup:Weapons', 'option:Pebbles']]], addW = [['Armor', ['option:+ Add item…', 'optgroup:Armor', 'option:Pebbles']]];
+        check('1.5.5 the sheet draws three placements of one list (sheets.js buildSections with the real fieldNode and the real item widgets, run for real on a page of plain objects): Arms shows the Weapons rows and every row of a category no placement names, Pebbles with none and Odd of its own, under the list\'s totals for the whole list; Wear shows Armor and Pouches; Kit, set to rows switched on, shows only the Tools rows switched on, so Rope and not Lamp; each placement\'s list to add opens on its first category, and carries it for the library\'s picker; a print draws the same rows, and the Layout preview and a window of its own, which draw with nothing live, the same rows with nothing to add',
+            !!dQ && j(dQ.sheet) === j([['Arms', ['Blade', 'Pebbles', 'Odd'], [wholeQ], [], addA], ['Wear', ['Coat', 'Coin Pouch'], [], [], addW], ['Kit', ['Rope'], [], [], []]])
+            && j(dQ.print.map(s => s.slice(0, 3))) === j(dQ.sheet.map(s => s.slice(0, 3))) && j(dQ.preview) === j(dQ.sheet.map(s => [s[0], s[1], s[2], s[3], []])) && j(dQ.win) === j(dQ.sheet.map(s => [s[0], s[1], s[2], s[3], []])), dErr || j(dQ));
+        check('1.5.5 the HUD follows its own placements (the real renderer with hudView): Ready shows the Weapons rows and every row of a category the HUD names nowhere, Worn the Armor row; and a rich table with a footer counts the rows its placement shows, with the whole list\'s totals once, under its first placement',
+            !!dQ && j(dQ.hud.map(s => s.slice(0, 3))) === j([['Ready', ['Blade', 'Pebbles', 'Rope', 'Lamp', 'Odd', 'Coin Pouch'], [wholeQ]], ['Worn', ['Coat'], []]])
+            && j(dQ.table.map(s => s.slice(0, 4))) === j([['Arms', ['Blade', 'Pebbles', 'Odd'], [wholeQ], ['3 items']], ['Wear', ['Coat', 'Coin Pouch'], [], ['2 items']], ['Kit', ['Rope'], [], ['1 item']]]), dErr || j(dQ && [dQ.hud, dQ.table]));
+        // a system that uses none of it draws node for node as the code before this fold drew it (the hashes below were taken from that code)
+        const serQ = n => (!n || typeof n !== 'object') ? n : n.tag === '#text' ? ['#', n.textContent] : [n.tag, n.className, n.children.length ? '' : n._t, n.title || '', n.value || '', n.disabled ? 1 : 0, n.checked ? 1 : 0, n.colSpan || 0, j(n.dataset), n.label || '', n.children.map(serQ)];
+        const plainQ = tbl => ({ v: 1, name: 'Docks kit', fields: [
+            Object.assign({ id: 'f_gear', key: 'Gear', label: 'Gear', kind: 'item-list', list: { stats: [{ key: 'Wt', label: 'Wt', show: true }], cols: [{ key: 'Load', label: 'Load', formula: 'Row.Wt', foot: true }] } }, tbl ? { table: { columns: ['category'], footer: true } } : {}),
+            { id: 'f_coin', key: 'Coins', kind: 'number' }],
+            items: [{ id: 'i_blade', name: 'Blade', category: 'Weapons', stats: { Wt: 3 } }, { id: 'i_coat', name: 'Coat', category: 'Armor', stats: { Wt: 10 } }, { id: 'i_pebbles', name: 'Pebbles', category: '', stats: { Wt: 1 } }],
+            sheet: { sections: [{ id: 's_arms', title: 'Arms', fields: [{ id: 'f_gear', w: 'row' }] }, { id: 's_wear', title: 'Wear', fields: [{ id: 'f_gear', w: 'row' }, { id: 'f_coin', w: 1 }] }],
+                hud: { tabs: [], sections: [{ id: 's_h', title: 'Ready', fields: [{ id: 'f_gear', w: 'row', on: true }, { id: 'f_gear', w: 1 }] }] } } });
+        const chP = { id: 'c_k', name: 'Kael', ownerId: '', values: { f_gear: [{ id: 'w_b', defId: 'i_blade', qty: 1 }, { id: 'w_c', defId: 'i_coat', qty: 1 }, { id: 'w_p', defId: 'i_pebbles', qty: 2 }, { id: 'w_x', qty: 1, def: { name: 'Odd', category: 'Trinkets', vis: 'all' } }] } };
+        let plainH = null, phErr = '';
+        try { plainH = []; [false, true].forEach(tbl => { const sy = cleanSystem(plainQ(tbl), { F, gmView: true });
+            plainH.push(hQ(serQ(drawQ(sy, chP, { campId: 'k_1', view: 'sheet', preview: false }))), hQ(serQ(drawQ(sy, chP, { campId: 'k_1', view: 'sheet', preview: false, print: true }))), hQ(serQ(drawQ(S.hudView(sy), chP, { campId: 'k_1', view: 'hud', preview: false }))), hQ(serQ(drawQ(sy, chP, { campId: 'k_1', view: 'sheet', preview: true }, false)))); }); } catch (e) { phErr = e.stack || e.message; }
+        check('1.5.5 a system that places each list once, with no categories, draws node for node as before this fold (the real renderer: the sheet, a print, the HUD and the Layout preview, a plain list and a rich table with a footer, by the hashes the code before the fold gave)',
+            j(plainH) === j(['717cec17387df848', '717cec17387df848', 'cc13aec16a43e17a', '5f36cba73622159a', 'fbf3667e03bca511', 'fbf3667e03bca511', 'cfa425372a0f4e20', '520a6be72a4d600e']), phErr || j(plainH));
+        // the home placement drawn (the review of this fold): a first placement set to the rows switched on, or with a show-if that is false, takes
+        // in no row it would hide; the rows no placement names stand in the next placement, under the whole list's totals
+        const homeSys = secs => cleanSystem(Object.assign(noVault(rawQ()), { sheet: { sections: secs } }), { F, gmView: true });
+        const chH = { id: 'c_k', name: 'Kael', ownerId: '', values: { f_coin: 0, f_gear: [{ id: 'w_b', defId: 'i_blade', qty: 1, on: true }, { id: 'w_c', defId: 'i_coat', qty: 1 }, { id: 'w_p', defId: 'i_pebbles', qty: 2 }, { id: 'w_r', defId: 'i_rope', qty: 1 }, { id: 'w_x', qty: 1, def: { name: 'Odd', category: 'Trinkets', vis: 'all' } }] } };
+        const sysH1 = homeSys([{ id: 's_a', title: 'Ready', fields: [{ id: 'f_gear', w: 'row', on: true, cats: ['Weapons'] }] }, { id: 's_b', title: 'Pack', fields: [{ id: 'f_gear', w: 'row', cats: ['Armor'] }] }]);
+        const sysH2 = homeSys([{ id: 's_a', title: 'Ready', fields: [{ id: 'f_gear', w: 'row', showIf: 'Coins > 0', cats: ['Weapons'] }] }, { id: 's_b', title: 'Pack', fields: [{ id: 'f_gear', w: 'row', cats: ['Armor'] }] }]);
+        const footH = S.resolveAll(sysH1, chH, F, null).f_gear.foot, wholeH = 'Whole listWt ' + footH.Wt.text + 'Load ' + footH.Load.text;
+        const secOf = (md, name) => { const i = md.indexOf('### ' + name), k = md.indexOf('\n### ', i + 1); return i < 0 ? '' : md.slice(i, k < 0 ? undefined : k); };
+        let hD = null, hErr = '';
+        try {
+            const mdH1 = SEQ.sheetToMarkdown(sysH1, chH, S.resolveAll(sysH1, chH, F, null), { F });
+            hD = { on: rowsQ(drawQ(sysH1, chH, { campId: 'k_1', view: 'sheet', preview: false })).map(s => s.slice(0, 3)), off: rowsQ(drawQ(sysH2, chH, { campId: 'k_1', view: 'sheet', preview: false })).map(s => s.slice(0, 3)),
+                prev: rowsQ(drawQ(sysH2, chH, { campId: 'k_1', view: 'sheet', preview: true }, false)).map(s => s.slice(0, 3)), md: [secOf(mdH1, 'Ready'), secOf(mdH1, 'Pack')].map(t => (t.match(/^\| [^|]+ \|/gm) || []).map(x => x.slice(2, -2).trim()).filter(x => x !== 'Item' && x !== '---')) };
+        } catch (e) { hErr = e.stack || e.message; }
+        check('1.5.5 the home placement drawn (the real renderer, and the readable page; the review of this fold): a first placement set to the rows switched on shows only Blade, switched on, and the next placement shows Coat with every row no placement names, Pebbles with none, Rope switched off and Odd of its own, under the whole list\'s totals; a first placement whose show-if is false is not drawn, its Weapons hidden as the GM set them, and the next placement holds the rest and the totals; the Layout preview draws the hidden placement dimmed with its own rows; the readable page lists the rows as the sheet does',
+            !!hD && j(hD.on) === j([['Ready', ['Blade'], []], ['Pack', ['Coat', 'Pebbles', 'Rope', 'Odd'], [wholeH]]]) && j(hD.off) === j([['Pack', ['Coat', 'Pebbles', 'Rope', 'Odd'], [wholeH]]])
+            && j(hD.prev) === j([['Ready', ['Blade'], []], ['Pack', ['Coat', 'Pebbles', 'Rope', 'Odd'], [wholeH]]]) && j(hD.md) === j([['Blade'], ['Coat', 'Pebbles', 'Rope', 'Odd']]), hErr || j(hD));
+        // + Custom… from a placement that names categories makes the row in that placement: it takes the placement's first category; a list
+        // placed once, with none, makes it with no category, as before this fold
+        const cmQ = [], cmP = [];
+        let cmErr = '';
+        try {
+            const bodyCm = drawQ(gD, chQ, { campId: 'k_1', view: 'sheet', preview: false }, true, (c, f, op) => cmQ.push([f.id, op.op, j(op.def)]));
+            byCls(bodyCm, 'sheet-item-add').forEach(a => { a.value = '__custom'; a.on.change(); });
+            const bodyP = drawQ(cleanSystem(plainQ(false), { F, gmView: true }), chP, { campId: 'k_1', view: 'sheet', preview: false }, true, (c, f, op) => cmP.push([f.id, op.op, j(op.def)]));
+            byCls(bodyP, 'sheet-item-add').forEach(a => { a.value = '__custom'; a.on.change(); });
+        } catch (e) { cmErr = e.stack || e.message; }
+        check('1.5.5 + Custom… from a placement by category makes its row in that placement (the real item widgets, run for real; the review of this fold): from Arms it starts in Weapons and from Wear in Armor, so its form opens where it was asked for; a list placed once with no categories makes its row with no category, as before',
+            j(cmQ) === j([['f_gear', 'custom', j({ category: 'Weapons' })], ['f_gear', 'custom', j({ category: 'Armor' })]]) && j(cmP) === j([['f_gear', 'custom', '{}']]), cmErr || j([cmQ, cmP]));
+        // a placement's categories in the players' view (the review of this fold): judged as the list's own categories are (Stage 6 F4b), so a
+        // category only GM-only things carry never travels; a placement left with none goes, and where every placement of a list is left with
+        // none, its first stays with no categories; a player's app cleaning the host's view again keeps it as it is
+        const rawV = () => ({ v: 1, name: 'Docks kit', rolls: [], items: JSON.parse(j(ITEMS)).concat([{ id: 'i_hex', name: 'Hex', category: 'Curses', vis: 'gm', stats: { Wt: 1 } }, { id: 'i_gem', name: 'Gem', category: 'Hidden Stash', vis: 'gm', stats: { Wt: 1 } }]),
+            fields: [GEAR(), { id: 'f_bag', key: 'Bag', label: 'Bag', kind: 'item-list' }, { id: 'f_coin', key: 'Coins', label: 'Coins', kind: 'number' }],
+            sheet: { sections: [
+                { id: 's_arms', title: 'Arms', fields: [{ id: 'f_gear', w: 'row', cats: ['Weapons'] }, { id: 'f_bag', w: 'row', cats: ['Curses'] }] },
+                { id: 's_wear', title: 'Wear', fields: [{ id: 'f_gear', w: 'row', cats: ['Armor', 'Hidden Stash'] }] },
+                { id: 's_hex', title: 'Hexed', fields: [{ id: 'f_gear', w: 'row', cats: ['Curses'] }, { id: 'f_bag', w: 'row', cats: ['Hidden Stash', 'Smuggled Relics'] }] },
+                { id: 's_loot', title: 'Loot', fields: [{ id: 'f_gear', w: 'row', cats: ['Smuggled Relics'] }] },
+                { id: 's_kit', title: 'Kit', fields: [{ id: 'f_gear', w: 'row', cats: ['Tools', 'Charms', 'Spare'] }] } ],
+              hud: { tabs: [], sections: [{ id: 's_h1', title: 'Ready', fields: [{ id: 'f_gear', w: 'row', cats: ['Hidden Stash'] }] }, { id: 's_h2', title: 'Worn', fields: [{ id: 'f_gear', w: 'row', cats: ['Armor'] }] }] } } });
+        const LIBV = { show: ['Charms'], hide: ['Smuggled Relics', 'Curses'] };
+        const gV = cleanSystem(rawV(), { F, gmView: true }), hostV = cleanSystem(rawV(), { F, gmView: false, libCats: LIBV }), shutV = cleanSystem(rawV(), { F, gmView: false }), cliV = cleanSystem(JSON.parse(j(hostV)), { F, gmView: false, libCats: {} });
+        const catsV = sh => sh.sections.map(s => [s.id, s.fields.map(p => p.id + (p.cats ? ':' + p.cats.join('+') : ''))]);
+        const wantVg = [['s_arms', ['f_gear:Weapons', 'f_bag:Curses']], ['s_wear', ['f_gear:Armor+Hidden Stash']], ['s_hex', ['f_gear:Curses', 'f_bag:Hidden Stash+Smuggled Relics']], ['s_loot', ['f_gear:Smuggled Relics']], ['s_kit', ['f_gear:Tools+Charms+Spare']]];
+        const wantVp = [['s_arms', ['f_gear:Weapons', 'f_bag']], ['s_wear', ['f_gear:Armor']], ['s_hex', []], ['s_loot', []], ['s_kit', ['f_gear:Tools+Charms+Spare']]];
+        const chV = { id: 'c_k', name: 'Kael', ownerId: '', values: { f_gear: [{ id: 'w_b', defId: 'i_blade', qty: 1 }, { id: 'w_c', defId: 'i_coat', qty: 1 }, { id: 'w_r', defId: 'i_rope', qty: 1 }, { id: 'w_x', qty: 1, def: { name: 'Odd', category: 'Curses', vis: 'all' } }] } };
+        let vD = null, vErr = '';
+        try { vD = { gm: rowsQ(drawQ(gV, chV, { campId: 'k_1', view: 'sheet', preview: false })).map(s => s.slice(0, 2)), pl: rowsQ(drawQ(hostV, chV, { campId: 'k_1', view: 'sheet', preview: false })).map(s => s.slice(0, 2)) }; } catch (e) { vErr = e.stack || e.message; }
+        check('1.5.5 a placement\'s categories in the players\' view (systemcore cleanSystem and placeCatsSeen, run for real; the review of this fold): the GM\'s view keeps every placement as set; the players\' view judges a placement\'s categories as it judges a list\'s own, so one that only GM-only items or GM-only library entries carry is left out, one a library entry players may see carries stays, and one nothing carries stays only where the library can say, as on the GM\'s machine; a placement left with none goes, and where every placement of a list is left with none its first stays with no categories; the HUD alike; nothing of those names is anywhere in the players\' view; a player\'s app cleaning it again keeps it byte for byte; on a player\'s sheet a row of a category they do not see stands in the list\'s home placement, so no row is lost',
+            j(catsV(gV.sheet)) === j(wantVg) && j(catsV(gV.sheet.hud)) === j([['s_h1', ['f_gear:Hidden Stash']], ['s_h2', ['f_gear:Armor']]])
+            && j(catsV(hostV.sheet)) === j(wantVp) && j(catsV(hostV.sheet.hud)) === j([['s_h1', []], ['s_h2', ['f_gear:Armor']]])
+            && j(catsV(shutV.sheet)) === j(wantVp.map(s => s[0] === 's_kit' ? ['s_kit', ['f_gear:Tools']] : s))
+            && !/Hidden Stash|Curses|Smuggled Relics/i.test(j(hostV)) && !/Hidden Stash|Curses|Smuggled Relics/i.test(j(shutV)) && j(cliV.sheet) === j(hostV.sheet)
+            && j(cleanSystem(JSON.parse(j(shutV)), { F, gmView: false }).sheet) === j(shutV.sheet)
+            && !!vD && j(vD.gm) === j([['Arms', ['Blade']], ['Wear', ['Coat']], ['Hexed', ['Odd']], ['Loot', []], ['Kit', ['Rope']]]) && j(vD.pl) === j([['Arms', ['Blade', 'Odd']], ['Wear', ['Coat']], ['Kit', ['Rope']]]),
+            vErr || j([catsV(hostV.sheet), catsV(hostV.sheet.hud), catsV(shutV.sheet), vD]));
+        // the readable page (sheetexport.js sheetToMarkdown, run for real) lists under each placement the rows the sheet shows there, and a system
+        // that uses none of it is written byte for byte as before (the hash the code before the fold gave)
+        const mdOf = sy => SEQ.sheetToMarkdown(sy, chQ, S.resolveAll(sy, chQ, F, null), { F }), mdQ = mdOf(gQ);
+        const mdPlainSys = cleanSystem({ v: 1, name: 'Docks kit', fields: [{ id: 'f_gear', key: 'Gear', label: 'Gear', kind: 'item-list', list: { stats: [{ key: 'Wt', label: 'Wt', show: true }], on: { label: 'Readied' } } }, { id: 'f_coin', key: 'Coins', kind: 'number' }],
+            items: [{ id: 'i_blade', name: 'Blade', category: 'Weapons', stats: { Wt: 3 } }, { id: 'i_coat', name: 'Coat', category: 'Armor', stats: { Wt: 10 } }, { id: 'i_pebbles', name: 'Pebbles', category: '', stats: { Wt: 1 } }],
+            sheet: { sections: [{ id: 's_arms', title: 'Arms', fields: [{ id: 'f_gear', w: 'row', on: true }] }, { id: 's_wear', title: 'Wear', fields: [{ id: 'f_gear', w: 'row' }, { id: 'f_coin', w: 1 }] }] } }, { F, gmView: true });
+        const chM = { id: 'c_k', name: 'Kael', ownerId: '', values: { f_gear: [{ id: 'w_b', defId: 'i_blade', qty: 1, on: true }, { id: 'w_c', defId: 'i_coat', qty: 1 }, { id: 'w_p', defId: 'i_pebbles', qty: 2 }, { id: 'w_x', qty: 1, def: { name: 'Odd', category: 'Trinkets', vis: 'all' } }] } };
+        const mdPlainH = hQ(SEQ.sheetToMarkdown(mdPlainSys, chM, S.resolveAll(mdPlainSys, chM, F, null), { F }));
+        const secMd = name => { const i = mdQ.indexOf('### ' + name), k = mdQ.indexOf('\n### ', i + 1); return i < 0 ? '' : mdQ.slice(i, k < 0 ? undefined : k); };
+        const rowNames = t => (t.match(/^\| [^|]+ \|/gm) || []).map(x => x.slice(2, -2).trim()).filter(x => x !== 'Item' && x !== '---');
+        check('1.5.5 the readable page lists the list under each of its placements with the rows the sheet shows there (sheetexport.js sheetToMarkdown, run for real), and writes a system that uses none of it byte for byte as before',
+            j(rowNames(secMd('Arms'))) === j(['Blade', 'Pebbles', 'Odd']) && j(rowNames(secMd('Wear'))) === j(['Coat', 'Coin Pouch']) && j(rowNames(secMd('Kit'))) === j(['Rope']) && mdPlainH === 'ecdfe30aa1b28c0e', j([mdPlainH, mdQ]));
+
+        // the Layout tab's control (sheets.js, sliced by its placecatsui markers and run for real on a page of plain objects)
+        const uiQ = cutQ('// [systemcheck:placecatsui-start]', '// [systemcheck:placecatsui-end]'), chcQ = cutQ('function catChoices(', 'function rowForm(');
+        const errQ = {}, draftQ = { fields: [GEAR(), { id: 'f_coin', key: 'Coins', kind: 'number' }], items: JSON.parse(j(ITEMS)), sheet: { sections: [] } };
+        const mkU = (tag, cls, text) => { const e = mkQ(tag, cls, text); e.attrs = {}; e.setAttribute = (k, v) => { e.attrs[k] = String(v); }; return e; };
+        const LIBQ0 = { show: ['Charms'], hide: ['Curses'] }; let libQ = LIBQ0, cliQ = false;
+        const UQ = new Function('el', 'document', 'LIMITS', 'catSplits', 'cleanPlaceCats', 'errorsById', 'draft', 'layoutView', 'errorCell', 'window', 'isClient', 'catHome', chcQ + uiQ + '\nreturn { placeCatNames, placeCatBtn, placeCatRow, placeCatTick, placeCatSays, placeCatErrs, placeCatPart, placeCatAgain, placeCatRefocus, placeCatGm, open: _plCatOpen };')(
+            mkU, docQ, S.LIMITS, S.catSplits, S.cleanPlaceCats, errQ, draftQ, 'sheet', k => { const c = mkQ('div', 'sys-err'); (errQ[k] || []).forEach(e => c.appendChild(mkQ('div', 'sys-err-line', e.message))); return c; }, { wpLibrary: { catsFor: () => libQ } }, () => cliQ, S.catHome);
+        const fG = draftQ.fields[0], namesQ = UQ.placeCatNames(fG, draftQ), namesSc = UQ.placeCatNames({ list: { cats: ['Armor', 'Tools'] } }, draftQ);
+        const plA = { id: 'f_gear', w: 'row', cats: ['Weapons'] }, plB = { id: 'f_gear', w: 'row', cats: ['Armor', 'Lost'] }, plC = { id: 'f_gear', w: 'row' };
+        const rowB = UQ.placeCatRow(plB, 's_wear', 0, namesQ, { weapons: 1 }, false, true), ticksB = byCls(rowB, 'sys-pl-catcb').map(c => [c.dataset.cat, c.checked, c.disabled]);
+        const rowA = UQ.placeCatRow(plA, 's_arms', 0, namesQ, { armor: 1, lost: 1 }, true, true), noteOf = r => byCls(r, 'sys-note').map(x => x.textContent);
+        const tk = { id: 'f_gear' }; UQ.placeCatTick(tk, 'Weapons', true); UQ.placeCatTick(tk, ' armor ', true); UQ.placeCatTick(tk, 'WEAPONS', true); const tk1 = j(tk); UQ.placeCatTick(tk, 'weapons', false); const tk2 = j(tk); UQ.placeCatTick(tk, 'Armor', false); const tk3 = j(tk);
+        const full = { id: 'f_gear', cats: ['A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8'] }; UQ.placeCatTick(full, 'A9', true); UQ.placeCatTick(null, 'A', true); UQ.placeCatTick(tk, 7, true); UQ.placeCatTick(tk, '  ', true);
+        check('1.5.5 the Layout tab\'s ticks (placeCatNames, placeCatRow and placeCatTick, run for real): a place offers the list\'s own categories where its picker names some, else those of the items, the core entries and the library\'s on the GM\'s machine, as a row\'s form offers them, and any it names already; a category another place of the list shows is greyed and says so; the list\'s first place says that rows of a category no place shows stand there; a tick adds a category once, ignoring case, and takes it off, the last one off leaving no key; past eight nothing is added',
+            j(namesQ) === j(['Weapons', 'Armor', 'Tools', 'Pouches', 'Charms', 'Curses']) && j(namesSc) === j(['Armor', 'Tools'])
+            && j(ticksB) === j([['Weapons', false, true], ['Armor', true, false], ['Tools', false, false], ['Pouches', false, false], ['Charms', false, false], ['Curses', false, false], ['Lost', true, false]]) && rowB.dataset.sid === 's_wear' && rowB.dataset.pi === '0'
+            && j(noteOf(rowB)) === j(['Place the list again for its other categories.']) && j(noteOf(rowA)) === j(['Rows of a category no place shows stand here.']) && byCls(rowA, 'sys-pl-catcb').find(c => c.dataset.cat === 'Armor').disabled === true && byCls(rowA, 'sys-pl-catcb').find(c => c.dataset.cat === 'Weapons').checked === true
+            && j(noteOf(UQ.placeCatRow(plC, 's_kit', 0, namesQ, {}, true, false))) === j(['None ticked: every row.']) && noteOf(UQ.placeCatRow(plC, 's_kit', 0, [], {}, true, false))[0] === 'Give items a category to choose which rows this place shows.'
+            && tk1 === j({ id: 'f_gear', cats: ['Weapons', 'armor'] }) && tk2 === j({ id: 'f_gear', cats: ['armor'] }) && tk3 === j({ id: 'f_gear' }) && full.cats.length === 8, j([namesQ, ticksB, noteOf(rowB), noteOf(rowA), tk1, tk2, tk3]));
+        // a category players never see is marked GM only on its tick, by the cleaner's own test; the note on where the rows no place names stand
+        // follows the list's home place (the review of this fold)
+        const gmT = UQ.placeCatGm({ items: [{ category: 'Weapons' }, { category: 'Hidden Stash', vis: 'gm' }, null, { category: 7 }], core: [{ category: 'Lore', vis: 'gm' }, { category: ' lore ' }] });
+        libQ = null; const gmN = UQ.placeCatGm({ items: [{ category: 'Weapons' }] }); libQ = LIBQ0;
+        cliQ = true; const gmC = UQ.placeCatGm({ items: [{ category: 'Weapons' }] }); cliQ = false;
+        const rowGm = UQ.placeCatRow(plB, 's_wear', 0, namesQ, {}, false, true, false, gmT), labsGm = byCls(rowGm, 'sys-list-cat').filter(l => l.children.some(k => hasQ(k, 'sys-pl-catgm')));
+        const noteAt = (secs, si) => { const h = mkQ('div', 'sys-pl-list'); UQ.placeCatPart(h, secs[si].fields[0], secs[si], 0, fG, secs); const r = h.children.find(c => hasQ(c, 'sys-pl-catrow')); return r ? noteOf(r) : null; };
+        const secsOn = [{ id: 's_a', fields: [{ id: 'f_gear', w: 'row', on: true, cats: ['Weapons'] }] }, { id: 's_b', fields: [{ id: 'f_gear', w: 'row', cats: ['Armor'] }] }];
+        const secsAll = [{ id: 's_a', fields: [{ id: 'f_gear', w: 'row', on: true, cats: ['Weapons'] }] }, { id: 's_b', fields: [{ id: 'f_gear', w: 'row', showIf: 'Coins > 0', cats: ['Armor'] }] }];
+        const partGm = mkQ('div', 'sys-pl-list'); UQ.placeCatPart(partGm, secsOn[0].fields[0], secsOn[0], 0, fG, secsOn); const partGmL = byCls(partGm, 'sys-pl-catgm').map(x => x.parentNode.children[0].dataset.cat);
+        check('1.5.5 the Layout tab marks a category players never see (placeCatGm and placeCatRow, run for real; the review of this fold): by the cleaner\'s own test, one no item, core entry or library entry players may see carries and the library calls GM-only is marked GM only on its tick, in words set as text with a tooltip saying so, and one nothing carries is not while the library can say; with the library unread, or on a player\'s app, any category no item players see carries is; and the note on where the rows no place names stand is under the list\'s home place: the next place where the first shows only rows switched on, and the first, saying it may hide some, where every place may',
+            gmT('Hidden Stash') && gmT('curses') && !gmT('Weapons') && !gmT('Lore') && !gmT('Charms') && !gmT('Spare') && !gmT('') && !gmT(7) && gmN('Spare') && gmN('Charms') && !gmN('Weapons') && gmC('Spare') && !gmC('Weapons')
+            && j(labsGm.map(l => l.children[0].dataset.cat)) === j(['Curses']) && labsGm[0].children.find(k => hasQ(k, 'sys-pl-catgm')).textContent === 'GM only' && labsGm[0].title === 'Only GM-only things carry this category, so players do not see it here'
+            && byCls(UQ.placeCatRow(plB, 's_wear', 0, namesQ, {}, false, true), 'sys-pl-catgm').length === 0 && j(partGmL) === j(['Curses'])
+            && j(noteAt(secsOn, 0)) === j(['Place the list again for its other categories.']) && j(noteAt(secsOn, 1)) === j(['Rows of a category no place shows stand here.'])
+            && j(noteAt(secsAll, 0)) === j(['Rows of a category no place shows stand here. This place may hide some of them.']) && j(noteAt(secsAll, 1)) === j(['Place the list again for its other categories.']),
+            j([labsGm.map(l => l.title), partGmL, noteAt(secsOn, 0), noteAt(secsOn, 1), noteAt(secsAll, 0), noteAt(secsAll, 1)]));
+        // what Save does, said under each place, and the cleaner agreeing on every case
+        const caseQ = secs => { const said = UQ.placeCatSays(secs, draftQ.fields), kept = cleanSystem(Object.assign({}, draftQ, { sheet: { sections: JSON.parse(j(secs)) } }), { F, gmView: true }).sheet.sections; return [Object.keys(said).sort().map(k => [k, said[k].map(m => m.message)]), kept.map(s => s.fields.map(p => p.cats ? p.id + ':' + p.cats.join('+') : p.id))]; };
+        const sNone = caseQ([{ id: 's_a', fields: [{ id: 'f_gear', w: 'row', cats: ['Weapons'] }] }, { id: 's_b', fields: [{ id: 'f_gear', w: 'row' }] }]);
+        const sTwice = caseQ([{ id: 's_a', fields: [{ id: 'f_gear', w: 'row', cats: ['Weapons'] }] }, { id: 's_b', fields: [{ id: 'f_gear', w: 'row', cats: ['Armor', 'WEAPONS'] }] }]);
+        const sOk = caseQ([{ id: 's_a', fields: [{ id: 'f_gear', w: 'row', cats: ['Weapons'] }] }, { id: 's_b', fields: [{ id: 'f_coin', w: 1 }, { id: 'f_gear', w: 'row', cats: ['Armor'] }] }]);
+        const sOnce = caseQ([{ id: 's_a', fields: [{ id: 'f_gear', w: 'row' }] }]), sCap = caseQ([{ id: 's_a', fields: [{ id: 'f_gear', w: 'row', cats: ['A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'a8', 'A9'] }] }]);
+        check('1.5.5 what Save does with a list\'s places is said under each (placeCatSays, run for real, with the cleaner agreeing on each case): a list placed again where a place names no category, or where two places show one category, says so under each place, that Save keeps only the first and that it shows every row, and that Save drops the others, as the cleaner does; places that hold the rule, and a list placed once, say nothing; a place that names more than eight says Save keeps the first eight',
+            j(sNone) === j([[['s_a:0', ['Each place of Gear needs categories of its own. So Save keeps only this place, and it shows every row.']], ['s_b:0', ['Each place of Gear needs categories of its own. So Save drops this place.']]], [['f_gear'], []]])
+            && j(sTwice) === j([[['s_a:0', ['Two places of Gear show WEAPONS. So Save keeps only this place, and it shows every row.']], ['s_b:0', ['Two places of Gear show WEAPONS. So Save drops this place.']]], [['f_gear'], []]])
+            && j(sOk) === j([[], [['f_gear:Weapons'], ['f_coin', 'f_gear:Armor']]]) && j(sOnce) === j([[], [['f_gear']]])
+            && j(sCap) === j([[['s_a:0', ['A place shows at most 8 categories, so Save keeps the first 8.']]], [['f_gear:A1+A2+A3+A4+A5+A6+A7+A8']]]), j([sNone, sTwice, sOk, sOnce, sCap]));
+        // placeCatErrs fills both layouts' keys and clears its own before; By category, placeCatAgain and placeCatPart
+        draftQ.sheet = { sections: [{ id: 's_a', fields: [{ id: 'f_gear', w: 'row', cats: ['Weapons'] }] }, { id: 's_b', fields: [{ id: 'f_gear', w: 'row' }] }], hud: { sections: [{ id: 's_h', fields: [{ id: 'f_gear', cats: ['A'] }, { id: 'f_gear', cats: ['a'] }] }] } };
+        errQ['plc:sheet:s_old:0'] = [{ message: 'stale' }]; errQ.f_other = [{ message: 'kept' }]; UQ.placeCatErrs();
+        const errKeys = Object.keys(errQ).sort();
+        const btnC = UQ.placeCatBtn(plC), btnA = UQ.placeCatBtn(plA), secsA = [{ id: 's_a', fields: [plA, { id: 'f_coin' }] }, { id: 's_b', fields: [plC] }], plNew = { id: 'f_gear', w: 1 }, againQ = UQ.placeCatAgain(secsA, plNew, draftQ.fields), againN = UQ.placeCatAgain(secsA, { id: 'f_coin' }, draftQ.fields);
+        const btnC2 = UQ.placeCatBtn(plC), hostQ = mkQ('div', 'sys-pl-list'); UQ.placeCatPart(hostQ, plC, secsA[1], 0, fG, secsA);
+        const hostN = mkQ('div', 'sys-pl-list'); UQ.placeCatPart(hostN, { id: 'f_gear', w: 1 }, secsA[1], 1, fG, secsA);
+        check('1.5.5 the Layout tab, what is drawn (placeCatErrs, placeCatBtn, placeCatAgain and placeCatPart, run for real): what Save does is kept under each place of both layouts by its own key, and a stale key of its own is cleared while every other is left; By category stands only on a place that names no category, and says whether its ticks are open; a list placed again opens the ticks of each of its places and of the new one, a field that is no list opens nothing; a place draws its ticks while open or while it names a category, and always the cell that says what Save does with it',
+            j(errKeys) === j(['f_other', 'plc:hud:s_h:0', 'plc:hud:s_h:1', 'plc:sheet:s_a:0', 'plc:sheet:s_b:0']) && btnA === null && btnC.dataset.act === 'plcats' && btnC.attrs['aria-expanded'] === 'false' && btnC.className.split(' ').indexOf('on') < 0 && btnC2.attrs['aria-expanded'] === 'true'
+            && againQ === true && againN === false && UQ.open.has(plA) && UQ.open.has(plC) && UQ.open.has(plNew) && btnC2.className.split(' ').indexOf('on') >= 0
+            && j(hostQ.children.map(c => c.className)) === j(['sys-pl-catrow', 'sys-err']) && hostQ.children[1].dataset.errFor === 'plc:sheet:s_b:0' && j(hostN.children.map(c => c.className)) === j(['sys-err']), j([errKeys, hostQ.children.map(c => c.className), hostN.children.map(c => c.className)]));
+        // the handlers: onLayoutChange's tick and onLayoutClick's By category, run for real
+        const chgA = shQ.indexOf('function onLayoutChange(t) {'), chgQ = shQ.slice(chgA, shQ.indexOf('\n}\n', chgA) + 3), clkA = shQ.indexOf('function onLayoutClick(b) {'), clkQ = shQ.slice(clkA, shQ.indexOf('\n}\n', clkA) + 3);
+        const secsH = [{ id: 's_a', title: 'Arms', fields: [{ id: 'f_gear', w: 'row' }] }], logH = [], refoc = [];
+        const ONH = new Function('layoutSections', 'markDirty', 'renderPreview', 'renderLayout', 'PIN_GID', 'LIMITS', 'toast', 'draft', 'pageOptions', 'ui', 'document', 'secRefocus', 'placeCatTick', '_plCatOpen', 'placeCatRefocus', chgQ + '\nreturn onLayoutChange;')(() => secsH, () => logH.push('dirty'), () => logH.push('preview'), () => logH.push('layout'), /^g_/, S.LIMITS, () => {}, draftQ, () => [], () => 'root', undefined, () => null, UQ.placeCatTick, UQ.open, (r, s, i, c) => refoc.push([r, s, i, c]));
+        const tickH = (cat, on) => ONH({ className: 'sys-pl-catcb', checked: on, dataset: { cat }, classList: { contains: c => c === 'sys-pl-catcb' }, closest: s => (s === '.sys-sec' ? { dataset: { sid: 's_a' } } : s === '.sys-pl-catrow' ? { dataset: { sid: 's_a', pi: '0' } } : null) });
+        const rH = [tickH('Weapons', true), j(secsH[0].fields[0]), tickH('Weapons', false), j(secsH[0].fields[0]), logH.join(','), j(refoc), UQ.open.has(secsH[0].fields[0])];
+        const logC = [], refC = [], CLQ = new Function('ui', 'layoutView', 'renderLayout', 'cleanSystem', 'draft', 'F', 'LIMITS', 'autoLayout', 'uid', 'clone', 'markDirty', 'toast', 'showConfirm', 'layoutSections', 'layoutRoot', 'sheetList', 'layoutTabs', 'draftHasHud', '_plCatOpen', 'placeCatRefocus', clkQ + '\nreturn onLayoutClick;')(
+            () => 'root', 'sheet', () => logC.push('layout'), cleanSystem, draftQ, () => F, S.LIMITS, S.autoLayout, p => p + 'x', o => JSON.parse(j(o)), () => logC.push('dirty'), () => {}, () => {}, () => secsH, () => ({}), () => [], () => [], () => false, UQ.open, (r, s, i) => refC.push([r, s, i]));
+        const plH = secsH[0].fields[0], pressH = () => CLQ({ id: '', dataset: { act: 'plcats' }, closest: s => (s === '.sys-sec' ? { dataset: { sid: 's_a' } } : s === '.sys-pl' ? { dataset: { pi: '0' } } : null) });
+        const wasOpen = UQ.open.has(plH); pressH(); const afterOne = UQ.open.has(plH); pressH(); const afterTwo = UQ.open.has(plH);
+        check('1.5.5 the handlers (onLayoutChange and onLayoutClick, run for real): a category\'s tick writes the place\'s categories through placeCatTick, keeps its ticks open, marks the draft changed, draws the tab again and gives the focus back to that very tick; By category opens and closes the ticks, draws the tab again and gives the focus back, and leaves the draft unchanged',
+            rH[0] === true && rH[1] === j({ id: 'f_gear', w: 'row', cats: ['Weapons'] }) && rH[2] === true && rH[3] === j({ id: 'f_gear', w: 'row' }) && rH[4] === 'dirty,layout,dirty,layout' && rH[5] === j([['root', 's_a', 0, 'Weapons'], ['root', 's_a', 0, 'Weapons']]) && rH[6] === true
+            && wasOpen === true && afterOne === false && afterTwo === true && logC.join(',') === 'layout,layout' && j(refC) === j([['root', 's_a', 0], ['root', 's_a', 0]]), j([rH, wasOpen, afterOne, afterTwo, logC, refC]));
+        // refreshErrors run for real says it too; the wiring, the add list and the pickers pinned
+        const reQ = cutQ('function refreshErrors(', 'function errorCell(');
+        const REQ = new Function('draft', 'F', 'validKey', 'KINDS', 'cleanItemKey', 'cleanSystem', 'validateSystem', 'statKey', 'LIMITS', 'getActiveCampaign', 'systemOf', 'catSplits', 'cleanPlaceCats', 'el', 'document', 'window', 'isClient',
+            'var errorsById = {}, warningsById = {}, layoutView = "sheet", errorCell = function() { return null; };\n' + chcQ + uiQ + reQ + '\nrefreshErrors(); return errorsById;')(
+            { v: 1, name: 'E', rolls: [], items: [], fields: [GEAR()], sheet: { sections: [{ id: 's_a', fields: [{ id: 'f_gear', w: 'row', cats: ['Weapons'] }] }, { id: 's_b', fields: [{ id: 'f_gear', w: 'row' }] }] } }, () => F, S.validKey, S.KINDS, S.cleanItemKey, cleanSystem, validateSystem, S.statKey, S.LIMITS, () => null, () => null, S.catSplits, S.cleanPlaceCats, mkU, docQ, {}, () => false);
+        check('1.5.5 refreshErrors, run for real, says under each place what Save does with it; the Layout tab draws it there and the ticks and By category on each item list\'s place; the add list offers a list placed already as placed again, for other categories, and opens the ticks of its places; the item list\'s branch draws only the rows its placement shows, hands the pickers every row and opens them on the placement\'s first category; the library\'s picker opens on it',
+            j((REQ['plc:sheet:s_a:0'] || []).map(m => m.message)) === j(['Each place of Gear needs categories of its own. So Save keeps only this place, and it shows every row.']) && j((REQ['plc:sheet:s_b:0'] || []).map(m => m.message)) === j(['Each place of Gear needs categories of its own. So Save drops this place.'])
+            && shQ.includes("            if (plf && plf.kind === 'item-list' && typeof placeCatPart === 'function') placeCatPart(list, pl, sec, pi, plf, secs);") && shQ.includes("    if (typeof placeCatErrs === 'function') placeCatErrs();   // 1.5.5: what Save does with a list's places, as the tab now stands")
+            && shQ.includes("        draft.fields.forEach(function(f) { if (placed[f.id] && f.kind === 'item-list') opts.push(['f:' + f.id, (f.label || f.key || '(field)') + ' again, for other categories']); });")
+            && shQ.includes("        if (pl && kind === 'f' && typeof placeCatAgain === 'function') placeCatAgain(layoutSections(), pl, draft.fields);")
+            && shQ.includes("        if (catT) { rowsI = rowsI.filter(function(r) { var dc = rowDef(sysI, r); return catT(dc && dc.def ? dc.def.category : ''); });") && shQ.includes("            if (specI) nPick = pickerInto(add, sysI.items || [], specI, carried, cantI);")
+            && shQ.includes("if (add.value === '__lib') { add.value = ''; openLibPicker(add, c, f, specI, carried); return; }") && (shQ.match(/LP\.open\(\{ anchor: anchor, cat: typeof catOf === 'function' \? catOf\(anchor\) : null, title:/g) || []).length === 2,
+            j([REQ['plc:sheet:s_a:0'], REQ['plc:sheet:s_b:0']]));
+        // said: Help's Layout entry and both release notes
+        const ixQ = fs.readFileSync(path.join(app, 'index.html'), 'utf8').replace(/\r\n/g, NL), notesQ = [fs.readFileSync(path.join(app, '..', '..', 'WHATSNEW.txt'), 'utf8'), fs.readFileSync(path.join(app, 'assets', 'whatsnew.txt'), 'utf8')].map(t => t.replace(/\r\n/g, NL).replace(/\s+/g, ' '));
+        check('1.5.5 said: Help\'s Layout entry says how a list stands in several places by category, and both release notes say it under 1.5.5, with what going back to 1.5.4 drops',
+            ixQ.includes('An item list can stand in more than one place, each showing some of its <b>categories</b>.') && ixQ.includes('A row of a category no place names shows in the list&rsquo;s first place.')
+            && ixQ.includes('A place with a show if, or one that shows only the rows switched on, is passed over for this.') && ixQ.includes('Adding from a place opens on its first category, and a custom row made there takes that category.')
+            && ixQ.includes('Players never see a category that only GM-only things carry.') && ixQ.includes('A field can be on both. Within each it appears once, but an item list can stand in several places by category.') && !ixQ.includes('A field can be on both, and within each it appears once.')
+            && shQ.includes("A field can be on the sheet and here. Within the HUD it appears once, but an item list can stand in several places by category.")
+            && notesQ.every(t => { const i5 = t.indexOf('WAYPOINT 1.5.5'), i4 = t.indexOf('WAYPOINT 1.5.4'), a = t.indexOf('An item list can now stand in more than one place'), b = t.indexOf('a list placed in more than one place by category'), c = t.indexOf('first place that shows every row'), d = t.indexOf('Players never see a category that only GM-only things carry.'); return i5 >= 0 && [a, b, c, d].every(x => x > i5 && x < i4); }));
     }
     summed = true;
     console.log(NL + pass + ' passed, ' + fail + ' failed.');

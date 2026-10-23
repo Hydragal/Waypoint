@@ -1635,6 +1635,36 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         check('152 fold 5 the new boxes\' edits from hostile values (everyEdit, run for real): a unit is kept as text cut to 24 characters, a number that is no number takes In a fight away, a tick that is not true leaves nothing set, nor the By the clock it would have made (the review of fold 5), and Save then drops the unit (systemcore cleanInFight)',
             typeof cutH === 'string' && cutH.length === 24 && cutH === (T + 'x'.repeat(40)).slice(0, 24) && editH === j({}) && j(rEv) === j({}) && SYl.cleanInFight({ n: 1, u: (T + 'x'.repeat(40)).slice(0, 24) }) === null && SYl.cleanInFight({ n: 1, u: P }) === null && SYl.cleanEvery({ n: 1, u: T }) === null, j([cutH, editH, rEv]));
     }
+    /* ---- 1.5.5, a list placed once a category: a category's name comes from a system file (an item's category, a placement's cats) or a library
+       entry, and reaches the Layout tab's ticks, what Save says, the sheet's list to add and the library's picker as text alone ---- */
+    {
+        const j = JSON.stringify, SYq = await import(modUrl('systemcore.js')), shQ = read('sheets.js');
+        const cutQ = (a, b) => { const i = shQ.indexOf(a), k = i < 0 ? -1 : shQ.indexOf(b, i + 1); if (i < 0 || k < 0) throw new Error('sinkcheck: sheets.js ' + a + ' not found'); return shQ.slice(i, k); };
+        const lineQ = k => { const i = shQ.indexOf(k); if (i < 0) throw new Error('sinkcheck: sheets.js ' + k + ' not found'); return shQ.slice(i, shQ.indexOf('\n', i)); };
+        const made = [], htmlSet = [];
+        const fake = tag => { const e = { tag, tagName: String(tag).toUpperCase(), children: [], childNodes: [], style: {}, dataset: {}, attrs: {}, className: '', textContent: '', label: '', title: '', appendChild(k) { if (k && typeof k === 'object') k.parentNode = this; this.children.push(k); this.childNodes.push(k); return k; }, insertBefore(k, ref) { if (k && typeof k === 'object') k.parentNode = this; const o = this.children.indexOf(k); if (o >= 0) this.children.splice(o, 1); const at = ref ? this.children.indexOf(ref) : -1; if (at < 0) this.children.push(k); else this.children.splice(at, 0, k); this.childNodes = this.children.slice(); return k; }, setAttribute(k, v) { this.attrs[k] = String(v); }, addEventListener() {} };
+            ['innerHTML', 'outerHTML'].forEach(p => Object.defineProperty(e, p, { set(v) { htmlSet.push(v); }, get() { return ''; } })); Object.defineProperty(e, 'nextSibling', { get() { const p = e.parentNode; if (!p) return null; const i = p.children.indexOf(e); return i >= 0 && i + 1 < p.children.length ? p.children[i + 1] : null; } }); e.insertAdjacentHTML = (w, v) => { htmlSet.push(v); }; made.push(e); return e; };
+        const doc = { createElement: fake, createTextNode: t => { const n = { tag: '#text', textContent: String(t) }; made.push(n); return n; } };
+        const uiSrc = cutQ('// [systemcheck:placecatsui-start]', '// [systemcheck:placecatsui-end]'), chcSrc = cutQ('function catChoices(', 'function rowForm('), leadSrc = cutQ('function catLead(', 'function pickerInto(');
+        const errs = {}, draft = { fields: [{ id: 'f_gear', key: 'Gear', label: T + 'Gear', kind: 'item-list', list: {} }], items: [{ id: 'i_a', name: 'A', category: T }, { id: 'i_b', name: 'B', category: P }], sheet: { sections: [] } };
+        const UQ = new Function('document', 'LIMITS', 'catSplits', 'cleanPlaceCats', 'errorsById', 'draft', 'layoutView', 'errorCell', 'window', 'isClient', "'use strict';\n" + lineQ('function el(tag, cls, text) {') + '\n' + chcSrc + uiSrc + leadSrc + '\nreturn { placeCatNames, placeCatRow, placeCatSays, placeCatGm, catLead, catOf, el };')(
+            doc, SYq.LIMITS, SYq.catSplits, SYq.cleanPlaceCats, errs, draft, 'sheet', () => fake('div'), { wpLibrary: { catsFor: () => ({ show: [T + 'lib'], hide: [P + 'lib'] }) } }, () => false);
+        const names = UQ.placeCatNames(draft.fields[0], draft), row = UQ.placeCatRow({ id: 'f_gear', cats: [T, P + 'own'] }, 's_a', 0, names, {}, true, true);
+        const gmQ = UQ.placeCatGm(draft), rowG = UQ.placeCatRow({ id: 'f_gear', cats: [T] }, 's_b', 0, names, {}, true, true, true, gmQ), marks = made.filter(e => e.tag === 'small');   // the review of this fold: a category players never see, marked GM only
+        const ticks = made.filter(e => e.tag === 'input'), texts = made.filter(e => e.tag === '#text').map(e => e.textContent);
+        const said = UQ.placeCatSays([{ id: 's_a', fields: [{ id: 'f_gear', cats: [T] }] }, { id: 's_b', fields: [{ id: 'f_gear', cats: [T.toUpperCase()] }] }], draft.fields);
+        const sel = fake('select'), top = fake('option'); top.value = ''; sel.appendChild(top); const g1 = fake('optgroup'); g1.label = 'Plain'; sel.appendChild(g1); const g2 = fake('optgroup'); g2.label = T; sel.appendChild(g2);
+        const led = UQ.catLead(sel, T.toUpperCase()), ledN = UQ.catLead(sel, P), anchor = { dataset: { cat: T } };
+        check('1.5.5 a list placed once a category, from a hostile system file (sheets.js placeCatNames, placeCatRow, placeCatSays and catLead, run for real on a page that records every node and any use of innerHTML): a category of an item, a library entry and a placement reaches the Layout tab\'s ticks only as a text node and a tick\'s data value, what Save says holds it only as words a line sets as text, the list to add moves a group of that label by comparing it and never builds markup from it, and the library\'s picker is handed it as a value; the sliced source writes no markup',
+            !/innerHTML|insertAdjacentHTML|outerHTML/.test(uiSrc + leadSrc) && htmlSet.length === 0 && made.every(e => ['div', 'span', 'small', 'input', 'label', 'select', 'option', 'optgroup', 'button', '#text'].indexOf(e.tag) >= 0)
+            && j(names) === j([T, P, T + 'lib', P + 'lib']) && ticks.some(c => c.dataset.cat === T && c.checked === true) && ticks.some(c => c.dataset.cat === P + 'own' && c.checked === true) && ticks.every(c => c.type === 'checkbox' && String(c.title || '').indexOf('<') < 0)
+            && texts.indexOf(' ' + T) >= 0 && texts.indexOf(' ' + P + 'lib') >= 0 && row.dataset.sid === 's_a'
+            && typeof said['s_a:0'][0].message === 'string' && said['s_a:0'][0].message.indexOf('Two places of ' + T + 'Gear show ' + T.toUpperCase() + '.') === 0
+            && led === true && sel.children[1] === g2 && ledN === false && UQ.catOf(anchor) === T && UQ.catOf({ dataset: {} }) === null && UQ.catOf(null) === null
+            && gmQ(P + 'lib') === true && gmQ(T) === false && gmQ(T + 'lib') === false && marks.length === 1 && marks[0].textContent === 'GM only' && marks[0].parentNode.children[0].dataset.cat === P + 'lib'
+            && marks[0].parentNode.title === 'Only GM-only things carry this category, so players do not see it here' && rowG.dataset.sid === 's_b',
+            j([htmlSet, names, ticks.map(c => [c.dataset.cat, c.checked]), said, marks.map(m => [m.textContent, m.parentNode.title])]));
+    }
     /* ---- Senses S2b: a token's Senses block in its Properties — a sense's name comes from a system file, a token's own ranges from a save ---- */
     {
         const j = JSON.stringify, FCs = await import(modUrl('fogcore.js')), inspS = read('inspector.js');
