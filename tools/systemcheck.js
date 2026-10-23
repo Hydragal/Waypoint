@@ -11500,7 +11500,7 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         check('a field\'s display unit, said: Help says it right after the unit a figure may show, with the measures, the setting, the examples, that formulas, rolls and the character file read the figure as it is (the readable page follows the setting since the website\'s own forms), and the height of a text field; both release notes say it among the character sheets',
             ixU.split(helpU).length === 2 && /can show a <b>unit<\/b> after its value[^\n]*<\/li>\n\s*<li>A unit of <b>yd<\/b>[^\n]*Formulas, rolls and the character file still read the figure as it is\. A text field can take the unit <b>height<\/b>\.[^\n]*<\/li>\n/.test(ixU) && notesU.every(t => t.split(noteU).length === 2 && t.indexOf('\nCharacter sheets\n') > 0 && t.indexOf(noteU) > t.indexOf('\nCharacter sheets\n') && t.indexOf(noteU) < t.indexOf('\nCalendar\n', t.indexOf('WAYPOINT 1.5.4'))), j(notesU.map(t => t.split(noteU).length)));
     }
-    // 1.5.4, the website's own forms of a figure (the review of the units fold found these gaps; the owner, 2026-10-17: "match shadowbase", and
+    // 1.5.4, the website's own forms of a figure (the review of the units fold found these gaps; the owner, 2026-10-17: "match the website", and
     // of the sheet: "my system should match the site while letting the user pick metric or imperial"). A speed, yd/s; how a measure reads under
     // Metric (unitShow: beside as before, swap for the metric figure in its place, bare for the book's figure alone under Imperial); a field's
     // decimals and thousands (decMin, decMax, group); a text field's unit weight; a height or a weight box that shows the viewer's half and stores

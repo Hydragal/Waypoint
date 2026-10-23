@@ -246,9 +246,9 @@ Character sheets
 - A level can have prerequisites of its own. A need, and the Rule,
   may begin at a level of the entry: set its From level. A player
   who raises a level is judged as when they take the entry.
-- The ShadowBase reader is no longer part of Waypoint. Waypoint reads
-  its own character files. A sheet file made elsewhere is read only
-  where a reader of your own stands beside the app.
+- The reader for a sheet website's character files is no longer part of
+  Waypoint. Waypoint reads its own character files. A sheet file made
+  elsewhere is read only where a reader of your own stands beside the app.
 - A list's column can show its special cases. In the System editor a
   column has a With stats box. Name number stats of the list there, and
   a row reads DR 15 (35 vs. energy) where such a stat has a figure. A
@@ -952,10 +952,10 @@ Sheets
   button stays in the header for as long as an upload waits, shows how
   many do, and opens the oldest one's Review.
 - Import on every sheet for the GM: the Import button is on every
-  character's sheet for you, an NPC's too. The ShadowBase file is read on
-  your machine and opens the Review, where you tick what to apply.
-- Export for ShadowBase: the way back to the website. In a sheet's
-  Download menu, pick the character's ShadowBase file (the website's
+  character's sheet for you, an NPC's too. A website's character file is
+  read on your machine and opens the Review, where you tick what to apply.
+- Export for the website: the way back there. In a sheet's
+  Download menu, pick the character's file from the website (the website's
   Export JSON) and Waypoint saves a copy of it with this session written
   in: the current Hit Points, Endurance Points and power pool, the
   credits, the alignment, and the token's posture and elevation.
@@ -1016,10 +1016,10 @@ Fixes
   built only when the map's box changes size.
 - A player who joins a table is told that their own campaigns are
   untouched and come back when they leave the session.
-- A sheet read from a ShadowBase file: a weapon's crystal destroyed by
-  an overload no longer adds to the character's power pool. The file
-  still lists it as fitted, marked Destroyed; it is now passed over, as a
-  destroyed part already was in the parts list.
+- A sheet read from the website's character file: a weapon's crystal
+  destroyed by an overload no longer adds to the character's power pool.
+  The file still lists it as fitted, marked Destroyed; it is now passed
+  over, as a destroyed part already was in the parts list.
 
 WAYPOINT 1.5.1 — What's New
 ============================
@@ -1077,7 +1077,7 @@ Tokens and portals
   destination is locked, or all travel is) tells you once, and not again at
   every turn of a token resting on it.
 
-ShadowBase sheets
+Sheets from a website
 - A ranged weapon brings its own range: where the Weapons list has Half and
   MaxRange stats (half and maxrange on the website's keys), a blaster with a
   Focusing Emitter or Magnetic Accelerator Coils shows the 1/2D and Max the
@@ -1193,7 +1193,7 @@ Tokens and portals
   sized up, keep their shape; Fit to Grid Cells gives a one-cell token the
   cell's shape in one press.
 - The token creator: your profile picture, a character's portrait
-  (Portrait…, a room character's, a ShadowBase import) and a picture a
+  (Portrait…, a room character's, a website import) and a picture a
   player uploads for their character or their own token open it first —
   drag to move, scroll, pinch or the slider to zoom, and OK keeps what is
   inside the square (untouched: the middle, as before). One square picture
@@ -1295,7 +1295,7 @@ Players and their characters
   plain token of theirs).
 - A player making a character can start it from a file: Start from a file…
   on their card, or Import on its sheet, takes their own sheet download
-  (.wpchar.json) or a ShadowBase sheet and fills it at once with their own
+  (.wpchar.json) or a website's sheet and fills it at once with their own
   rights, its skills and gear linked to the library packs they can see or
   else rows of their own, and tells them what did not come across. You
   review the whole character when they press Done; untick …may start it
@@ -1550,12 +1550,12 @@ Character sheets: the system
   one column or the full row, dragged between sections — with a live preview
   for a chosen character. Without a layout the sheet arranges itself by
   kind; Start from the automatic layout copies that.
-- Bridges: a token with a ShadowBase sheet attached gets Character from this
-  sheet (a copy of its attributes, resources and skills by the system's
-  matching keys, and much more on a system built for it: see ShadowBase
-  sheets); the party strip's right-click menu offers Sheet… and Characters…;
-  the Tutorial campaign carries a small system with Bren's sheet, and the
-  tour opens it.
+- Bridges: a token with a website's sheet attached gets Character from
+  this sheet (a copy of its attributes, resources and skills by the
+  system's matching keys, and much more on a system built for it: see
+  Sheets from a website); the party strip's right-click menu offers
+  Sheet… and Characters…; the Tutorial campaign carries a small system
+  with Bren's sheet, and the tour opens it.
 - GM-only values stay yours: your roll that reads a value worked out from a
   GM-only field (a visible formula built on it, a skill whose base reads
   it), or whose label shows one, stays private, as do a GM-only field's own
@@ -2059,8 +2059,8 @@ The library
   make later in the Items tab move on the next open (the tutorial's Firepot
   stays).
 
-ShadowBase sheets
-- On a system built on the ShadowBase website's own keys, Character from
+Sheets from a website
+- On a system built on the website's own keys, Character from
   this sheet (and Copy the sheet's values into the character, to copy again)
   brings the whole dossier across: the player, species, homeworld, levels
   bought, points, credits, alignment and the narrative, and its rows, from
@@ -2074,7 +2074,7 @@ ShadowBase sheets
   threats while it is engaged (with token facing on), and a skill level the
   website exports as text now comes across.
 - Players update their own characters: Import on their sheet sends their
-  ShadowBase file to you as proposed changes, and nothing changes until you
+  website file to you as proposed changes, and nothing changes until you
   review it. A gold Review (N) button appears on the character's sheet: each
   change has a tick (a value you set yourself and a row the file no longer
   has start unticked), Apply takes the ticked ones, Keep as it is takes
@@ -2944,7 +2944,7 @@ Tokens
   one off hides the chips but keeps the values, and in a session the GM's
   switches decide what players see. The switches travel with the saves
   folder like the other table settings.
-- An attached ShadowBase sheet seeds the token's posture and elevation
+- An attached website sheet seeds the token's posture and elevation
   from its details, and Export JSON writes both back into the sheet, using
   the website's posture ids (lying-prone, lying-face-up).
 
@@ -4104,12 +4104,12 @@ Exports & data safety
 - Saves from ANY older Waypoint version are upgraded automatically on first
   launch — the original is backed up first and never silently overwritten.
 
-Character sheets (shadow-base.com)
+Character sheets from a website
 - Exports follow the site's published contract: the languages line is the
   bracket-free projection of the entries (no more double-billed tongues or
   the "languages are structured rows now" notice on every load), familiarity
   and literacy lists use semicolons, and Size Modifier is always written.
-- Import Character (toolbar) turns a ShadowBase character JSON into a ready
+- Import Character (toolbar) turns a website character JSON into a ready
   token: the sheet's portrait becomes the token art, name and a stats line
   fill in, and the full sheet rides attached.
 - View (inspector) opens the attached sheet read-only — attributes,

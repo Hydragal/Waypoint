@@ -199,7 +199,7 @@ function cleanNum(v, dflt) { v = Number(v); return fin(v) ? v : dflt; }
 // measures are yd, ft, in, lb and mi, and lbs and yds as the website writes them. A text field may carry the unit height and is read as a
 // height: the website's pair "6'7\" / 2.00 m" by the half of the viewer's setting. DISPLAY ONLY: a field holds its figure in the book's unit,
 // and nothing here reaches a formula, a roll, a stored value or a file. A field with no such unit is drawn exactly as before. Both views alike.
-// The gaps the review of that fold found, closed as options of the builder (the owner, 2026-10-17: "match shadowbase"): a speed, yd/s, which
+// The gaps the review of that fold found, closed as options of the builder (the owner, 2026-10-17: "match the website"): a speed, yd/s, which
 // is Move's yards a second and metres a second in metric; a text field's unit weight, read as the website's showWeightText reads one; how a
 // measure reads under Metric (unitShow: beside its figure as before, swap for the metric figure in its place, bare for the book's figure with
 // no word under Imperial, as the website shows a Move); a field's decimals and thousands (decMin, decMax, group: Basic Lift 32.0 lbs, a total
@@ -3033,7 +3033,7 @@ function unseenMods(c, view, full) {
 // Stage 5h Fold 3: facing. A token faces rot + front (0 = up, clockwise, as in fog.js and whiteboard.js); threat marks are world bearings on
 // the token (w.threats, the first the active one), one per side of the dial (6 on a hex or gridless map, 4 on a square one). A threat's arc
 // counts sides from the one the token faces, so a free-angle token reads the side the dial shows: on a hex grid that side and the two beside
-// it are front, the next two side, the back one rear (ShadowBase's 3 / 2 / 1); on a square grid 1 / 2 / 1. Pure; a token's values from a
+// it are front, the next two side, the back one rear (the website's 3 / 2 / 1); on a square grid 1 / 2 / 1. Pure; a token's values from a
 // save or the wire are re-checked here.
 var FACING_NAMES = Object.freeze(['Facing', 'Arc', 'Arc.front', 'Arc.side', 'Arc.rear', 'Threats', 'Threats.front', 'Threats.side', 'Threats.rear']);
 // Stage 6: the token's stance — Posture (the index of its posture below; 0 standing) and Elevation (yards), each 0 while its VTT feature is off
@@ -3376,7 +3376,7 @@ function waitingNeed(camp, pid, mapId, op, rules, blocked) {
 }
 // "What a player plays", for labels: the character in play, else the old name binding
 function playsAs(camp, pid) { var a = activeCharOf(camp, pid); if (a.id) return charsIn(camp)[a.id].name; var rec = playerRec(camp, pid); return rec && typeof rec.charName === 'string' ? rec.charName : ''; }
-// The dial's ring click (ShadowBase's cycle): a side with no mark is marked (the active threat when it is the first, else queued); the
+// The dial's ring click (the website's cycle): a side with no mark is marked (the active threat when it is the first, else queued); the
 // active one clicked is cleared and the next queued one takes over; a queued one clicked becomes active and the old active is queued
 function cycleThreat(list, bearing, sides) {
     var cur = cleanThreats(list), n = sides === 4 ? 4 : 6;

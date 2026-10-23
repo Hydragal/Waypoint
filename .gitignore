@@ -42,6 +42,6 @@ dist/
 docs/*.md
 # ...and every folder under docs/ (local research and the owner's own campaign build): never committed, on any clone
 /docs/*/
-# an outside sheet reader of the owner's own (the ShadowBase bridge): the private/ folder at the repository's root alone, kept on the
+# an outside sheet reader of the owner's own (a bridge to a sheet website): the private/ folder at the repository's root alone, kept on the
 # owner's machine, served by tools/dev-server.js only
 /private/

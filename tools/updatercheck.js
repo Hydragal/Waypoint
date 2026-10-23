@@ -15,6 +15,8 @@
    pinned; and the page's one-click core update, run on a page of plain objects, with every fallback to the walk-through.
    The dev server (tools/dev-server.js), a scratch copy of it run as a child process against a signed release newer than it:
    it never updates, restores or installs over the source tree it runs from, only a scratch copy of system/ named on purpose.
+   The list of names the website that serves Waypoint refuses: no tracked file, and no file of the app folder a release zips, names
+   the owner's own sheet website, which this suite writes only as the SHA-256 of its name.
    Usage: node tools/updatercheck.js   (exit 1 on any failure) */
 'use strict';
 const http = require('http'), fs = require('fs'), path = require('path'), os = require('os'), zlib = require('zlib'), crypto = require('crypto'), cp = require('child_process');
@@ -808,6 +810,69 @@ process.on('exit', code => { if (!summed && !code) { console.log(NL + 'FAIL     
             const gi = read('.gitignore'), iss = read('installer.iss'), yml = read('.github/workflows/checks.yml');
             check('a private key cannot ride along by accident: *.pem is ignored by git and left out of the installer (which packs the folder), as are the updater\'s own working folders; CI runs this suite',
                 /^\*\.pem$/m.test(gi) && /Excludes: "[^"]*,\*\.pem[,"]/.test(iss) && /system\\app\.bad,system\\app\.bad\\\*/.test(iss) && /system\\app\.prev,system\\app\.prev\\\*/.test(iss) && /run: node tools\/updatercheck\.js/.test(yml));
+        }
+
+        /* ================= the website's list of names: no tracked file, nor any file of the app folder, names the owner's own sheet website ================= */
+        {
+            // The website that serves Waypoint in a browser refuses to deploy a release any of whose files names a term on its list, and
+            // shows a release's notes only where they pass the same scan (the owner, 2026-10-22, by prompt: "Refuse; clean the app first
+            // (Recommended)"). The owner's own sheet website is on that list, and this repository holds it to the rule it keeps for every
+            // other company's work: no tracked file, test, Help line or release note names it. This suite writes it only as the SHA-256 of
+            // its name. That keeps the words out of this file and hides nothing: a name this short is found again from its hash in moments.
+            // What is read: every file git tracks, and every file of the app folder as it stands on disk, tracked or not, but for the app
+            // folder's own private folder. A release zips the app folder whole, untracked files too, and refuses to be built while a
+            // private folder stands in it. With no git, the app folder, the notes and the guide are read. A hit is the word head, then a
+            // gap, then tail characters that with head hash, in lower case, to pin. The gap is what git grep -ni reads between the two
+            // halves (no character, or one that is no line break), or two or three characters that are neither a letter, a digit nor a
+            // line break. Every file is read as UTF-8 and again byte for byte, and its path is read too. A new term joins TERMS by its
+            // hash, never by its name.
+            const TERMS = [{ head: 'shadow', tail: 4, pin: 'ed9d02bbb2b13ee09bf52ab20c35784f17c8b1e8c84babbb552de3aa911d0fa0' }];
+            const GAP = /^[^\p{L}\p{N}\n]{2,3}$/u;
+            // the lines (from 1) where a term stands in a text
+            const termHits = (text, t) => {
+                const low = String(text).toLowerCase(), h = t.head.toLowerCase(), out = [];
+                for (let i = low.indexOf(h); i >= 0; i = low.indexOf(h, i + 1)) {
+                    const at = i + h.length;
+                    for (let g = 0; g <= 3; g++) {
+                        const gap = low.slice(at, at + g), tail = low.slice(at + g, at + g + t.tail);
+                        if (gap.length !== g || tail.length !== t.tail) break;
+                        if (g === 1 ? gap === NL : g > 1 && !GAP.test(gap)) continue;
+                        if (sha256(h + tail) === t.pin) { out.push(low.slice(0, i).split(NL).length); break; }
+                    }
+                }
+                return out;
+            };
+            // the matcher's own test, on a name made of invented words that names nothing
+            const pouch = { head: 'pebble', tail: 5, pin: sha256('pebblepouch') }, n = s => termHits(s, pouch).length;
+            check('the website\'s list, its matcher: tried on a name of the suite\'s own made of invented words, a hit in any case, run on into a longer word, with no gap, one character that is no line break, or two or three that are neither a letter, a digit nor a line break (an en dash too); none across a line break, after a letter, past three, with a digit in a longer gap or for part of the name; each hit\'s line counted; every pin a SHA-256',
+                n('a Pebble-Pouch b') === 1 && n('PEBBLEPOUCH') === 1 && n('pebblepouches') === 1 && n('pebble pouch') === 1 && n('pebble1pouch') === 1 && n('Pebble - Pouch') === 1 && n('pebble . pouch') === 1 && n('Pebble–Pouch') === 1
+                && n('pebble\npouch') === 0 && n('pebbles pouch') === 0 && n('pebble    pouch') === 0 && n('pebble 1 pouch') === 0 && n('pebblepouc') === 0 && n('pebble') === 0 && n('') === 0
+                && n('pebblepouch pebble pouch\nPebblePouch') === 3 && j(termHits('x\ny\npebblepouch', pouch)) === '[3]' && TERMS.every(t => /^[0-9a-f]{64}$/.test(t.pin) && t.head.length > 2 && t.tail > 0));
+            // the app folder as it stands on disk, as a release zips it: every file in it, tracked or not, but for its own private folder
+            const appFiles = [], walk = rel => {
+                let names = []; try { names = fs.readdirSync(path.join(ROOT, rel)); } catch (e) { return; }
+                for (const nm of names) { const r = rel + '/' + nm; let st = null; try { st = fs.lstatSync(path.join(ROOT, r)); } catch (e) { continue; } if (st.isDirectory()) { if (r.toLowerCase() !== 'system/app/private') walk(r); } else appFiles.push(r); }   // a link is read as a file, never walked into
+            };
+            walk('system/app');
+            let tracked = null, how = 'every file git tracks, and every file of the app folder on disk';
+            try { tracked = cp.execFileSync('git', ['ls-files', '-z'], { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 64 * 1024 * 1024 }).split('\0').filter(Boolean); } catch (e) { tracked = null; }
+            if (!tracked || !tracked.length) {   // no git here (an archive of the source): the app folder, and the notes and the guide beside it
+                how = 'no git here, so the app folder, the notes and the guide'; tracked = ['WHATSNEW.txt', 'README.md', 'CAMPAIGN_INTEGRATION.md'];
+            }
+            const trackedSet = new Set(tracked), untracked = appFiles.filter(f => !trackedSet.has(f)), files = tracked.concat(untracked);
+            const found = []; let readN = 0;
+            for (const f of files) {
+                let b = null; try { b = fs.readFileSync(path.join(ROOT, f)); } catch (e) { continue; }
+                readN++;
+                for (const t of TERMS) {
+                    if (termHits(f, t).length) found.push(f + ' (its path)');
+                    const lines = termHits(b.toString('utf8'), t), bytes = lines.length ? [] : termHits(b.toString('latin1'), t);
+                    for (const ln of lines) found.push(f + ':' + ln);
+                    if (bytes.length) found.push(f + ' (read byte for byte)');
+                }
+            }
+            check('no tracked file, and no file of the app folder a release zips, names the owner\'s own sheet website, which the website that serves Waypoint refuses a release for (the owner, 2026-10-22: "Refuse; clean the app first (Recommended)"): ' + how + ', its path and its text, the name written here only as its SHA-256',
+                files.length > 100 && readN > 100 && appFiles.length > 100 && found.length === 0, { files: files.length, read: readN, app: appFiles.length, untracked: untracked.slice(0, 20), found: found.slice(0, 40) });
         }
 
         /* ================= Settings: Update Now and Restore the previous version, run on a page of plain objects ================= */
