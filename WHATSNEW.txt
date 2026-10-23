@@ -52,16 +52,17 @@ Calendar
 - Time rules now run at once by default: every character's rules run
   as time passes, NPCs too, with no list to answer. An NPC's summary
   comes to you alone. Ask me is still there in Settings for a GM who
-  wants to say which run.
+  wants to say which run. A campaign set to Ask me before 1.5.5 now
+  runs at once. Pick Ask me again in Settings to keep it.
 - A time rule's run that moved nothing and rolled no dice now posts
   nothing: no summary in chat and no Session Log line. So a rule that
   fills a pool says nothing while the pool is full, and many NPCs at
   their most no longer fill the chat every game hour.
 - A game hour of time rules on a large campaign no longer stalls your
   screen.
-- The steps, Move and Set in the Calendar window always work. Time you
-  move on while a list of time rules waits is counted once you apply
-  or skip it.
+- The steps, Move and Set no longer wait for a list of time rules.
+  Time you move on while a list waits is counted once you apply or
+  skip it.
 - With Ask me, Apply and Skip stand at the top of the list, and
   players' characters and NPCs are listed apart, by the map each
   stands on.
@@ -123,7 +124,11 @@ Combat
   so two fights move it once for each second. The round a fight ends
   in counts: with rounds of 1 second, a fight begun at 12:00:00 and
   ended in round 3 lets the clock go on from 12:00:03. A step back is a
-  correction, and nothing counts twice.
+  correction, and nothing counts twice. After a step back, nothing
+  counts again for its fighters until that fight passes the furthest
+  it reached. After you move the clock back, nothing counts again
+  until the clock passes the latest time it reached. Until then no
+  timed effect runs out and no time rule counts.
 - A new fight starts at the time of the fight you play, which is the
   one you last started or stepped, or at the clock when no fight is on.
   When that fight ends, the one furthest behind is the one you play.
@@ -134,6 +139,19 @@ Combat
   for everyone in it, NPCs too, with no list.
 - A player's app forgets your fights when you end the session, so their
   own campaign shows no turn strip of yours afterwards.
+
+Going back to 1.5.4
+- Restore the previous version back to 1.5.4 keeps your campaign, but
+  its next save drops what 1.5.5 added: a row's own Description and By
+  level text, the choice Players ask, the GM approves, Waits in a fight,
+  In a fight and Ask me first, Before its fields, the clock's own marks
+  and each NPC's Rules run switch. Updating again does not bring them
+  back. In 1.5.4 a campaign's Time rules may read Ask me again, so
+  check them in Settings.
+- Launch copies made before that save keep what 1.5.5 added, in
+  saves/backups, until ten newer launches replace them. To keep a copy
+  until you delete it, press Snapshot the Save Now in Settings >
+  Advanced before you restore.
 
 WAYPOINT 1.5.4 — What's New
 ============================

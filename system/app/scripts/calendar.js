@@ -587,7 +587,15 @@ function setHidden(hide) {
     if (net() && net().logEvent) net().logEvent('time', hide ? 'Players no longer see the date' : 'Players see the date again');
     save(); refresh(); return true;
 }
-var FIGHT_HOLDS = 'A fight is on, so the clock follows the fight furthest behind. The steps, Move and Set work again once every fight has ended.';
+// 1.5.5 (the release trace, loss 3): why the steps, Move and Set move nothing while a fight runs, naming each map that holds a fight by its own title,
+// so a fight forgotten on another map is found: three names at most, then how many more. Plain text, which the notice draws as text
+function fightHolds(camp) {
+    var n = net(), cs = n && n.combats && typeof n.combats === 'object' ? n.combats : null, items = camp && camp.items && typeof camp.items === 'object' ? camp.items : null, ids = [], nF = 0;
+    if (cs) Object.keys(cs).forEach(function(k) { var c = cs[k]; if (!c || typeof c !== 'object') return; nF++; var m = typeof c.mapId === 'string' ? c.mapId : ''; if (ids.indexOf(m) < 0) ids.push(m); });
+    var names = ids.map(function(m) { var it = items && m && Object.prototype.hasOwnProperty.call(items, m) ? items[m] : null, t = it && it.meta && typeof it.meta.title === 'string' ? it.meta.title.trim() : ''; return t || 'a map with no name'; });
+    var more = names.length - 3, shown = names.slice(0, 3), list = more > 0 ? shown.join(', ') + ' and ' + more + ' more map' + (more === 1 ? '' : 's') : shown.length > 1 ? shown.slice(0, -1).join(', ') + ' and ' + shown[shown.length - 1] : (shown[0] || '');
+    return (!list ? 'A fight is on' : (nF > 1 ? 'Fights run on ' : 'A fight runs on ') + list) + ', so the clock follows the fight furthest behind. The steps, Move and Set work again once every fight has ended.';
+}
 function onWinClick(e) {
     var b = e.target && e.target.closest ? e.target.closest('button') : null; if (!b) return;
     if (b.id === 'calendarClose') { closeWin(); return; }
@@ -601,7 +609,7 @@ function onWinClick(e) {
     if (act === 'callive') { setHold(b.dataset.live === 'hold'); return; }   // 1.5.4: Runs / Held
     if (act === 'calpendapply') { pendDone(true); return; }
     if (act === 'calpendskip') { pendDone(false); return; }
-    if ((act === 'calstep' || act === 'calany' || (act === 'calset' && pick !== null)) && ordersRun()) { toast(FIGHT_HOLDS); return; }   // 152: while a fight runs the clock follows it; nothing is greyed (159), a press says why
+    if ((act === 'calstep' || act === 'calany' || (act === 'calset' && pick !== null)) && ordersRun()) { toast(fightHolds(camp)); return; }   // 152: while a fight runs the clock follows it; nothing is greyed (159), a press says why
     if (act === 'calstep') { moveBy(Number(b.dataset.secs), restMode); return; }
     if (act === 'caladdnote' && pick !== null) { var nt = q('cal-note-new'), nv = q('cal-note-newvis'), txt = nt ? String(nt.value || '').trim() : ''; if (!txt) { toast('Type the note first.'); return; } addNote(pick, txt, !!(nv && nv.checked === true)); return; }
     if (act === 'calnotedel') { delNote(b.dataset.note); return; }

@@ -629,6 +629,17 @@ if(_el_ctxRenameItem) _el_ctxRenameItem.addEventListener('click', function() {
       if (window.wpDocPanel && window.wpDocPanel.popOut) window.wpDocPanel.popOut(id);
   });
 
+  // [netcheck:mapfights-start]
+  // 1.5.5 (the release trace, F3): a map deleted while a fight runs on it. Every fight on it ends first, as End combat ends it, while the map still
+  // stands, so its fighters live the closing round once (after the delete, net.itemGone found no fighter there and gave that round to everyone).
+  // Each piece asked through typeof; nothing on a player's app or in the stream window
+  function endFightsOn(id) {
+      var n = window.wpNet; if (!n || n.active !== true || n.role !== 'host' || n.stream || typeof n.fightsOn !== 'function' || typeof n.fightSet !== 'function') return 0;
+      var ids = n.fightsOn(id); if (!Array.isArray(ids)) return 0;
+      ids.forEach(function(fid) { n.fightSet(fid, null); });
+      return ids.length;
+  }
+  // [netcheck:mapfights-end]
   var _el_ctxDeleteItem = document.getElementById('ctxDeleteItem');
   if(_el_ctxDeleteItem) _el_ctxDeleteItem.addEventListener('click', function() {
       var menu = document.getElementById('sidebarContextMenu');
@@ -642,6 +653,7 @@ if(_el_ctxRenameItem) _el_ctxRenameItem.addEventListener('click', function() {
       
       showConfirm("Are you sure you want to delete this item? This cannot be undone (a safety copy is taken first).", function(yes) {
           if(yes) takeSafetyCopy().then(function() {
+              if (typeof endFightsOn === 'function') endFightsOn(id);   // 1.5.5: a fight on the map ends first, while the map stands
               // Promote any nested children to the deleted item's parent
               var removed = camp.items[id];
               if (removed) {
@@ -683,6 +695,7 @@ if(_el_delItemBtn) _el_delItemBtn.addEventListener('click', function() {
 
           if(yes) takeSafetyCopy().then(function() {
 
+              if (typeof endFightsOn === 'function') endFightsOn(camp.activeItemId);   // 1.5.5: a fight on the map ends first, while the map stands
               var goneId = camp.activeItemId, goneIt = camp.items[goneId];
               delete camp.items[goneId];
               if (window.wpNet && window.wpNet.itemGone) window.wpNet.itemGone(camp.id, goneId, goneIt && goneIt.meta ? goneIt.meta.title : undefined);   // hosting: the item leaves every player's copy too (a fight on a map ends, named as the map was)

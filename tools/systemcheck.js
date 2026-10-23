@@ -5003,6 +5003,30 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         const t5 = [turn5(1, { f_st: true }), turn5(2, { f_st: true }), turn5(3, { f_st: true }), turn5(3, { f_st: false })];
         check('m410 (A) at a turn\'s start (turnHook, run for real): an action that needs the round to be 3 runs from round 3 and is passed over before, a reminder that needs its character stunned and the round to be 2 is posted only then, each judged with the round its fight is in; an each-round action never runs at a turn',
             j(t5) === j([[0, [], '-'], [0, ['c_a:r_wake:turn:2'], '-'], [1, ['c_a:r_wake:turn:3'], 9], [1, [], 9]]), j(t5));
+        // 1.5.5 (the release trace, F2): the round and turn hooks judge a player's character by what its player sees, as net.js turnMoveStart does. timedHook
+        // run for real with the real tokenCtx, and what targets a token answered by net.js's own aimsOf (its targetas slice): an NPC the GM targets Ana
+        // with through Target as, hidden from her, is no threat to an action or a reminder that reads Threats; shown, it is. Before, the hooks asked
+        // with no viewer, so the hidden NPC counted: her value changed and a reminder was posted to her while her own sheet showed no threat
+        const ntF2 = fs.readFileSync(path.join(app, 'scripts', 'net.js'), 'utf8').replace(/\r\n/g, NL), taF2 = ntF2.slice(ntF2.indexOf('// [netcheck:targetas-start]'), ntF2.indexOf('// [netcheck:targetas-end]'));
+        const sysF2 = cleanSystem({ v: 1, name: 'T', fields: [{ id: 'f_th', key: 'Seen', kind: 'number', def: 0 }],
+            rolls: [{ id: 'r_seen', label: 'Seen', apply: [{ f: 'f_th', formula: 'Threats + 1', add: true }], each: 'turn' }, { id: 'r_rseen', label: 'Round seen', apply: [{ f: 'f_th', formula: 'Threats + 10', add: true }], each: 'round' },
+                { id: 'r_warn', label: 'Warn', apply: [{ f: 'f_th', formula: '1', add: true }], each: 'turn', by: 'owner', needs: 'Threats > 0' }] }, { F, gmView: true });
+        const hookF2 = (hidden, kind) => {
+            const posted = [], ana = { id: 't1', isChar: true, charId: 'c_a', ownerId: 'u_a', x: 0, y: 0, w: 50, h: 50, rot: 0 }, orc = { id: 't_orc', isChar: true, charId: 'c_o', charName: 'Orc', x: 0, y: 200, w: 50, h: 50 };
+            if (hidden) orc.hidden = true;
+            const chars = { c_a: { id: 'c_a', name: 'Ana', ownerId: 'u_a', npc: false, values: {} } }, camp = { items: { m1: { id: 'm1', type: 'map', meta: { gridType: 'square' }, whiteboard: [ana, orc] } }, chars, system: sysF2 };
+            const nT = { active: true, role: 'host', targets: { 'tk:t_orc': { id: 't1', mapId: 'm1', name: 'Orc', from: 't_orc' } } };
+            const N = new Function('net', 'applyTarget', 'broadcastTargets', 'toast', 'getActiveCampaign', 'fogDrop', 'mapFogged', taF2 + '\nreturn net;')(nT, () => {}, () => {}, () => {}, () => camp, () => null, m => !!(m && m.fog && m.fog.on === true));
+            const n = { role: 'host', active: true, syncCharDelta() {}, postDue: (c, a, k, rd) => posted.push(c.id + ':' + a.id + ':' + k + ':' + rd) };
+            const hooks = new Function('getActiveCampaign', 'systemOf', 'net', 'F', 'window', 'combatChars', 'charsOf', 'charById', 'withRound', 'tokenCtx', 'tokenFlags', 'applyRound', 'dueActs', 'resolveAll', 'renderViews', 'save', 'rollNeedsOk', hk5 + NL + 'return { turnHook: turnHook, roundHook: roundHook };')(
+                () => camp, c => c.system, () => n, () => F, { wpVtt: { on: () => true } }, S.combatChars, c => c.chars, (id, c) => c.chars[id] || null, S.withRound, S.tokenCtx, () => ({ turning: true }), S.applyRound, S.dueActs, S.resolveAll, () => {}, () => {}, S.rollNeedsOk);
+            let done = null; S.setAimSource((m, t, v) => N.aimsOf(m, t, v));
+            try { done = hooks[kind === 'round' ? 'roundHook' : 'turnHook']('m1', { rows: [{ tokId: 't1' }], turn: 0, round: 2 }); } finally { S.setAimSource(null); }
+            return [done, posted, chars.c_a.values.f_th === undefined ? '-' : chars.c_a.values.f_th];
+        };
+        const tF2 = [hookF2(true, 'turn'), hookF2(false, 'turn'), hookF2(true, 'round'), hookF2(false, 'round')];
+        check('1.5.5 (the release trace, F2) the round and turn hooks judge a player\'s character by what its player sees (timedHook, run for real with net.js\'s own aimsOf): an NPC that targets Ana through Target as while it is hidden from her is no threat to an Also at its turn\'s start action that reads Threats, to a reminder whose needs read it, or to an Also each round action; shown, it is a threat to all three',
+            j(tF2) === j([[1, [], 1], [1, ['c_a:r_warn:turn:2'], 2], [1, [], 10], [1, [], 11]]), j(tF2));
         // a roll by the clock: not rolled while held
         const sys6 = cleanSystem({ v: 1, name: 'K', fields: [{ id: 'f_hp', key: 'HP', kind: 'number', def: 10 }, { id: 'f_st', key: 'Stunned', kind: 'toggle' }],
             rolls: [{ id: 'r_rec', label: 'Recover', formula: '3d6 <= 30', then: [{ f: 'f_hp', formula: '1', add: true }], every: { n: 1, u: 'hour' }, needs: 'not(Stunned) and HP < 12' }] }, { F, gmView: true });
@@ -12379,6 +12403,23 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             const hudV = draw(S.hudView(cG), { campId: 'k_1', view: 'hud', preview: false }), oldV = draw(cN, { campId: 'k_1', view: 'sheet', preview: false });
             const kept = draw(cG, { view: 'sheet' }, { s_main: true, s_cur: true }), keptH = draw(S.hudView(cG), { view: 'hud' }, { 'h:s_hmain': true, s_hmain: false });
             bsT = { sheet: look(sheetV), purse: (() => { const p = subOf(tops(sheetV)[0], 'Purse'); return p ? [p.tag, p.open] : null; })(), print: look(printV), hud: look(hudV), old: look(oldV), kept: [tops(kept)[0].open, subOf(tops(kept)[0], 'Purse').open], keptH: tops(keptH)[0].open };
+            // 1.5.5 (the release trace, F4): the toggle the browser fires for the code's own open (ownOpen, as a browser fires it for each details the
+            // code drew open) is not kept, so a section drawn open in the Layout preview or on the sheet and set Starts closed since is drawn folded; a
+            // reader's own fold is kept both ways. The memory is the one the sheet and the preview share
+            const dets = n => { const out = []; const walk = x => (x.children || []).forEach(k => { if (k && k.tag === 'details') out.push(k); walk(k); }); walk(n); return out; };
+            const ownOpen = n => dets(n).forEach(d => { if (d.open === true && typeof d.on.toggle === 'function') d.on.toggle(); });
+            const plainOf = n => tops(n).find(k => nameOf(k) === 'Plain'), press = (n, open) => { const p = plainOf(n); p.open = open; p.on.toggle(); };
+            const closedS = JSON.parse(j(MSYS)); closedS.sheet.sections.find(s => s.id === 's_plain').open = false; const cC = cleanSystem(closedS, { F, gmView: true });
+            const memF = {}, fold = [];
+            const pvF = draw(cG, { campId: 'k_1', view: 'sheet', preview: true }, memF); ownOpen(pvF); fold.push(j(memF));
+            const svF = draw(cG, { campId: 'k_1', view: 'sheet', preview: false }, memF); ownOpen(svF); fold.push(j(memF), plainOf(svF).open);
+            const s2F = draw(cC, { campId: 'k_1', view: 'sheet', preview: false }, memF); ownOpen(s2F); fold.push(plainOf(s2F).open);
+            press(s2F, true); fold.push(j(memF)); const s3F = draw(cC, { campId: 'k_1', view: 'sheet', preview: false }, memF); ownOpen(s3F); fold.push(plainOf(s3F).open, j(memF));
+            press(s3F, false); fold.push(j(memF)); const s4F = draw(cC, { campId: 'k_1', view: 'sheet', preview: false }, memF); ownOpen(s4F); fold.push(plainOf(s4F).open);
+            const memG = {}, g1F = draw(cG, { campId: 'k_1', view: 'sheet', preview: false }, memG); ownOpen(g1F); press(g1F, false);
+            const g2F = draw(cG, { campId: 'k_1', view: 'sheet', preview: false }, memG); ownOpen(g2F); fold.push(plainOf(g2F).open, j(memG)); press(g2F, true);
+            const g3F = draw(cG, { campId: 'k_1', view: 'sheet', preview: false }, memG); ownOpen(g3F); fold.push(plainOf(g3F).open, j(memG));
+            bsT.fold = fold;
         } catch (e) { bsErr = e.message; }
         check('1.5.5 a sub-section set Before its fields is drawn before its parent\'s own fields, in the order the sub-sections have, and every other sub-section after them as before (sheets.js buildSections, run for real on a page of plain objects): Docks reads its title, Purse, Tools, its own Coins, then Kit; a parent with no fields of its own still stands for a sub-section set first',
             !!bsT && j(bsT.sheet[0]) === j(['Docks', 'details', false, ['title', 'sub:Purse', 'sub:Tools', 'grid:Coins', 'sub:Kit']]) && j(bsT.sheet[1]) === j(['Bare', 'div', null, ['title', 'sub:Inner']]) && bsT.sheet.length === 4, bsErr || j(bsT));
@@ -12386,6 +12427,8 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             !!bsT && j(bsT.purse) === j(['details', false]) && j(bsT.sheet[2]) === j(['Plain', 'details', true, ['title', 'grid:Note']]) && j(bsT.sheet[3]) === j(['Fixed', 'div', null, ['title', 'grid:Coin_Pouch']])
             && j(bsT.kept) === j([true, true]) && bsT.keptH === true
             && j(bsT.print.map(x => [x[0], x[1], x[3]])) === j(bsT.sheet.map(x => [x[0], 'div', x[3]])), bsErr || j(bsT));
+        check('1.5.5 (the release trace, F4) Starts closed on a sheet already drawn open: the toggle the browser fires for the code\'s own open is not kept, so a section the Layout preview and the sheet drew open, and that Starts closed since, is drawn folded; the reader\'s own fold is kept both ways, on a section that starts closed and on one that starts open (sheets.js buildSections, run for real)',
+            !!bsT && j(bsT.fold) === j(['{}', '{}', true, false, '{"s_plain":true}', true, '{"s_plain":true}', '{"s_plain":false}', false, false, '{"s_plain":false}', true, '{"s_plain":true}']), bsErr || j(bsT && bsT.fold));
         check('1.5.5 the HUD draws through the same renderer, so its sub-sections stand where they are set; a system with no sub-section set first draws every sub-section after its parent\'s own fields, in their order, exactly as before',
             !!bsT && j(bsT.hud) === j([['Pack', 'details', false, ['title', 'sub:Purse', 'grid:Coins', 'sub:Kit']]])
             && j(bsT.old[0]) === j(['Docks', 'details', false, ['title', 'grid:Coins', 'sub:Purse', 'sub:Kit', 'sub:Tools']]) && j(bsT.old[1]) === j(['Bare', 'div', null, ['title', 'sub:Inner']]), bsErr || j(bsT));

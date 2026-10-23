@@ -5989,7 +5989,7 @@ function handleMessage(msg, conn) {
         if (cm.authTimer) { clearTimeout(cm.authTimer); cm.authTimer = null; }   // this hello answers the key challenge below
         if (msg.profile && typeof msg.profile !== 'object') return;
         var prof = msg.profile || { id: conn.peer, name: 'Player' };
-        if (!validProfileId(prof.id)) { denyJoin(conn, 'That player identity is not valid.'); return; }
+        if (!validProfileId(prof.id) || prof.id.indexOf('tk:') === 0) { denyJoin(conn, 'That player identity is not valid.'); return; }   // 1.5.5 (the release trace, F5, its review): a key of tk: and a token's id is one of the GM's characters' pointers, so no player is ever on the roster under one (their leave, their removal and their roll's range read that key)
         prof = { id: prof.id, name: prof.name, color: prof.color, avatar: prof.avatar, face: cleanFace(prof.face) };   // only what a roster carries: nothing else a peer sends is stored or re-broadcast
         if (!prof.face) delete prof.face;   // Onboarding F1b: a face the rule refuses is dropped
         if (prof.id === net.myId) { denyJoin(conn, 'That player identity is the GM\'s own.'); return; }   // a claimed GM id would render as "You" on the GM's screen
@@ -6269,7 +6269,7 @@ function handleMessage(msg, conn) {
         // [netcheck:travelmsg-end]
     } else if (msg.type === 'target' && net.role === 'host') {
         // [netcheck:targetask-start]
-        var tp = net.roster[conn.peer]; if (!tp) return;
+        var tp = net.roster[conn.peer]; if (!tp || (typeof tp.id === 'string' && tp.id.indexOf('tk:') === 0)) return;   // 1.5.5 (the release trace, F5): a key of tk: and a token's id is one of the GM's characters' pointers, so such a player sets none and nothing is sent
         if (!allow('target', { perMs: 100, burst: 20, windowMs: 5000, table: 1000 }, conn.peer)) return;
         var okId = msg.id === null || (typeof msg.id === 'string' && msg.id.length <= 80);
         if (!okId || typeof msg.mapId !== 'string' || msg.mapId.length > 80) return;

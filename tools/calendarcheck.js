@@ -631,16 +631,33 @@ process.on('exit', code => { if (!summed && !code) { console.log(NL + 'FAIL     
         WB.api.onWinClick({ target: findN(WB.body, 'cal-pend-skip')[0] }); const b2 = [WB.api.st().pend, j(campB.clock.acc || null), WB.runs.length];
         check('152 fold 4 the GM\'s Rules run switch, off (camp.clock.rulesOff, run for real): an NPC listed there has none of its time rules run by itself, its fires going to the waiting list unticked with their counts kept; a player\'s character named there runs as ever; Skip runs nothing',
             j(b1) === j([[[['c_a:r_go:1'], '1 hour of activity']], ['c_n:r_go'], '{"c_n":false}', 'null']) && j(b2) === j([null, 'null', 1]), j([b1, b2]));
-        // while a fight runs the steps, Move and Set move nothing, a press says why, nothing is greyed; with no fight they work as before
-        const campF = { id: 'k', clock: { t: 600 }, chars: chars4() }, WF = mkCal({ camp: campF, sys: sys4, host: true, combats: { f_docks001: { mapId: 'm1', rows: [] } } }); WF.api.openWin();
+        // while a fight runs the steps, Move and Set move nothing, a press says why, nothing is greyed; with no fight they work as before. 1.5.5 (the release
+        // trace, loss 3; moved on purpose): the words name the map that holds the fight, the Docks
+        const campF = { id: 'k', clock: { t: 600 }, chars: chars4(), items: { m1: { type: 'map', meta: { title: 'Docks' } } } }, WF = mkCal({ camp: campF, sys: sys4, host: true, combats: { f_docks001: { mapId: 'm1', rows: [] } } }); WF.api.openWin();
         WF.api.onWinClick({ target: findN(WF.body, 'cal-step').find(b => b.textContent === '+1 hour') });
         findN(WF.body, 'cal-any-n')[0].value = '2'; findN(WF.body, 'cal-any-u')[0].value = 'hour'; WF.api.onWinClick({ target: findN(WF.body, 'cal-any-go')[0] });
         WF.api.onWinClick({ target: findN(WF.body, 'cal-day')[4] }); findN(WF.body, 'cal-set-h')[0].value = '3'; WF.api.onWinClick({ target: findN(WF.body, 'cal-set')[0] });
-        const SAYS = 'A fight is on, so the clock follows the fight furthest behind. The steps, Move and Set work again once every fight has ended.';
+        const SAYS = 'A fight runs on Docks, so the clock follows the fight furthest behind. The steps, Move and Set work again once every fight has ended.';
         const f1 = [campF.clock.t, WF.toasts.slice(), WF.runs.length, findN(WF.body, 'cal-step').every(b => b.disabled !== true) && findN(WF.body, 'cal-any-go')[0].disabled !== true, findN(WF.body, 'cal-live-note')[0].textContent, findN(WF.body, 'cal-round')[0].textContent];
         WF.win.wpNet.combats = {}; WF.api.onWinClick({ target: findN(WF.body, 'cal-step').find(b => b.textContent === '+1 hour') }); const f2 = [campF.clock.t, WF.toasts.length];
         check('152 fold 4 while a fight runs the Calendar\'s steps, Move and Set move nothing, and a press says why in plain words, nothing greyed (calendar.js, run for real); the window says the clock follows the fight furthest behind and that each fight keeps its own time; with no fight running a step works as before',
             j(f1) === j([600, [SAYS, SAYS, SAYS], 0, true, 'Waiting: a fight is on. The clock follows the fight furthest behind.', 'Each fight keeps its own time. Each round adds 1 second, the round\u2019s length from the Combat card\u2019s Turns box. While fights run, the clock shows the fight furthest behind.']) && j(f2) === j([4200, 3]), j([f1, f2]));
+        // 1.5.5 (the release trace, loss 3): the refusal names each map that holds a fight by its own title, as text, so a fight forgotten on another map is
+        // found: two fights on one map and one on a map whose title is markup, three maps named and then how many more, a map whose title is blank or that
+        // is gone, a fight on a map named as a prototype's key; the clock moves nothing in any of them
+        const holdsOf = (items, combats) => { const cH = { id: 'k', clock: { t: 600 }, chars: chars4(), items }, WH2 = mkCal({ camp: cH, sys: sys4, host: true, combats }); WH2.api.openWin(); WH2.api.onWinClick({ target: findN(WH2.body, 'cal-step').find(b => b.textContent === '+1 hour') }); return [cH.clock.t, WH2.toasts.slice()]; };
+        const mapH = t => ({ type: 'map', meta: { title: t } }), fH = m => ({ mapId: m, rows: [] }), TAIL = ', so the clock follows the fight furthest behind. The steps, Move and Set work again once every fight has ended.';
+        const hd = [holdsOf({ m1: mapH('Docks'), m2: mapH(HOSTILE) }, { f_aaaaaaaa: fH('m1'), f_bbbbbbbb: fH('m2'), f_cccccccc: fH('m1') }),
+            holdsOf({ m1: mapH('Docks'), m2: mapH('  Pier  '), m3: mapH('Harbour'), m4: mapH('Mill'), m5: mapH('') }, { f_1: fH('m1'), f_2: fH('m2'), f_3: fH('m3'), f_4: fH('m4'), f_5: fH('m5') }),
+            holdsOf({ m1: mapH('Docks'), m2: mapH('Pier'), m3: mapH('Harbour'), m4: mapH('Mill') }, { f_1: fH('m1'), f_2: fH('m2'), f_3: fH('m3'), f_4: fH('m4') }),
+            holdsOf({ m1: mapH('Docks'), m2: mapH('Pier'), m3: mapH('   ') }, { f_1: fH('m1'), f_2: fH('m3'), f_3: fH('m2') }),
+            holdsOf({ m1: mapH('Docks') }, { f_1: fH('mGone') }), holdsOf({ m1: mapH('Docks') }, { f_1: fH('__proto__') }), holdsOf({ m1: mapH('Docks') }, { f_1: fH('m1'), f_2: fH('m1') })];
+        const calH = read('system/app/scripts/calendar.js'), ioH = read('system/app/scripts/io.js');
+        check('1.5.5 (the release trace, loss 3) while fights run the Calendar\'s refusal names each map that holds one by its own title, as plain text, so a fight forgotten on another map is found (calendar.js fightHolds, run for real): one fight on a map, two fights on one map, fights on two maps (a title that is markup said as the very characters it holds), three maps named and then how many more, a title trimmed, a blank title and a map that is gone or named as a prototype\'s key said as a map with no name; the clock moves in none of them; the words go to the notice alone, which draws them as text',
+            j(hd) === j([[600, ['Fights run on Docks and ' + HOSTILE + TAIL]], [600, ['Fights run on Docks, Pier, Harbour and 2 more maps' + TAIL]], [600, ['Fights run on Docks, Pier, Harbour and 1 more map' + TAIL]],
+                [600, ['Fights run on Docks, a map with no name and Pier' + TAIL]], [600, ['A fight runs on a map with no name' + TAIL]], [600, ['A fight runs on a map with no name' + TAIL]], [600, ['Fights run on Docks' + TAIL]]])
+            && (calH.match(/fightHolds\(/g) || []).length === 2 && calH.includes('&& ordersRun()) { toast(fightHolds(camp)); return; }') && !/FIGHT_HOLDS/.test(calH)
+            && ioH.includes("document.getElementById('toastMsg').textContent = msg;"), j(hd));
         // the second (calendar.js second): with the Calendar on it is the clock, on and reaching the dated notes, back only for a correction that keeps the top;
         // it counts no timed effect (ownTime has counted each character already); the Calendar off ('mem'): kept in memory alone, let go with the last fight
         const campS4 = { id: 'k', clock: { t: 43200, notes: [{ id: nId('a'), day: 0, text: 'Noon' }, { id: nId('b'), day: 1, text: 'Dawn' }] }, chars: chars4() }, WS4 = mkCal({ camp: campS4, sys: sys4, host: true });

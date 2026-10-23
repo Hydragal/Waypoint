@@ -1299,6 +1299,13 @@ function mutations(tpl) {
         if (n > 1) finding('UI trap: a player queues a Start-combat dialog on the GM per NPC token named', 'target from u_p1 → ' + n + ' dialogs for 40 tokens (only Settings ▸ targetAsk off stops it)', { type: 'target', id: 'npcx…', mapId: 'm_open' });
         check('host: the Start-combat offer is raised at most once per player (' + n + ' dialogs for 40 NPC tokens targeted in turn)', n <= 1);
     }
+    {   // 1.5.5 (the release trace, F5): a player whose own profile id begins with tk: would hold the key of one of the GM's characters' pointers
+        await resetWorld(); resetRec(); const rpT = net.roster[conns.p1.peer], wasT = rpT.id, sbT = sentLog.length; rpT.id = 'tk:tok_npc';
+        let thrT = null; try { net._handleMessage({ type: 'target', id: 'tok_p2', mapId: 'm_open' }, conns.p1); net._handleMessage({ type: 'target', id: null, mapId: 'm_open' }, conns.p1); } catch (e) { thrT = e; } finally { rpT.id = wasT; }
+        const keptT = Object.prototype.hasOwnProperty.call(net.targets || {}, 'tk:tok_npc'), sentT = sentLog.slice(sbT).filter(s => s.m && s.m.type === 'targets').length;
+        if (keptT || sentT) finding('identity: a player whose profile id begins with tk: sets a pointer under the key of one of the GM\'s characters\' pointers', 'target from a player with the id tk:tok_npc → kept ' + keptT + ', targets sent ' + sentT, { type: 'target', id: 'tok_p2', mapId: 'm_open' });
+        check('host: a player whose own profile id begins with tk: sets no pointer and nothing is sent (throws nowhere)', !thrT && !keptT && sentT === 0, { threw: thrT && thrT.message, kept: keptT, sent: sentT });
+    }
     {   // approvedIds: the GM says yes to a join whose connection dropped meanwhile; the NEXT hello claiming that id is admitted without a key
         await resetWorld(); drainDialogs(); resetRec(); clockOff += 20000;
         const cS = connect('peer_dropper'); hello(cS, { id: 'u_drop', name: 'Dropper' });

@@ -1636,7 +1636,7 @@ function buildSections(body, sys, c, all, gm, own, rerender, vctx) {   // rerend
         var collap = !!sec.collapsible && !printV;   // printed: open (and never written back to the live sheet's memory)
         var s = el(collap ? 'details' : 'div', 'sheet-section' + (collap ? ' sheet-collap' : '') + (isChild ? ' sheet-subsection' : '') + (sec.inline === true ? ' sheet-inline' : ''));
         var secKey = (hudV ? 'h:' : '') + sec.id;   // HF1: remembered per view (sheet keys unchanged)
-        if (collap) { s.open = (secKey in _secOpen) ? _secOpen[secKey] : (sec.open !== false); s.addEventListener('toggle', function () { _secOpen[secKey] = s.open; }); }
+        if (collap) { var secDrawn = (secKey in _secOpen) ? _secOpen[secKey] : (sec.open !== false), secOwn = secDrawn === true; s.open = secDrawn; s.addEventListener('toggle', function () { if (secOwn) { secOwn = false; if (s.open === secDrawn) return; } _secOpen[secKey] = s.open; }); }   // 1.5.5 (the release trace, F4): the toggle the browser fires for the code's own open is not kept, so only the reader's own fold is remembered
         var stripe = !!(sec.style && sec.style.accent && sec.style.stripe !== false);   // Stage 5g: an accent can colour the title alone
         if (sec.style && (sec.style.bg || sec.style.border || stripe)) {   // Stage 3: per-section colors (padding/radius so the panel reads as a box)
             s.style.padding = '8px 10px'; s.style.borderRadius = '8px';
@@ -3425,7 +3425,7 @@ function timedHook(mapId, combat, kind) {
     var who = kind === 'turn' ? { rows: combat && Array.isArray(combat.rows) && combat.rows[combat.turn] ? [combat.rows[combat.turn]] : [] } : combat;
     combatChars(mp, who, charsOf(camp)).forEach(function(e) {
         var c = charById(e.charId, camp); if (!c) return;
-        var tc = withRound(tokenCtx(mp, e.tok, tokenFlags()), combat), vvD = null;
+        var tc = withRound(tokenCtx(mp, e.tok, Object.assign({}, tokenFlags(), { viewer: typeof e.tok.ownerId === 'string' ? e.tok.ownerId : undefined })), combat), vvD = null;   // 1.5.5 (the release trace, F2): a player's character is judged by what its player sees, as turnMoveStart judges it, so an attacker hidden from them counts for nothing
         dues.forEach(function(a) { if (a.needs && typeof rollNeedsOk === 'function') { vvD = vvD || resolveAll(sys, c, F(), tc).vars; if (!rollNeedsOk(a, vvD, F())) return; } if (n.postDue) n.postDue(c, a, kind, combat.round, a.by === 'owner' && a.vis !== 'gm'); });   // 1.5.4: no reminder while its needs are not met
         var res = applyRound(sys, c, function(w) { return resolveAll(sys, w, F(), tc).vars; }, F(), tc, kind), ids = Object.keys(res.values);
         if (!ids.length) return;
