@@ -7,8 +7,8 @@
    docs/CALENDAR_PLAN.md. */
 import { getActiveCampaign } from './models.js';
 import { save, saveView, toast } from './io.js';
-import { roundSecs } from './systemcore.js';
-import { cleanCalendar, cleanClock, cleanAcc, ruleFires, livedSpans, freshAcc, tCmp, tSpanMs, dateOf, timeOf, periodDays, dayLength, fmtDate, fmtWhen, fmtSpan, CAL_LIMITS } from './calendarcore.js';
+import { roundSecs, needsHeld, chainsShallow } from './systemcore.js';
+import { cleanCalendar, cleanClock, cleanAcc, ruleFires, everySecs, fightSecs, livedSpans, freshAcc, tCmp, tSpanMs, dateOf, timeOf, periodDays, dayLength, fmtDate, fmtWhen, fmtSpan, CAL_LIMITS } from './calendarcore.js';
 
 function net() { return window.wpNet || null; }
 function sysNow() { var sh = window.wpSheets; return sh && sh.systemOf ? sh.systemOf() : null; }
@@ -148,6 +148,7 @@ function ownTime(groups) {   // the one counter: each group's spans, once, to th
         if (typeof g.secs !== 'number') g.secs = Math.max(0, tSpanMs(g.t0, g.t1) / 1000);
         var spans = g.spans && typeof g.spans === 'object' ? g.spans : null; if (!spans) { g.marked = false; spans = spansOf(camp, g); if (g.marked) marked = true; }   // a move of the clock hands its spans in, and writes them with the clock
         if (!Object.keys(spans).length) return;
+        g.held = needsAt(camp, sys, g, spans);   // 1.5.5: the needs of the rules ticked Only while its needs hold, judged as the stretch is counted, before its timed effects run
         if (g.kind !== 'fight' && n && typeof n.fxSpans === 'function') { try { n.fxSpans(spans, g.walk === true); } catch (e) { console.error(e); } }   // section 6: outside a fight its timed effects follow its own time; in one, its turns. walk: those who walk into a fight live the gap before it
         if (groupRules(camp, sys, g, spans)) made = true;
     });
@@ -174,7 +175,7 @@ function groupRules(camp, sys, g, spans, only) {
         var rn = firesOf(camp, sys, now, g, spans), go = [];
         commitAcc(rn.acc, g.live === true); heldFollow(now, rn.acc);
         rn.fires.forEach(function(f) { rd(f); if (!off(f.c)) go.push(f); else if (cal) list.push(f); });
-        if (go.length && window.wpSheets && window.wpSheets.runTimeRules) window.wpSheets.runTimeRules(go, groupWords(g), fight && typeof g.round === 'number' ? { round: g.round } : undefined);
+        if (go.length && window.wpSheets && window.wpSheets.runTimeRules) { var backs = []; window.wpSheets.runTimeRules(go, groupWords(g), fight && typeof g.round === 'number' ? { round: g.round } : undefined, backTo(backs)); heldBack(camp, sys, backs, true, g.live === true); }   // 1.5.5's review: a run held back keeps its time
     }
     if (later.length && !cal) { var rx = firesOf(camp, sys, later, g, spans); commitAcc(rx.acc, g.live === true); heldFollow(later, rx.acc); if (rx.fires.length) bellUp(camp, sys, rx.fires.map(rd), groupWords(g)); }   // the Calendar off: counted, and its runs wait in the bell for the GM's word (fold 4b)
     else if (later.length && pend) queueStretch(camp, g, spans, later, rules);   // 159: a list waits for the GM's word, and this time is judged once it is answered
@@ -186,9 +187,127 @@ function groupRules(camp, sys, g, spans, only) {
     return list.length ? listUp(camp, g, list, asked) : false;
 }
 function firesOf(camp, sys, rules, g, spans) {   // the fires of these rules over each character's span; outside a fight with every span the same, as it always counted
-    var acc = accNow(camp), ids = Object.keys(spans), one = uniformOf(spans);
-    if (g.kind !== 'fight' && one !== null) return ruleFires(sysCal(), sysUnits(sys), rules, ids, acc, one, !!g.rest);
-    return ruleFires(sysCal(), sysUnits(sys), rules, ids, acc, spans, !!g.rest, { fight: g.kind === 'fight', rs: typeof g.rs === 'number' && g.rs > 0 ? g.rs : roundSecs(sys) });
+    var acc = accNow(camp), ids = Object.keys(spans), one = uniformOf(spans), need = needOf(g, spans), res;   // 1.5.5: need, undefined with no rule ticked Only while its needs hold
+    if (g.kind !== 'fight' && one !== null) res = need ? ruleFires(sysCal(), sysUnits(sys), rules, ids, acc, one, !!g.rest, undefined, need) : ruleFires(sysCal(), sysUnits(sys), rules, ids, acc, one, !!g.rest);
+    else { var o8 = { fight: g.kind === 'fight', rs: typeof g.rs === 'number' && g.rs > 0 ? g.rs : roundSecs(sys) }; res = need ? ruleFires(sysCal(), sysUnits(sys), rules, ids, acc, spans, !!g.rest, o8, need) : ruleFires(sysCal(), sysUnits(sys), rules, ids, acc, spans, !!g.rest, o8); }
+    if (need && g.pieces) dueOn(sys, rules, acc, res.fires, g);   // 1.5.5's review: where each run of a ticked count came due
+    return res;
+}
+// 1.5.5 (the owner, 2026-10-23: "everything needs to be accounted for, no shortcuts"): a rule's By the clock or In a fight ticked Only while its needs
+// hold (whileNeeds) counts only the part of each stretch in which the rule's needs hold for the character (calendarcore ruleFires' need). Each stretch
+// is judged as it is counted (ownTime, before its timed effects run): a step, Move or Set as the character stands when the GM moves the clock on, and
+// so at the stretch's start; a minute the clock ran by itself, a fight's round and the time outside a fight while fights run as the character stands
+// when that minute or round is counted, which is when its runs are made, so a count and its runs read the character alike (to one round, or one bank
+// of the running clock). A stretch counts whole or not at all, but outside a fight one is judged again at each moment within it that a timed effect of
+// the character runs out (systemcore needsHeld). 1.5.5's review (a draw counted while a nap held its needs was lost, since the nap ran out before the
+// run was made): a run is made as its character stood where it came due, with the timed effects it had there (dueOn, timeRuleRun's opt.due); a fire
+// whose first run its needs hold back all the same (another rule's run before it, a change made before a list is answered, time judged when it was
+// lived) gives its runs' time back to its count, so they come due again and nothing counted is lost; and a fire run at once whose own runs make its
+// needs fail stops there, its count at none, since the time after its last run was not time they held (heldBack). No second counts twice.
+// needsAt: { charId: { count key: seconds its needs held } } for each count ticked so that counts in this stretch (as groupRules counts: a count that
+// does not count here is not judged), each judged with the sheet's own resolver as the rule's run reads it; null where no rule is ticked, and every
+// count is then as it was. With no formula engine at hand a ticked count holds for none of the stretch, as a needs formula that cannot be worked out does.
+// Outside a fight it also keeps each character's pieces of the stretch (g.pieces: needsHeld's keep), where its runs come due
+var HELD_ID = /^[a-z]_[A-Za-z0-9_]{1,24}$/;
+function needsAt(camp, sys, g, spans) {
+    var rules = clockRules(sys).filter(function(r) { return (r.every && r.every.whileNeeds === true) || (r.inFight && r.inFight.whileNeeds === true); }); if (!rules.length) return null;
+    var fight = g.kind === 'fight', cal = clockOn(), asks = [], out = {}, pieces = {};
+    if (timeMode(camp) !== 'off' && !tablePaused() && (fight || cal)) rules.forEach(function(r) {
+        if (cal && r.every && r.every.whileNeeds === true && !(r.every.rest === true && !g.rest) && !(fight && r.every.wait === true)) asks.push({ key: r.id, rule: r, fight: false });
+        if (fight && r.inFight && r.inFight.whileNeeds === true) asks.push({ key: 'x_' + r.id.slice(2), rule: r, fight: true });
+    });
+    var Fm = typeof window !== 'undefined' && window.wpFormula ? window.wpFormula : null, judge = asks.length > 0 && !!Fm && typeof needsHeld === 'function', flat = false;
+    if (judge) { try { flat = typeof chainsShallow === 'function' && chainsShallow(sys, Fm) === true; } catch (e) { flat = false; } }   // a lazy resolver only where any resolver answers alike, as runTimeRules shares one
+    var o = { round: fight && typeof g.round === 'number' ? g.round : undefined, split: !fight, flat: flat, now: Date.now() };   // in a fight a character's timed effects follow its turns: no moment within a round is judged apart
+    Object.keys(spans).forEach(function(c) {
+        if (!HELD_ID.test(c)) return;
+        var h = {}, ch = hasOwn(camp.chars, c) ? camp.chars[c] : null, keep = fight ? null : []; asks.forEach(function(a) { h[a.key] = 0; });
+        if (judge && ch && typeof ch === 'object') { try { var r = needsHeld(sys, ch, asks, Fm, spans[c], keep ? Object.assign({ keep: keep }, o) : o); asks.forEach(function(a) { if (hasOwn(r, a.key) && typeof r[a.key] === 'number') h[a.key] = r[a.key]; }); if (keep && keep.length) pieces[c] = keep; } catch (e) { console.error(e); } }
+        out[c] = h;
+    });
+    if (Object.keys(pieces).length) g.pieces = pieces;
+    return out;
+}
+// The need ruleFires asks of a ticked count: what needsAt judged for this stretch (g.held: a count it did not judge holds for none of it), or, for time that
+// waited behind a list, what was judged when it was lived (g.gap: the seconds each ticked count's needs held for each character judged; a character it
+// never judged, one made since, holds for none of it, and a count a judged character's entry does not name, a rule ticked since, counts whole). With
+// neither: undefined, and ruleFires counts exactly as it always did
+function needOf(g, spans) {
+    var key = function(rl, fx) { return fx ? 'x_' + rl.id.slice(2) : rl.id; };
+    if (g.held && typeof g.held === 'object') return function(c, rl, fx) { var h = hasOwn(g.held, c) ? g.held[c] : null, k = key(rl, fx); return h && hasOwn(h, k) && typeof h[k] === 'number' ? h[k] : 0; };
+    if (g.gap && typeof g.gap === 'object') return function(c, rl, fx) { var z = hasOwn(g.gap, c) ? g.gap[c] : null, k = key(rl, fx); if (!z || typeof z !== 'object') return 0; if (!hasOwn(z, k) || typeof z[k] !== 'number') return true; return Math.max(0, z[k]); };
+    return undefined;
+}
+// What a stretch kept behind a list (queueStretch) carries of needsAt's judgement for the rules asked for: for each character it judged, the seconds each
+// ticked count it judged held. Summed, each part as it was judged, when two stretches run on as one (joinStretch), so it stays exact. null: no judgement
+function gapOf(g, spans, later) {
+    if (!g.held || typeof g.held !== 'object') return null;
+    var z = {};
+    Object.keys(spans).forEach(function(c) {
+        var h = hasOwn(g.held, c) ? g.held[c] : null, m = {}; if (!h || typeof h !== 'object') return;
+        later.forEach(function(r) { [r.id, 'x_' + r.id.slice(2)].forEach(function(k) { if (hasOwn(h, k) && typeof h[k] === 'number') m[k] = h[k]; }); });
+        z[c] = m;
+    });
+    return z;
+}
+// 1.5.5's review: where each run of a fire of a By the clock count ticked Only while its needs hold came due, outside a fight: the piece of the stretch
+// (g.pieces) in which the time its needs held reached that run's period, counted on from what the count held (acc, as ruleFires was handed it). Each
+// fire so carries due, [{ n, fx }] in run order: n runs made with fx, the character's timed effects in that piece, a copy (sheets.js runTimeRules,
+// systemcore timeRuleRun). Its other values are as they stand when the run is made, and a fight's round has no such moment: its effects follow its turns
+var DUE_EPS = 0.0005;
+function dueOn(sys, rules, acc, fires, g) {
+    if (!g.pieces || typeof g.pieces !== 'object' || typeof everySecs !== 'function' || !Array.isArray(fires)) return;
+    var cal = sysCal(), un = sysUnits(sys);
+    fires.forEach(function(f) {
+        if (!f || f.x === 1 || typeof f.c !== 'string' || !(typeof f.n === 'number' && f.n >= 1)) return;
+        var rl = rules.filter(function(r) { return r && r.id === f.r; })[0]; if (!rl || !rl.every || rl.every.whileNeeds !== true) return;
+        var ps = hasOwn(g.pieces, f.c) && Array.isArray(g.pieces[f.c]) ? g.pieces[f.c] : null, per = everySecs(cal, un, rl.every); if (!ps || !ps.length || !(per > 0)) return;
+        var mine = hasOwn(acc, f.c) && acc[f.c] && typeof acc[f.c] === 'object' ? acc[f.c] : null, had = mine && typeof mine[rl.id] === 'number' && mine[rl.id] > 0 ? mine[rl.id] : 0;
+        var held = function(p) { return !!p && !!p.ok && p.ok[rl.id] === true && p.len > 0; }, last = -1; ps.forEach(function(p, i) { if (held(p)) last = i; }); if (last < 0) return;
+        var parts = [], i = 0, cum = 0;
+        for (var j = 1; j <= Math.min(500, f.n); j++) {
+            var at = j * per - had;   // the time its needs held, within this stretch, when run j came due
+            while (i < ps.length && !(held(ps[i]) && cum + ps[i].len >= at - DUE_EPS)) { if (held(ps[i])) cum += ps[i].len; i++; }
+            var k = i < ps.length ? i : last, top = parts.length ? parts[parts.length - 1] : null;
+            if (top && top.p === k) top.n++; else parts.push({ p: k, n: 1 });
+        }
+        f.due = parts.map(function(d) { return { n: d.n, fx: JSON.parse(JSON.stringify(ps[d.p].fx || {})) }; });
+    });
+}
+// Two fires of one count joined in a waiting list (listUp) keep where each of their runs came due, in order, up to the 500 runs a fire makes: a fire with
+// no due has its runs made as its character stands when they are made
+function dueJoin(a, b) {
+    var out = [], left = 500;
+    [a, b].forEach(function(f) { (Array.isArray(f.due) ? f.due : [{ n: f.n, fx: null }]).forEach(function(d) { if (left <= 0 || !d || typeof d.n !== 'number' || !(d.n >= 1)) return; var k = Math.min(left, Math.floor(d.n)); out.push({ n: k, fx: d.fx || null }); left -= k; }); });
+    return out;
+}
+// What runTimeRules is told of each fire it runs (its fourth argument): kept in order, for heldBack
+function backTo(list) { return function(fi, ran, held) { list.push({ fi: fi, ran: typeof ran === 'number' ? ran : 0, held: held === true }); }; }
+// 1.5.5's review: a fire of a count ticked Only while its needs hold that its needs held back. Its time was counted while they held, so where its first
+// run was held back (and no run of that count was made before it in the same go: those would have been its own) its runs go back to the count, n
+// periods on what it holds now, and come due again the next time it counts on. Where its own runs made its needs fail part way, the time after its last
+// run was not time they held: fresh (a fire run at once, its count this very stretch's) leaves the count at none; otherwise (a list or the bell answered
+// later, while the count may have counted on) the count stands as it is. A list's own counts follow, as heldFollow keeps them. live: as commitAcc's
+function heldBack(camp, sys, backs, fresh, live) {
+    if (!camp || !sys || !Array.isArray(backs) || !backs.length || typeof everySecs !== 'function' || typeof fightSecs !== 'function') return false;
+    var rules = clockRules(sys), cal = sysCal(), un = sysUnits(sys), ck = clockOf(camp) || { t: 0 }, acc = JSON.parse(JSON.stringify(ck.acc || {})), ran = Object.create(null), ask = heldOf(camp), moved = false;
+    backs.forEach(function(b) {
+        var fi = b && b.fi; if (!fi || typeof fi.c !== 'string' || !HELD_ID.test(fi.c) || typeof fi.r !== 'string' || !(typeof fi.n === 'number' && fi.n >= 1)) return;
+        var rl = rules.filter(function(r) { return r.id === fi.r; })[0], fx = fi.x === 1, pc = rl ? (fx ? rl.inFight : rl.every) : null; if (!pc || pc.whileNeeds !== true) return;
+        var k = fx ? 'x_' + rl.id.slice(2) : rl.id, sk = fi.c + ' ' + k, own = b.ran > 0 || ran[sk] === 1;
+        if (b.ran > 0) ran[sk] = 1;
+        if (b.held !== true || (own && fresh !== true)) return;
+        var per = fx ? fightSecs(cal, un, rl.inFight, roundSecs(sys)) : everySecs(cal, un, rl.every); if (!own && !(per > 0)) return;
+        var put = function(o) {
+            var m = hasOwn(o, fi.c) && o[fi.c] && typeof o[fi.c] === 'object' ? o[fi.c] : (o[fi.c] = {}), cur = hasOwn(m, k) && typeof m[k] === 'number' && m[k] > 0 ? m[k] : 0;
+            var nx = own ? 0 : Math.round((cur + Math.min(500, Math.floor(fi.n)) * per) * 1000) / 1000;
+            if (nx > 0) m[k] = nx; else delete m[k]; if (!Object.keys(m).length) delete o[fi.c];
+        };
+        put(acc); moved = true;
+        if (ask && pend.keys.indexOf(k) >= 0 && Array.isArray(pend.ids) && pend.ids.indexOf(fi.c) >= 0) put(pend.acc);
+    });
+    if (moved) commitAcc(acc, live === true);
+    return moved;
 }
 // What each rule has counted, as the next stretch counts on from it: the clock's counts, with those a waiting list holds for the rules it asked for laid
 // over them, so a rule asked for in one stretch and run at once in another (a Set, then a step; a list of Ask me, then a fight) never counts the same
@@ -217,7 +336,7 @@ var PEND_FIRES = 2000;
 function listUp(camp, g, fires, asked) {   // fires for the GM to answer: a list of their own, or, while one waits, joined to it (their counts are kept already)
     var on = Object.create(null); fires.forEach(function(f) { on[f.c] = isPc(hasOwn(camp.chars, f.c) ? camp.chars[f.c] : null); });
     if (pend) {
-        fires.forEach(function(f) { var same = pend.fires.filter(function(x) { return x.c === f.c && x.r === f.r && (x.x === 1) === (f.x === 1); })[0]; if (same) same.n = Math.min(500, same.n + f.n); else if (pend.fires.length < PEND_FIRES) pend.fires.push(f); if (!hasOwn(pend.on, f.c)) pend.on[f.c] = on[f.c]; });
+        fires.forEach(function(f) { var same = pend.fires.filter(function(x) { return x.c === f.c && x.r === f.r && (x.x === 1) === (f.x === 1); })[0]; if (same) { if (same.due || f.due) same.due = dueJoin(same, f); same.n = Math.min(500, same.n + f.n); } else if (pend.fires.length < PEND_FIRES) pend.fires.push(f); if (!hasOwn(pend.on, f.c)) pend.on[f.c] = on[f.c]; });   // 1.5.5's review: where each run came due, joined
         if (winOpen()) renderWin(); refresh(); return false;
     }
     pend = { secs: g.secs, rest: !!g.rest, fires: fires, acc: asked ? asked.acc : null, keys: asked ? asked.keys : [], ids: asked ? asked.ids : [], on: on, camp: camp.id };
@@ -239,17 +358,24 @@ function queueStretch(camp, g, spans, later, rules) {
     if (g.kind !== 'clock') q.g = g.kind; if (typeof g.round === 'number') q.n = g.round; if (g.kind === 'fight' && typeof g.rs === 'number') q.rs = g.rs; if (g.kind !== 'clock') q.w = groupWords(g);
     if (later.length !== rules.length) q.k = later.map(function(r) { return r.id; });
     if (!even) q.c = Object.assign({}, spans);
+    var zq = gapOf(g, spans, later); if (zq) q.z = zq;   // 1.5.5: what of it the needs of a rule ticked Only while its needs hold held, for each character judged now
     if (q.l && Object.keys(q).length === 4) { livePend += q.s; sinceSync(); return; }   // the clock's own minutes, said under the list as they pass
     var last = pendQ.length ? pendQ[pendQ.length - 1] : null;
     if (last && (pendQ.length >= PEND_Q || sameShape(last, q))) joinStretch(camp, last, q); else pendQ.push(q);
     sinceSync();
 }
-function sameShape(a, b) { return a.r === b.r && a.a === b.a && a.l === b.l && a.g === b.g && a.rs === b.rs && JSON.stringify(a.k || null) === JSON.stringify(b.k || null) && !a.c === !b.c; }
+function sameShape(a, b) { return a.r === b.r && a.a === b.a && a.l === b.l && a.g === b.g && a.rs === b.rs && JSON.stringify(a.k || null) === JSON.stringify(b.k || null) && !a.c === !b.c && !a.z === !b.z; }
 function joinStretch(camp, a, b) {   // b runs on from a: their seconds summed (each character's own, where either has them), b's round and words the latest
+    if (a.z || b.z) {   // 1.5.5: what each ticked count held, summed, each part as it was judged: none for a character a part never judged, the whole of its own span for a part that judged nothing or a count it did not name
+        var spanIn = function(x, id) { return x.c ? (hasOwn(x.c, id) && typeof x.c[id] === 'number' ? x.c[id] : 0) : x.s; };
+        var part = function(x, id, k) { if (!x.z || typeof x.z !== 'object') return spanIn(x, id); var e = hasOwn(x.z, id) ? x.z[id] : null; if (!e || typeof e !== 'object') return 0; return hasOwn(e, k) && typeof e[k] === 'number' ? e[k] : spanIn(x, id); };
+        var zz = {}; [a.z, b.z].forEach(function(z) { if (z && typeof z === 'object') Object.keys(z).forEach(function(id) { if (!HELD_ID.test(id) || !z[id] || typeof z[id] !== 'object') return; var m = hasOwn(zz, id) ? zz[id] : (zz[id] = {}); Object.keys(z[id]).forEach(function(k) { if (HELD_ID.test(k) && !hasOwn(m, k)) m[k] = Math.round((part(a, id, k) + part(b, id, k)) * 1000) / 1000; }); }); });
+        a.z = zz;
+    }
     if (a.c || b.c) { var ac = a.c || evenSpans(camp, a.s), bc = b.c || evenSpans(camp, b.s), out = {}; Object.keys(ac).concat(Object.keys(bc)).forEach(function(id) { if (!hasOwn(out, id)) out[id] = Math.round(((hasOwn(ac, id) ? ac[id] : 0) + (hasOwn(bc, id) ? bc[id] : 0)) * 1000) / 1000; }); a.c = out; }
     a.s = Math.round((a.s + b.s) * 1000) / 1000; if (hasOwn(b, 'n')) a.n = b.n; if (hasOwn(b, 'w')) a.w = b.w;
 }
-function qGroup(q) { return { kind: q.g === 'fight' || q.g === 'out' ? q.g : 'clock', secs: q.s, rest: q.r === true, ask: q.a === true, live: q.l === true, round: q.n, rs: q.rs, words: q.w }; }
+function qGroup(q) { var g = { kind: q.g === 'fight' || q.g === 'out' ? q.g : 'clock', secs: q.s, rest: q.r === true, ask: q.a === true, live: q.l === true, round: q.n, rs: q.rs, words: q.w }; if (q.z && typeof q.z === 'object') g.gap = q.z; return g; }   // 1.5.5: gap, as judged when it was lived
 function keepAsked(camp, p) {   // a list answered: the counts of the rules it asked for, as it counted them, for the characters it counted; every other count stays
     if (!p.acc || !Array.isArray(p.keys) || !p.keys.length) return;
     var ck = clockOf(camp) || { t: 0 }; commitAcc(layAsked(JSON.parse(JSON.stringify(ck.acc || {})), p));
@@ -307,7 +433,8 @@ function bellDone(key, apply) {   // Apply (true) or Skip: the item goes, and Ap
     if (!it) return false;
     if (apply === true && window.wpSheets && window.wpSheets.runTimeRules) {
         var w0 = it.runs.length ? it.runs[0].w : '', one = it.runs.every(function(q) { return q.w === w0; });
-        window.wpSheets.runTimeRules(it.runs.map(function(q) { var f = { c: it.c, r: it.r, n: q.n }; if (q.x === 1) f.x = 1; if (q.rd !== null) f.rd = q.rd; return f; }), w0 ? (one ? w0 : 'Since ' + w0) : '');
+        var backs = []; window.wpSheets.runTimeRules(it.runs.map(function(q) { var f = { c: it.c, r: it.r, n: q.n }; if (q.x === 1) f.x = 1; if (q.rd !== null) f.rd = q.rd; return f; }), w0 ? (one ? w0 : 'Since ' + w0) : '', undefined, backTo(backs));
+        heldBack(camp, sysNow(), backs, false);   // 1.5.5's review: a run its needs held back gives its time back to its count
     }
     return true;
 }
@@ -389,9 +516,11 @@ function pendDone(apply) {
     var p = pend, cal = sysCal(); pend = null;
     if (typeof window !== 'undefined' && window.wpNotices) window.wpNotices.done('time');   // 160
     var camp = getActiveCampaign(); if (!camp || camp.id !== p.camp) { renderWin(); return false; }
-    if (apply) { var go = p.fires.filter(function(f) { return p.on[f.c] === true; }); if (go.length && window.wpSheets && window.wpSheets.runTimeRules) window.wpSheets.runTimeRules(go, p.words || spanWords(cal, p.secs, p.rest, p.live)); }
+    var backs = [];
+    if (apply) { var go = p.fires.filter(function(f) { return p.on[f.c] === true; }); if (go.length && window.wpSheets && window.wpSheets.runTimeRules) window.wpSheets.runTimeRules(go, p.words || spanWords(cal, p.secs, p.rest, p.live), undefined, backTo(backs)); }
     keepAsked(camp, p);   // 152: only the counts of the rules this list asked for: a count another rule made since stays
     var sysD = sysNow();
+    heldBack(camp, sysD, backs, false);   // 1.5.5's review: a run its needs held back gives its time back, on the count as the list kept it
     if (livePend > 0) { var lp = livePend; livePend = 0; groupRules(camp, sysD, { kind: 'clock', secs: lp, rest: false, live: true }, evenSpans(camp, lp), true); }   // 1.5.4: the time that passed while this list waited (the clock running)
     while (!pend && pendQ.length) { var qd = pendQ.shift(); groupRules(camp, sysD, qGroup(qd), qd.c && typeof qd.c === 'object' ? qd.c : evenSpans(camp, qd.s), Array.isArray(qd.k) ? qd.k : true); }   // 159: then the time moved on meanwhile, in order, until a stretch makes rules due again
     renderWin(); refresh(); return true;

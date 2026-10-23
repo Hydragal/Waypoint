@@ -193,9 +193,10 @@ function everySecs(cal, units, every) {
 // each has counted, as cleanAcc keeps it), secs (the stretch), rest (true: rest). A rule during rest only counts rest, and a stretch of activity
 // clears what it had counted; any other rule counts all time. Each full interval fires once (at most 500 a stretch) and the rest carries.
 // { fires: [{ c, r, n }], acc } — a new acc, the one given left as it was. Backlog 152: an eighth argument o, a plain object whose fight is true or
-// false, counts time in a fight or out of one (ruleFiresIn); anything else, or none, is the function above exactly as it was
-function ruleFires(cal, units, rules, charIds, acc, secs, rest, o) {
-    if (fightOpt(o)) return ruleFiresIn(cal, units, rules, charIds, acc, secs, rest, o);
+// false, counts time in a fight or out of one (ruleFiresIn); anything else, or none, is the function above exactly as it was. 1.5.5: a ninth argument
+// need, the judge of a count ticked Only while its needs hold (heldPart), in both ways; none, or no function, and both are exactly as they were
+function ruleFires(cal, units, rules, charIds, acc, secs, rest, o, need) {
+    if (fightOpt(o)) return ruleFiresIn(cal, units, rules, charIds, acc, secs, rest, o, need);
     var out = { fires: [], acc: {} }, prev = cleanAcc(acc) || {}; Object.keys(prev).forEach(function(c) { out.acc[c] = Object.assign({}, prev[c]); });
     if (typeof secs !== 'number' || !isFinite(secs) || !(secs > 0)) return out;
     (Array.isArray(charIds) ? charIds : []).forEach(function(c) {
@@ -205,13 +206,25 @@ function ruleFires(cal, units, rules, charIds, acc, secs, rest, o) {
             var per = everySecs(cal, units, rl.every); if (!(per > 0)) return;
             var mine = Object.prototype.hasOwnProperty.call(out.acc, c) ? out.acc[c] : (out.acc[c] = {}), had = Object.prototype.hasOwnProperty.call(mine, rl.id) ? mine[rl.id] : 0;
             if (rl.every.rest === true && !rest) { delete mine[rl.id]; if (!Object.keys(mine).length) delete out.acc[c]; return; }
-            var a = had + secs, k = Math.floor(a / per), left = a - k * per;
+            var cs = heldPart(need, c, rl, false, secs); if (!(cs > 0)) { if (!Object.keys(mine).length) delete out.acc[c]; return; }   // 1.5.5: a count ticked Only while its needs hold adds only the time they held, and stands still otherwise
+            var a = had + cs, k = Math.floor(a / per), left = a - k * per;
             if (left > 0.0005) mine[rl.id] = Math.round(left * 1000) / 1000; else delete mine[rl.id];
             if (!Object.keys(mine).length) delete out.acc[c];
             if (k > 0) out.fires.push({ c: c, r: rl.id, n: Math.min(500, k) });
         });
     });
     return out;
+}
+// 1.5.5 (the owner, 2026-10-23, of a droid's draw taken only where it slept at the moment each day began: "everything needs to be accounted for, no
+// shortcuts"): a time rule's By the clock or In a fight may be ticked Only while its needs hold (every.whileNeeds, inFight.whileNeeds, true only), and
+// that count then adds only the part of a stretch in which the rule's needs held for the character, standing still for the rest: never cleared, as a
+// rest-only count is by activity. The core is pure, so the needs are judged by its caller and handed in as need(charId, rule, fight) (fight: the In a
+// fight count; else By the clock's), asked only of a ticked count that counts in this stretch, after the rest gate: true is the whole stretch, a
+// number that many of its seconds (held to it), anything else none of it. No need, no function or a count not ticked: the whole stretch, as before
+function heldPart(need, c, rl, fight, s) {
+    var pc = fight ? rl.inFight : rl.every; if (typeof need !== 'function' || !isObj(pc) || pc.whileNeeds !== true) return s;
+    var v = false; try { v = need(c, rl, fight === true); } catch (e) { v = false; }
+    return v === true ? s : typeof v === 'number' && isFinite(v) && v > 0 ? Math.min(s, v) : 0;
 }
 
 // Backlog 152 (the fight clock, docs/FIGHT_CLOCK_DESIGN.md 1 to 3): the pure core of fights that keep their own time.
@@ -300,14 +313,16 @@ function fightOpt(o) { if (!isObj(o)) return false; var pr = Object.getPrototype
 // gate comes first, as above. By the clock (every, its r_ count) counts unless the rule Waits in a fight (every.wait) and this is a fight; In a
 // fight (inFight, its x_ count: x_ and the rule id's tail) counts in a fight alone, through fightSecs, and holds its count out of one; its fires
 // carry x: 1. Worked out in whole milliseconds, so the counts are exact; each full interval fires once (at most 500 a stretch), the rest carries.
-// A character counts once however often it is named. { fires: [{ c, r, n, x? }], acc } — a new acc, the one given left as it was
-function ruleFiresIn(cal, units, rules, charIds, acc, secs, rest, o) {
+// A character counts once however often it is named. { fires: [{ c, r, n, x? }], acc } — a new acc, the one given left as it was. 1.5.5: need, as
+// ruleFires' own: a ticked count adds only its part of the stretch, in whole milliseconds, and one that adds nothing is left as it was
+function ruleFiresIn(cal, units, rules, charIds, acc, secs, rest, o, need) {
     var out = { fires: [], acc: {} }, prev = cleanAcc(acc) || {}, seen = Object.create(null), one = typeof secs === 'number';
     Object.keys(prev).forEach(function(c) { out.acc[c] = Object.assign({}, prev[c]); });
     var mineOf = function(c) { return Object.prototype.hasOwnProperty.call(out.acc, c) ? out.acc[c] : (out.acc[c] = {}); };
     var tidy = function(c) { if (!Object.keys(out.acc[c]).length) delete out.acc[c]; };
+    var part = function(c, rl, fight, cms) { var p = heldPart(need, c, rl, fight, cms / 1000); return p === cms / 1000 ? cms : Math.min(cms, Math.round(p * 1000)); };   // 1.5.5: the whole stretch, or the part its needs held
     var count = function(c, rid, key, per, cms, x) {
-        var perMs = Math.round(per * 1000); if (!(perMs > 0)) return;
+        var perMs = Math.round(per * 1000); if (!(perMs > 0) || !(cms > 0)) return;
         var mine = mineOf(c), had = Object.prototype.hasOwnProperty.call(mine, key) ? Math.round(mine[key] * 1000) : 0;
         var a = had + cms, k = Math.floor(a / perMs), left = a - k * perMs;
         if (left > 0) mine[key] = left / 1000; else delete mine[key];
@@ -324,9 +339,9 @@ function ruleFiresIn(cal, units, rules, charIds, acc, secs, rest, o) {
             var per = everySecs(cal, units, rl.every);
             if (per > 0) {
                 if (rl.every.rest === true && !rest) { delete mineOf(c)[rl.id]; tidy(c); }
-                else if (!(o.fight && rl.every.wait === true)) count(c, rl.id, rl.id, per, cms, false);
+                else if (!(o.fight && rl.every.wait === true)) count(c, rl.id, rl.id, per, part(c, rl, false, cms), false);
             }
-            if (o.fight && rl.id.slice(0, 2) !== 'x_') { var fp = fightSecs(cal, units, rl.inFight, o.rs); if (fp > 0) count(c, rl.id, 'x_' + rl.id.slice(2), fp, cms, true); }
+            if (o.fight && rl.id.slice(0, 2) !== 'x_') { var fp = fightSecs(cal, units, rl.inFight, o.rs); if (fp > 0) count(c, rl.id, 'x_' + rl.id.slice(2), fp, part(c, rl, true, cms), true); }
         });
     });
     return out;

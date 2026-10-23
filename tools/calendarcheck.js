@@ -140,10 +140,10 @@ process.on('exit', code => { if (!summed && !code) { console.log(NL + 'FAIL     
     const mkCal = o => {
         const Dm = mkDom(), log = [], saves = [], toasts = [], local = [], game = [], runs = [], views = [], syncs = [], notes = [];
         const win = { wpVtt: { on: id => id === 'calendar' && o.on !== false, setLocal: (id, off) => { local.push([id, off]); return true; } }, wpNet: o.player ? { foreign: true, logEvent: () => log.push('player!'), fxGameTime: s => game.push(['player!', s]), fxSpans: sp => game.push(['player!', sp]) } : { foreign: false, active: !!o.paused || !!o.host, role: o.role || (o.host ? 'host' : undefined), paused: !!o.paused, stream: !!o.stream, combats: o.combats, second: o.second, syncClock: () => syncs.push(j(o.camp && o.camp.clock)), logEvent: (k, t) => log.push([k, t]), fxGameTime: s => game.push(s), fxSpans: sp => game.push(JSON.parse(JSON.stringify(sp))) }, wpSheets: { runTimeRules: (fires, words, at) => { runs.push([JSON.parse(JSON.stringify(fires)), words].concat(at !== undefined ? [JSON.parse(JSON.stringify(at))] : [])); return fires.length; } },
-            wpNotices: { wait: (k, t, kind, arg) => { notes.push(['wait', k, t, kind, arg]); return true; }, done: k => { notes.push(['done', k]); return true; } } };   // 152 fold 4b: the bell, a recorder
-        const api = new Function('document', 'window', 'getActiveCampaign', 'save', 'saveView', 'toast', 'roundSecs', 'cleanCalendar', 'cleanClock', 'cleanAcc', 'ruleFires', 'livedSpans', 'freshAcc', 'tCmp', 'tSpanMs', 'dateOf', 'timeOf', 'periodDays', 'dayLength', 'fmtDate', 'fmtWhen', 'fmtSpan', 'CAL_LIMITS', 'net', 'sysNow',
+            wpFormula: F, wpNotices: { wait: (k, t, kind, arg) => { notes.push(['wait', k, t, kind, arg]); return true; }, done: k => { notes.push(['done', k]); return true; } } };   // 152 fold 4b: the bell, a recorder; 1.5.5: the formula engine, as the app's page holds it
+        const api = new Function('document', 'window', 'getActiveCampaign', 'save', 'saveView', 'toast', 'roundSecs', 'cleanCalendar', 'cleanClock', 'cleanAcc', 'ruleFires', 'livedSpans', 'freshAcc', 'tCmp', 'tSpanMs', 'dateOf', 'timeOf', 'periodDays', 'dayLength', 'fmtDate', 'fmtWhen', 'fmtSpan', 'CAL_LIMITS', 'net', 'sysNow', 'needsHeld', 'chainsShallow', 'everySecs', 'fightSecs',
             "'use strict';\n" + winSrc + '\nreturn { gridOf, stepView, viewOf, stepsOf, unitsOf, renderWin, moveTo, moveBy, setHidden, onWinClick, onWinChange, openWin, closeWin, refresh, ownTime, second, fightBegan, liveTick, liveHeld, liveRate, setHold, setRate, rulesRun: typeof rulesRun === "function" ? rulesRun : null, setRulesRun: typeof setRulesRun === "function" ? setRulesRun : null, bellUp: typeof bellUp === "function" ? bellUp : null, bellDone: typeof bellDone === "function" ? bellDone : null, bellStill: typeof bellStill === "function" ? bellStill : null, st: () => ({ view, pick, pend, restMode, pendQ }), liveSt: () => ({ liveAt, liveMs, livePend, liveBankAt }), memSt: () => memT };')(
-            Dm.doc, win, () => o.camp, () => saves.push(j(o.camp && o.camp.clock !== undefined ? o.camp.clock : null)), () => views.push(j(o.camp && o.camp.clock !== undefined ? o.camp.clock : null)), t => toasts.push(t), S.roundSecs, cleanCalendar, cleanClock, C.cleanAcc, C.ruleFires, C.livedSpans, C.freshAcc, C.tCmp, C.tSpanMs, dateOf, timeOf, periodDays, dayLength, fmtDate, fmtWhen, fmtSpan, C.CAL_LIMITS, () => win.wpNet, () => o.sys);
+            Dm.doc, win, () => o.camp, () => saves.push(j(o.camp && o.camp.clock !== undefined ? o.camp.clock : null)), () => views.push(j(o.camp && o.camp.clock !== undefined ? o.camp.clock : null)), t => toasts.push(t), S.roundSecs, cleanCalendar, cleanClock, C.cleanAcc, o.ruleFires || C.ruleFires, C.livedSpans, C.freshAcc, C.tCmp, C.tSpanMs, dateOf, timeOf, periodDays, dayLength, fmtDate, fmtWhen, fmtSpan, C.CAL_LIMITS, () => win.wpNet, () => o.sys, S.needsHeld, o.chainsShallow || S.chainsShallow, C.everySecs, C.fightSecs);
         return { api, Dm, log, saves, toasts, local, game, runs, views, syncs, notes, win, body: Dm.reg.calendarBody, chip: Dm.reg.clockChip, modal: Dm.reg.calendarModal };
     };
     const cal0 = mkCal({ camp: { id: 'k' }, sys: null }).api, ton = timeOf(tw, { year: 1, period: 0, pday: 15, h: 10 }), g1 = cal0.gridOf(tw, { yi: 0, period: 0 }, ton, 20), g2 = cal0.gridOf(tw, { yi: 0, period: 1 }, ton, null);
@@ -805,6 +805,213 @@ process.on('exit', code => { if (!summed && !code) { console.log(NL + 'FAIL     
             } catch (e) { r4r = String(e && e.stack || e); }
             if (r4r) check('152 fold 4b\'s review a character with no player yet is no NPC (calendar.js, run for real) could be run', false, r4r);
         }
+    }
+    {   // 1.5.5 (the owner, 2026-10-23, of a droid's sleep draw taken only where it slept at the moment each day began: "everything needs to be accounted
+        // for, no shortcuts"): a time rule's By the clock or In a fight ticked Only while its needs hold (whileNeeds) counts only the time its needs hold.
+        // The pure core (calendarcore ruleFires' ninth argument), the judge (systemcore needsHeld) and the window (calendar.js ownTime and needsAt, the
+        // time kept behind a list and its answer, the clock's own minutes, a fight's round), each run for real, in a scope of their own; each check runs
+        // on its own, so one that throws is a failure of its own and the others still run
+        const tcH = (name, fn) => { let r; try { r = fn(); } catch (e) { r = [false, String(e && e.stack || e)]; } check(name, r[0] === true, r[1]); };
+        const RF = C.ruleFires, stripH = rs => JSON.parse(j(rs), (k, v) => k === 'whileNeeds' ? undefined : v);
+        // (1) the core
+        tcH('1.5.5 Only while its needs hold, the core (calendarcore ruleFires, run for real over 400 seeded stretches, in a fight and out of one, rest and activity, one stretch or each character\'s own): with no judge, with a judge that is no function, with one that says the whole stretch or more than it, the counts and fires are byte for byte what the same rules give with the tick taken off, so a system with no tick counts as it did; and a judge that says none of it is heard, so the tick is no word that changes nothing', () => {
+            let sdH = 155023; const rnH = n => { sdH = (sdH * 1103515245 + 12345) % 2147483648; return Math.floor(sdH / 2147483648 * n); }, pkH = a => a[rnH(a.length)];
+            const mkRH = i => { const r = { id: 'r_q' + i }; if (rnH(3)) r.every = { n: pkH([1, 2, 5]), u: pkH(['min', 'hour', 'day']), rest: pkH([true, undefined]), wait: pkH([true, undefined]), whileNeeds: pkH([true, undefined, 'yes']) }; if (rnH(2)) r.inFight = { n: pkH([1, 3]), u: pkH(['round', 'min']), whileNeeds: pkH([true, undefined]) }; return r; };
+            const diffH = []; let tickedH = 0, heardH = 0;
+            for (let i = 0; i < 400; i++) {
+                const rules = Array.from({ length: 1 + rnH(4) }, (_, k) => mkRH(i * 10 + k)), ids = ['c_a', 'c_b', 'c_c'].slice(0, 1 + rnH(3)), acc = {};
+                ids.forEach(c => { if (rnH(2)) { acc[c] = {}; rules.forEach(r => { if (rnH(2)) acc[c][r.id] = 1 + rnH(5000); if (rnH(3) === 0) acc[c]['x_' + r.id.slice(2)] = 1 + rnH(20); }); } });
+                const secs = rnH(3) ? pkH([60, 3600, 86400, 90000, 0.5]) : { c_a: pkH([60, 7, 86400]), c_b: pkH([1, 3600]) }, rest = rnH(2) === 0, o = pkH([undefined, { fight: false }, { fight: true, rs: 6 }, { fight: true, rs: 0.1 }]);
+                if (rules.some(r => (r.every && r.every.whileNeeds === true) || (r.inFight && r.inFight.whileNeeds === true))) tickedH++;
+                const base = j(RF(tw, [], stripH(rules), ids, acc, secs, rest, o)), seen = [j(RF(tw, [], rules, ids, acc, secs, rest, o)), j(RF(tw, [], rules, ids, acc, secs, rest, o, () => true)), j(RF(tw, [], rules, ids, acc, secs, rest, o, 'judge')), j(RF(tw, [], rules, ids, acc, secs, rest, o, () => 1e12))];
+                if (seen.some(s => s !== base)) diffH.push([i, base, seen]);
+                if (j(RF(tw, [], rules, ids, acc, secs, rest, o, () => false)) !== base) heardH++;
+            }
+            return [diffH.length === 0 && tickedH > 100 && heardH > 40, j([diffH.slice(0, 2), tickedH, heardH])];
+        });
+        const rS = [{ id: 'r_sl', every: { n: 1, u: 'day', whileNeeds: true } }, { id: 'r_pl', every: { n: 1, u: 'hour' } }];
+        tcH('1.5.5 Only while its needs hold, the core: a count the judge says did not hold stands still, never cleared and never begun (its 100 seconds kept, none made for another character), while a count with no tick counts on; a number counts that many seconds, held to the stretch; true the whole stretch; anything else, and a judge that throws, none of it; a rule every day whose needs hold one stretch of eight hours in three runs once three such stretches have passed, however they were broken up; each character\'s own stretch counts the part in whole milliseconds', () => {
+            const sNo = RF(tw, [], rS, ['c_a', 'c_b'], { c_a: { r_sl: 100 } }, 86400, false, undefined, () => false);
+            const partsH = [3600, 1e9, true, -5, NaN, 'x', {}, null, false].map(v => { const r = RF(tw, [], rS.slice(0, 1), ['c_a'], { c_a: { r_sl: 100 } }, 86400, false, undefined, () => v); return [r.acc.c_a ? r.acc.c_a.r_sl : 0, r.fires.length]; });
+            const thrownH = RF(tw, [], rS.slice(0, 1), ['c_a'], { c_a: { r_sl: 100 } }, 86400, false, undefined, () => { throw new Error('no'); });
+            let accD = {}; const firesD = []; for (let i = 0; i < 9; i++) { const r = RF(tw, [], rS.slice(0, 1), ['c_a'], accD, 28800, false, undefined, () => i % 3 === 0); accD = r.acc; firesD.push(r.fires.length); }
+            const msH = RF(tw, [], [{ id: 'r_q', every: { n: 1, u: 'min', whileNeeds: true } }], ['c_a'], {}, { c_a: 10 }, false, { fight: false }, () => 0.0015);
+            return [j(sNo) === j({ fires: [{ c: 'c_a', r: 'r_pl', n: 24 }, { c: 'c_b', r: 'r_pl', n: 24 }], acc: { c_a: { r_sl: 100 } } })
+                && j(partsH) === j([[3700, 0], [100, 1], [100, 1], [100, 0], [100, 0], [100, 0], [100, 0], [100, 0], [100, 0]]) && j(thrownH) === j({ fires: [], acc: { c_a: { r_sl: 100 } } })
+                && j(firesD) === j([0, 0, 0, 0, 0, 0, 1, 0, 0]) && j(accD) === j({}) && j(msH.acc) === j({ c_a: { r_q: 0.002 } }), j([sNo, partsH, thrownH, firesD, accD, msH])];
+        });
+        tcH('1.5.5 Only while its needs hold, the core: the judge is asked of a ticked count alone, and only where it counts in that stretch, with the character, the rule and whether it is the In a fight count: never of a count with no tick, of a rest-only count that activity clears, of a By the clock count that waits in a fight, nor of an In a fight count out of a fight', () => {
+            const rA = [{ id: 'r_sl', every: { n: 1, u: 'day', whileNeeds: true } }, { id: 'r_dr', every: { n: 1, u: 'hour', rest: true, whileNeeds: true } }, { id: 'r_pl', every: { n: 1, u: 'hour' } }, { id: 'r_fi', every: { n: 1, u: 'hour', wait: true, whileNeeds: true }, inFight: { n: 2, u: 'round', whileNeeds: true } }];
+            const callsA = [], spyA = (c, r, fx) => { callsA.push(c + ':' + r.id + ':' + fx); return true; };
+            RF(tw, [], rA, ['c_a'], {}, 600, false, undefined, spyA); callsA.push('|'); RF(tw, [], rA, ['c_a'], {}, 600, true, undefined, spyA); callsA.push('|');
+            RF(tw, [], rA, ['c_a'], {}, { c_a: 12 }, false, { fight: true, rs: 6 }, spyA); callsA.push('|'); RF(tw, [], rA, ['c_a'], {}, { c_a: 12 }, false, { fight: false }, spyA);
+            return [j(callsA) === j(['c_a:r_sl:false', 'c_a:r_fi:false', '|', 'c_a:r_sl:false', 'c_a:r_dr:false', 'c_a:r_fi:false', '|', 'c_a:r_sl:false', 'c_a:r_fi:true', '|', 'c_a:r_sl:false', 'c_a:r_fi:false']), j(callsA)];
+        });
+
+        // (2) the judge (systemcore needsHeld), with the sheet's own resolver
+        const rawJ = { v: 1, name: 'Droids', calendar: tw, combat: { turn: { secs: 6 } }, fields: [{ id: 'f_sl', key: 'Asleep', kind: 'toggle' }, { id: 'f_ch', key: 'Charging', kind: 'toggle' }, { id: 'f_pp', key: 'PP', kind: 'resource', maxFormula: '10', def: 'max', min: 0 }, { id: 'f_fx', key: 'Fx', kind: 'effects' }],
+            effects: [{ id: 'e_nap', name: 'Nap', mods: [{ f: 'f_sl', op: 'on' }] }],
+            rolls: [{ id: 'r_sl', label: 'Sleep draw', apply: [{ f: 'f_pp', formula: '1' }], needs: 'Asleep', every: { n: 1, u: 'day', whileNeeds: true } },
+                { id: 'r_ch', label: 'Charge', apply: [{ f: 'f_pp', formula: '1', add: true }], needs: 'Charging', every: { n: 1, u: 'hour', whileNeeds: true }, inFight: { n: 1, u: 'round', whileNeeds: true } },
+                { id: 'r_r3', label: 'Late', apply: [{ f: 'f_pp', formula: '1' }], needs: 'CombatRound > 2', every: { n: 1, u: 'hour', whileNeeds: true }, inFight: { n: 1, u: 'round', whileNeeds: true } },
+                { id: 'r_bd', label: 'Typo', apply: [{ f: 'f_pp', formula: '1' }], needs: 'Asleeep > 0', every: { n: 1, u: 'hour', whileNeeds: true } }] };
+        const sysJ = S.cleanSystem(rawJ, { F, gmView: true }), RJ = id => sysJ.rolls.find(r => r.id === id), NOW = 5e12;
+        const nap = (left, more) => [Object.assign({ id: 'x1', ref: 'e_nap', on: true, t: { left: left, at: 0 } }, more || {})];
+        const hJ = (ch, asks, secs, o) => S.needsHeld(sysJ, ch, asks, F, secs, o), aSl = [{ key: 'r_sl', rule: RJ('r_sl'), fight: false }];
+        tcH('1.5.5 the judge (systemcore needsHeld, run for real with the sheet\'s own resolver): a stretch counts whole where the needs hold as the character stands and none of it where they do not; outside a fight it is judged again at each moment a timed effect of the character runs out, so a nap of 8 hours counts 8 hours of a day, a paused one the whole day, one already running its last hour an hour, one switched off none, and two that end at one and two hours two hours; without that the stretch is judged at its start alone; a lazy resolver shared as runTimeRules shares one and the sheet worked out whole agree; the character is never changed', () => {
+            const chJ = { up: { id: 'c_up', values: {} }, sl: { id: 'c_sl', values: { f_sl: true } }, nap8: { id: 'c_n8', values: { f_fx: nap(28800) } }, napP: { id: 'c_np', values: { f_fx: [{ id: 'x1', ref: 'e_nap', on: true, t: { left: 100, at: 0, p: 1 } }] } },
+                napR: { id: 'c_nr', values: { f_fx: nap(7200, { t: { left: 7200, at: NOW - 3600 * 1000 } }) } }, napOff: { id: 'c_no', values: { f_fx: nap(28800, { on: false }) } }, two: { id: 'c_2', values: { f_fx: [{ id: 'x1', ref: 'e_nap', on: true, t: { left: 3600, at: 0 } }, { id: 'x2', name: 'Doze', on: true, mods: [{ f: 'f_sl', op: 'on' }], t: { left: 7200, at: 0 } }] } } };
+            const keepJ = j(chJ), flatJ = S.chainsShallow(sysJ, F), rowsJ = ['up', 'sl', 'nap8', 'napP', 'napR', 'napOff', 'two'].map(k => [true, false].map(sp => [true, false].map(fl => hJ(chJ[k], aSl, 86400, { split: sp, flat: fl, now: NOW }).r_sl)));
+            return [flatJ === true && j(rowsJ) === j([[[0, 0], [0, 0]], [[86400, 86400], [86400, 86400]], [[28800, 28800], [86400, 86400]], [[86400, 86400], [86400, 86400]], [[3600, 3600], [86400, 86400]], [[0, 0], [0, 0]], [[7200, 7200], [86400, 86400]]]) && j(chJ) === keepJ, j(rowsJ)];
+        });
+        tcH('1.5.5 the judge: an In a fight count reads CombatRound as the round its runs read (round 3 holds where round 2 does not), a By the clock count reads it as 0, as its runs do; a needs formula that cannot be worked out holds for none of the stretch, flat or not; a rule with no needs holds throughout; an ask with a key that is no count\'s, a rule that is no object or no ask at all is left out; no stretch, no system, character or formula engine, or asks that are no list: nothing held; the answer to the millisecond', () => {
+            const aAll = [{ key: 'r_ch', rule: RJ('r_ch'), fight: false }, { key: 'x_ch', rule: RJ('r_ch'), fight: true }, { key: 'r_r3', rule: RJ('r_r3'), fight: false }, { key: 'x_r3', rule: RJ('r_r3'), fight: true }, { key: 'r_bd', rule: RJ('r_bd'), fight: false }, { key: 'r_no', rule: { id: 'r_no' }, fight: false }];
+            const chC = { id: 'c_c', values: { f_ch: true } }, rdJ = [3, 2, undefined, 'x'].map(rd => [true, false].map(fl => hJ(chC, aAll, 6, { round: rd, flat: fl, now: NOW })));
+            const odd = [hJ(chC, aAll.concat([{ key: '__proto__', rule: RJ('r_ch') }, { key: 'not a key', rule: RJ('r_ch') }, { key: 'r_zz', rule: 'r_ch' }, null]), 6, {}), hJ(chC, aSl, 0, {}), hJ(chC, aSl, -5, {}), hJ(chC, aSl, NaN, {}), hJ(chC, aSl, '6', {}),
+                S.needsHeld(null, chC, aSl, F, 6, {}), S.needsHeld(sysJ, null, aSl, F, 6, {}), S.needsHeld(sysJ, chC, aSl, null, 6, {}), hJ(chC, 'asks', 6, {}), hJ({ id: 'c_s', values: { f_sl: true } }, aSl, 2.0004, null)];
+            return [j(rdJ[0][0]) === j({ r_ch: 6, x_ch: 6, r_r3: 0, x_r3: 6, r_bd: 0, r_no: 6 }) && j(rdJ[1][0]) === j({ r_ch: 6, x_ch: 6, r_r3: 0, x_r3: 0, r_bd: 0, r_no: 6 }) && j(rdJ[2][0]) === j(rdJ[1][0]) && j(rdJ[3][0]) === j(rdJ[1][0]) && rdJ.every(p => j(p[0]) === j(p[1]))
+                && j(odd[0]) === j(rdJ[2][0]) && !Object.prototype.hasOwnProperty.call(odd[0], '__proto__') && j(odd.slice(1, 5)) === j([{ r_sl: 0 }, { r_sl: 0 }, { r_sl: 0 }, { r_sl: 0 }]) && j(odd.slice(5, 9)) === j([{ r_sl: 0 }, { r_sl: 0 }, { r_sl: 0 }, {}]) && j(odd[9]) === j({ r_sl: 2 }), j([rdJ, odd])];
+        });
+        tcH('1.5.5 the judge where chainsShallow fails: a needs formula that a lazy resolver cannot work out (a chain of 70 formulas, past the engine\'s depth) but the sheet worked out whole can is read through resolveAll, as timeRuleRun\'s run reads it there, so the two agree (systemcore rollNeedsOk\'s more, asked only then; a more that gives no resolver or throws: as before)', () => {
+            const deepF = Array.from({ length: 70 }, (_, i) => ({ id: 'f_d' + i, key: 'C' + i, kind: 'formula', formula: i === 0 ? '1' : 'C' + (i - 1) + ' + 1' }));
+            const sysD = S.cleanSystem({ v: 1, name: 'Deep', fields: deepF, rolls: [{ id: 'r_dp', label: 'Deep', apply: [], needs: 'C69 > 0', every: { n: 1, u: 'hour', whileNeeds: true } }] }, { F, gmView: true }), chD = { id: 'c_d', values: {} }, ruleD = sysD.rolls[0];
+            const deep = [S.chainsShallow(sysD, F), S.rollNeedsOk(ruleD, S.makeResolver(sysD, chD, F), F), S.rollNeedsOk(ruleD, S.resolveAll(sysD, chD, F).vars, F), S.needsHeld(sysD, chD, [{ key: 'r_dp', rule: ruleD, fight: false }], F, 60, { flat: false }).r_dp,
+                S.rollNeedsOk(ruleD, S.makeResolver(sysD, chD, F), F, () => S.resolveAll(sysD, chD, F).vars), S.rollNeedsOk(ruleD, S.makeResolver(sysD, chD, F), F, () => 'no'), S.rollNeedsOk(ruleD, S.makeResolver(sysD, chD, F), F, () => { throw new Error('x'); })];
+            return [j(deep) === j([false, false, true, 60, true, false, false]), j(deep)];
+        });
+
+        // (3) the window (calendar.js, run for real through mkCal): each stretch judged as it is counted, before its timed effects run
+        const mkH = (sys, tr, chars, more) => { const camp = { id: 'k', clock: { t: 0 }, turnRules: tr, chars: chars }; return Object.assign({ camp }, { W: mkCal(Object.assign({ camp, sys }, more || {})) }); };
+        const cntH = (acc, c, r) => acc && acc[c] && typeof acc[c][r] === 'number' ? acc[c][r] : 0, firesH = W => W.runs.map(r => r[0].map(f => f.c + ':' + f.r + (f.x ? ':x' : '') + ':' + f.n).join(' '));
+        const sysW = Object.assign({}, sysJ, { rolls: [RJ('r_sl'), { id: 'r_pl', label: 'Plain', apply: [], every: { n: 1, u: 'day' } }] });
+        tcH('1.5.5 the window (calendar.js ownTime, run for real): a rule every day ticked Only while its needs hold counts each character\'s own stretches only while its needs hold, judged as the clock moves on: Kael asleep 12 hours, awake 12 and asleep 12 more runs once, at the end of the third, while Unit 7, asleep only in the middle twelve, holds 12 hours; the rule beside it with no tick counts on as ever; a stretch is judged before its timed effects run (what they change counts from the next stretch); a nap of 2 hours inside a stretch of 10 counts 2 hours; a player\'s app judges nothing and counts nothing', () => {
+            const H1 = mkH(sysW, undefined, { c_a: { id: 'c_a', name: 'Kael', ownerId: 'u_a', values: { f_sl: true } }, c_b: { id: 'c_b', name: 'Unit 7', npc: true, values: {} } }), ch1 = H1.camp.chars;
+            const st1 = [], snap1 = () => st1.push([cntH(H1.camp.clock.acc, 'c_a', 'r_sl'), cntH(H1.camp.clock.acc, 'c_b', 'r_sl'), cntH(H1.camp.clock.acc, 'c_a', 'r_pl')]);
+            H1.W.api.moveBy(43200); snap1(); ch1.c_a.values.f_sl = false; ch1.c_b.values.f_sl = true; H1.W.api.moveBy(43200); snap1(); ch1.c_a.values.f_sl = true; ch1.c_b.values.f_sl = false; H1.W.api.moveBy(43200); snap1();
+            H1.W.win.wpNet.fxSpans = sp => { ch1.c_a.values.f_sl = false; ch1.c_b.values.f_sl = true; }; H1.W.api.moveBy(3600); snap1();   // the stretch's timed effects run after it is judged
+            H1.W.win.wpNet.fxSpans = () => {}; ch1.c_b.values = { f_fx: nap(7200) }; H1.W.api.moveBy(36000); snap1();
+            const HP = mkH(sysW, undefined, { c_a: { id: 'c_a', name: 'Kael', ownerId: 'u_a', values: { f_sl: true } } }, { player: true }); HP.W.api.ownTime([{ kind: 'clock', ids: ['c_a'], t0: 0, t1: 86400 }]);   // a player's app judges nothing and counts nothing
+            return [j(st1) === j([[43200, 0, 43200], [43200, 43200, 0], [0, 43200, 43200], [3600, 43200, 46800], [3600, 50400, 82800]]) && j(firesH(H1.W)) === j(['c_a:r_pl:1 c_b:r_pl:1', 'c_a:r_sl:1']) && HP.W.runs.length === 0 && !HP.camp.clock.acc, j([st1, firesH(H1.W), HP.camp.clock])];
+        });
+        tcH('1.5.5 the window: with no rule ticked nothing is judged and ruleFires is called exactly as before 1.5.5, with no ninth argument, by a step and by a fight\'s round; with one ticked, the judge is handed to it', () => {
+            const spyRF = [], spyOf = arr => function() { arr.push(arguments.length); return C.ruleFires.apply(null, arguments); };
+            const H0 = mkH(Object.assign({}, sysW, { rolls: stripH(sysW.rolls) }), undefined, { c_a: { id: 'c_a', name: 'Kael', values: { f_sl: true } } }, { ruleFires: spyOf(spyRF) });
+            H0.W.api.moveBy(90000); H0.W.api.ownTime([{ kind: 'fight', ids: ['c_a'], t0: H0.camp.clock.t, t1: H0.camp.clock.t + 6, round: 1, rs: 6, words: 'Round 1 on Docks' }]);
+            const spyRF2 = [], H2 = mkH(sysW, undefined, { c_a: { id: 'c_a', name: 'Kael', values: { f_sl: true } } }, { ruleFires: spyOf(spyRF2) }); H2.W.api.moveBy(90000);
+            return [j(spyRF) === j([7, 8]) && j(H0.camp.clock.acc) === j({ c_a: { r_sl: 3606, r_pl: 3606 } }) && j(spyRF2) === j([9]), j([spyRF, H0.camp.clock.acc, spyRF2])];
+        });
+        tcH('1.5.5 the window under Ask me: time moved on while a list waits keeps what was judged as it was lived (pendQ\'s z: the seconds each ticked count held, for every character judged, summed as stretches run on as one), and the answer counts it so: Kael awake one hour and asleep the next holds one hour, Unit 7, awake both, none, though Unit 7 sleeps and Kael wakes before you skip; the clock\'s own minutes, judged, are kept in order with what they held, each run on as one (1.5.5\'s review, a deliberate change of this pin: z says what held for each character judged, where it said what did not hold for those it did not hold for, so that a character made since holds none of it; and a judged minute never joins the minutes kept as one number, which every character counts whole)', () => {
+            const sysQ = Object.assign({}, sysJ, { rolls: [RJ('r_sl')] });
+            const HQ = mkH(sysQ, { time: 'confirm' }, { c_a: { id: 'c_a', name: 'Kael', ownerId: 'u_a', values: { f_sl: true } }, c_b: { id: 'c_b', name: 'Unit 7', npc: true, values: {} } }), chQ = HQ.camp.chars;
+            HQ.W.api.moveBy(86400); const pQ = HQ.W.api.st().pend, listQ = pQ ? pQ.fires.map(f => f.c + ':' + f.r + ':' + f.n) : null;
+            chQ.c_a.values.f_sl = false; HQ.W.api.moveBy(3600); chQ.c_a.values.f_sl = true; HQ.W.api.moveBy(3600); const qQ = JSON.parse(j(HQ.W.api.st().pendQ));
+            chQ.c_b.values.f_sl = true; chQ.c_a.values.f_sl = false; HQ.W.api.onWinClick({ target: findN(HQ.W.body, 'cal-pend-skip')[0] });
+            const afterQ = [HQ.W.api.st().pend, HQ.W.api.st().pendQ.length, j(HQ.camp.clock.acc || null)];
+            HQ.W.api.moveBy(86400); const pQ2 = HQ.W.api.st().pend; HQ.W.api.moveTo(HQ.camp.clock.t + 60, null, true); chQ.c_a.values.f_sl = true; HQ.W.api.moveTo(HQ.camp.clock.t + 60, null, true); HQ.W.api.moveTo(HQ.camp.clock.t + 60, null, true);
+            const liveQ = [!!pQ2, HQ.W.api.liveSt().livePend, JSON.parse(j(HQ.W.api.st().pendQ))];
+            return [j(listQ) === j(['c_a:r_sl:1']) && j(qQ) === j([{ s: 7200, r: false, a: false, l: false, z: { c_a: { r_sl: 3600 }, c_b: { r_sl: 0 } } }]) && j(afterQ) === j([null, 0, j({ c_a: { r_sl: 3600 } })])
+                && liveQ[0] === true && liveQ[1] === 0 && j(liveQ[2]) === j([{ s: 180, r: false, a: false, l: true, z: { c_a: { r_sl: 120 }, c_b: { r_sl: 180 } } }]), j([listQ, qQ, afterQ, liveQ])];
+        });
+        tcH('1.5.5 the window in a fight (calendar.js ownTime with a fight\'s round, run for real): an In a fight count ticked so is judged in the round its runs read, so Kael, charging, runs Charge each round while Unit 7 does not, and a rule that needs CombatRound > 2 runs in round 3 alone; the By the clock counts beside them are judged with no round, as their runs read it', () => {
+            const sysF = Object.assign({}, sysJ, { rolls: [RJ('r_ch'), RJ('r_r3')] });
+            const HF = mkH(sysF, undefined, { c_a: { id: 'c_a', name: 'Kael', ownerId: 'u_a', values: { f_ch: true } }, c_b: { id: 'c_b', name: 'Unit 7', npc: true, values: {} } });
+            [1, 2, 3].forEach(rd => HF.W.api.ownTime([{ kind: 'fight', ids: ['c_a', 'c_b'], t0: { s: rd * 6 - 6 }, t1: { s: rd * 6 }, round: rd, rs: 6, words: 'Round ' + rd + ' on Docks' }]));
+            return [j(firesH(HF.W)) === j(['c_a:r_ch:x:1', 'c_a:r_ch:x:1', 'c_a:r_ch:x:1 c_a:r_r3:x:1 c_b:r_r3:x:1']) && j(HF.camp.clock.acc) === j({ c_a: { r_ch: 18 } }), j([firesH(HF.W), HF.camp.clock.acc])];
+        });
+        tcH('1.5.5 the window with the Calendar off: a rule ticked Ask me first and Only while its needs hold waits in the bell as any rule does, for the characters whose needs held alone (Kael, charging, waits there with his round; Unit 7, not charging, counts nothing and waits nowhere)', () => {
+            const sysB = Object.assign({}, sysJ, { rolls: [Object.assign({}, RJ('r_ch'), { ask: true })] });
+            const HB = mkH(sysB, undefined, { c_a: { id: 'c_a', name: 'Kael', ownerId: 'u_a', values: { f_ch: true } }, c_b: { id: 'c_b', name: 'Unit 7', npc: true, values: {} } }, { on: false });
+            HB.W.api.ownTime([{ kind: 'fight', ids: ['c_a', 'c_b'], t0: { s: 0 }, t1: { s: 6 }, round: 2, rs: 6, words: 'Round 2 on Docks' }]);
+            const waits = HB.W.notes.filter(n => n[0] === 'wait').map(n => n[1]);
+            return [j(waits) === j(['timeask:c_a:r_ch']) && HB.W.runs.length === 0 && !HB.camp.clock.acc, j([HB.W.notes, HB.W.runs, HB.camp.clock])];
+        });
+
+        // (4) 1.5.5's review (a draw counted while a nap held its needs was lost: the nap ran out before the run was made, and the run was judged after it):
+        // the window with the REAL runs behind it, end to end: calendar.js ownTime, the timed effects run as net.fxSpans runs them (systemcore fxTick, stored
+        // as fxApply stores them), sheets.js runTimeRules sliced by its timerules markers and run for real over the real timeRuleRun, and what it tells
+        // calendar.js of each run (heldBack). Each check fails without the review's fix
+        const rawE = { v: 1, name: 'Droids', calendar: tw, combat: { turn: { secs: 6 } },
+            fields: [{ id: 'f_sl', key: 'Asleep', kind: 'toggle' }, { id: 'f_ch', key: 'Charging', kind: 'toggle' }, { id: 'f_pp', key: 'PP', kind: 'resource', maxFormula: '20', def: 'max', min: 0 }, { id: 'f_lm', key: 'Lumen', kind: 'number', def: 0 }, { id: 'f_fx', key: 'Fx', kind: 'effects' }],
+            effects: [{ id: 'e_nap', name: 'Nap', mods: [{ f: 'f_sl', op: 'on' }] }, { id: 'e_dock', name: 'Dock', mods: [{ f: 'f_ch', op: 'on' }] }],
+            rolls: [{ id: 'r_sl', label: 'Sleep draw', apply: [{ f: 'f_pp', formula: '1' }], needs: 'Asleep', every: { n: 1, u: 'day', whileNeeds: true } },
+                { id: 'r_ch', label: 'Charge', apply: [{ f: 'f_pp', formula: '1', add: true }], needs: 'Charging', every: { n: 1, u: 'hour', whileNeeds: true } },
+                { id: 'r_hd', label: 'Hourly draw', apply: [{ f: 'f_pp', formula: '1' }], needs: 'PP > 0', every: { n: 1, u: 'hour', whileNeeds: true } },
+                { id: 'r_dr', label: 'Drain', apply: [{ f: 'f_pp', formula: '1' }], every: { n: 1, u: 'hour' } },
+                { id: 'r_gl', label: 'Glow', apply: [{ f: 'f_lm', formula: '1', add: true }], needs: 'PP > 2', every: { n: 1, u: 'hour', whileNeeds: true } },
+                { id: 'r_rs', label: 'Dream', apply: [{ f: 'f_lm', formula: '1', add: true }], needs: 'Asleep', every: { n: 1, u: 'hour', rest: true, whileNeeds: true } }] };
+        const sysE = S.cleanSystem(rawE, { F, gmView: true }), RE = id => sysE.rolls.find(r => r.id === id), sysOfE = ids => Object.assign({}, sysE, { rolls: ids.map(RE) });
+        const shE = read('system/app/scripts/sheets.js'), trA = shE.indexOf('// [sinkcheck:timerules-start]'), trB = shE.indexOf('// [sinkcheck:timerules-end]'), trSrcE = trA >= 0 && trB > trA ? shE.slice(trA, trB) : '';
+        const napE = h => ({ id: 'n' + h, ref: 'e_nap', on: true, t: { left: h * 3600, at: 0 } }), dockE = h => ({ id: 'd' + h, ref: 'e_dock', on: true, t: { left: h * 3600, at: 0 } });
+        const mkE = (sys, chars, tr, more) => {   // the window with the real runs behind it
+            const H = mkH(sys, tr, chars, more), camp = H.camp, cards = [];
+            camp.system = sys;
+            const rtr = new Function('getActiveCampaign', 'systemOf', 'net', 'F', 'charById', 'timeRuleRun', 'gmOnlyNames', 'applyScope', 'renderViews', 'save', 'window', 'makeResolver', 'hasDice', 'figText', 'ruleRunCtx', 'chainsShallow', "'use strict';" + NL + trSrcE + NL + 'return runTimeRules;')(
+                () => camp, c => c.system, () => ({ active: false, timeCard: (ch, text) => cards.push([ch.id, text]) }), () => F, (id, c) => (Object.prototype.hasOwnProperty.call(c.chars, id) ? c.chars[id] : null), S.timeRuleRun, S.gmOnlyNames, S.applyScope, () => {}, () => {}, { wpDiceCore: null, appRender: () => {} }, S.makeResolver, S.hasDice, S.figText, S.ruleRunCtx, S.chainsShallow);
+            H.W.win.wpSheets.runTimeRules = (fires, words, at, back) => { H.W.runs.push([JSON.parse(j(fires)), words]); return rtr(fires, words, at, back); };
+            H.W.win.wpNet.fxSpans = sp => Object.keys(sp).forEach(id => { const ch = camp.chars[id]; if (!ch) return; const r = S.fxTick(sys, ch, 'game', Date.now(), sp[id]); Object.keys(r.values).forEach(k => { ch.values[k] = r.values[k]; }); });   // as net.fxSpans and fxApply store them
+            return Object.assign(H, { cards });
+        };
+        const ppE = ch => ch.values.f_pp && typeof ch.values.f_pp.cur === 'number' ? ch.values.f_pp.cur : 20, lmE = ch => typeof ch.values.f_lm === 'number' ? ch.values.f_lm : 0;
+        const canon = o => JSON.parse(JSON.stringify(o === undefined ? null : o, (k, v) => v && typeof v === 'object' && !Array.isArray(v) ? Object.keys(v).sort().reduce((a, x) => { a[x] = v[x]; return a; }, {}) : v));
+        const kaelE = vals => ({ c_a: { id: 'c_a', name: 'Kael', ownerId: 'u_a', values: vals || {} } });
+        tcH('1.5.5\'s review: a run is made as its character stood where it came due (calendar.js dueOn, sheets.js runTimeRules, systemcore timeRuleRun\'s due, run end to end): Kael, with 16 hours of sleep counted and a nap of 8 hours, completes his day 8 hours into a step of a day and his Sleep draw is taken, though the nap has run out by the time the run is made; the same day as a step of 4 hours and one of 20; three naps of 8 hours, each laid on before a step of 8 hours; one nap of 30 hours and a step of 2 days, 6 hours carried; and a dock of 2 hours in a step of 10 hours charging him twice. Each run is summed up as any is', () => {
+            if (!trSrcE) return [false, 'sheets.js has no timerules slice'];
+            const out = [];
+            { const E = mkE(sysOfE(['r_sl']), kaelE({ f_fx: [napE(8)] })); E.camp.clock.acc = { c_a: { r_sl: 57600 } }; E.W.api.moveBy(86400); out.push([ppE(E.camp.chars.c_a), canon(E.camp.clock.acc), E.cards.length]); }
+            { const E = mkE(sysOfE(['r_sl']), kaelE({ f_fx: [napE(8)] })); E.camp.clock.acc = { c_a: { r_sl: 57600 } }; E.W.api.moveBy(14400); E.W.api.moveBy(72000); out.push([ppE(E.camp.chars.c_a), canon(E.camp.clock.acc), E.cards.length]); }
+            { const E = mkE(sysOfE(['r_sl']), kaelE()); for (let i = 0; i < 3; i++) { E.camp.chars.c_a.values.f_fx = [napE(8)]; E.W.api.moveBy(28800); } out.push([ppE(E.camp.chars.c_a), canon(E.camp.clock.acc), E.cards.length]); }
+            { const E = mkE(sysOfE(['r_sl']), kaelE({ f_fx: [napE(30)] })); E.W.api.moveBy(172800); out.push([ppE(E.camp.chars.c_a), canon(E.camp.clock.acc), E.cards.length]); }
+            { const E = mkE(sysOfE(['r_ch']), kaelE({ f_pp: { cur: 10 }, f_fx: [dockE(2)] })); E.W.api.moveBy(36000); out.push([ppE(E.camp.chars.c_a), canon(E.camp.clock.acc), E.cards.length]); }
+            return [j(out) === j([[19, null, 1], [19, null, 1], [19, null, 1], [19, canon({ c_a: { r_sl: 21600 } }), 1], [12, null, 1]]), j(out)];
+        });
+        tcH('1.5.5\'s review: a run its needs hold back all the same gives its time back to its count (calendar.js heldBack): under Ask me, a day Kael slept is listed, you wake him and apply, and the draw is held back with the day kept on his count; a minute of sleep later the draw comes due again, at once, and is taken; nothing else of the count moves', () => {
+            if (!trSrcE) return [false, 'sheets.js has no timerules slice'];
+            const E = mkE(sysOfE(['r_sl']), kaelE({ f_sl: true }), { time: 'confirm' }), ch = E.camp.chars.c_a, out = [];
+            E.W.api.moveBy(86400); out.push((E.W.api.st().pend || { fires: [] }).fires.map(f => f.c + ':' + f.r + ':' + f.n));
+            ch.values.f_sl = false; E.W.api.onWinClick({ target: findN(E.W.body, 'cal-pend-apply')[0] }); out.push([ppE(ch), canon(E.camp.clock.acc), E.cards.length]);
+            ch.values.f_sl = true; E.W.api.moveBy(60); out.push((E.W.api.st().pend || { fires: [] }).fires.map(f => f.c + ':' + f.r + ':' + f.n));
+            E.W.api.onWinClick({ target: findN(E.W.body, 'cal-pend-apply')[0] }); out.push([ppE(ch), canon(E.camp.clock.acc), E.cards.length]);
+            return [j(out) === j([['c_a:r_sl:1'], [20, canon({ c_a: { r_sl: 86400 } }), 0], ['c_a:r_sl:1'], [19, canon({ c_a: { r_sl: 60 } }), 1]]), j(out)];
+        });
+        tcH('1.5.5\'s review: a run held back by another rule\'s run before it in the same stretch gives its time back too: Drain takes Kael from 3 PP to 2 before Glow, which needs more than 2 and counted the hour while he had 3, is made; Glow keeps the hour and is made the next time its count moves on and its needs hold. A rule with no tick, held back, keeps nothing, as before', () => {
+            if (!trSrcE) return [false, 'sheets.js has no timerules slice'];
+            const E = mkE(sysOfE(['r_dr', 'r_gl']), kaelE({ f_pp: { cur: 3 } })), ch = E.camp.chars.c_a, out = [];
+            E.W.api.moveBy(3600); out.push([ppE(ch), lmE(ch), canon(E.camp.clock.acc)]);
+            ch.values.f_pp = { cur: 10 }; E.W.api.moveBy(60); out.push([ppE(ch), lmE(ch), canon(E.camp.clock.acc)]);
+            const plain = Object.assign({}, RE('r_gl'), { every: { n: 1, u: 'hour' } }), E2 = mkE(Object.assign({}, sysE, { rolls: [RE('r_dr'), plain] }), kaelE({ f_pp: { cur: 3 } }));
+            E2.W.api.moveBy(3600); out.push([ppE(E2.camp.chars.c_a), lmE(E2.camp.chars.c_a), canon(E2.camp.clock.acc)]);
+            return [j(out) === j([[2, 0, canon({ c_a: { r_gl: 3600 } })], [10, 1, canon({ c_a: { r_dr: 60, r_gl: 60 } })], [2, 0, null]]), j(out)];
+        });
+        tcH('1.5.5\'s review: a rule whose own runs make its needs fail stops there with its count at none, since the time after its last run was not time they held (heldBack, fresh): Kael\'s Hourly draw, which needs PP above 0, takes his last 3 PP in a step of 10 and a half hours and keeps no half hour, so with 5 PP and half an hour more it draws nothing, exactly as the same time stepped an hour at a time gives', () => {
+            if (!trSrcE) return [false, 'sheets.js has no timerules slice'];
+            const run = steps => { const E = mkE(sysOfE(['r_hd']), kaelE({ f_pp: { cur: 3 } })), ch = E.camp.chars.c_a; steps.forEach(s => E.W.api.moveBy(s)); const mid = [ppE(ch), canon(E.camp.clock.acc)]; ch.values.f_pp = { cur: 5 }; E.W.api.moveBy(1800); return [mid, ppE(ch), canon(E.camp.clock.acc)]; };
+            const one = run([37800]), many = run([3600, 3600, 3600, 3600, 3600, 3600, 3600, 3600, 3600, 3600, 1800]);
+            return [j(one) === j([[0, null], 5, canon({ c_a: { r_hd: 1800 } })]) && j(many) === j(one), j([one, many])];
+        });
+        tcH('1.5.5\'s review: time kept behind a list holds for none of a character it never judged (calendar.js gapOf, needOf, joinStretch): a character made while a list waits counts none of the hour stepped on before it was made, once you skip, while Kael, asleep through it, counts it whole; two such hours run on as one keep each character\'s own', () => {
+            const E = mkH(sysOfE(['r_sl']), { time: 'confirm' }, kaelE({ f_sl: true }));
+            E.W.api.moveBy(86400); E.W.api.moveBy(3600); E.camp.chars.c_n = { id: 'c_n', name: 'Pebbles', npc: true, values: { f_sl: true } }; E.W.api.moveBy(3600);
+            const q = JSON.parse(j(E.W.api.st().pendQ)); E.W.api.onWinClick({ target: findN(E.W.body, 'cal-pend-skip')[0] });
+            return [j(q) === j([{ s: 7200, r: false, a: false, l: false, z: { c_a: { r_sl: 7200 }, c_n: { r_sl: 3600 } } }]) && j(canon(E.camp.clock.acc)) === j(canon({ c_a: { r_sl: 7200 }, c_n: { r_sl: 3600 } })), j([q, E.camp.clock.acc])];
+        });
+        tcH('1.5.5\'s review, owed tests: with no formula engine at hand a ticked count stands still while one with no tick counts on (calendar.js needsAt); time outside fights while fights run is judged as the window says, so a rest-only rule ticked so counts none of it under Active and all of it under Rest, and a dock that runs out within it still charges for the time it held', () => {
+            if (!trSrcE) return [false, 'sheets.js has no timerules slice'];
+            const N = mkH(sysW, undefined, kaelE({ f_sl: true })); delete N.W.win.wpFormula; N.W.api.moveBy(43200);
+            const noF = canon(N.camp.clock.acc);
+            const E = mkE(sysOfE(['r_ch', 'r_rs']), kaelE({ f_sl: true, f_pp: { cur: 10 }, f_fx: [dockE(2)] })), ch = E.camp.chars.c_a; E.W.api.openWin();
+            E.W.api.ownTime([{ kind: 'out', ids: ['c_a'], t0: { s: 0 }, t1: { s: 36000 } }]); const act = [ppE(ch), lmE(ch), canon(E.camp.clock.acc)];
+            E.W.api.onWinClick({ target: findN(E.W.body, 'cal-kind-btn')[1] }); E.W.api.ownTime([{ kind: 'out', ids: ['c_a'], t0: { s: 36000 }, t1: { s: 39600 } }]); const rst = [ppE(ch), lmE(ch), canon(E.camp.clock.acc)];
+            return [j(noF) === j(canon({ c_a: { r_pl: 43200 } })) && j(act) === j([12, 0, null]) && j(rst) === j([12, 1, null]), j([noF, act, rst])];
+        });
+        tcH('1.5.5\'s review, owed tests: what judging costs through calendar.js needsAt itself, a minute of the clock on 160 characters of a sheet of 160 fields: chainsShallow asked once for the stretch, never once a character, the formula engine asked a handful of times a character, never the sheet worked out whole, well within a second', () => {
+            const flds = [{ id: 'f_sl', key: 'Asleep', kind: 'toggle' }].concat(Array.from({ length: 159 }, (_, i) => ({ id: 'f_g' + i, key: 'G' + i, kind: 'formula', formula: '1 + ' + i })));
+            const sysC = S.cleanSystem({ v: 1, name: 'Cost', calendar: tw, fields: flds, rolls: [{ id: 'r_sl', label: 'Sleep draw', apply: [], needs: 'Asleep and G3 > 0', every: { n: 1, u: 'day', whileNeeds: true } }] }, { F, gmView: true });
+            const chars = {}; for (let i = 0; i < 160; i++) chars['c_' + i] = { id: 'c_' + i, name: 'Unit ' + i, npc: true, values: { f_sl: i % 2 === 0 } };
+            let shallow = 0, asks = 0; const W = mkH(sysC, undefined, chars, { chainsShallow: (s, Fx) => { shallow++; return S.chainsShallow(s, Fx); } });
+            W.W.win.wpFormula = Object.assign({}, F, { evaluate: (t, o) => { asks++; return F.evaluate(t, o); }, evaluateAst: (a, o) => { asks++; return F.evaluateAst(a, o); } });
+            const t0 = Date.now(); W.W.api.moveBy(60); const ms = Date.now() - t0, acc = W.camp.clock.acc || {}, held = Object.keys(acc).length;
+            return [shallow === 1 && asks <= 160 * 8 && ms < 1000 && held === 80 && acc.c_0 && acc.c_0.r_sl === 60 && !acc.c_1, j({ shallow, asks, ms, held })];
+        });
     }
     check('the running clock is wired and said (pinned): one look a second from the page\'s wiring; a minute banked tells the table and writes quietly, never through a save; the chip\'s mark in the page; Help\'s Calendar list, the integration guide\'s keys and What\'s New in both copies; its styles',
         calJs.includes("import { save, saveView, toast } from './io.js';") && calJs.includes("    if (typeof setInterval === 'function') setInterval(function() { try { liveTick(Date.now()); } catch (e) {} }, 1000);")

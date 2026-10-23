@@ -36,6 +36,12 @@ System editor
 - Under each rule the editor says what Save would drop, and warns of
   an action that would run both each round and In a fight. The Rolls
   tab's key names During rest only and the three new ticks.
+- A time rule can count only while its needs hold. Tick Only while
+  its needs hold beside By the clock or In a fight, and that count
+  grows only while the rule's Needs hold for the character. It stands
+  still the rest of the time. So a rule every day that needs its
+  character asleep runs once the character has slept a whole day in
+  all, however the days were broken up.
 - A section on the Layout tab can start closed. Pick Starts closed
   beside Fixed and Collapsible: the section is folded when the sheet
   opens, until the reader opens it.
