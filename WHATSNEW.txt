@@ -161,6 +161,9 @@ Combat
 - A player's app forgets your fights when you end the session, so their
   own campaign shows no turn strip of yours afterwards.
 
+Multiplayer
+- On Waypoint's website a player account opens straight to Join a game.
+
 Going back to 1.5.4
 - Restore the previous version back to 1.5.4 keeps your campaign, but
   its next save drops what 1.5.5 added: a row's own Description and By

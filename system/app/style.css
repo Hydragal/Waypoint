@@ -2210,6 +2210,25 @@
   .wc-join-status.ok { color: var(--gold); }
   .wc-join-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .wc-join-actions .tool { font-size: 14px; padding: 8px 18px; }
+  /* 1.5.5: Waypoint on a website whose plan joins tables and nothing else (webmode.js puts web-join on the body; the owner, 2026-10-23: "jut the
+     welcome screen being available for now with an option to join and nothing else but what is needed for the player side to work"). The
+     welcome is Join a game alone, and it always shows. Nothing reaches a campaign of the player's own or a GM's tool: no campaign menu, no
+     Import or Export, no hosting, and in Settings no Updates, Developer mode or snapshots of a save. At a table the player's side is as a
+     joined player's (body.net-client). The mark at the row's left opens no welcome there, since the welcome has no way back to a table.
+     While the join page is up (main.js wcGate writes web-gate) the app behind it is put away, so no key or press reaches it: every part of it,
+     with no transition, since a part that eases its look stays in reach while it eases, and a page that is not drawn never ends one. No :has() here:
+     a browser that does not know it would drop the whole rule */
+  body.web-join #wcStartBtn, body.web-join #wcLoadBtn, body.web-join #wcContinue, body.web-join #wcEnterBtn, body.web-join #welcomeScreen .wc-launch,
+  body.web-join #moreMenu [data-press="headerBrand"], body.web-join #moreFiles, body.web-join #campMenuWrap, body.web-join #mapTabs, body.web-join #rowPills,
+  body.web-join #handoutsBtn, body.web-join #imgLibBtn, body.web-join #importCharBtn, body.web-join .gm-only,
+  body.web-join #updateBtn, body.web-join #updateBanner, body.web-join #installerModal,
+  body.web-join #netPaneHostBtn, body.web-join #netPaneHost, body.web-join #netPlayersBtn, body.web-join #netEndBtn,
+  body.web-join #settingsModal .set-welcome, body.web-join #settingsModal .set-devmode,
+  body.web-join #setSnapNowBtn, body.web-join #setSnapNowBtn + .set-line, body.web-join #settingsModal .set-snaps,
+  body.web-join #settingsModal .set-group[data-group="updates"], body.web-join #settingsModal .set-saves { display: none !important; }
+  body.web-join .wc-actions { grid-template-columns: 1fr; }
+  body.web-join #headerBrand { pointer-events: none; cursor: default !important; }
+  body.web-join.web-gate > .app, body.web-join.web-gate > .app * { visibility: hidden !important; transition: none !important; }
 
   /* Pinned / Recent maps above the Maps tree */
   #mapQuick { padding: 2px 6px 6px; border-bottom: 1px solid var(--edge); margin-bottom: 4px; }

@@ -44,6 +44,17 @@ const LOCAL_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
 // server runs WITHOUT one (scratch saves only) unless WAYPOINT_LAUNCH_SECRET sets it (at least 32 characters; a shorter one passes nothing) —
 // then every request must carry it in the X-Waypoint-Launch header, checked first, as the shell does.
 const LAUNCH_SECRET = process.env.WAYPOINT_LAUNCH_SECRET || '';
+// 1.5.5: the plan-aware mode's test switch (system/app/scripts/webmode.js). WAYPOINT_WEB_CAN set, even to nothing, adds to /api/version what a
+// website's play host adds: web: { plan, can }, can the words it names, comma-separated (each of lower-case letters, 16 at most), plan the
+// name WAYPOINT_WEB_PLAN gives, else player. So WAYPOINT_WEB_CAN=join shows the mode of a website's Player plan. Read by this server alone:
+// the shell never sends a web key, and without the switch this server sends none either
+const WEB_FIELD = (function() {
+    const raw = process.env.WAYPOINT_WEB_CAN;
+    if (raw === undefined) return null;
+    const can = String(raw).split(',').map(s => s.trim()).filter(s => /^[a-z]{1,20}$/.test(s)).slice(0, 16);
+    const plan = process.env.WAYPOINT_WEB_PLAN;
+    return { plan: typeof plan === 'string' && /^[A-Za-z0-9][A-Za-z0-9 _-]{0,39}$/.test(plan) ? plan : 'player', can: can };
+})();
 // A request that throws must not take the whole app (and every joined player) down with it.
 process.on('uncaughtException', (e) => { try { console.error('[waypoint] uncaught exception (kept running):', e && e.stack || e); } catch (_) {} });
 function localRequest(req) {
@@ -73,7 +84,7 @@ const server = http.createServer((req, res) => {
     if (url.pathname === '/api/version') {
         let v = shellPkg.version;
         try { const j = JSON.parse(fs.readFileSync(path.join(appDir, 'version.json'), 'utf8')); if (j.version && updater.cmpVersion(j.version, v) > 0) v = j.version; } catch (e) {}
-        res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify({ version: v + '-dev', shell: shellPkg.version }));
+        res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify(WEB_FIELD ? { version: v + '-dev', shell: shellPkg.version, web: WEB_FIELD } : { version: v + '-dev', shell: shellPkg.version }));
     }
 
     // Shared table preferences: saves/preferences.json mirrors the browser's wp_* settings so
@@ -276,5 +287,5 @@ const server6 = http.createServer((req, res) => server.emit('request', req, res)
 server6.requestTimeout = 0;
 shellguard.listenLoopback(server, server6, port, (held) => {
     if (!held) { console.error('Waypoint dev server: port ' + port + ' is taken (on 127.0.0.1 or on [::1]). Stop the program that holds it, or give another port.'); process.exit(1); }
-    console.log('Waypoint dev server: http://localhost:' + port + '  (saves: ' + savesDir + ')');
+    console.log('Waypoint dev server: http://localhost:' + port + '  (saves: ' + savesDir + ')' + (WEB_FIELD ? '  (as a website: plan ' + WEB_FIELD.plan + ', can ' + (WEB_FIELD.can.join(',') || 'nothing') + ')' : ''));
 }, 0);

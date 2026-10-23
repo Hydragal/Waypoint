@@ -46,6 +46,7 @@ import { renderWhiteboard, attachResizeHandle, attachRotateHandle, addWbItem, up
 import { getRoomInspectorHtml, attachRoomInspectorEvents, renderInspector,  renderElementList, esc } from './inspector.js';
 
 import { onLoad as cleanupOnLoad, sweepRecents, dropWaiting } from './cleanup.js';
+import { webReady } from './webmode.js';   // 1.5.5: what a website's plan allows, read once before load() decides anything
 
 
 
@@ -239,6 +240,30 @@ import { onLoad as cleanupOnLoad, sweepRecents, dropWaiting } from './cleanup.js
   window.wpTakeBindNotes = function() { var n = _bindNotes; _bindNotes = []; return n; };   // main.js: what the normaliser bound in a file it shaped for a Merge, taken once
   window.wpNoteBindings = noteBindings;   // main.js: an import's bindings get the same notice
 
+  // [netcheck:webload-start]
+  // 1.5.5: Waypoint on a website whose plan joins tables and nothing else (webmode.js). load() is where the player's own campaign comes back,
+  // at the start and whenever a table is left or lost. There is none on such a website and none is made: nothing is fetched, seeded or sent.
+  // The table on screen is let go of as load() lets it go, and the welcome's Join a game comes up, with the words of a table just lost still
+  // in its line (net.js setStatus writes them there). The Multiplayer window a lost table opened is put away: its words are in that line too
+  function loadJoinOnly(overtaken) {
+      if (overtaken()) return;   // a join's snapshot landed meanwhile: the table stays
+      state.appState = { activeCampaignId: null, campaigns: {} };
+      state.selId = null; state.selWbId = null; state.selWbIds = [];
+      var n = window.wpNet;
+      if (n) { n.foreign = !!window.wpStream; n.stance = null; n.stanceCamps = null; n.gmId = ''; n.sounds = null; n.soundNow = null; }
+      if (window.wpDocForeign) window.wpDocForeign(!!(n && n.foreign));
+      if (window.wpSound) window.wpSound.foreign(!!(n && n.foreign));
+      if (window.wpFx) window.wpFx.foreign(!!(n && n.foreign));
+      updateCampaignSelect();
+      updateSidebarNav();
+      render();
+      if (n && n.refreshUi) n.refreshUi();
+      updateUndoBtn();
+      var nm = document.getElementById('netModal'); if (nm) nm.style.display = 'none';
+      if (!window.wpStream && !window.wpPopout && window.wpShowWelcome) window.wpShowWelcome();
+  }
+  // [netcheck:webload-end]
+
   function load() {
 
     resetHistory();   // before the fetch: a Ctrl+Z while the disk is being read finds nothing to pop
@@ -249,7 +274,9 @@ import { onLoad as cleanupOnLoad, sweepRecents, dropWaiting } from './cleanup.js
     var _loadGen = window.wpNet ? window.wpNet.snapshotGen : 0;
     var overtaken = function() { var n = window.wpNet; return !!(n && n.active && n.role === 'client' && (n.snapshotGen || 0) > _loadGen); };
 
-    fetch('/api/data')
+    webReady.then(function(web) {   // 1.5.5: the site's word first (webmode.js). A desktop's answer has no web key, and the load below runs as it always did
+      if (web && web.mode === 'join-only') { loadJoinOnly(overtaken); return; }
+      return fetch('/api/data')
 
       .then(res => res.json())
 
@@ -384,6 +411,7 @@ import { onLoad as cleanupOnLoad, sweepRecents, dropWaiting } from './cleanup.js
         saveNote.innerHTML = 'Error loading data.';
 
       });
+    });
 
   }
 
@@ -429,7 +457,8 @@ import { onLoad as cleanupOnLoad, sweepRecents, dropWaiting } from './cleanup.js
 
   // "May this window write to this disk right now?" One answer for every write to disk.
   function canPersistLocal() {
-      var n = window.wpNet;
+      var n = window.wpNet, W = window.wpWebMode;
+      if (W && typeof W.joinOnly === 'function' && W.joinOnly() === true) return false;   // 1.5.5: a website's plan that joins tables alone keeps nothing of the player's (webmode.js): the site answers a save with 403
       if (window.__wpNoSave) return false;                              // a restore is deciding
       if (window.wpStream || window.wpPopout) return false;             // the stream / pop-out windows never own a save
       if (n && (n.foreign || (n.active && n.role === 'client'))) return false;
@@ -442,7 +471,8 @@ import { onLoad as cleanupOnLoad, sweepRecents, dropWaiting } from './cleanup.js
   // moment a snapshot lands (net.foreign, the state's origin marker), between a reconnect's attempts, in the stream and pop-out windows, and
   // while a restore decides. Only save() reads it: every other write stays behind canPersistLocal.
   function ownWhileWaiting() {
-      var n = window.wpNet;
+      var n = window.wpNet, W = window.wpWebMode;
+      if (W && typeof W.joinOnly === 'function' && W.joinOnly() === true) return false;   // 1.5.5: and no campaign of the player's own waits with them on such a website
       if (window.__wpNoSave || window.wpStream || window.wpPopout) return false;
       if (!n || !n.active || n.role !== 'client' || n.foreign || n.stream || n.syncedPeer) return false;
       if (state.appState && state.appState._foreign) return false;

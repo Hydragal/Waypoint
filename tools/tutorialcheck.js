@@ -108,6 +108,93 @@ for (const t of targets) {
     if (startPinned && importPinned && endPinned && guardPinned) console.log('ok        the welcome\'s Start a campaign on a fresh, unseen save enters Waypoint and owes the naming prompt (wpCampaignAfterTour) instead of opening it; endTour — the last step, Keep, Discard, Skip and Esc all go through it — opens that prompt once, after the tour; Import from the welcome holds the tour until the file is chosen or dropped; wpTutorial.pending published');
     else { bad++; console.log('FAIL      the welcome\'s Start a campaign / the prompt after the tour / Import\'s hold pinned', JSON.stringify({ startPinned, importPinned, endPinned, guardPinned })); }
 }
+// 1.5.5, a plan-aware mode (the owner, 2026-10-23: "jut the welcome screen being available for now with an option to join and nothing else but what is
+// needed for the player side to work will suffice"): on a website whose plan joins tables and nothing else (webmode.js) the welcome is the way to a table
+// and the one screen before it. main.js's wcweb slice, hideWelcome, showWelcome, maybeShowWelcome and the quick jump's key run for real on pages of plain
+// objects; the style sheet's rule, Help and both release notes pinned
+{
+    const nl = String.fromCharCode(10), mainLf = fs.readFileSync(path.join(app, 'scripts', 'main.js'), 'utf8').replace(/\r\n/g, nl), css = fs.readFileSync(path.join(app, 'style.css'), 'utf8').replace(/\r\n/g, nl), page = html.replace(/\r\n/g, nl);
+    const cut = (a, b) => { const i = mainLf.indexOf(a), k = mainLf.indexOf(b, i + 1); return i >= 0 && k > i && mainLf.indexOf(a, i + 1) < 0 ? mainLf.slice(i, k + b.length) : ''; };
+    const webSrc = cut('  // [tutorialcheck:wcweb-start]', '  // [tutorialcheck:wcweb-end]'), showSrc = cut('  function showWelcome() {', nl + '  }' + nl), maySrc = cut('  (function maybeShowWelcome() {', nl + '  })();');
+    const hideSrc = (mainLf.match(/\n(  function hideWelcome\(\) \{[^\n]*)/) || [])[1] || '';
+    const W = jo => (jo === undefined ? undefined : { joinOnly: () => jo });
+    // the body's classes, as a page's
+    const bodyOf = had => { const list = new Set(had || []); return { list, classList: { toggle(c, on) { if (on) list.add(c); else list.delete(c); return !!on; } } }; };
+    // the one judge, the table test, the launch rule, opening on Join a game and the page put away behind it
+    const mk = (jo, netW) => { const timers = []; let api = null; try { api = new Function('window', 'setTimeout', '"use strict";' + nl + webSrc + nl + 'return { jo: wcJoinOnly, at: wcAtTable, launch: wcAtLaunch, first: wcJoinFirst, gate: wcGate };')({ wpWebMode: W(jo), wpNet: netW }, fn => timers.push(fn)); } catch (e) { api = null; } return { api, timers }; };
+    const el = (o) => Object.assign({ style: { display: '' }, value: '', disabled: true, textContent: '', focused: false, focus() { this.focused = true; } }, o || {});
+    const docOf = (els, body) => ({ getElementById: id => els[id] || null, createElement: () => ({}), body: body === undefined ? null : body });
+    const firstRun = (jo, name, noBody) => { const body = noBody ? undefined : bodyOf(); const els = { wcMain: el({ style: { display: 'flex' } }), wcJoinView: el({ style: { display: 'none' } }), wcJoinGo: el(), wcNameInput: el({ value: name }), wcJoinCode: el(), wcJoinStatus: el({ textContent: 'Session ended by the GM.' }) }; const m = mk(jo); let did = null; try { did = m.api.first(docOf(els, body)); } catch (e) { return 'threw: ' + e.message; } m.timers.forEach(fn => fn());
+        return [did, els.wcMain.style.display, els.wcJoinView.style.display, els.wcJoinGo.disabled, els.wcNameInput.focused ? 'name' : els.wcJoinCode.focused ? 'code' : 'none', els.wcJoinStatus.textContent, body ? body.list.has('web-gate') : '-'].join('|'); };
+    let webOk = !!mk(true).api;
+    const judge = webOk ? [mk(true).api.jo(), mk(false).api.jo(), mk(undefined).api.jo(), mk(1).api.jo(), mk('true').api.jo()] : [];
+    const table = webOk ? [mk(true, null).api.at(), mk(true, { active: true }).api.at(), mk(true, { foreign: true }).api.at(), mk(true, { active: false, foreign: false }).api.at()] : [];
+    const PREFS = ['always', 'first', 'never', 'junk', undefined];
+    const launchFull = webOk && PREFS.every(p => [true, false].every(nm => mk(false).api.launch(p, nm) === !(p === 'never' || (p === 'first' && nm)) && mk(undefined).api.launch(p, nm) === !(p === 'never' || (p === 'first' && nm))));
+    const launchWeb = webOk && PREFS.every(p => [true, false].every(nm => mk(true).api.launch(p, nm) === true));
+    const firsts = webOk ? [firstRun(true, ''), firstRun(true, 'Kael'), firstRun(false, 'Kael'), firstRun(true, 'Kael', true)] : [];
+    // the page behind the join page: put away on such a website alone, taken off whenever asked, nothing thrown with no body
+    const gateRun = (jo, had, on, noBody) => { const body = noBody ? undefined : bodyOf(had); try { mk(jo).api.gate(docOf({}, body), on); } catch (e) { return 'threw'; } return body ? [...body.list].join() : '-'; };
+    const gates = webOk ? [gateRun(true, [], true), gateRun(true, ['web-gate', 'web-join'], false), gateRun(false, [], true), gateRun(undefined, [], true), gateRun(false, ['web-gate'], false), gateRun(true, [], true, true)] : [];
+    // hideWelcome, run for real with the slice: the welcome put away and the page behind it back, on such a website and on a desktop
+    const hideRun = (jo) => { const body = bodyOf(['web-gate', 'web-join']), els = { welcomeScreen: el({ style: { display: 'flex' } }) }, log = [];
+        try { new Function('window', 'document', 'wcLaunchStoreOnce', 'setTimeout', '"use strict";' + nl + webSrc + nl + hideSrc + nl + 'hideWelcome();')({ wpWebMode: W(jo) }, docOf(els, body), () => log.push('stored'), () => 0); } catch (e) { return 'threw: ' + e.message; }
+        return [els.welcomeScreen.style.display, [...body.list].join(), log.join()].join('|'); };
+    const hides = hideSrc ? [hideRun(true), hideRun(false)] : ['no hideWelcome'];
+    webOk = webOk && JSON.stringify(judge) === JSON.stringify([true, false, false, false, false]) && JSON.stringify(table) === JSON.stringify([false, true, true, false]) && launchFull && launchWeb
+        && JSON.stringify(firsts) === JSON.stringify(['true|none|flex|false|name|Session ended by the GM.|true', 'true|none|flex|false|code|Session ended by the GM.|true', 'false|flex|none|true|none|Session ended by the GM.|false', 'true|none|flex|false|code|Session ended by the GM.|-'])
+        && JSON.stringify(gates) === JSON.stringify(['web-gate', 'web-join', '', '', '', '-']) && JSON.stringify(hides) === JSON.stringify(['none|web-join|stored', 'none|web-join|stored']);
+    // showWelcome, run for real with the slice: a website's welcome opens on Join a game with the page behind it put away and lists no campaign, and never
+    // comes up over a table; a desktop's as before
+    const showRun = (jo, netW) => {
+        const calls = [], body = bodyOf(), els = { welcomeScreen: el(), wcMain: el(), wcJoinView: el(), wcNameInput: el(), wcColorInput: el(), wcAvatarPrev: el({ appendChild() {} }), wcLaunchPref: el(), wcJoinGo: el(), wcJoinCode: el(), wcJoinStatus: el({ textContent: 'Could not reconnect.' }) };
+        const win = { wpWebMode: W(jo), wpNet: netW };
+        try { new Function('window', 'document', 'setTimeout', 'wcProfile', 'wcSafeAvatar', 'wpDefaultAvatar', 'welcomePref', 'wcLaunchRow', 'welcomePrefSet', 'renderWcContinue', 'state', '"use strict";' + nl + webSrc + nl + showSrc + nl + 'showWelcome();')(
+            win, docOf(els, body), () => 0, () => ({ name: 'Kael' }), () => false, () => 'data:,', () => 'always', () => calls.push('launchRow'), () => true, () => calls.push('continue'), { appState: { campaigns: { c1: {} } } }); } catch (e) { return 'threw: ' + e.message; }
+        return [els.welcomeScreen.style.display, els.wcMain.style.display, els.wcJoinView.style.display, calls.join('+'), els.wcJoinStatus.textContent, netW ? String(netW.fromWelcome) : '-', body.list.has('web-gate')].join('|');
+    };
+    const shows = { desk: showRun(false, null), deskTable: showRun(false, { active: true, foreign: true, fromWelcome: true }), web: showRun(true, { active: false, foreign: false, fromWelcome: true }), webTable: showRun(true, { active: true, foreign: true, fromWelcome: false }), webLost: showRun(true, { active: false, foreign: false }) };
+    const showOk = shows.desk === 'flex|flex|none|launchRow+continue|Could not reconnect.|-|false' && shows.deskTable === 'flex|flex|none|launchRow+continue|Could not reconnect.|false|false' && shows.web === 'flex|none|flex|launchRow|Could not reconnect.|false|true'
+        && shows.webTable === '||||Could not reconnect.|false|false' && shows.webLost === 'flex|none|flex|launchRow|Could not reconnect.|false|true';
+    // maybeShowWelcome, run for real: it shows at once as it always did, a desktop by the stored choice and a website's page always (its mode is known
+    // from the page's address); where only the answer can say join-only (the dev server's test switch) the join page comes up once it says so; a stream
+    // window gets no welcome, but a website's page asked for one is the join page
+    const mayRun = (o) => {
+        let held = null, cur = o.jo === true; const shown = [];
+        const win = { wpWebMode: o.mod === false ? undefined : { joinOnly: () => cur, ready: { then(ok, no) { held = o.reject ? no : ok; } } } };
+        try { new Function('window', 'location', 'welcomePref', 'wcProfile', 'showWelcome', '"use strict";' + nl + webSrc + nl + maySrc)(win, { search: o.stream ? '?stream=1' : '' }, () => o.pref, () => ({ name: o.named ? 'Kael' : '' }), () => shown.push('shown')); } catch (e) { return 'threw: ' + e.message; }
+        const before = shown.length; if (o.later) cur = true; if (held) held(); return before + ':' + shown.length;
+    };
+    const mays = [mayRun({ mod: false, pref: 'always' }), mayRun({ mod: false, pref: 'never' }), mayRun({ jo: true, pref: 'never', named: true }), mayRun({ jo: false, pref: 'never' }), mayRun({ jo: false, pref: 'first', named: true }), mayRun({ jo: false, pref: 'first' }), mayRun({ jo: false, pref: 'always', reject: true }),
+        mayRun({ jo: true, pref: 'always', stream: true }), mayRun({ jo: false, pref: 'always', stream: true }), mayRun({ jo: false, pref: 'never', later: true }), mayRun({ jo: false, pref: 'always', later: true }), mayRun({ jo: false, pref: 'always', stream: true, later: true }), mayRun({ jo: true, pref: 'never', later: true })];
+    const mayOk = JSON.stringify(mays) === JSON.stringify(['1:1', '0:0', '1:1', '0:0', '0:0', '1:1', '1:1', '1:1', '0:0', '0:1', '1:2', '0:0', '1:1']);
+    // the quick jump (Ctrl+K), run for real: never on such a website, at a table or on the join page; elsewhere as before
+    const kA = mainLf.indexOf("        document.addEventListener('keydown', function(e) {\n            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {"), kB = kA < 0 ? -1 : mainLf.indexOf('\n        });', kA), kSrc = kA >= 0 && kB > kA ? mainLf.slice(kA, kB + '\n        });'.length) : '';
+    const kRun = win => { let fn = null; const opened = []; let prevented = 0;
+        try { new Function('document', 'window', 'cmdkOpen', kSrc)({ addEventListener: (t, f) => { if (t === 'keydown') fn = f; } }, win, () => opened.push('open')); } catch (e) { return 'threw: ' + e.message; }
+        if (!fn) return 'no listener'; fn({ ctrlKey: true, metaKey: false, key: 'K', preventDefault() { prevented++; } }); return opened.length + ':' + prevented; };
+    const keys = kSrc ? [kRun({}), kRun({ wpWebMode: { joinOnly: () => true } }), kRun({ wpWebMode: { joinOnly: () => false } }), kRun({ wpWebMode: { joinOnly: () => 1 } }), kRun({ wpNet: { active: true, role: 'client' } }), kRun({ wpWebMode: { joinOnly: () => true }, wpNet: { active: false } })] : ['no slice'];
+    const keyOk = JSON.stringify(keys) === JSON.stringify(['1:1', '0:0', '1:1', '1:1', '0:0', '0:0']);
+    // the style sheet: the welcome's other choices and the GM's and the save's parts of Settings put away under the body's one word, every id it names in
+    // the page; no :has() in it, which a browser that does not know it would drop with the whole rule, so a row of Settings is put away by a class of its
+    // own; the relay is a GM's part; and while the join page is up the app behind it is put away
+    const rule = (css.match(/\n  (body\.web-join #wcStartBtn,[^{]*)\{ display: none !important; \}/) || [])[1] || '';
+    const named = (rule.match(/#[A-Za-z][\w-]*/g) || []).map(s => s.slice(1)).filter((v, i, a) => a.indexOf(v) === i);
+    const webLines = css.replace(/\/\*[\s\S]*?\*\//g, '').split(nl).filter(l => /web-join|web-gate/.test(l));
+    const relayIn = (() => { const at = page.indexOf('id="setTurnUrls"'), g = page.lastIndexOf('<div class="gm-only">', at); if (at < 0 || g < 0) return false; let depth = 0; const re = /<(\/?)div\b[^>]*>/g; re.lastIndex = g; let m; while ((m = re.exec(page))) { if (m.index > at) return depth > 0; depth += m[1] ? -1 : 1; if (depth === 0) return false; } return false; })();
+    const cssOk = !!rule && rule.split(',').every(s => /^\s*body\.web-join /.test(s)) && ['wcStartBtn', 'wcLoadBtn', 'wcContinue', 'wcEnterBtn', 'welcomeScreen', 'moreMenu', 'moreFiles', 'campMenuWrap', 'mapTabs', 'rowPills', 'handoutsBtn', 'imgLibBtn', 'importCharBtn', 'updateBtn', 'updateBanner', 'installerModal', 'netPaneHostBtn', 'netPaneHost', 'netPlayersBtn', 'netEndBtn', 'setSnapNowBtn', 'settingsModal'].every(id => named.indexOf(id) >= 0)
+        && /body\.web-join #welcomeScreen \.wc-launch/.test(rule) && /body\.web-join \.gm-only/.test(rule) && /body\.web-join #settingsModal \.set-group\[data-group="updates"\]/.test(rule) && /body\.web-join #moreMenu \[data-press="headerBrand"\]/.test(rule) && /body\.web-join #settingsModal \.set-saves/.test(rule)
+        && ['set-welcome', 'set-devmode', 'set-snaps'].every(c => rule.indexOf('body.web-join #settingsModal .' + c + ',') >= 0 && page.split('class="' + c + '"').length === 2)
+        && /<div class="set-welcome"[^>]*>\s*<div class="set-field-label">Welcome screen on launch<\/div>\s*<select id="setWelcomePref"/.test(page) && /<div class="set-devmode"[^>]*>\s*<div class="set-field-label"[^>]*>Developer mode <span id="setDevConsoleState"[^\n]*\n\s*<button class="tool ghost" id="setDevConsoleBtn"/.test(page)
+        && /<div class="set-snaps"[^>]*>\s*<div class="set-field-label">Snapshots of the save<\/div>\s*<div id="setSnapList"/.test(page) && webLines.length >= 3 && webLines.every(l => l.indexOf(':has(') < 0) && relayIn
+        && named.every(id => page.split('id="' + id + '"').length === 2) && /class="set-saves"[^>]*>Campaign data lives in the <b>saves<\/b> folder/.test(page) && /\n  body\.web-join #headerBrand \{ pointer-events: none; cursor: default !important; \}/.test(css) && !/class="[^"]*\bweb-(join|gate)\b/.test(page)
+        && /\n  body\.web-join\.web-gate > \.app, body\.web-join\.web-gate > \.app \* \{ visibility: hidden !important; transition: none !important; \}/.test(css) && page.split('class="app"').length === 2 && /<div class="app">\s*<header>/.test(page);
+    const helpOk = /<li>The Join screen shows the connection and drops you in when the GM&rsquo;s table loads\.<\/li>\s*<li>On Waypoint&rsquo;s website a player account opens straight to <b>Join a game<\/b>\.<\/li>/.test(page);
+    const NOTE = '- On Waypoint\'s website a player account opens straight to Join a game.';
+    const notesOk = ['WHATSNEW.txt', 'system/app/assets/whatsnew.txt'].every(f => { const t = fs.readFileSync(path.join(__dirname, '..', f), 'utf8').replace(/\r\n/g, nl); const i = t.indexOf(NOTE), v = t.indexOf('WAYPOINT 1.5.4'); return i > 0 && v > i && t.indexOf(NOTE, i + 1) < 0; });
+    if (webOk && showOk && mayOk && keyOk && cssOk && helpOk && notesOk) console.log('ok        1.5.5 plan-aware mode, the welcome (main.js run for real): on a website whose plan joins tables alone (webmode.js says join-only, true only) the welcome always shows, at once, opens on Join a game with the words of a table just lost still in its line and the focus on the name or else the room code, lists no campaign and never comes up over a table, and while it is up the app behind it is put away (web-gate), back whenever the welcome goes; where only the site\'s answer can say join-only the join page comes up once it does; a desktop\'s welcome is as before, at once, by its stored choice, and a stream window gets none; the quick jump never opens there; the style sheet puts the welcome\'s other choices, the campaign menu, Import and Export, the map tabs and pills, Handouts, the Image Library, every GM part, the relay among them, hosting, Player History, End Session, Updates, Developer mode and the snapshots away under body.web-join alone, with no :has() that would drop the rule, every id it names still in the page once; Help and both release notes say it in one line');
+    else { bad++; console.log('FAIL      1.5.5 plan-aware mode, the welcome', JSON.stringify({ webOk, judge, table, launchFull, launchWeb, firsts, gates, hides, shows, mays, keys, cssOk, named, relayIn, helpOk, notesOk })); }
+}
 // The tour's keys (the keys slice run for real): while the tour is up Right arrow and Enter go on and Left arrow goes back — never from a field. A
 // planner's boxes are editable as plain text only, so a field is told by the element itself (isContentEditable), not by one word of an attribute.
 {

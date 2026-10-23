@@ -26,7 +26,8 @@ var newerSeen = {};   // player versions newer than ours that the GM has already
 // The shell's /api/version (older shells report only their own package.json) and the app folder's
 // own version.json: the newer wins. After a hot update on an old shell only version.json moved.
 window.wpVersionReady = Promise.all([
-    fetch('/api/version').then(function(r) { return r.json(); }).catch(function() { return null; }),
+    window.wpWebMode && window.wpWebMode.answer && typeof window.wpWebMode.answer.then === 'function' ? window.wpWebMode.answer   // 1.5.5: the one read webmode.js made of it, so the page asks once
+        : fetch('/api/version').then(function(r) { return r.json(); }).catch(function() { return null; }),
     fetch('version.json', { cache: 'no-store' }).then(function(r) { return r.json(); }).catch(function() { return null; }),
 ]).then(function(vs) {
     var a = vs[0] && vs[0].version ? String(vs[0].version) : null;
@@ -42,6 +43,15 @@ function versionCmp(a, b) {   // numeric major.minor.patch; anything after a '-'
     for (var i = 0; i < 3; i++) { if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) - (pb[i] || 0); }
     return 0;
 }
+// [netcheck:webjoin-start]
+// 1.5.5: Waypoint on a website whose plan joins tables and nothing else (webmode.js). This app hosts no table there, a table's snapshot puts the
+// welcome away whoever began the join (a refresh's rejoin too), and the way back from a table is the welcome's Join a game (io.js load).
+// True on a website's page from the start, and on a page of this computer once the site's answer says so (the dev server's test switch); on a desktop false
+function webJoinOnly() { var W = typeof window !== 'undefined' ? window.wpWebMode : null; return !!(W && typeof W.joinOnly === 'function' && W.joinOnly() === true); }
+// What this app is told when a host turns it away as older than the GM's, on such a website: there the deploy is the update, so no step of an
+// update is named (the Updates part of Settings is put away). gms: the GM's version as the host named it, already checked, or ''
+function webOlderWords(gms) { return 'The GM’s Waypoint' + (gms ? ' ' + gms : '') + ' is newer than this website’s. Try again once the website is updated.'; }
+// [netcheck:webjoin-end]
 function updateMessage(theirs, ours) {
     return 'Your Waypoint (' + (theirs || 'older than 1.1.2') + ') is older than the GM\'s' + (ours ? ' (' + ours + ')' : '') + '. Update Waypoint, then rejoin: open Settings ▸ Check for Updates and press Update Now (or get the latest Waypoint_Setup.exe from your GM and run it over your copy — saves and settings are kept).';
 }
@@ -1870,7 +1880,7 @@ function applySnapshot(msg) {
     }
     if (window.wpSettingsSync) window.wpSettingsSync();
     try { if (window.wpSheets && window.wpSheets.charChanged) window.wpSheets.charChanged(null); } catch (e) {}   // Onboarding F0: a sheet whose character was reassigned while we were away closes now
-    if (net.fromWelcome) { net.fromWelcome = false; if (window.wpHideWelcome) window.wpHideWelcome(); }   // a join started from the welcome screen: its campaign is here, so leave the welcome for the table
+    if (net.fromWelcome || (typeof webJoinOnly === 'function' && webJoinOnly())) { net.fromWelcome = false; if (window.wpHideWelcome) window.wpHideWelcome(); }   // a join started from the welcome screen: its campaign is here, so leave the welcome for the table (1.5.5: and every join on a website whose plan joins tables alone, where the welcome is the only other screen)
 }
 
 // [netcheck:broadcast-start]
@@ -6096,9 +6106,10 @@ function handleMessage(msg, conn) {
         // Security (2026-10-01): an update notice is said in this app's OWN words — the host names only its version — in the status line and the
         // toast, like every other refusal, never in a dialog carrying the host's text (which read as the app's own voice); a reason is plain text, cut
         var whyR = typeof msg.reason === 'string' ? msg.reason.replace(/[\u0000-\u001f\u007f\u200b\u200e\u200f\u202a-\u202e\u2060-\u2069\ufeff]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200) : '';
-        var why = msg.type === 'kicked' ? 'Removed from the session by the GM.' : msg.update === true ? updateMessage(APP_VERSION, typeof msg.v === 'string' && /^\d{1,4}\.\d{1,4}\.\d{1,4}$/.test(msg.v) ? msg.v : '') : (whyR || 'The GM declined your request.');
+        var webD = typeof webJoinOnly === 'function' && webJoinOnly(), gmV = typeof msg.v === 'string' && /^\d{1,4}\.\d{1,4}\.\d{1,4}$/.test(msg.v) ? msg.v : '';   // 1.5.5: on a website whose plan joins tables alone there is no update to take and no campaign of the player's own to come back (webmode.js)
+        var why = msg.type === 'kicked' ? 'Removed from the session by the GM.' : msg.update === true ? (webD && typeof webOlderWords === 'function' ? webOlderWords(gmV) : updateMessage(APP_VERSION, gmV)) : (whyR || 'The GM declined your request.');
         setStatus(why);
-        toast(why + ' Restoring your own campaign.');
+        toast(webD ? why : why + ' Restoring your own campaign.');
         if (net.fromWelcome) { if (window.wpJoinFailed) window.wpJoinFailed(); }   // stay on the welcome Join screen with the reason shown; re-enable Join
         else { var nm2 = ui('netModal'); if (nm2) nm2.style.display = 'flex'; }
         setTimeout(function() { try { conn.close(); } catch (e) {} }, 400);   // the honest host closes it too, 400 ms after its word; one that keeps the line open is not waited for
@@ -6113,9 +6124,10 @@ function handleMessage(msg, conn) {
         // [netcheck:snapkey-end]
         applySnapshot(msg);   // after gmId: the settings refresh inside it keys this table's off-list by campaign + GM
         syncSessionButtons();
-        setStatus('Connected — you are at the GM’s table. Your own campaigns are untouched and come back when you leave the session.');   // the owner, 2026-10-04: a player asked where their own campaigns had gone
+        var webJ = typeof webJoinOnly === 'function' && webJoinOnly();   // 1.5.5: a website's plan that joins tables alone has no campaign of the player's own to speak of (webmode.js)
+        setStatus(webJ ? 'Connected. You are at the GM’s table.' : 'Connected — you are at the GM’s table. Your own campaigns are untouched and come back when you leave the session.');   // the owner, 2026-10-04: a player asked where their own campaigns had gone
         var backS = conn.wpRetry === true && !conn.wpBackSaid; conn.wpBackSaid = true;
-        toast(backS ? 'Reconnected ✓' : 'Campaign synced from host. Your own campaigns come back when you leave.');   // security (2026-10-01): a reconnect is said when the table is taken — once per connection, in place of the synced notice (the app shows one notice at a time) — never for a connection that merely opened (whoever answers at the code could raise it at every dial)
+        toast(backS ? 'Reconnected ✓' : webJ ? 'Campaign synced from host.' : 'Campaign synced from host. Your own campaigns come back when you leave.');   // security (2026-10-01): a reconnect is said when the table is taken — once per connection, in place of the synced notice (the app shows one notice at a time) — never for a connection that merely opened (whoever answers at the code could raise it at every dial)
         if (window.wpVtt) window.wpVtt.joined();   // seed this table's off-list and queue the join notice
         net.videoWake();   // item 21 V2: a video the GM is showing, offered before this snapshot, is asked for now
     } else if (msg.type === 'item') {
@@ -6332,7 +6344,7 @@ function handleMessage(msg, conn) {
         setStatus('Session ended by the GM.');
         var nm = ui('netModal');
         if (nm) nm.style.display = 'flex';
-        toast('The GM ended the session — restoring your own campaign.');
+        toast(typeof webJoinOnly === 'function' && webJoinOnly() ? 'The GM ended the session.' : 'The GM ended the session — restoring your own campaign.');   // 1.5.5: a website's plan that joins tables alone has no campaign of the player's own to come back (webmode.js)
         // [netcheck:end-end]
     } else if (msg.type === 'char-upload-ans' && net.role === 'client') {   // Stage 6 U2: the host's answer to our upload
         if (typeof msg.rid !== 'string' || !Object.prototype.hasOwnProperty.call(_uploadPending, msg.rid)) return;
@@ -7446,7 +7458,7 @@ function giveUpAndRestore(msg) {
     ringReset();   // HF3: nor its rolls into this machine's own HUDs
     renderRoster();
     setStatus(msg);
-    toast(msg + ' Restoring your own campaign.');
+    toast(typeof webJoinOnly === 'function' && webJoinOnly() ? msg : msg + ' Restoring your own campaign.');   // 1.5.5: nor here (webmode.js)
     load();
 }
 
@@ -7807,6 +7819,7 @@ function startHosting(forceFresh) {
     _lastSent = {};   // a new table starts from the snapshot, not from anything sent before
     sensesReset();   // Senses S0: and from no copy made for anyone
     _dragFrom = Object.create(null); _refusedAt = Object.create(null);   // fold M4: and from no drag of the last table
+    if (typeof webJoinOnly === 'function' && webJoinOnly()) return;   // 1.5.5: a website's plan that joins tables alone hosts none (webmode.js; the site holds the same line): nothing of a table is begun
     fogForgetAll();   // fold M5: and from no record of what anyone's copy held
     if (window.wpFog && typeof window.wpFog.marksForget === 'function') window.wpFog.marksForget(null);   // senses S4b: and no marks held for anyone
     net._lastSnapSent = typeof window.wpSnapOn === 'function' && window.wpSnapOn() === true;   // the snap rule: the join snapshot carries Snap as it stands
@@ -8070,7 +8083,7 @@ function leaveSession(silent) {
         net.stageOverride = null;
         net.stageMode = null; net.stageFallback = null; net.stagePicked = {};   // the next session starts from the defaults again
         setStatus('Not in a session.');
-        toast(wasClient ? 'Left the session — restoring your own campaign.' : wasHost ? 'Session ended for everyone — the room code is retired.' + (fightsOver ? (fightsOver === 1 ? ' The fight ended too.' : ' The ' + fightsOver + ' fights ended too.') : '') : 'Left the session.');
+        toast(wasClient ? (typeof webJoinOnly === 'function' && webJoinOnly() ? 'You left the session.' : 'Left the session — restoring your own campaign.') : wasHost ? 'Session ended for everyone — the room code is retired.' + (fightsOver ? (fightsOver === 1 ? ' The fight ended too.' : ' The ' + fightsOver + ' fights ended too.') : '') : 'Left the session.');
         if (wasHost) { logEvent('session', 'Session ended'); net.applyingRemote = true; save(true); net.applyingRemote = false; }
         if ((wasClient || net.foreign) && !window.wpStream) load();   // foreign without a live link (a failed re-join) still leaves this way
     }
@@ -8845,6 +8858,8 @@ if (_refreshBtn) _refreshBtn.addEventListener('click', function() {
 setTimeout(function() {
     var rj = null, rh = null;
     try { rj = sessionStorage.getItem('wp_rejoin'); rh = sessionStorage.getItem('wp_rehost'); sessionStorage.removeItem('wp_rejoin'); sessionStorage.removeItem('wp_rehost'); } catch (e) {}
+    var Wr = window.wpWebMode;   // 1.5.5: the site's word first (webmode.js)
+    (Wr && Wr.ready && typeof Wr.ready.then === 'function' ? Wr.ready : Promise.resolve()).then(function() {
     if (rj) {
         try {
             var j = JSON.parse(rj);
@@ -8852,6 +8867,7 @@ setTimeout(function() {
                 var ci = ui('netCodeInput'), ni = ui('netNameInput'), pi = ui('netJoinPassInput');
                 if (ci) ci.value = j.code; if (ni && j.name) ni.value = j.name; if (pi) pi.value = j.pass || '';
                 toast('Refreshed — rejoining the table…');
+                if (typeof webJoinOnly === 'function' && webJoinOnly()) net.fromWelcome = true;   // 1.5.5: on a website whose plan joins tables alone the welcome's Join a game is up, and what the rejoin says goes to its line
                 joinSession(j.code, j.name);
             }
         } catch (e) {}
@@ -8859,6 +8875,7 @@ setTimeout(function() {
         toast('Refreshed — resuming your table with the same room code…');
         startHosting(false);
     }
+    });
 }, 1200);
 /* The GM gets one clear "End Session for Everyone" (the host's Leave was the same
    teardown, but its label read like a player's exit). Players keep Leave Session. */
@@ -9062,7 +9079,8 @@ if (!net.leaveSession) net.leaveSession = leaveSession;
 net.leaveSessionConfirm = function() {
     if (!net.active && !net.foreign) return;
     import('./dialogs.js').then(function(d) {
-        d.showConfirm('Leave the session? Your own campaign comes back on screen. You can rejoin with the same room code.', function(yes) {
+        var byeQ = typeof webJoinOnly === 'function' && webJoinOnly() ? 'Leave the session? You go back to Join a game. You can rejoin with the same room code.' : 'Leave the session? Your own campaign comes back on screen. You can rejoin with the same room code.';   // 1.5.5: a website's plan that joins tables alone has no campaign of the player's own to come back
+        d.showConfirm(byeQ, function(yes) {
             if (!yes) return;   // Cancel and Esc stay at the table
             leaveSession(false);
             var nm = ui('netModal'); if (nm) nm.style.display = 'none';

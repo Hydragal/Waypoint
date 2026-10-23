@@ -5552,6 +5552,147 @@ pendingChecks.push((async () => {
         && [vw.seated, vw.waiting, vw.retry, vw.marked, vw.stream, vw.popout, vw.noSave].every(x => x === ' /  / 111 / as it was')
         && ufSrc.includes('saveView();') && !/\bsave\(/.test(ufSrc) && ufSrc.includes('am.meta.lastWbX = cx;') && /import \{[^}]*\bsaveView\b[^}]*\} from '\.\/io\.js';/.test(mainE) && /\n    saveView,\n/.test(ioE.replace(/\n\n/g, '\n'))
         && ['WHATSNEW.txt', 'system/app/assets/whatsnew.txt'].every(f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8').includes('- Moving around a map no longer lags it.')), j(vw));
+    // 1.5.5, a plan-aware mode (the owner, 2026-10-23: "a plan-aware mode, read from the site's /api/version answer, with the Player plan join-only"):
+    // on a website whose plan joins tables and nothing else (webmode.js), nothing of the player's is kept and no campaign of their own is loaded or made.
+    // io.js canPersistLocal, ownWhileWaiting, save, saveView, load and loadJoinOnly, each run for real
+    pendingChecks.push((async () => {
+        const webW = (joinOnly) => (joinOnly === undefined ? undefined : { joinOnly: () => joinOnly });
+        const cplSrc = fnIo('  function canPersistLocal() {', '\n  }\n', 'canPersistLocal') + '\nreturn canPersistLocal;';
+        const cpl = (W, netC) => new Function('window', 'state', cplSrc)({ wpNet: netC || null, wpWebMode: W }, { appState: { campaigns: {} } })();
+        const cplOut = [cpl(webW(true)), cpl(webW(false)), cpl(undefined), cpl({ joinOnly: () => 'yes' }), cpl({}), cpl(webW(true), { active: true, role: 'host' })];
+        const runSaveW = (netS, joinOnly) => { const log = [], st = { appState: { activeCampaignId: 'mine', campaigns: { mine: { id: 'mine' } } } }, note = { innerHTML: '' };
+            if (netS) netS.onLocalSave = () => log.push('wire');
+            const saveW = new Function('window', 'state', 'getActiveMap', 'saveNote', 'pushHistory', 'fetch', 'setTimeout', 'clearTimeout', saveSrc)(
+                { wpNet: netS, wpWebMode: webW(joinOnly) }, st, () => ({ meta: {} }), note, () => log.push('history'), (url, opts) => { log.push('disk:' + url); return { then(f) { f({ ok: true }); return { catch() {} }; } }; }, () => 0, () => {});
+            saveW(true); return log.join() + ' / ' + note.innerHTML.replace(/<[^>]*>/g, ''); };
+        const svW = { solo: runSaveW(null, true), waiting: runSaveW(cliS({ foreign: false, syncedPeer: null }), true), seated: runSaveW(cliS(), true), notYet: runSaveW(null, false), full: runSaveW(null, undefined) };
+        const runViewW = joinOnly => { const timers = [], log = [];
+            const api = new Function('window', 'state', 'getActiveMap', 'saveNote', 'pushHistory', 'fetch', 'setTimeout', 'clearTimeout', viewSrc)(
+                { wpNet: null, wpWebMode: webW(joinOnly) }, { appState: { activeCampaignId: 'mine', campaigns: { mine: { id: 'mine' } } } }, () => ({ meta: {} }), { innerHTML: '' }, () => {}, url => { log.push('disk:' + url); return { then() {} }; }, fn => { timers.push(fn); return timers.length; }, () => {});
+            api.saveView(); timers.forEach(fn => fn()); return timers.length + ':' + log.join(); };
+        check('1.5.5 plan-aware mode, nothing kept (io.js canPersistLocal, save and saveView, run for real): on a website whose plan joins tables alone this computer writes nothing for the player — canPersistLocal answers no, a save on the join screen and while waiting for the GM\'s Allow reaches no disk, and the camera is never written — while at the table a save goes to the host as before; only an answer of true counts, so before the site\'s answer is in, and on a desktop, every one of them is as it was',
+            j(cplOut) === j([false, true, true, true, true, false]) && !/disk/.test(svW.solo) && !/disk/.test(svW.waiting) && svW.seated === 'wire / Synced to host &#10003;' && svW.waiting === 'wire / Synced to host &#10003;'
+            && /^history,disk:\/api\/data \/ Saved to disk/.test(svW.notYet) && /^history,disk:\/api\/data \/ Saved to disk/.test(svW.full) && runViewW(true) === '0:' && runViewW(false) === '1:disk:/api/data' && runViewW(undefined) === '1:disk:/api/data', j([cplOut, svW, runViewW(true), runViewW(false)]));
+        // load: the site's word first. A join-only answer fetches nothing and seeds nothing; any other answer loads the save exactly as before
+        const loadSrcW = fnIo('  function load() {', '\n  }\n', 'load');
+        const runLoadW = async (ready, data, netL) => {
+            const log = [], st = { appState: { activeCampaignId: null, campaigns: {} } }, note = { innerHTML: '' };
+            const fetchL = url => { log.push('fetch:' + url); return Promise.resolve({ json: () => Promise.resolve(JSON.parse(JSON.stringify(data))) }); };
+            const loadW = new Function('resetHistory', 'window', 'webReady', 'loadJoinOnly', 'fetch', 'cleanupOnLoad', 'cleanupHooks', 'migrateAppState', 'state', 'dropWaiting', '_bindNotes', 'canPersistLocal', 'noteBindings', 'setTimeout', 'save', 'sweepRecents',
+                'createNewCampaign', 'createNewMap', 'CATS', 'updateCampaignSelect', 'updateSidebarNav', 'applyRememberedView', 'render', 'document', 'restoreCameraPosition', 'pushHistory', 'updateUndoBtn', 'toast', 'saveNote', loadSrcW + '\nreturn load;')(
+                () => log.push('reset'), { wpNet: netL || null }, ready, ov => log.push('joinOnly:' + (typeof ov === 'function' ? ov() : 'none')), fetchL, d => Promise.resolve(d), {}, d => ({ data: d, changed: false }), st, () => {}, [], () => true, () => {}, () => 0, () => log.push('save'), () => {},
+                n => ({ id: 'c_seed', name: n, items: {} }), n => ({ id: 'm_seed', type: 'map', meta: { title: n }, rooms: [], whiteboard: [], cats: { default: {} } }), {}, () => log.push('select'), () => log.push('nav'), () => {}, () => log.push('render'), { getElementById: () => ({ clientWidth: 100 }) }, () => {}, () => log.push('history'), () => {}, () => {}, note);
+            loadW();
+            const settle = async () => { for (let i = 0; i < 12; i++) await new Promise(r => setImmediate(r)); };
+            await settle();
+            return { log: log.join(), logArr: log, camps: Object.values(st.appState.campaigns).map(c => c.name), note: note.innerHTML, settle };
+        };
+        let openGate = null; const gate = new Promise(r => { openGate = r; });
+        const pend = await runLoadW(gate, {}), pendBefore = pend.log; openGate({ mode: 'full', plan: '', can: [] }); await pend.settle(); const pendAfter = pend.logArr.join();
+        const lw = { full: await runLoadW(Promise.resolve({ mode: 'full', plan: '', can: [] }), {}), none: await runLoadW(Promise.resolve(null), {}), join: await runLoadW(Promise.resolve({ mode: 'join-only', plan: 'player', can: ['join'] }), {}),
+            joinSaved: await runLoadW(Promise.resolve({ mode: 'join-only', plan: 'player', can: ['join'] }), { activeCampaignId: 'c1', campaigns: { c1: { id: 'c1', name: 'Mine', items: {} } } }) };
+        check('1.5.5 plan-aware mode, no campaign of the player\'s own (io.js load, run for real): load waits for the site\'s word before it reads anything; a join-only answer fetches nothing, seeds no Default Campaign, saves nothing and hands the way back to the join screen (loadJoinOnly, with the test of a join that overtook it); no answer, or one that is the full app, reads the save and seeds a fresh one exactly as before',
+            pendBefore === 'reset' && pendAfter === 'reset,fetch:/api/data,select,nav,render,history' && lw.full.log === 'reset,fetch:/api/data,select,nav,render,history' && j(lw.full.camps) === j(['Default Campaign']) && lw.none.log === lw.full.log && j(lw.none.camps) === j(['Default Campaign'])
+            && lw.join.log === 'reset,joinOnly:false' && j(lw.join.camps) === j([]) && lw.joinSaved.log === 'reset,joinOnly:false' && j(lw.joinSaved.camps) === j([]) && [lw.full, lw.join].every(r => r.note === ''), j([pendBefore, pendAfter, lw]));
+        // loadJoinOnly (the webload slice): the table on screen is let go of as load() lets it go, and the welcome's Join a game comes up
+        const ljSrc = (() => { const a = '// [netcheck:webload-start]', b = '// [netcheck:webload-end]', i = ioE.indexOf(a), k = ioE.indexOf(b); return i >= 0 && k > i && ioE.indexOf(a, i + 1) < 0 ? ioE.slice(i + a.length, k) : ''; })();
+        const runLJ = o => {
+            const log = [], st = { appState: { activeCampaignId: 'gm', campaigns: { gm: { id: 'gm', name: 'The GM\'s', _foreign: { at: 1 } } } }, selId: 'r', selWbId: 'w', selWbIds: ['w'] };
+            const netL = o.net === null ? null : Object.assign({ active: false, role: null, foreign: true, stance: { a: 1 }, stanceCamps: { gm: 1 }, gmId: 'u_gm', sounds: [1], soundNow: 's1', refreshUi: () => log.push('refreshUi') }, o.net || {});
+            const nm = { style: { display: 'flex' } };
+            const win = { wpNet: netL, wpStream: !!o.stream, wpPopout: !!o.popout, wpDocForeign: v => log.push('doc:' + v), wpSound: { foreign: v => log.push('sound:' + v) }, wpFx: { foreign: v => log.push('fx:' + v) }, wpShowWelcome: () => log.push('welcome') };
+            let fn = null; try { fn = new Function('window', 'state', 'updateCampaignSelect', 'updateSidebarNav', 'render', 'updateUndoBtn', 'document', 'fetch', ljSrc + '\nreturn loadJoinOnly;')(win, st, () => log.push('select'), () => log.push('nav'), () => log.push('render'), () => log.push('undo'), { getElementById: id => (id === 'netModal' ? nm : null) }, () => log.push('FETCH')); } catch (e) { return 'threw: ' + e.message; }
+            fn(() => !!o.overtaken);
+            return { log: log.join(), camps: Object.keys(st.appState.campaigns), act: st.appState.activeCampaignId, sel: [st.selId, st.selWbId, st.selWbIds.length], net: netL && [netL.foreign, netL.stance, netL.stanceCamps, netL.gmId, netL.sounds, netL.soundNow], nm: nm.style.display };
+        };
+        const lj = { left: runLJ({}), over: runLJ({ overtaken: true }), stream: runLJ({ stream: true }), pop: runLJ({ popout: true }), noNet: runLJ({ net: null }) };
+        check('1.5.5 plan-aware mode, the way back from a table (io.js loadJoinOnly, the webload slice run for real): the GM\'s campaign is let go of and nothing takes its place, the selection is cleared, the table\'s ceiling, sounds and GM go as load() lets them go, the reader, sound and effects are told the campaign is no table\'s, the panels are drawn again, the Multiplayer window a lost table opened is put away and the welcome comes up; nothing is fetched; a join that overtook it changes nothing; the stream and pop-out windows bring up no welcome',
+            typeof lj.left === 'object' && lj.left.log === 'doc:false,sound:false,fx:false,select,nav,render,refreshUi,undo,welcome' && j(lj.left.camps) === '[]' && lj.left.act === null && j(lj.left.sel) === j([null, null, 0]) && j(lj.left.net) === j([false, null, null, '', null, null]) && lj.left.nm === 'none'
+            && lj.over.log === '' && j(lj.over.camps) === j(['gm']) && lj.over.nm === 'flex' && !/welcome/.test(lj.stream.log) && !/welcome/.test(lj.pop.log) && j(lj.pop.camps) === '[]' && lj.noNet.log === 'doc:false,sound:false,fx:false,select,nav,render,undo,welcome' && !/FETCH/.test(j(lj)),
+            j(lj));
+        // net.js: the one judge (the webjoin slice), a snapshot putting the welcome away, no hosting, a refresh's rejoin and the words of leaving
+        const wjSrc = tryBetween('// [netcheck:webjoin-start]', '// [netcheck:webjoin-end]') || '';
+        const wj = W => { try { return new Function('window', wjSrc + '\nreturn webJoinOnly();')({ wpWebMode: W }); } catch (e) { return 'threw'; } };
+        const wjOut = [wj({ joinOnly: () => true }), wj({ joinOnly: () => false }), wj(undefined), wj({ joinOnly: () => 1 }), wj({ joinOnly: 'yes' })];
+        const hideLine = (src.match(/\n    (if \(net\.fromWelcome \|\| \(typeof webJoinOnly === 'function' && webJoinOnly\(\)\)\) \{ net\.fromWelcome = false; if \(window\.wpHideWelcome\) window\.wpHideWelcome\(\); \})/) || [])[1] || '';
+        const runHide = (from, joinOnly) => { const n = { fromWelcome: from }, log = []; new Function('net', 'window', 'webJoinOnly', hideLine)(n, { wpHideWelcome: () => log.push('hide') }, () => joinOnly); return log.join() + ':' + n.fromWelcome; };
+        const hideOut = hideLine ? [runHide(true, false), runHide(false, true), runHide(false, false)] : ['no line'];
+        const shA = src.indexOf('function startHosting(forceFresh) {'), shB = src.indexOf('\n', src.indexOf('fogForgetAll();', shA)), shHead = shA >= 0 && shB > shA ? src.slice(shA, shB) + '\n}\nreturn startHosting;' : '';
+        const runHost = joinOnly => { const log = []; const sh = new Function('_lastSent', 'sensesReset', 'webJoinOnly', '_dragFrom', '_refusedAt', 'fogForgetAll', 'log', shHead.replace('    fogForgetAll();', '    log.push("went on"); fogForgetAll();'))(null, () => {}, () => joinOnly, null, null, () => {}, log); sh(false); return log.join() || 'stopped'; };
+        const hostOut = shHead ? [runHost(true), runHost(false)] : ['no head'];
+        const rfA = src.indexOf('// after a refresh: straight back to where you were\n'), rfB = src.indexOf('}, 1200);', rfA), rfSrc = rfA >= 0 && rfB > rfA ? src.slice(rfA, rfB + '}, 1200);'.length) : '';
+        const runRefresh = async (store, joinOnly, gateR) => {
+            const timers = [], log = [], n = { fromWelcome: false }, els = { netCodeInput: { value: '' }, netNameInput: { value: '' }, netJoinPassInput: { value: '' } };
+            const ss = { getItem: k => (k in store ? store[k] : null), removeItem: k => { delete store[k]; } };
+            new Function('setTimeout', 'sessionStorage', 'ui', 'toast', 'joinSession', 'startHosting', 'net', 'window', 'webJoinOnly', rfSrc)(fn => timers.push(fn), ss, id => els[id] || null, t => log.push('toast'), (c, nm) => log.push('join:' + c + ':' + nm + ':' + n.fromWelcome), () => log.push('host'), n, { wpWebMode: gateR === undefined ? undefined : { ready: gateR } }, () => joinOnly);
+            timers.forEach(fn => fn());
+            for (let i = 0; i < 8; i++) await new Promise(r => setImmediate(r));
+            return log;
+        };
+        const RJ = () => ({ wp_rejoin: JSON.stringify({ code: 'ABCDEFGHJK', name: 'Kael', pass: '' }) });
+        let openR = null; const gateR = new Promise(r => { openR = r; });
+        const rfPend = await runRefresh(RJ(), true, gateR), rfBefore = rfPend.join();
+        const rf = { webJoin: (await runRefresh(RJ(), true, Promise.resolve({ mode: 'join-only' }))).join(), desk: (await runRefresh(RJ(), false, Promise.resolve({ mode: 'full' }))).join(), noMod: (await runRefresh(RJ(), false, undefined)).join(), rehost: (await runRefresh({ wp_rehost: '1' }, false, undefined)).join() };
+        openR({ mode: 'join-only' }); for (let i = 0; i < 8; i++) await new Promise(r => setImmediate(r)); const rfLate = rfPend.join();
+        const leaveA = src.indexOf('net.leaveSessionConfirm = function() {'), leaveS = leaveA < 0 ? '' : src.slice(leaveA, src.indexOf('\n};\n', leaveA));
+        check('1.5.5 plan-aware mode in net.js (each run for real): webJoinOnly answers yes only to an answer of true; a table\'s snapshot puts the welcome away for a join begun from it and, on a website whose plan joins tables alone, for every join, a refresh\'s among them; that website hosts no table (startHosting stops before anything of a table is begun); a refresh\'s rejoin waits for the site\'s word and there goes through the welcome\'s line, as a join begun from it does, a desktop\'s as before; leaving says the player goes back to Join a game there, and that their own campaign comes back elsewhere',
+            j(wjOut) === j([true, false, false, false, false]) && j(hideOut) === j(['hide:false', 'hide:false', ':false']) && j(hostOut) === j(['stopped', 'went on'])
+            && rf.webJoin === 'toast,join:ABCDEFGHJK:Kael:true' && rf.desk === 'toast,join:ABCDEFGHJK:Kael:false' && rf.noMod === rf.desk && rf.rehost === 'toast,host' && rfBefore === '' && rfLate === 'toast,join:ABCDEFGHJK:Kael:true'
+            && /var byeQ = typeof webJoinOnly === 'function' && webJoinOnly\(\) \? 'Leave the session\? You go back to Join a game\. You can rejoin with the same room code\.' : 'Leave the session\? Your own campaign comes back on screen\. You can rejoin with the same room code\.';[^\n]*\n\s*d\.showConfirm\(byeQ, function\(yes\) \{/.test(leaveS),
+            j([wjOut, hideOut, hostOut, rf, rfBefore, rfLate]));
+        // the words at the table: no campaign of the player's own is spoken of on such a website (the snapshot branch's two statements, run for real)
+        const sayA = src.indexOf("        var webJ = typeof webJoinOnly === 'function' && webJoinOnly();"), sayB = src.indexOf('\n', src.indexOf("        toast(backS ? 'Reconnected", sayA)), saySrc = sayA >= 0 && sayB > sayA ? src.slice(sayA, sayB) : '';
+        const runSay = (joinOnly, retry) => { const said = []; const conn = { wpRetry: retry, wpBackSaid: false }; new Function('webJoinOnly', 'setStatus', 'toast', 'conn', saySrc)(() => joinOnly, s => said.push('status:' + s), t => said.push('toast:' + t), conn); return said; };
+        check('1.5.5 plan-aware mode, the words of a join (the snapshot branch run for real): on a website whose plan joins tables alone the player is told they are at the GM\'s table and nothing of a campaign of their own; on a desktop the words are as before; a reconnect is said as before either way',
+            j(runSay(true, false)) === j(['status:Connected. You are at the GM’s table.', 'toast:Campaign synced from host.']) && j(runSay(false, false)) === j(['status:Connected — you are at the GM’s table. Your own campaigns are untouched and come back when you leave the session.', 'toast:Campaign synced from host. Your own campaigns come back when you leave.'])
+            && j(runSay(true, true)) === j(['status:Connected. You are at the GM’s table.', 'toast:Reconnected ✓']), j([runSay(true, false), runSay(false, false), runSay(true, true)]));
+        // what a player is told on such a website when the host turns them away, ends the table or is lost, and when they leave: no step of an update
+        // (the Updates part is put away there: the deploy is the update) and no campaign of their own to come back; on a desktop as before. The denied
+        // and end branches run for real, and the toast statements of giveUpAndRestore and leaveSession
+        const W2 = (() => { try { return new Function(wjSrc + '\nreturn typeof webOlderWords === "function" ? webOlderWords : null;')(); } catch (e) { return null; } })();
+        const denW = tryBetween('// [netcheck:denied-start]', '// [netcheck:denied-end]') || '';
+        const updW = (() => { const i = src.indexOf('function updateMessage(theirs, ours) {'); return i < 0 ? '' : src.slice(i, src.indexOf('\n}\n', i) + 3); })();
+        const DW = ['net', 'setStatus', 'showConfirm', 'toast', 'ui', 'window', 'setTimeout', 'updateMessage', 'APP_VERSION', 'webJoinOnly', 'webOlderWords'];
+        const runDenW = (joinOnly, msg) => { const h = { status: [], toasts: [], confirms: 0, failed: 0 }; const conn = { peer: 'host-x', open: true, close() {} };
+            const env = { net: { role: 'client', conns: [conn], leaving: false, fromWelcome: true }, setStatus: s => h.status.push(s), showConfirm: () => h.confirms++, toast: t => h.toasts.push(t), ui: () => ({ style: {} }), window: { wpJoinFailed: () => h.failed++ }, setTimeout: () => 0,
+                updateMessage: new Function(updW + '\nreturn updateMessage;')(), APP_VERSION: '1.5.5', webJoinOnly: () => joinOnly, webOlderWords: W2 };
+            try { new Function('env', 'msg', 'conn', 'var ' + DW.map(n => n + ' = env.' + n).join(', ') + ';\n' + denW + '\nreturn "ran";')(env, msg, conn); } catch (e) { return 'threw: ' + e.message; }
+            return h; };
+        const OLDER = 'The GM’s Waypoint 1.5.6 is newer than this website’s. Try again once the website is updated.';
+        const dW = [runDenW(true, { type: 'denied', update: true, v: '1.5.6', reason: 'Run this.' }), runDenW(true, { type: 'denied', update: true, v: '<b>9</b>' }), runDenW(true, { type: 'kicked' }), runDenW(true, { type: 'denied', reason: 'Not tonight.' })];
+        const dD = [runDenW(false, { type: 'denied', update: true, v: '1.5.6' }), runDenW(false, { type: 'kicked' })];
+        const plainW = s => typeof s === 'string' && !/[()–—;]|Settings|Update Now|Waypoint_Setup|own campaign/.test(s) && s.split('. ').every(x => x.length <= 140);
+        const endW = tryBetween('// [netcheck:end-start]', '// [netcheck:end-end]') || '';
+        const runEndW = joinOnly => { const h = { status: [], toasts: [] }; const conn = { peer: 'h', open: true };
+            try { new Function('net', 'conn', 'msg', 'diceSessionReset', 'setStatus', 'ui', 'toast', 'webJoinOnly', endW)({ role: 'client', leaving: false, conns: [conn] }, conn, { type: 'end' }, () => {}, s => h.status.push(s), () => ({ style: {} }), t => h.toasts.push(t), () => joinOnly); } catch (e) { return 'threw: ' + e.message; }
+            return h.status.concat(h.toasts).join('|'); };
+        const guA = src.indexOf('function giveUpAndRestore(msg) {'), guLine = guA < 0 ? '' : ((src.slice(guA, src.indexOf('\n}\n', guA)).match(/\n(    toast\([^\n]*)/) || [])[1] || '');
+        const runGu = joinOnly => { const t = []; try { new Function('webJoinOnly', 'toast', 'msg', guLine)(() => joinOnly, x => t.push(x), 'Could not reconnect to the GM.'); } catch (e) { return 'threw: ' + e.message; } return t.join('|'); };
+        const lvA = src.indexOf('function leaveSession(silent) {'), lvLine = lvA < 0 ? '' : ((src.slice(lvA, src.indexOf('\n}\n', lvA)).match(/\n(        toast\(wasClient \?[^\n]*)/) || [])[1] || '');
+        const runLv = (joinOnly, wasClient, wasHost) => { const t = []; try { new Function('wasClient', 'wasHost', 'fightsOver', 'webJoinOnly', 'toast', lvLine)(wasClient, wasHost, 0, () => joinOnly, x => t.push(x)); } catch (e) { return 'threw: ' + e.message; } return t.join('|'); };
+        const wordsW = { dW: dW.map(h => typeof h === 'string' ? h : [h.status.join(), h.toasts.join(), h.confirms, h.failed].join(' / ')), dD: dD.map(h => typeof h === 'string' ? h : [h.status.join(), h.toasts.join()].join(' / ')),
+            end: [runEndW(true), runEndW(false)], gu: [runGu(true), runGu(false)], lv: [runLv(true, true, false), runLv(false, true, false), runLv(true, false, true)] };
+        check('1.5.5 plan-aware mode, the words of a table that is lost (net.js run for real): on a website whose plan joins tables alone a host that turns the player away as older is said in plain words with the GM\'s version and no step of an update, the Updates part being put away there, and no toast speaks of a campaign of the player\'s own coming back, when they are turned away or removed, when the GM ends the table, when it is lost or when they leave; on a desktop every one of them is as before',
+            !!W2 && W2('1.5.6') === OLDER && plainW(W2('1.5.6')) && plainW(W2(''))
+            && j(wordsW.dW) === j([OLDER + ' / ' + OLDER + ' / 0 / 1', 'The GM’s Waypoint is newer than this website’s. Try again once the website is updated. / The GM’s Waypoint is newer than this website’s. Try again once the website is updated. / 0 / 1', 'Removed from the session by the GM. / Removed from the session by the GM. / 0 / 1', 'Not tonight. / Not tonight. / 0 / 1'])
+            && /^Your Waypoint \(1\.5\.5\) is older than the GM's \(1\.5\.6\)\. Update Waypoint, then rejoin: open Settings/.test(wordsW.dD[0]) && / \/ Your Waypoint \(1\.5\.5\)[^/]* Restoring your own campaign\.$/.test(wordsW.dD[0]) && wordsW.dD[1] === 'Removed from the session by the GM. / Removed from the session by the GM. Restoring your own campaign.'
+            && j(wordsW.end) === j(['Session ended by the GM.|The GM ended the session.', 'Session ended by the GM.|The GM ended the session — restoring your own campaign.'])
+            && j(wordsW.gu) === j(['Could not reconnect to the GM.', 'Could not reconnect to the GM. Restoring your own campaign.'])
+            && j(wordsW.lv) === j(['You left the session.', 'Left the session — restoring your own campaign.', 'Session ended for everyone — the room code is retired.']), j(wordsW));
+        // the stream window is the GM's (stream.js run for real): a website's page that joins tables alone opens none and is the join page, and a stream
+        // window open before the site's answer said so asks the server for nothing once it has; elsewhere as before
+        const stJs = fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', 'stream.js'), 'utf8').replace(/\r\n/g, '\n');
+        const swA = stJs.indexOf('// [netcheck:streamweb-start]'), swB = stJs.indexOf('// [netcheck:streamweb-end]'), swSrc = swA >= 0 && swB > swA && stJs.indexOf('// [netcheck:streamweb-start]', swA + 1) < 0 ? stJs.slice(swA, swB) : '';
+        const onLine = (stJs.match(/\nconst on = [^\n]*\n/) || [''])[0];
+        const onRun = (search, Wm) => { try { return new Function('window', 'location', 'URLSearchParams', swSrc + onLine + '\nreturn on;')({ wpWebMode: Wm }, { search }, URLSearchParams); } catch (e) { return 'threw: ' + e.message; } };
+        const ons = [onRun('?stream=1', undefined), onRun('?stream=1', { joinOnly: () => true }), onRun('?stream=1', { joinOnly: () => false }), onRun('', undefined), onRun('', { joinOnly: () => true }), onRun('?stream=1', { joinOnly: () => 'yes' })];
+        const tkA = stJs.indexOf('    async function tick() {\n'), tkB = stJs.indexOf('        if (!data || !data.campaigns', tkA), tickHead = tkA >= 0 && tkB > tkA ? stJs.slice(tkA, tkB) : '';
+        const tickRun = async Wm => { const asked = []; try { const tk = new Function('window', 'fetch', swSrc + tickHead + "        return 'went on';\n    }\n    return tick;")({ wpWebMode: Wm }, u => { asked.push(u); return Promise.resolve({ json: () => Promise.resolve({}) }); }); const r = await tk(); return (r || 'stopped') + ':' + asked.join(); } catch (e) { return 'threw: ' + e.message; } };
+        const ticks = [await tickRun({ joinOnly: () => true }), await tickRun({ joinOnly: () => false }), await tickRun(undefined)];
+        check('1.5.5 plan-aware mode, no stream window (stream.js run for real): ?stream=1 opens the GM\'s stream window on a desktop as before and none on a website whose plan joins tables alone, only an answer of true counting; a stream window opened before the site\'s answer said so asks the server for nothing at its next tick; main.js shows such a page the join page',
+            !!swSrc && j(ons) === j([true, false, true, false, false, true]) && j(ticks) === j(['stopped:', 'went on:/api/data', 'went on:/api/data'])
+            && /if \(\/\[\?&\]stream=1\/\.test\(location\.search\) && !wcJoinOnly\(\)\) return;/.test(fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', 'main.js'), 'utf8')), j([ons, ticks]));
+    })());
 }
 
 let summed = false;   // a check that never settles (a promise nothing answers) would let Node exit with no summary and code 0: that is a failure
@@ -12332,7 +12473,7 @@ pendingChecks.push((async () => {
         const wiredU = [
             /\} else if \(net\.active && net\.code\) \{\n(?:\s*\/\/[^\n]*\n)*\s*if \(conn\.wpHostOk !== true && cur\) \{\n\s*if \(conn\.wpBefore\) \{ reconn\.tries = conn\.wpBefore\.tries; reconn\.gen = conn\.wpBefore\.gen; \}\n\s*else if \(hostGone\(conn\)\) return;\n\s*\}\n(?:\s*\/\/[^\n]*\n)*\s*reconn\.code = net\.code;/.test(clS) && /\/\/ \[netcheck:connclose-start\]\n\s*var cur = net\.conns\[0\] === conn;[^\n]*\n\s*net\.conns = net\.conns\.filter\(/.test(src),
             /var h = hostHeld\(conn\); if \(!h\) return;\n\s*hostSlow\(conn, h\.gmId\);/.test(stSrc) && nCalls(stSrc, /snapRefuse\(/g) === 3 && nCalls(stSrc, /hostSlow\(/g) === 3,
-            nCalls(src, /Reconnected/g) === 1 && /var backS = conn\.wpRetry === true && !conn\.wpBackSaid; conn\.wpBackSaid = true;\n\s*toast\(backS \? 'Reconnected [^']*' : 'Campaign synced from host\. Your own campaigns come back when you leave\.'\);/.test(snapBr) && /setStatus\('Connected [^']* Your own campaigns are untouched and come back when you leave the session\.'\);/.test(snapBr) && nCalls(snapBr, /toast\(/g) === 1 && !/if \(wasRetry\) toast\(/.test(src),
+            nCalls(src, /Reconnected/g) === 1 && /var backS = conn\.wpRetry === true && !conn\.wpBackSaid; conn\.wpBackSaid = true;\n\s*toast\(backS \? 'Reconnected [^']*' : webJ \? 'Campaign synced from host\.' : 'Campaign synced from host\. Your own campaigns come back when you leave\.'\);/.test(snapBr) && /setStatus\(webJ \? 'Connected\. You are at the GM[^']*s table\.' : 'Connected [^']* Your own campaigns are untouched and come back when you leave the session\.'\);/.test(snapBr) && nCalls(snapBr, /toast\(/g) === 1 && !/if \(wasRetry\) toast\(/.test(src),
             /if \(rfJ\) setStatus\(rfJ\.late \? HOST_LATE \+ ' You have not joined\.' : SNAP_REFUSED \+ ' You have not joined\.'/.test(src),
             /if \(!conn\.open\) return;\n\s*if \(typeof net\.syncMapStubs === 'function'\) net\.syncMapStubs\(\);/.test(admU) && admU.indexOf('net.syncMapStubs()') < admU.indexOf('net.roster[conn.peer] = prof') && nCalls(admU, /syncMapStubs\(\)/g) === 1,
             /<li><b>Your GM, and no one else:<\/b>[\s\S]{0,1200}?<li>If no table there shows in time that it is your GM&rsquo;s, you are asked whether to join again and wait for it\. It may only be slow\.<\/li>\s*<li>Your app still checks that it is your GM before you are joined\.<\/li>/.test(htmlS)

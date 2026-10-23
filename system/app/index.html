@@ -1383,6 +1383,7 @@ Plain paragraphs are text: **bold**, *italic*, ~~strike~~, &lt;u&gt;underline&lt
                                   <li>Set your name, which is required, and your color, picture and token face.</li>
                                   <li>Enter the code, and the password if there is one, and press <b>Join</b>.</li>
                                   <li>The Join screen shows the connection and drops you in when the GM&rsquo;s table loads.</li>
+                                  <li>On Waypoint&rsquo;s website a player account opens straight to <b>Join a game</b>.</li>
                               </ul>
                           </li>
                           <li>Your first time at a table, the GM gets a prompt to let you in. You'll see "waiting for the GM" for a moment. After that you're recognized and go straight in.</li>
@@ -3260,7 +3261,7 @@ Plain paragraphs are text: **bold**, *italic*, ~~strike~~, &lt;u&gt;underline&lt
             <button class="tool ghost" id="setFaceBtn" type="button" style="padding:3px 8px;" title="Choose your token's face"><span class="face-prev"></span></button>
             <span style="font-size:10.5px; color:var(--dim); flex:1; line-height:1.35;">What your token shows while you wait for a character at a table: your picture, the plain default, a bundled token picture or an emoji.</span>
         </div>
-        <div style="margin-top:6px;">
+        <div class="set-welcome" style="margin-top:6px;">
             <div class="set-field-label">Welcome screen on launch</div>
             <select id="setWelcomePref" class="field" style="width:100%; box-sizing:border-box;"><option value="always">Every time</option><option value="first">First run only</option><option value="never">Never</option></select>
         </div>
@@ -3540,7 +3541,7 @@ Plain paragraphs are text: **bold**, *italic*, ~~strike~~, &lt;u&gt;underline&lt
             <input type="range" id="setUndoDepth" min="10" max="500" step="10" style="width:100%;" title="How many steps Undo/Redo can take back, per map and per planner">
             <div style="font-size:10.5px; color:var(--dim); line-height:1.4;">Steps kept per map &amp; planner (default 100). More gives deeper Undo but uses more memory on this computer &mdash; all maps share a 64&nbsp;MB cap, and the oldest steps on maps you&rsquo;re not using are dropped first. This computer only.</div>
         </div>
-        <div style="margin-bottom:12px;">
+        <div class="set-devmode" style="margin-bottom:12px;">
             <div class="set-field-label" style="display:flex; justify-content:space-between;">Developer mode <span id="setDevConsoleState" style="color:var(--dim);"></span></div>
             <button class="tool ghost" id="setDevConsoleBtn" style="width:100%;">Toggle Developer mode</button>
             <div style="color:var(--dim); font-size:10.5px; line-height:1.5; margin-top:6px;">When on, <b>~</b> drops down a JavaScript console and, in the installed app, <b>Ctrl+Shift+I</b> opens the developer tools &mdash; for debugging and power users. It asks before it turns on: used incorrectly, these tools can change or break your campaigns and settings. Waypoint reloads when you switch it. Off by default.</div>
@@ -3553,7 +3554,7 @@ Plain paragraphs are text: **bold**, *italic*, ~~strike~~, &lt;u&gt;underline&lt
             <button class="tool ghost" id="setResetPrefsBtn" title="Clears every remembered preference (units, snap and snap mode, pen color/width/style, eraser, shape sizing, opacities, the minimap fold, rulers, the zoom buttons, the pointer location, panel sizes, folded sections, the VTT default for new campaigns, your per-table VTT choices, the sound volumes, the Sound panel's position, any bundled sounds you hid and the dice-sound switch) here and in the saves folder's preferences.json. Your campaigns — each with its own VTT settings — your name, picture and multiplayer identity are untouched.">Reset Local Preferences</button>
             <div class="set-line tight">Clears what this computer remembers of your choices. Your campaigns and your profile are not touched.</div>
             </div>
-                <div style="margin-top:14px;">
+                <div class="set-snaps" style="margin-top:14px;">
                 <div class="set-field-label">Snapshots of the save</div>
                 <div id="setSnapList" style="display:flex; flex-direction:column; gap:4px; font-size:12px;"><div style="color:var(--dim);">Loading&hellip;</div></div>
                 <div style="color:var(--dim); font-size:10.5px; line-height:1.5; margin-top:6px;">Waypoint copies the save into the saves folder's <b>backups</b> at every launch and keeps the newest ten. Snapshots you take by hand are kept until you delete them. A launch backup you delete here is set aside, not erased: it moves to <b>backups/removed</b> in the saves folder (the ten newest are kept), and moving the file back into <b>backups</b> lists it here again. <b>Restore</b> replaces the whole save with that copy and reloads; the save as it is now is snapshotted first, so nothing is lost.</div>
@@ -3574,7 +3575,7 @@ Plain paragraphs are text: **bold**, *italic*, ~~strike~~, &lt;u&gt;underline&lt
             <div style="text-align:center; margin-top:14px;"><button id="setVersionBtn" class="tool ghost" style="font-size:11px; color:var(--dim); padding:2px 10px;" title="Click to read what's new">Waypoint</button></div>
             </div>
         </details>
-        <div style="font-size:10.5px; color:var(--dim); margin-top:10px; line-height:1.5;">Campaign data lives in the <b>saves</b> folder and is snapshotted to <b>saves/backups</b> on every launch.</div>
+        <div class="set-saves" style="font-size:10.5px; color:var(--dim); margin-top:10px; line-height:1.5;">Campaign data lives in the <b>saves</b> folder and is snapshotted to <b>saves/backups</b> on every launch.</div>
     </div>
 </div>
 
