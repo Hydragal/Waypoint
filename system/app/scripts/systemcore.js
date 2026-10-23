@@ -1788,6 +1788,15 @@ function cleanSheetStyle(v) {
 }
 function fieldById(sys, id) { for (var i = 0; i < sys.fields.length; i++) if (sys.fields[i].id === id) return sys.fields[i]; return null; }
 function keyIndex(sys) { var ix = map(); sys.fields.forEach(function(f) { ix[lower(f.key)] = f; }); return ix; }
+// 1.5.5: keyIndex for a resolver, kept for a fields array while each of its fields is the very object it was made from with the very key, so a
+// draft edited in place (a field added, removed, replaced or given another key) is indexed again. Read only: every resolver of that array shares it
+var _ixKept = typeof WeakMap === 'function' ? new WeakMap() : null;
+function keyIndexOf(sys) {
+    var fs = sys.fields, m = _ixKept ? _ixKept.get(fs) : null, i = 0;
+    if (m && m.n === fs.length) { for (; i < fs.length; i++) if (fs[i] !== m.fs[i] || fs[i].key !== m.ks[i]) break; if (i === fs.length) return m.ix; }
+    var ix = keyIndex(sys); if (_ixKept) _ixKept.set(fs, { n: fs.length, fs: fs.slice(), ks: fs.map(function(f) { return f.key; }), ix: ix });
+    return ix;
+}
 // Stage 6 F5a1: the keys of the GM-only library entries, per visible item list whose scope has them (lower-case list key -> lower-case entry
 // key -> 1) — a visible formula naming L.<such a key> reads a secret (critic 5: per list and key, never all keys everywhere). The system's items
 // and its core (the library's addressed entries, a GM-only pack's marked GM-only: findRow reads both; owed review F5a1#1). Local
@@ -1963,8 +1972,10 @@ function cleanCharEdits(msg) {
 // a pool's current value (full = its max) or a number's stored value (an effect's change stays the effect's), minus the amount (plus, for an
 // add), clamped by the field (applyEdit: a pool's min is its floor). An amount is a number, no dice, a pool's rounded; below 0 it counts as 0
 // (a subtract never raises, an add never lowers). All or nothing. { ok: true, values: { fieldId: value }, lines: [{ f, n, d, v }], names:
-// [{ name, value }] } — lines: the label, the amount (signed), the new value — or { ok: false, reason: field|value|none|error, message? }
-function applyAct(sys, char, act, vars, F, tctx, rowCtx) {   // rowCtx (R2b): { f: the list, r: the row } — a change may move one of that row's counters
+// [{ name, value }] } — lines: the label, the amount (signed), the new value — or { ok: false, reason: field|value|none|error, message? }.
+// same (1.5.5, true only): vars is char's own resolver in tctx, in a system chainsShallow passes, so it reads a pool's current value and its
+// most in place of a new resolver while no change is made yet (any resolver of one state answers alike there)
+function applyAct(sys, char, act, vars, F, tctx, rowCtx, same) {   // rowCtx (R2b): { f: the list, r: the row } — a change may move one of that row's counters
     if (!sys || !Array.isArray(sys.fields) || !char || !isObj(act) || !Array.isArray(act.apply) || !act.apply.length || typeof vars !== 'function' || !F) return { ok: false, reason: 'field' };
     if (!rollNeedsOk(act, vars, F)) return { ok: false, reason: 'error', message: rollNeedsSays(act) };   // 1.5.4: what it needs, read with the same names its amounts read (a list's action has none)
     var amts = [], names = [], seenN = map();
@@ -1983,10 +1994,11 @@ function applyAct(sys, char, act, vars, F, tctx, rowCtx) {   // rowCtx (R2b): { 
         amts.push({ f: f, ctr: ctr, lf: lfC, amt: c.set === true ? v : (v > 0 ? v : 0), add: c.add === true, set: c.set === true });   // R1: Set to takes the amount as it is
     }
     if (!amts.some(function(a) { return a.set || a.amt > 0; })) return { ok: false, reason: 'none' };
-    var work = Object.assign({}, char, { values: JSON.parse(JSON.stringify(char.values || {})) }), out = {}, lines = [];
+    var work = Object.assign({}, char, { values: JSON.parse(JSON.stringify(char.values || {})) }), out = {}, lines = [], asIs = same === true;   // asIs: work still as char stands
     for (var j = 0; j < amts.length; j++) {
         var a = amts[j]; if (!a.set && !(a.amt > 0)) continue;
         if (a.ctr) {   // Stage 6 HUD R2b: one of the row's counters — from 0 to the row's own most, on the working copy of its list
+            asIs = false;
             var rowsC = work.values[a.lf.id] = JSON.parse(JSON.stringify(Array.isArray(work.values[a.lf.id]) ? work.values[a.lf.id] : [])), rwC = null;
             rowsC.forEach(function(r) { if (!rwC && isObj(r) && rowIdOf(r) === rowCtx.r) rwC = r; }); if (!rwC || rwC.hid === 1) return { ok: false, reason: 'missing' };
             var curC = rowCt(rwC, a.ctr), nxC = Math.max(0, Math.min(1e6, Math.round(a.set ? a.amt : a.add ? curC + a.amt : curC - a.amt))), mxC = makeResolver(sys, work, F, tctx || null).ctMax(a.lf, rwC, a.ctr.key);
@@ -1996,12 +2008,12 @@ function applyAct(sys, char, act, vars, F, tctx, rowCtx) {   // rowCtx (R2b): { 
             continue;
         }
         var cur = 0;
-        if (a.f.kind === 'resource') { var rv = makeResolver(sys, work, F, tctx || null)(a.f.key); if (typeof rv === 'number' && fin(rv)) cur = rv; }   // full (nothing stored) reads as the max
+        if (a.f.kind === 'resource') { var rv = (asIs ? vars : makeResolver(sys, work, F, tctx || null))(a.f.key); if (typeof rv === 'number' && fin(rv)) cur = rv; }   // full (nothing stored) reads as the max
         else { var sv = storedOf(a.f, work); if (typeof sv === 'number' && fin(sv)) cur = sv; }
         var next = a.set ? a.amt : a.add ? cur + a.amt : cur - a.amt;
-        var ed = applyEdit(sys, work, a.f.id, a.f.kind === 'resource' ? { cur: next } : next, F, { tctx: tctx });   // 152 (fold 1's review): held to the most as this context reads it, as cur was read
+        var ed = applyEdit(sys, work, a.f.id, a.f.kind === 'resource' ? { cur: next } : next, F, asIs ? { tctx: tctx, vars: vars } : { tctx: tctx });   // 152 (fold 1's review): held to the most as this context reads it, as cur was read
         if (!ed.ok) return { ok: false, reason: ed.reason };
-        work.values[a.f.id] = ed.value; out[a.f.id] = ed.value;
+        work.values[a.f.id] = ed.value; out[a.f.id] = ed.value; asIs = false;
         var nv = a.f.kind === 'resource' ? ed.value.cur : ed.value;
         lines.push({ f: a.f.id, n: a.f.label || a.f.key, d: a.set ? nv - cur : a.add ? a.amt : -a.amt, v: nv });   // a Set's line says what it moved
     }
@@ -2046,14 +2058,19 @@ function applyRound(sys, char, varsFor, F, tctx, kind) {   // kind (T2b): 'round
 // worked out on what the one before left. { values: { fieldId: value } (what changed), lines: [{ f, n, d, v }] (each field once: how far it
 // really moved, a full pool's clamp counted, and where it ended), rolls: { made, pass, fail }, ran } ; a run that fails is passed over.
 // Backlog 152: at = { round } runs it in a fight, so CombatRound reads that round (whole, within 0 to 9999, as withRound keeps it); the context is
-// built here, since withRound answers nothing with no token's context. Without it, CombatRound reads 0, as before
-function timeRuleRun(sys, char, rule, n, F, D, at) {
+// built here (ruleRunCtx), since withRound answers nothing with no token's context. Without it, CombatRound reads 0, as before. 1.5.5 (found
+// live: one press of +1 hour on a campaign of 158 characters held the GM's screen for four seconds, nearly all of it here, working out every
+// field of the sheet for every run): opt.vars, a resolver of char as it stands in this run's context, is the first run's, and each later run
+// works out only the names it reads, with one resolver of its own state (ropts.reuse). A caller hands it in only for a system chainsShallow passes, where
+// any resolver of one state answers every name alike, so nothing a run gives changes. Without it, as before
+function ruleRunCtx(at) { return isObj(at) && fin(at.round) ? { combat: { round: Math.max(0, Math.min(9999, Math.floor(at.round))) } } : null; }
+function timeRuleRun(sys, char, rule, n, F, D, at, opt) {
     var out = { values: {}, lines: [], rolls: { made: 0, pass: 0, fail: 0 }, ran: 0 }; if (!isObj(sys) || !isObj(char) || !isObj(rule) || !F) return out;
-    var tctx = isObj(at) && fin(at.round) ? { combat: { round: Math.max(0, Math.min(9999, Math.floor(at.round))) } } : null;
+    var tctx = ruleRunCtx(at), own = isObj(opt) && typeof opt.vars === 'function';
     var work = Object.assign({}, char, { values: JSON.parse(JSON.stringify(isObj(char.values) ? char.values : {})) }), tot = map(), init = map(), order = [], count = Math.max(0, Math.min(500, Math.floor(Number(n) || 0)));
     var chk = isObj(sys.combat) && sys.combat.checks === 'under3d6' ? 'under3d6' : '';
     for (var i = 0; i < count; i++) {
-        var vars = resolveAll(sys, work, F, tctx).vars, act = null;
+        var vars = own ? (i === 0 ? opt.vars : makeResolver(sys, work, F, tctx ? { combat: tctx.combat, reuse: true } : { reuse: true })) : resolveAll(sys, work, F, tctx).vars, act = null;
         if (!rollNeedsOk(rule, vars, F)) { out.held = true; break; }   // 1.5.4: its needs not met, it is passed over (the next run would read the same)
         if (Array.isArray(rule.apply)) act = rule;
         else if (typeof rule.formula === 'string' && rule.formula) {
@@ -2066,13 +2083,94 @@ function timeRuleRun(sys, char, rule, n, F, D, at) {
         }
         if (!act) break;
         act.apply.forEach(function(c) { if (isObj(c) && typeof c.f === 'string' && init[c.f] === undefined) { var fd = fieldById(sys, c.f), iv = fd ? vars(fd.key) : null; init[c.f] = typeof iv === 'number' && fin(iv) ? iv : 0; } });   // where each field began, for how far it really moved
-        var r = applyAct(sys, work, act, vars, F, tctx, null); if (!r.ok) continue;
+        var r = applyAct(sys, work, act, vars, F, tctx, null, own); if (!r.ok) continue;
         Object.keys(r.values).forEach(function(k) { work.values[k] = r.values[k]; out.values[k] = r.values[k]; });
         r.lines.forEach(function(l) { if (!tot[l.f]) { tot[l.f] = { f: l.f, n: l.n, v: l.v }; order.push(l.f); } tot[l.f].v = l.v; });
         out.ran++;
     }
     out.lines = order.map(function(k) { var v = tot[k].v; return { f: k, n: tot[k].n, d: typeof v === 'number' && fin(v) ? Math.round((v - (init[k] || 0)) * 1000) / 1000 : 0, v: v }; });
     return out;
+}
+// 1.5.5: whether no name of the system can be worked out through a loop or deeper than the formula engine allows (its LIMITS.maxDepth). The
+// resolver keeps on its chain each definition it is working out (a formula, a skill's base, a pool's most, a list's total, highest or
+// lowest, a column of one row, a choice's option), and the engine refuses a chain past that depth: so where a chain could pass it, a
+// resolver whose cache already holds part of the chain (resolveAll's, which works out every field in order) may answer a name that a fresh
+// one cannot. Where none can, every resolver of one state answers every name alike, and a caller may share one or work out only what it
+// reads. Read from the definitions alone, each name its text reads followed to the node the resolver itself would work it out under (by
+// key, a list's names, a reserved suffix, a column's Row.*), so it holds every chain the resolver can build and more. A loop, a chain past
+// the depth or no engine: false. The review of 1.5.5: no path is walked past that depth, since a path that long already answers, so a long
+// chain never runs the stack out and is never read cut short; and anything it cannot read (an engine that throws) is no proof: false too
+function chainsShallow(sys, F) {
+    if (!isObj(sys) || !Array.isArray(sys.fields) || !F || typeof F.names !== 'function') return false;
+    try { return chainsWalk(sys, F); } catch (e) { return false; }
+}
+function chainsWalk(sys, F) {
+    var lim = isObj(F.LIMITS) && typeof F.LIMITS.maxDepth === 'number' ? F.LIMITS.maxDepth : 64, ix = keyIndex(sys), lists = map(), info = map(), memo = map(), on = map();
+    var node = function(id, texts, L, names, more) { if (!info[id]) info[id] = { texts: texts, L: L, names: names, more: more }; return id; };
+    var listOf = function(f) {   // listCtx's own reading of a list's stats, columns and counters
+        var lk = lower(f.key); if (lists[lk]) return lists[lk];
+        var spec = isObj(f.list) ? f.list : null, st = map(), cl = map(), ct = map();
+        (spec && Array.isArray(spec.stats) ? spec.stats : []).forEach(function(x) { if (isObj(x) && typeof x.key === 'string') st[lower(x.key)] = x; });
+        (spec && Array.isArray(spec.cols) ? spec.cols : []).forEach(function(x) { if (isObj(x) && typeof x.key === 'string') cl[lower(x.key)] = x; });
+        (spec && Array.isArray(spec.counters) ? spec.counters : []).forEach(function(x) { if (isObj(x) && typeof x.key === 'string') ct[lower(x.key)] = x; });
+        return (lists[lk] = { k: lk, st: st, cl: cl, ct: ct });
+    };
+    var defNode = function(f, sfx) {   // a field's name: its definition worked out (a formula, a skill's base, a pool's most), '' for one read as stored
+        var t = DEF_PROP[f.kind] ? f[DEF_PROP[f.kind]] : null; if (typeof t !== 'string' || !t) return '';   // none, GM only or missing: answered with nothing on the chain
+        if (f.kind === 'formula' ? sfx : f.kind === 'skill' ? sfx && sfx !== 'base' : sfx && sfx !== 'max' && sfx !== 'cur') return '';   // a pool full or by .cur reads its most
+        return node('f|' + lower(f.key), [t], null, [], []);
+    };
+    var rowNode = function(L, w) {   // a row's own name (Row.<w>, L.<Key>.<w>): a choice reads its option's value, a column is worked out
+        if (w === 'lvl' || w === 'qty' || w === 'on' || w === 'has' || w === 'paid') return '';
+        if (L.st[w]) return L.st[w].kind === 'pick' ? node('p|' + L.k + '|' + w, [], null, (Array.isArray(L.st[w].opts) ? L.st[w].opts : []).map(function(o) { return isObj(o) && typeof o.name === 'string' ? o.name : ''; }), []) : '';
+        if (L.cl[w]) return typeof L.cl[w].formula === 'string' && L.cl[w].formula ? node('c|' + L.k + '|' + w, [L.cl[w].formula], L, [], []) : '';
+        return '';
+    };
+    var totNode = function(L, w, ext) {   // a total of w (ext: a highest or lowest); undefined where the resolver has none and looks further
+        if (ext ? !((L.st[w] && L.st[w].kind !== 'pick') || L.cl[w]) : ((w !== 'count' && w !== 'qty' && w !== 'paid' && !L.st[w] && !L.cl[w]) || (L.st[w] && L.st[w].kind === 'pick'))) return undefined;
+        var c = L.cl[w] ? rowNode(L, w) : ''; return node('t|' + L.k + '|' + w, [], null, [], c ? [c] : []);
+    };
+    var listNode = function(l) {   // listName's own reading
+        var segs = l.split('.'), f = ix[segs[0]]; if (!f || f.kind !== 'item-list' || segs.length < 2 || segs.length > 4) return undefined;
+        var on4 = segs.length === 4 && segs[1] === 'on', ext = on4 ? segs[2] : segs[1];
+        if (segs.length === 4 && ext !== 'max' && ext !== 'min') return undefined;
+        var L = listOf(f);
+        if (segs.length === 2) return totNode(L, segs[1], false);
+        if ((ext === 'max' || ext === 'min') && segs.length === (on4 ? 4 : 3)) return totNode(L, segs[segs.length - 1], true);
+        if (segs.length === 4) return undefined;
+        if (segs[1] === 'on') return totNode(L, segs[2], false);
+        var w = segs[2]; if (w !== 'lvl' && w !== 'qty' && w !== 'on' && w !== 'has' && w !== 'paid' && !L.st[w] && !L.cl[w] && !L.ct[w]) return undefined;
+        return rowNode(L, w);
+    };
+    var nodeOf = function(name, L) {   // the resolver's own lookup (fn, and a column's rowVars): the node a name is worked out under, or ''
+        var l = lower(name);
+        if (L && l.slice(0, 4) === 'row.') { var w = l.slice(4); return w.indexOf('.') < 0 ? rowNode(L, w) : ''; }
+        if (ix[l]) return defNode(ix[l], '');
+        if (l.indexOf('.') > 0) { var ln = listNode(l); if (ln !== undefined) return ln; }
+        var dot = l.lastIndexOf('.'); if (dot > 0 && RESERVED_SUFFIX[l.slice(dot + 1)] && ix[l.slice(0, dot)]) return defNode(ix[l.slice(0, dot)], l.slice(dot + 1));
+        return '';
+    };
+    var namesOf = function(t) { var ns = F.names(t); return (Array.isArray(ns) ? ns : []).map(function(x) { return typeof x === 'string' ? x : isObj(x) && typeof x.name === 'string' ? x.name : ''; }); };   // a throw goes to chainsShallow's own catch
+    var over = false;   // a loop met, or a path walked past the depth: the answer is false, and nothing is walked further
+    var depth = function(id, p) {   // the longest chain from id, in nodes (a loop: Infinity); p: the nodes on the path walked to it, id among them
+        if (memo[id] !== undefined) return memo[id];
+        if (on[id] === 1 || p > lim) { over = true; return Infinity; }
+        on[id] = 1; var it = info[id], best = 0;
+        var see = function(d) { if (!d || best > lim) return; var x = depth(d, p + 1); if (x > best) best = x; };
+        it.texts.forEach(function(t) { namesOf(t).forEach(function(nm) { if (nm) see(nodeOf(nm, it.L)); }); });
+        it.names.forEach(function(nm) { if (nm) see(nodeOf(nm, null)); });
+        it.more.forEach(see);
+        on[id] = 0; return (memo[id] = best + 1);
+    };
+    var tops = [];
+    Object.keys(ix).forEach(function(k) {
+        var f = ix[k]; if (!isObj(f)) return; var d = defNode(f, ''); if (d) tops.push(d);
+        if (f.kind !== 'item-list') return; var L = listOf(f);
+        Object.keys(L.cl).forEach(function(w) { var t = totNode(L, w, false); if (t) tops.push(t); });
+        Object.keys(L.st).forEach(function(w) { var p = rowNode(L, w); if (p) tops.push(p); });
+    });
+    for (var i = 0; i < tops.length; i++) if (depth(tops[i], 1) > lim || over) return false;
+    return true;
 }
 function applyScope(sys, char, act, gm, F) {
     if (gm || !sys || !Array.isArray(sys.fields) || !isObj(act) || act.vis === 'gm' || !char || char.npc || !char.ownerId || !Array.isArray(act.apply) || !act.apply.length) return 'gm';
@@ -3414,8 +3512,9 @@ function srcKeep(list, m, seen) {
     for (var i = list.length - 1; i >= 0; i--) if (!list[i].gm) { list[i] = m; return; }
 }
 function makeResolver(sys, char, F, ropts) {   // ropts.noFx: the values with no effect applied (the breakdown's true base); ropts.facing / ropts.stance: tokenCtx(...) for the built-in token names
-    var autoL = (ropts && (ropts.noFx || ropts.noAuto)) ? null : autoEffectsOn(sys, char, F);   // conditions C4: the automatic effects on, from a first pass that holds none
-    var ix = keyIndex(sys), cache = map(), chain = [], fx = (ropts && ropts.noFx) ? null : fxIndex(sys, char, ropts ? ropts.stance : null, autoL), detail = map();
+    var first = {}, autoL = (ropts && (ropts.noFx || ropts.noAuto)) ? null : autoEffectsOn(sys, char, F, first);   // conditions C4: the automatic effects on, from a first pass that holds none
+    if (ropts && ropts.reuse === true && autoL && !autoL.length && first.r && !ropts.facing && !ropts.stance && !ropts.combat && !ropts.range) return first.r;   // 1.5.5 (a time rule's run, in a system chainsShallow passes): with no automatic effect on and no token's context, that first pass answers every name as this resolver would, so it is this resolver
+    var ix = keyIndexOf(sys), cache = map(), chain = [], fx = (ropts && ropts.noFx) ? null : fxIndex(sys, char, ropts ? ropts.stance : null, autoL), detail = map();
     var lctx = map(), asts = map(), pretty = map();   // Stage 6 F5a1: each list's rows (once a render), each column formula parsed once, readable names for a loop's message
     var rangeRead = false;   // range penalties R3: whether anything this resolver worked out read RangeMod or TargetDistance (fn.rangeRead)
     // 5h: where a derived value's effects came from — the sources recorded on the names its formula read (theirs and their own "via")
@@ -3799,10 +3898,10 @@ function tokenEffects(sys, char, gm, F) {   // conditions C4: F (the formula eng
 // and item mods but no automatic effect (so none reads its own changes or another's) and no token (its names read 0 there, as the reference
 // sheet works these out from the character alone): the sheet, the token, the wire and a roll agree. A formula that fails or gives anything
 // else: off. Only a visible effect carries a formula, and never one reading a GM-only value (cleanSystem: the owner's "Only public ones")
-function autoEffectsOn(sys, char, F) {
+function autoEffectsOn(sys, char, F, first) {   // first (1.5.5): an object handed in gets the first pass's resolver as r (makeResolver's ropts.reuse)
     var out = []; if (!isObj(sys) || !Array.isArray(sys.effects) || !Array.isArray(sys.fields) || !isObj(char) || !F || typeof F.evaluate !== 'function') return out;
     var list = sys.effects.filter(function(d) { return isObj(d) && typeof d.id === 'string' && typeof d.auto === 'string' && d.auto && d.vis !== 'gm'; }); if (!list.length) return out;
-    var r1 = makeResolver(sys, char, F, { noAuto: true });
+    var r1 = makeResolver(sys, char, F, { noAuto: true }); if (isObj(first)) first.r = r1;
     list.forEach(function(d) { var res = null; try { res = F.evaluate(d.auto, { vars: r1, random: noDice }); } catch (e) { res = null; } if (res && res.ok && (res.value === true || (typeof res.value === 'number' && isFinite(res.value) && res.value !== 0))) out.push(d); });
     return out;
 }
@@ -4224,7 +4323,8 @@ function charView(c, sys, own, opts) {
     return outC;
 }
 // The host's answer to one edit (its own or a player's): { ok, value } or { ok: false, reason }. Backlog 152 (fold 1's review): opts.tctx, an
-// object, is the context a pool's most is read with (a token's, a fight's round: what applyAct reads the pool itself with); none, as before
+// object, is the context a pool's most is read with (a token's, a fight's round: what applyAct reads the pool itself with); none, as before.
+// opts.vars (1.5.5): a resolver of char as it stands in that context, which reads the most in place of a new one (applyAct's same)
 function applyEdit(sys, char, fieldId, value, F, opts) {
     opts = opts || {};
     var f = fieldById(sys, fieldId); if (!f || !STORED[f.kind] || f.kind === 'effects') return { ok: false, reason: 'field' };   // 5h: an effects list changes only through applyEffectOp
@@ -4232,7 +4332,7 @@ function applyEdit(sys, char, fieldId, value, F, opts) {
     if (opts.player && f.vis !== 'all') return { ok: false, reason: 'field' };
     if (opts.player && f.kind === 'resource' && gmPools(sys, F)[f.id] === 1) return { ok: false, reason: 'field' };   // a pool whose max is GM-only is GM-only: the answer to 999 would be the max
     var max = null;
-    if (f.kind === 'resource') { var r = makeResolver(sys, char, F, isObj(opts.tctx) ? opts.tctx : undefined)(f.key + '.max'); max = typeof r === 'number' && isFinite(r) ? r : null; }
+    if (f.kind === 'resource') { var r = (typeof opts.vars === 'function' ? opts.vars : makeResolver(sys, char, F, isObj(opts.tctx) ? opts.tctx : undefined))(f.key + '.max'); max = typeof r === 'number' && isFinite(r) ? r : null; }
     var v = cleanValue(f, value, { max: max });
     if (v === undefined) return { ok: false, reason: 'value' };
     return { ok: true, value: v };
@@ -4775,6 +4875,6 @@ function orderBySide(rows, isPc, first) {
     var a = [], b = []; list.forEach(function(r) { (!!isPc(r) === (first === 'pc') ? a : b).push(r); });
     return a.concat(b);
 }
-var API = { VERSION: VERSION, cleanFieldUnit: cleanFieldUnit, metricOf: metricOf, unitTail: unitTail, readMeasure: readMeasure, heightWords: heightWords, MEASURES: MEASURES, measureWords: measureWords, unitWords: unitWords, unitHead: unitHead, listFig: listFig, listWords: listWords, unitOf: unitOf, figText: figText, figFmt: figFmt, weightWords: weightWords, textWords: textWords, measureStore: measureStore, rollNeedsOk: rollNeedsOk, rollNeedsSays: rollNeedsSays, onGroup: onGroup, onlyOne: onlyOne, onHeld: onHeld, cleanNeeds: cleanNeeds, hideNeeds: hideNeeds, needsMet: needsMet, needsSays: needsSays, needRule: needRule, ruleTrue: ruleTrue, setRuleJudge: setRuleJudge, cleanBudgets: cleanBudgets, budgetsOf: budgetsOf, budgetWatch: budgetWatch, budgetSays: budgetSays, cleanDesc: cleanDesc, cleanLvls: cleanLvls, EVERY_UNITS: EVERY_UNITS, cleanEvery: cleanEvery, FIGHT_UNITS: FIGHT_UNITS, cleanInFight: cleanInFight, timeRuleRun: timeRuleRun, cleanFace: cleanFace, charForView: charForView, mapGridOf: mapGridOf, tokenCell: tokenCell, shapeStandIn: shapeStandIn, cleanFrame: cleanFrame, openChar: openChar, newCharRules: newCharRules, charClash: charClash, coreOf: coreOf, setLibraryFind: setLibraryFind, statKeys: statKeys, statPicks: statPicks, cleanIcon: cleanIcon, droppedCounts: droppedCounts, parseLasts: parseLasts, lastsSecs: lastsSecs, roundSecs: roundSecs, fxLeftNow: fxLeftNow, fxTick: fxTick, mapCellScale: mapCellScale, moveAllowCells: moveAllowCells, dueActs: dueActs, gridCells: gridCells, cleanTurn: cleanTurn, TURN_UNITS: TURN_UNITS, TIME_WORDS: TIME_WORDS, roundActs: roundActs, combatChars: combatChars, applyRound: applyRound, thenChanges: thenChanges, showsIf: showsIf, rowRollNames: rowRollNames, applyAct: applyAct, applyScope: applyScope, cleanCharApply: cleanCharApply, APPLY_KINDS: APPLY_KINDS, hudView: hudView, hudHasContent: hudHasContent, pinTargetsAll: pinTargetsAll, TONES: TONES, valueTone: valueTone, cleanTones: cleanTones, playableChars: playableChars, activeCharOf: activeCharOf, activeChars: activeChars, ownedTokenPlan: ownedTokenPlan, applyOwnerOps: applyOwnerOps, migrateBindings: migrateBindings, tokenSourceFor: tokenSourceFor, playsAs: playsAs, cleanNewPlayers: cleanNewPlayers, newPlayerRules: newPlayerRules, waitingTokensOf: waitingTokensOf, waitingNeed: waitingNeed, stackZ: stackZ, LIMITS: LIMITS, PALETTE_KEYS: PALETTE_KEYS, headerEdits: headerEdits, pinTargets: pinTargets, pruneGroups: pruneGroups, GROUP_ID: GROUP_ID, GLYPHS: GLYPHS, glyphPath: glyphPath, ROLL_TONES: ROLL_TONES, KINDS: KINDS, STORED: STORED, DEF_PROP: DEF_PROP, LAYOUT: LAYOUT, validPageId: validPageId, BAND_KINDS: BAND_KINDS, IDENTITY_KINDS: IDENTITY_KINDS, LEDGER_KINDS: LEDGER_KINDS, headerEntry: headerEntry, captionParts: captionParts, capExpr: capExpr, labelNames: labelNames, labelGmNames: labelGmNames, valueOpts: valueOpts, rowIdOf: rowIdOf, cleanRowDef: cleanRowDef, rowDef: rowDef, projectRows: projectRows, cleanListSpec: cleanListSpec, STAT_KEY: STAT_KEY, statKey: statKey, cleanEntryStats: cleanEntryStats, rowStats: rowStats, rowStat: rowStat, plusText: plusText, rowPaid: rowPaid, cleanListRules: cleanListRules, cleanOv: cleanOv, mergeOv: mergeOv, itemReach: itemReach, OV_LOCK: OV_LOCK, lvlClamp: lvlClamp, rowLvl: rowLvl, rowOn: rowOn, cleanItemKey: cleanItemKey, ROW_WORDS: ROW_WORDS, applyRowOp: applyRowOp, orphanRows: orphanRows, stampRows: stampRows, libSnaps: libSnaps, carriedBy: carriedBy, cleanItemMods: cleanItemMods, fieldKinds: fieldKinds, unseenMods: unseenMods, cleanItemMsg: cleanItemMsg, RM_MODES: RM_MODES, applyEffectOp: applyEffectOp, cleanCharEffect: cleanCharEffect, gmEffectNames: gmEffectNames, fxText: fxText, activeEffects: activeEffects, tokenEffects: tokenEffects, autoEffectsOn: autoEffectsOn, tokenOwnEffects: tokenOwnEffects, projectEffects: projectEffects, FACING_NAMES: FACING_NAMES, TOKEN_NAMES: TOKEN_NAMES, POSTURE_IDS: POSTURE_IDS, POSTURE_NAMES: POSTURE_NAMES, DEFAULT_POSTURES: DEFAULT_POSTURES, cleanPostures: cleanPostures, postureList: postureList, ownPostures: ownPostures, postureAt: postureAt, postureSeven: postureSeven, stanceCtx: stanceCtx, tokenCtx: tokenCtx, setAimSource: setAimSource, bearingTo: bearingTo, aimsOf: aimsOf, facingNow: facingNow, withRound: withRound, rangeCtx: rangeCtx, withRange: withRange, sideOf: sideOf, threatArc: threatArc, cleanThreats: cleanThreats, facingCtx: facingCtx, charTokenOn: charTokenOn, cycleThreat: cycleThreat, RESERVED_SUFFIX: RESERVED_SUFFIX, emptySystem: emptySystem, uid: uid, validKey: validKey, cleanFormulaText: cleanFormulaText, hasDice: hasDice, cleanField: cleanField, cleanRollDef: cleanRollDef, cleanItemDef: cleanItemDef, cleanCombat: cleanCombat, cleanCover: cleanCover, cleanLightRules: cleanLightRules, lightName: lightName, lightPresets: lightPresets, LIGHT_UNITS: LIGHT_UNITS, cleanRangeRules: cleanRangeRules, rangeModOf: rangeModOf, rangeDist: rangeDist, rangeOf: rangeOf, RANGE_UNITS: RANGE_UNITS, cleanSenses: cleanSenses, secretFieldIds: secretFieldIds, gmViewFields: gmViewFields, coverTier: coverTier, coverOutcome: coverOutcome, coverDamage: coverDamage, cleanSystem: cleanSystem, cleanValue: cleanValue, cleanChar: cleanChar, cleanCharEdit: cleanCharEdit, cleanCharEdits: cleanCharEdits, resetTargets: resetTargets, cleanCharItem: cleanCharItem, cleanDenyReason: cleanDenyReason, cleanSheetStyle: cleanSheetStyle, fieldById: fieldById, itemDef: itemDef, keyIndex: keyIndex, makeResolver: makeResolver, resolveAll: resolveAll, hoverLines: hoverLines, gmOnlyNames: gmOnlyNames, gmDerivedNames: gmDerivedNames, gmPools: gmPools, initRoll: initRoll, orderByInit: orderByInit, cleanInitRules: cleanInitRules, cleanHeightRules: cleanHeightRules, heightModOf: heightModOf, heightOf: heightOf, HEIGHT_UNITS: HEIGHT_UNITS, initTie: initTie, sideFirst: sideFirst, orderBySide: orderBySide, validateSystem: validateSystem, charFor: charFor, applyEdit: applyEdit, autoLayout: autoLayout, cleanCharUpload: cleanCharUpload, cleanUploads: cleanUploads, fillMaking: fillMaking, applyProposal: applyProposal, statAsk: statAsk, readerKit: readerKit, registerReader: registerReader, dropReader: dropReader, readers: readers, readerById: readerById, readerFor: readerFor, fmtNum: fmtNum, suggest: suggest, lookRule: lookRule, cleanLooks: cleanLooks, applyStyle: applyStyle, cleanCharStyle: cleanCharStyle, lookOf: lookOf, lookFor: lookFor };
+var API = { VERSION: VERSION, cleanFieldUnit: cleanFieldUnit, metricOf: metricOf, unitTail: unitTail, readMeasure: readMeasure, heightWords: heightWords, MEASURES: MEASURES, measureWords: measureWords, unitWords: unitWords, unitHead: unitHead, listFig: listFig, listWords: listWords, unitOf: unitOf, figText: figText, figFmt: figFmt, weightWords: weightWords, textWords: textWords, measureStore: measureStore, rollNeedsOk: rollNeedsOk, rollNeedsSays: rollNeedsSays, onGroup: onGroup, onlyOne: onlyOne, onHeld: onHeld, cleanNeeds: cleanNeeds, hideNeeds: hideNeeds, needsMet: needsMet, needsSays: needsSays, needRule: needRule, ruleTrue: ruleTrue, setRuleJudge: setRuleJudge, cleanBudgets: cleanBudgets, budgetsOf: budgetsOf, budgetWatch: budgetWatch, budgetSays: budgetSays, cleanDesc: cleanDesc, cleanLvls: cleanLvls, EVERY_UNITS: EVERY_UNITS, cleanEvery: cleanEvery, FIGHT_UNITS: FIGHT_UNITS, cleanInFight: cleanInFight, timeRuleRun: timeRuleRun, ruleRunCtx: ruleRunCtx, chainsShallow: chainsShallow, cleanFace: cleanFace, charForView: charForView, mapGridOf: mapGridOf, tokenCell: tokenCell, shapeStandIn: shapeStandIn, cleanFrame: cleanFrame, openChar: openChar, newCharRules: newCharRules, charClash: charClash, coreOf: coreOf, setLibraryFind: setLibraryFind, statKeys: statKeys, statPicks: statPicks, cleanIcon: cleanIcon, droppedCounts: droppedCounts, parseLasts: parseLasts, lastsSecs: lastsSecs, roundSecs: roundSecs, fxLeftNow: fxLeftNow, fxTick: fxTick, mapCellScale: mapCellScale, moveAllowCells: moveAllowCells, dueActs: dueActs, gridCells: gridCells, cleanTurn: cleanTurn, TURN_UNITS: TURN_UNITS, TIME_WORDS: TIME_WORDS, roundActs: roundActs, combatChars: combatChars, applyRound: applyRound, thenChanges: thenChanges, showsIf: showsIf, rowRollNames: rowRollNames, applyAct: applyAct, applyScope: applyScope, cleanCharApply: cleanCharApply, APPLY_KINDS: APPLY_KINDS, hudView: hudView, hudHasContent: hudHasContent, pinTargetsAll: pinTargetsAll, TONES: TONES, valueTone: valueTone, cleanTones: cleanTones, playableChars: playableChars, activeCharOf: activeCharOf, activeChars: activeChars, ownedTokenPlan: ownedTokenPlan, applyOwnerOps: applyOwnerOps, migrateBindings: migrateBindings, tokenSourceFor: tokenSourceFor, playsAs: playsAs, cleanNewPlayers: cleanNewPlayers, newPlayerRules: newPlayerRules, waitingTokensOf: waitingTokensOf, waitingNeed: waitingNeed, stackZ: stackZ, LIMITS: LIMITS, PALETTE_KEYS: PALETTE_KEYS, headerEdits: headerEdits, pinTargets: pinTargets, pruneGroups: pruneGroups, GROUP_ID: GROUP_ID, GLYPHS: GLYPHS, glyphPath: glyphPath, ROLL_TONES: ROLL_TONES, KINDS: KINDS, STORED: STORED, DEF_PROP: DEF_PROP, LAYOUT: LAYOUT, validPageId: validPageId, BAND_KINDS: BAND_KINDS, IDENTITY_KINDS: IDENTITY_KINDS, LEDGER_KINDS: LEDGER_KINDS, headerEntry: headerEntry, captionParts: captionParts, capExpr: capExpr, labelNames: labelNames, labelGmNames: labelGmNames, valueOpts: valueOpts, rowIdOf: rowIdOf, cleanRowDef: cleanRowDef, rowDef: rowDef, projectRows: projectRows, cleanListSpec: cleanListSpec, STAT_KEY: STAT_KEY, statKey: statKey, cleanEntryStats: cleanEntryStats, rowStats: rowStats, rowStat: rowStat, plusText: plusText, rowPaid: rowPaid, cleanListRules: cleanListRules, cleanOv: cleanOv, mergeOv: mergeOv, itemReach: itemReach, OV_LOCK: OV_LOCK, lvlClamp: lvlClamp, rowLvl: rowLvl, rowOn: rowOn, cleanItemKey: cleanItemKey, ROW_WORDS: ROW_WORDS, applyRowOp: applyRowOp, orphanRows: orphanRows, stampRows: stampRows, libSnaps: libSnaps, carriedBy: carriedBy, cleanItemMods: cleanItemMods, fieldKinds: fieldKinds, unseenMods: unseenMods, cleanItemMsg: cleanItemMsg, RM_MODES: RM_MODES, applyEffectOp: applyEffectOp, cleanCharEffect: cleanCharEffect, gmEffectNames: gmEffectNames, fxText: fxText, activeEffects: activeEffects, tokenEffects: tokenEffects, autoEffectsOn: autoEffectsOn, tokenOwnEffects: tokenOwnEffects, projectEffects: projectEffects, FACING_NAMES: FACING_NAMES, TOKEN_NAMES: TOKEN_NAMES, POSTURE_IDS: POSTURE_IDS, POSTURE_NAMES: POSTURE_NAMES, DEFAULT_POSTURES: DEFAULT_POSTURES, cleanPostures: cleanPostures, postureList: postureList, ownPostures: ownPostures, postureAt: postureAt, postureSeven: postureSeven, stanceCtx: stanceCtx, tokenCtx: tokenCtx, setAimSource: setAimSource, bearingTo: bearingTo, aimsOf: aimsOf, facingNow: facingNow, withRound: withRound, rangeCtx: rangeCtx, withRange: withRange, sideOf: sideOf, threatArc: threatArc, cleanThreats: cleanThreats, facingCtx: facingCtx, charTokenOn: charTokenOn, cycleThreat: cycleThreat, RESERVED_SUFFIX: RESERVED_SUFFIX, emptySystem: emptySystem, uid: uid, validKey: validKey, cleanFormulaText: cleanFormulaText, hasDice: hasDice, cleanField: cleanField, cleanRollDef: cleanRollDef, cleanItemDef: cleanItemDef, cleanCombat: cleanCombat, cleanCover: cleanCover, cleanLightRules: cleanLightRules, lightName: lightName, lightPresets: lightPresets, LIGHT_UNITS: LIGHT_UNITS, cleanRangeRules: cleanRangeRules, rangeModOf: rangeModOf, rangeDist: rangeDist, rangeOf: rangeOf, RANGE_UNITS: RANGE_UNITS, cleanSenses: cleanSenses, secretFieldIds: secretFieldIds, gmViewFields: gmViewFields, coverTier: coverTier, coverOutcome: coverOutcome, coverDamage: coverDamage, cleanSystem: cleanSystem, cleanValue: cleanValue, cleanChar: cleanChar, cleanCharEdit: cleanCharEdit, cleanCharEdits: cleanCharEdits, resetTargets: resetTargets, cleanCharItem: cleanCharItem, cleanDenyReason: cleanDenyReason, cleanSheetStyle: cleanSheetStyle, fieldById: fieldById, itemDef: itemDef, keyIndex: keyIndex, makeResolver: makeResolver, resolveAll: resolveAll, hoverLines: hoverLines, gmOnlyNames: gmOnlyNames, gmDerivedNames: gmDerivedNames, gmPools: gmPools, initRoll: initRoll, orderByInit: orderByInit, cleanInitRules: cleanInitRules, cleanHeightRules: cleanHeightRules, heightModOf: heightModOf, heightOf: heightOf, HEIGHT_UNITS: HEIGHT_UNITS, initTie: initTie, sideFirst: sideFirst, orderBySide: orderBySide, validateSystem: validateSystem, charFor: charFor, applyEdit: applyEdit, autoLayout: autoLayout, cleanCharUpload: cleanCharUpload, cleanUploads: cleanUploads, fillMaking: fillMaking, applyProposal: applyProposal, statAsk: statAsk, readerKit: readerKit, registerReader: registerReader, dropReader: dropReader, readers: readers, readerById: readerById, readerFor: readerFor, fmtNum: fmtNum, suggest: suggest, lookRule: lookRule, cleanLooks: cleanLooks, applyStyle: applyStyle, cleanCharStyle: cleanCharStyle, lookOf: lookOf, lookFor: lookFor };
 if (typeof window !== 'undefined') window.wpSystemCore = API;
-export { VERSION, cleanFieldUnit, metricOf, unitTail, readMeasure, heightWords, MEASURES, measureWords, unitWords, unitHead, listFig, listWords, unitOf, figText, figFmt, weightWords, textWords, measureStore, rollNeedsOk, rollNeedsSays, onGroup, onlyOne, onHeld, cleanNeeds, hideNeeds, needsMet, needsSays, needRule, ruleTrue, setRuleJudge, cleanBudgets, budgetsOf, budgetWatch, budgetSays, cleanDesc, cleanLvls, EVERY_UNITS, cleanEvery, FIGHT_UNITS, cleanInFight, timeRuleRun, cleanFace, charForView, mapGridOf, tokenCell, shapeStandIn, cleanFrame, openChar, newCharRules, charClash, coreOf, setLibraryFind, statKeys, statPicks, cleanIcon, droppedCounts, parseLasts, lastsSecs, roundSecs, fxLeftNow, fxTick, mapCellScale, moveAllowCells, dueActs, gridCells, cleanTurn, TURN_UNITS, TIME_WORDS, roundActs, combatChars, applyRound, thenChanges, showsIf, rowRollNames, applyAct, applyScope, cleanCharApply, APPLY_KINDS, hudView, hudHasContent, pinTargetsAll, TONES, valueTone, cleanTones, playableChars, activeCharOf, activeChars, ownedTokenPlan, applyOwnerOps, migrateBindings, tokenSourceFor, playsAs, cleanNewPlayers, newPlayerRules, waitingTokensOf, waitingNeed, stackZ, LIMITS, PALETTE_KEYS, headerEdits, pinTargets, pruneGroups, GROUP_ID, GLYPHS, glyphPath, ROLL_TONES, KINDS, STORED, DEF_PROP, LAYOUT, validPageId, BAND_KINDS, IDENTITY_KINDS, LEDGER_KINDS, headerEntry, captionParts, capExpr, labelNames, labelGmNames, valueOpts, rowIdOf, cleanRowDef, rowDef, projectRows, cleanListSpec, STAT_KEY, statKey, cleanEntryStats, rowStats, rowStat, plusText, rowPaid, cleanListRules, cleanOv, mergeOv, itemReach, OV_LOCK, lvlClamp, rowLvl, rowOn, cleanItemKey, ROW_WORDS, applyRowOp, orphanRows, stampRows, libSnaps, carriedBy, cleanItemMods, fieldKinds, unseenMods, cleanItemMsg, RM_MODES, applyEffectOp, cleanCharEffect, gmEffectNames, fxText, activeEffects, tokenEffects, autoEffectsOn, tokenOwnEffects, projectEffects, FACING_NAMES, TOKEN_NAMES, POSTURE_IDS, POSTURE_NAMES, DEFAULT_POSTURES, cleanPostures, postureList, ownPostures, postureAt, postureSeven, stanceCtx, tokenCtx, setAimSource, bearingTo, aimsOf, facingNow, withRound, rangeCtx, withRange, sideOf, threatArc, cleanThreats, facingCtx, charTokenOn, cycleThreat, RESERVED_SUFFIX, emptySystem, uid, validKey, cleanFormulaText, hasDice, cleanField, cleanRollDef, cleanItemDef, cleanCombat, cleanCover, cleanLightRules, lightName, lightPresets, LIGHT_UNITS, cleanRangeRules, rangeModOf, rangeDist, rangeOf, RANGE_UNITS, cleanSenses, secretFieldIds, gmViewFields, coverTier, coverOutcome, coverDamage, cleanSystem, cleanValue, cleanChar, cleanCharEdit, cleanCharEdits, resetTargets, cleanCharItem, cleanDenyReason, cleanSheetStyle, fieldById, itemDef, keyIndex, makeResolver, resolveAll, hoverLines, gmOnlyNames, gmDerivedNames, gmPools, initRoll, orderByInit, cleanInitRules, cleanHeightRules, heightModOf, heightOf, HEIGHT_UNITS, initTie, sideFirst, orderBySide, validateSystem, charFor, applyEdit, autoLayout, cleanCharUpload, cleanUploads, fillMaking, applyProposal, statAsk, readerKit, registerReader, dropReader, readers, readerById, readerFor, fmtNum, suggest, lookRule, cleanLooks, applyStyle, cleanCharStyle, lookOf, lookFor };
+export { VERSION, cleanFieldUnit, metricOf, unitTail, readMeasure, heightWords, MEASURES, measureWords, unitWords, unitHead, listFig, listWords, unitOf, figText, figFmt, weightWords, textWords, measureStore, rollNeedsOk, rollNeedsSays, onGroup, onlyOne, onHeld, cleanNeeds, hideNeeds, needsMet, needsSays, needRule, ruleTrue, setRuleJudge, cleanBudgets, budgetsOf, budgetWatch, budgetSays, cleanDesc, cleanLvls, EVERY_UNITS, cleanEvery, FIGHT_UNITS, cleanInFight, timeRuleRun, ruleRunCtx, chainsShallow, cleanFace, charForView, mapGridOf, tokenCell, shapeStandIn, cleanFrame, openChar, newCharRules, charClash, coreOf, setLibraryFind, statKeys, statPicks, cleanIcon, droppedCounts, parseLasts, lastsSecs, roundSecs, fxLeftNow, fxTick, mapCellScale, moveAllowCells, dueActs, gridCells, cleanTurn, TURN_UNITS, TIME_WORDS, roundActs, combatChars, applyRound, thenChanges, showsIf, rowRollNames, applyAct, applyScope, cleanCharApply, APPLY_KINDS, hudView, hudHasContent, pinTargetsAll, TONES, valueTone, cleanTones, playableChars, activeCharOf, activeChars, ownedTokenPlan, applyOwnerOps, migrateBindings, tokenSourceFor, playsAs, cleanNewPlayers, newPlayerRules, waitingTokensOf, waitingNeed, stackZ, LIMITS, PALETTE_KEYS, headerEdits, pinTargets, pruneGroups, GROUP_ID, GLYPHS, glyphPath, ROLL_TONES, KINDS, STORED, DEF_PROP, LAYOUT, validPageId, BAND_KINDS, IDENTITY_KINDS, LEDGER_KINDS, headerEntry, captionParts, capExpr, labelNames, labelGmNames, valueOpts, rowIdOf, cleanRowDef, rowDef, projectRows, cleanListSpec, STAT_KEY, statKey, cleanEntryStats, rowStats, rowStat, plusText, rowPaid, cleanListRules, cleanOv, mergeOv, itemReach, OV_LOCK, lvlClamp, rowLvl, rowOn, cleanItemKey, ROW_WORDS, applyRowOp, orphanRows, stampRows, libSnaps, carriedBy, cleanItemMods, fieldKinds, unseenMods, cleanItemMsg, RM_MODES, applyEffectOp, cleanCharEffect, gmEffectNames, fxText, activeEffects, tokenEffects, autoEffectsOn, tokenOwnEffects, projectEffects, FACING_NAMES, TOKEN_NAMES, POSTURE_IDS, POSTURE_NAMES, DEFAULT_POSTURES, cleanPostures, postureList, ownPostures, postureAt, postureSeven, stanceCtx, tokenCtx, setAimSource, bearingTo, aimsOf, facingNow, withRound, rangeCtx, withRange, sideOf, threatArc, cleanThreats, facingCtx, charTokenOn, cycleThreat, RESERVED_SUFFIX, emptySystem, uid, validKey, cleanFormulaText, hasDice, cleanField, cleanRollDef, cleanItemDef, cleanCombat, cleanCover, cleanLightRules, lightName, lightPresets, LIGHT_UNITS, cleanRangeRules, rangeModOf, rangeDist, rangeOf, RANGE_UNITS, cleanSenses, secretFieldIds, gmViewFields, coverTier, coverOutcome, coverDamage, cleanSystem, cleanValue, cleanChar, cleanCharEdit, cleanCharEdits, resetTargets, cleanCharItem, cleanDenyReason, cleanSheetStyle, fieldById, itemDef, keyIndex, makeResolver, resolveAll, hoverLines, gmOnlyNames, gmDerivedNames, gmPools, initRoll, orderByInit, cleanInitRules, cleanHeightRules, heightModOf, heightOf, HEIGHT_UNITS, initTie, sideFirst, orderBySide, validateSystem, charFor, applyEdit, autoLayout, cleanCharUpload, cleanUploads, fillMaking, applyProposal, statAsk, readerKit, registerReader, dropReader, readers, readerById, readerFor, fmtNum, suggest, lookRule, cleanLooks, applyStyle, cleanCharStyle, lookOf, lookFor };

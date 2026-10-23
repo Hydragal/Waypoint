@@ -23,6 +23,26 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
     const { LIMITS, validKey, cleanField, cleanSystem, cleanValue, cleanChar, cleanCharEdit, makeResolver, resolveAll, hoverLines, validateSystem, charFor, applyEdit, autoLayout, emptySystem } = S;
     const d20 = JSON.parse(fs.readFileSync(path.join(app, 'assets', 'systems', 'd20.json'), 'utf8'));
     const g3d6 = JSON.parse(fs.readFileSync(path.join(app, 'assets', 'systems', '3d6.json'), 'utf8'));
+    // 1.5.5's review (a large campaign's hour): every harness that runs runTimeRules (sheets.js) runs it as the app does, handed ruleRunCtx and
+    // chainsShallow (trFlat, which keeps in trSeen what chainsShallow answered for that harness), and trTwin runs the same fires on two copies of
+    // the campaign, one so and one handed neither (the path every run took before), with the same dice, and keeps in trSeen whether the two
+    // gave the same, byte for byte: what is stored, sent, redrawn and saved, and every summary with its audience
+    const trSeen = [], trBase = ['getActiveCampaign', 'systemOf', 'net', 'F', 'charById', 'timeRuleRun', 'gmOnlyNames', 'applyScope', 'renderViews', 'save', 'window', 'makeResolver', 'hasDice', 'figText'];
+    const trFlat = tag => (sy, Fx) => { const a = typeof S.chainsShallow === 'function' ? S.chainsShallow(sy, Fx) : null; trSeen.push([tag, a]); return a; };
+    const trTwin = (tag, src, camp, fires, words, at, D, omit) => {
+        const one = flat => {
+            let x = 7; const rnd = faces => { x = (Math.imul(x, 1103515245) + 12345) >>> 0; return 1 + Math.floor(x / 4294967296 * faces); };
+            const Fx = Object.assign({}, F, { evaluate: (t, o) => F.evaluate(t, o && o.random ? o : Object.assign({}, o, { random: rnd })), evaluateAst: (a, o) => F.evaluateAst(a, o && o.random ? o : Object.assign({}, o, { random: rnd })) });
+            const cp = { system: camp.system, chars: JSON.parse(j(camp.chars)) }, out = { cards: [], deltas: [], views: [], saves: 0, renders: 0 };
+            const netT = { active: true, role: 'host', syncCharDelta: (id, v) => out.deltas.push([id, JSON.parse(j(v))]), timeCard: (ch, text, gm) => out.cards.push([ch.id, text, gm]) };
+            const vals = { getActiveCampaign: () => cp, systemOf: c => c.system, net: () => netT, F: () => Fx, charById: (id, c) => (Object.prototype.hasOwnProperty.call(c.chars, id) ? c.chars[id] : null), timeRuleRun: S.timeRuleRun, gmOnlyNames: S.gmOnlyNames, applyScope: S.applyScope,
+                renderViews: id => out.views.push(id), save: () => out.saves++, window: { wpDiceCore: D, appRender: () => out.renders++ }, makeResolver: S.makeResolver, hasDice: S.hasDice, figText: S.figText, ruleRunCtx: S.ruleRunCtx, chainsShallow: S.chainsShallow };
+            const names = trBase.concat(flat ? ['ruleRunCtx', 'chainsShallow'] : []).filter(n => !(omit || []).includes(n));
+            out.n = new Function(...names, "'use strict';" + NL + src + NL + 'return runTimeRules;')(...names.map(n => vals[n]))(JSON.parse(j(fires)), words, at);
+            out.chars = Object.keys(cp.chars).map(id => [id, cp.chars[id].values, typeof cp.chars[id].updated === 'number']); return j(out);   // when it was stamped is the clock's
+        };
+        const same = one(true) === one(false); trSeen.push([tag + ':twin', same]); return same;
+    };
 
     /* ---- presets ---- */
     [['d20', d20], ['3d6', g3d6]].forEach(([n, p]) => {
@@ -4860,9 +4880,11 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             j(hk) === j([[[], undefined], [['c_a:r_due'], 7]]), j(hk));
         // runTimeRules: a rule held from the start says nothing
         const trSrcN = cutN('// [sinkcheck:timerules-start]', '// [sinkcheck:timerules-end]'), campTN = { system: gmN, chars: { c_a: chN({ f_hp: 12 }), c_b: Object.assign(chN({ f_hp: 10 }), { id: 'c_b', name: 'Bo' }) } }, cardsN = [];
-        const runTN = new Function('getActiveCampaign', 'systemOf', 'net', 'F', 'charById', 'timeRuleRun', 'gmOnlyNames', 'applyScope', 'renderViews', 'save', 'window', 'makeResolver', 'hasDice', 'figText', "'use strict';" + NL + trSrcN + NL + 'return runTimeRules;')(
-            () => campTN, c => c.system, () => ({ active: true, role: 'host', syncCharDelta() {}, timeCard: (ch, text) => cardsN.push([ch.id, text]) }), () => F, (id, c) => (Object.prototype.hasOwnProperty.call(c.chars, id) ? c.chars[id] : null), S.timeRuleRun, S.gmOnlyNames, S.applyScope, () => {}, () => {}, {}, S.makeResolver, S.hasDice, S.figText);
-        const nTN = runTN([{ c: 'c_a', r: 'r_clock', n: 3 }, { c: 'c_b', r: 'r_clock', n: 3 }], '3 hours');
+        const runTN = new Function('getActiveCampaign', 'systemOf', 'net', 'F', 'charById', 'timeRuleRun', 'gmOnlyNames', 'applyScope', 'renderViews', 'save', 'window', 'makeResolver', 'hasDice', 'figText', 'ruleRunCtx', 'chainsShallow', "'use strict';" + NL + trSrcN + NL + 'return runTimeRules;')(
+            () => campTN, c => c.system, () => ({ active: true, role: 'host', syncCharDelta() {}, timeCard: (ch, text) => cardsN.push([ch.id, text]) }), () => F, (id, c) => (Object.prototype.hasOwnProperty.call(c.chars, id) ? c.chars[id] : null), S.timeRuleRun, S.gmOnlyNames, S.applyScope, () => {}, () => {}, {}, S.makeResolver, S.hasDice, S.figText, S.ruleRunCtx, trFlat('fold 2 (A)'));
+        const firesTN = [{ c: 'c_a', r: 'r_clock', n: 3 }, { c: 'c_b', r: 'r_clock', n: 3 }];
+        trTwin('fold 2 (A)', trSrcN, campTN, firesTN, '3 hours');
+        const nTN = runTN(firesTN, '3 hours');
         check('fold 2 (A) runTimeRules (sheets.js, run for real): a rule whose needs fail from the start is passed over and says nothing; the same rule on a character that meets it runs until it does not, and is summed up',
             nTN === 1 && j(cardsN) === j([['c_b', '3 hours — Bo: Mend ×3: HP +2 → 12']]) && campTN.chars.c_a.values.f_hp === 12 && campTN.chars.c_b.values.f_hp === 12, j([nTN, cardsN]));
         // the editor: the Rolls tab's boxes and handlers, and what refreshErrors says Save drops (run for real)
@@ -7696,9 +7718,11 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         const trSrc = cutL('// [sinkcheck:timerules-start]', '// [sinkcheck:timerules-end]');
         const campTR = { system: evG, chars: { c_a: { id: 'c_a', name: 'Pat', ownerId: 'u_a', values: { f_hp: { cur: 5 }, f_fp: { cur: 2 } } }, c_n: { id: 'c_n', name: 'Orc', npc: true, values: { f_fp: { cur: 1 } } }, c_f: { id: 'c_f', name: 'Full', ownerId: 'u_b', values: { f_fp: { cur: 10 } } } } }, outTR = { cards: [], deltas: [], views: [], saves: 0, renders: 0 };
         const netTR = { active: true, role: 'host', syncCharDelta: (id, v) => outTR.deltas.push([id, JSON.parse(j(v))]), timeCard: (ch, text, gm) => outTR.cards.push([ch.id, text, gm]) };
-        const runTR = new Function('getActiveCampaign', 'systemOf', 'net', 'F', 'charById', 'timeRuleRun', 'gmOnlyNames', 'applyScope', 'renderViews', 'save', 'window', 'makeResolver', 'hasDice', 'figText', "'use strict';" + NL + trSrc + NL + 'return runTimeRules;')(
-            () => campTR, c => c.system, () => netTR, () => F, (id, c) => (Object.prototype.hasOwnProperty.call(c.chars, id) ? c.chars[id] : null), S.timeRuleRun, S.gmOnlyNames, S.applyScope, id => outTR.views.push(id), () => outTR.saves++, { wpDiceCore: DCk, appRender: () => outTR.renders++ }, S.makeResolver, S.hasDice, S.figText);
-        const nTR = runTR([{ c: 'c_a', r: 'r_heal', n: 2 }, { c: 'c_a', r: 'r_fp', n: 20 }, { c: 'c_n', r: 'r_fp', n: 3 }, { c: 'c_x', r: 'r_fp', n: 1 }, { c: 'c_a', r: 'r_b1', n: 1 }, { c: 'c_f', r: 'r_fp', n: 2 }, null], '8 hours of rest');
+        const runTR = new Function('getActiveCampaign', 'systemOf', 'net', 'F', 'charById', 'timeRuleRun', 'gmOnlyNames', 'applyScope', 'renderViews', 'save', 'window', 'makeResolver', 'hasDice', 'figText', 'ruleRunCtx', 'chainsShallow', "'use strict';" + NL + trSrc + NL + 'return runTimeRules;')(
+            () => campTR, c => c.system, () => netTR, () => F, (id, c) => (Object.prototype.hasOwnProperty.call(c.chars, id) ? c.chars[id] : null), S.timeRuleRun, S.gmOnlyNames, S.applyScope, id => outTR.views.push(id), () => outTR.saves++, { wpDiceCore: DCk, appRender: () => outTR.renders++ }, S.makeResolver, S.hasDice, S.figText, S.ruleRunCtx, trFlat('K5'));
+        const firesTR = [{ c: 'c_a', r: 'r_heal', n: 2 }, { c: 'c_a', r: 'r_fp', n: 20 }, { c: 'c_n', r: 'r_fp', n: 3 }, { c: 'c_x', r: 'r_fp', n: 1 }, { c: 'c_a', r: 'r_b1', n: 1 }, { c: 'c_f', r: 'r_fp', n: 2 }, null];
+        trTwin('K5', trSrc, campTR, firesTR, '8 hours of rest', undefined, DCk);
+        const nTR = runTR(firesTR, '8 hours of rest');
         check('item 20 K5 runTimeRules (sheets.js, run for real over the real systemcore): each ticked fire runs on its character, stored, one delta each, its views redrawn, one save; one summary per character — its rules with how many ran, how many rolls succeeded and how far each field moved — to its player and the GM, the GM alone for an NPC; a full pool moved nothing, so it says nothing and sends nothing (the flood fix of 2026-10-22 moved this pin on purpose: it said no change); a character or a rule that is not there, or a rule with no clock, runs nothing',
             nTR === 2 && j(campTR.chars.c_a.values) === j({ f_hp: { cur: 7 }, f_fp: { cur: 10 } }) && j(campTR.chars.c_n.values) === j({ f_fp: { cur: 4 } }) && j(outTR.deltas) === j([['c_a', { f_hp: { cur: 7 }, f_fp: { cur: 10 } }], ['c_n', { f_fp: { cur: 4 } }]]) && j(outTR.views) === j(['c_a', 'c_n']) && outTR.saves === 1 && outTR.renders === 1
             && j(outTR.cards) === j([['c_a', '8 hours of rest \u2014 Pat: Heal \u00d72 (2 of 2 succeeded): HP +2 \u2192 7; Breath \u00d720: FP +8 \u2192 10', false], ['c_n', '8 hours of rest \u2014 Orc: Breath \u00d73: FP +3 \u2192 4', true]]) && !/innerHTML/.test(trSrc), j([nTR, campTR.chars, outTR]));
@@ -7729,8 +7753,9 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             const flRun = (chars, fires, withR, at, bare) => {
                 const camp = { system: sysFl, chars }, out = { cards: [], deltas: [], views: [], saves: 0 };
                 const netF = { active: true, role: 'host', syncCharDelta: (id, v) => out.deltas.push([id, JSON.parse(j(v))]), timeCard: (ch, text, gm) => out.cards.push([ch.id, text, gm]) };
-                const names = ['getActiveCampaign', 'systemOf', 'net', 'F', 'charById', 'timeRuleRun', 'gmOnlyNames', 'applyScope', 'renderViews', 'save', 'window'].concat(withR ? ['makeResolver'] : []).concat(bare ? [] : ['hasDice', 'figText']);
-                const args = [() => camp, c => c.system, () => netF, () => F, (id, c) => (Object.prototype.hasOwnProperty.call(c.chars, id) ? c.chars[id] : null), S.timeRuleRun, S.gmOnlyNames, S.applyScope, id => out.views.push(id), () => out.saves++, { wpDiceCore: DCk, appRender: () => {} }].concat(withR ? [S.makeResolver] : []).concat(bare ? [] : [S.hasDice, S.figText]);
+                const names = ['getActiveCampaign', 'systemOf', 'net', 'F', 'charById', 'timeRuleRun', 'gmOnlyNames', 'applyScope', 'renderViews', 'save', 'window'].concat(withR ? ['makeResolver'] : []).concat(bare ? [] : ['hasDice', 'figText']).concat(['ruleRunCtx', 'chainsShallow']);
+                const args = [() => camp, c => c.system, () => netF, () => F, (id, c) => (Object.prototype.hasOwnProperty.call(c.chars, id) ? c.chars[id] : null), S.timeRuleRun, S.gmOnlyNames, S.applyScope, id => out.views.push(id), () => out.saves++, { wpDiceCore: DCk, appRender: () => {} }].concat(withR ? [S.makeResolver] : []).concat(bare ? [] : [S.hasDice, S.figText]).concat([S.ruleRunCtx, trFlat('the flood fix')]);
+                if (withR) trTwin('the flood fix', trSrc, camp, fires, '1 hour of activity', at, DCk, bare ? ['hasDice', 'figText'] : []);
                 out.n = new Function(...names, "'use strict';" + NL + trSrc + NL + 'return runTimeRules;')(...args)(fires, '1 hour of activity', at);
                 return out;
             };
@@ -7798,6 +7823,212 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
                 && [rdFl('WHATSNEW.txt'), rdFl('system/app/assets/whatsnew.txt')].every(t => { const p = t.indexOf('WAYPOINT 1.5.5'), q = t.indexOf('WAYPOINT 1.5.4'), c = t.indexOf('\nCalendar\n', p), k = t.indexOf(noteFl); return p >= 0 && c > p && k > c && k < q && t.split(noteFl).length === 2; })
                 && calFl.includes("Each player gets a summary of what moved or was rolled', altTip:") && calFl.includes("the rolls are made for them and each player gets a summary of what moved or was rolled', 'calpendapply'"), j([ixFl.split(helpFl).length, atFl, applyFl, hFl]));
         }
+        {   // 1.5.5 (found live, 2026-10-22, on a scratch copy of a campaign of 158 characters: one press of the Calendar's +1 hour held the GM's
+            // screen for 4.1 seconds, 4,109 ms of it in ONE call of runTimeRules, which worked out every field of the sheet for every run and built a
+            // new resolver for each read). runTimeRules (sheets.js, sliced by its timerules markers) run for real over the real systemcore as the app
+            // runs it, with ruleRunCtx and chainsShallow, against the same code handed neither: the path every run took before (resolveAll each run)
+            const lcg = s => { let x = s >>> 0; return () => { x = (Math.imul(x, 1103515245) + 12345) >>> 0; return x / 4294967296; }; };
+            const diceOf = s => { const r = lcg(s); return faces => 1 + Math.floor(r() * faces); };
+            const SPARE = 'A0 + A1 + 7', shallowOf = (sy, Fx) => (typeof S.chainsShallow === 'function' ? S.chainsShallow(sy, Fx) : null);   // the formula of a field no rule reads: working it out means the sheet was worked out whole
+            const countF = rnd => { const c = { asks: 0, spare: 0 }; return { c: c, F: Object.assign({}, F, { evaluate: (t, o) => { c.asks++; if (t === SPARE) c.spare++; return F.evaluate(t, o && o.random ? o : Object.assign({}, o, { random: rnd })); }, evaluateAst: (a, o) => { c.asks++; return F.evaluateAst(a, o && o.random ? o : Object.assign({}, o, { random: rnd })); } }) }; };
+            const trRun = (camp, fires, flat, Fx, at, spy) => {
+                const out = { cards: [], deltas: [], views: [], saves: 0 };
+                const netH = { active: true, role: 'host', syncCharDelta: (id, v) => out.deltas.push([id, JSON.parse(j(v))]), timeCard: (ch, text, gm) => out.cards.push([ch.id, text, gm]) };
+                const names = ['getActiveCampaign', 'systemOf', 'net', 'F', 'charById', 'timeRuleRun', 'gmOnlyNames', 'applyScope', 'renderViews', 'save', 'window', 'makeResolver', 'hasDice', 'figText'].concat(flat ? ['ruleRunCtx', 'chainsShallow'] : []);
+                const args = [() => camp, c => c.system, () => netH, () => Fx, (id, c) => (Object.prototype.hasOwnProperty.call(c.chars, id) ? c.chars[id] : null), S.timeRuleRun, S.gmOnlyNames, spy || S.applyScope, id => out.views.push(id), () => out.saves++, { wpDiceCore: DCk, appRender: () => {} }, S.makeResolver, S.hasDice, S.figText].concat(flat ? [S.ruleRunCtx, S.chainsShallow] : []);
+                out.n = new Function(...names, "'use strict';" + NL + trSrc + NL + 'return runTimeRules;')(...args)(fires, '1 hour', at);
+                out.chars = Object.keys(camp.chars).map(id => [id, camp.chars[id].values]);
+                return out;
+            };
+            // a sheet of 277 fields: attributes, 60 formulas in chains that read a list's total and its highest, 100 skills, 30 pools whose most reads
+            // a formula, numbers, toggles, texts, two lists with stats, a choice, a level and columns with totals, an effects list, a GM-only number
+            const bigFields = [];
+            for (let i = 0; i < 10; i++) bigFields.push({ id: 'f_a' + i, key: 'A' + i, kind: 'number', def: 10 });
+            for (let i = 0; i < 60; i++) bigFields.push({ id: 'f_d' + i, key: 'Dv' + i, kind: 'formula', formula: i === 0 ? 'floor((A0 + A1) / 2)' : i % 7 === 3 ? 'Dv' + (i - 1) + ' + Gear.wt / 10' : i % 11 === 5 ? 'max(Dv' + (i - 1) + ', Powers.on.lc)' : i % 13 === 4 ? 'Dv' + (i - 1) + ' + Gear.max.Prot' : 'floor((A' + (i % 10) + ' + Dv' + (i - 1) + ') / 2) + ' + (i % 3) });
+            bigFields.push({ id: 'f_spare', key: 'Spare', kind: 'formula', formula: SPARE });
+            for (let i = 0; i < 100; i++) bigFields.push({ id: 'f_s' + i, key: 'Skill.S' + i, kind: 'skill', base: 'Dv' + (i % 60) + ' - 10' });
+            bigFields.push({ id: 'f_cp', key: 'CP', label: 'Charge', kind: 'resource', maxFormula: 'Dv10 + A2', def: 'max', min: 0, hover: true }, { id: 'f_pw', key: 'PW', label: 'Power', kind: 'resource', maxFormula: '20 + Dv20', def: 'max', min: 0 });
+            for (let i = 2; i < 30; i++) bigFields.push({ id: 'f_p' + i, key: 'P' + i, kind: 'resource', maxFormula: 'Dv' + i + ' + A' + (i % 10), def: 'max', min: 0 });
+            for (let i = 0; i < 40; i++) bigFields.push({ id: 'f_n' + i, key: 'N' + i, kind: 'number', def: i % 5 });
+            for (let i = 0; i < 20; i++) bigFields.push({ id: 'f_t' + i, key: 'T' + i, kind: 'toggle' });
+            for (let i = 0; i < 10; i++) bigFields.push({ id: 'f_x' + i, key: 'X' + i, kind: 'text', def: 'Docks' });
+            bigFields.push({ id: 'f_sel', key: 'Sel', kind: 'select', options: ['One', 'Two'], def: 'One' }, { id: 'f_no', key: 'Notes1', kind: 'notes' }, { id: 'f_sec', key: 'Sec', kind: 'number', vis: 'gm', def: 3 });
+            bigFields.push({ id: 'f_gear', key: 'Gear', kind: 'item-list', vis: 'all', list: { stats: [{ key: 'wt' }, { key: 'dr' }, { key: 'grade', kind: 'pick', opts: [{ label: 'Light', name: 'A3' }, { label: 'Heavy', name: 'A4' }] }], cols: [{ key: 'Load', formula: 'Row.wt * Row.qty', foot: true }, { key: 'Prot', formula: 'Row.dr + Row.grade / 10' }] } });
+            bigFields.push({ id: 'f_pow', key: 'Powers', kind: 'item-list', vis: 'all', list: { lvl: { min: 1, max: 10, def: 1 }, on: { label: 'On' }, stats: [{ key: 'lc' }], cols: [{ key: 'Pts', formula: 'Row.lc * Row.lvl', foot: true }] } });
+            bigFields.push({ id: 'f_fx', key: 'Fx', kind: 'effects' });
+            const bigItems = [];
+            for (let i = 0; i < 30; i++) bigItems.push({ id: 'i_g' + i, name: i % 2 ? 'Coin Pouch ' + i : 'Pebbles ' + i, category: 'Gear', stats: { wt: (i % 7) + 0.5, dr: i % 4, grade: i % 3 ? 'Light' : 'Heavy' }, mods: i % 6 === 0 ? [{ f: 'f_d5', op: 'add', v: 1 }] : undefined });
+            for (let i = 0; i < 20; i++) bigItems.push({ id: 'i_p' + i, name: 'Knack ' + i, category: 'Power', stats: { lc: (i % 5) + 1 }, mods: i % 4 === 0 ? [{ f: 'f_s' + i, op: 'add', v: 2 }] : undefined });
+            const bigSys = cleanSystem({ v: 1, name: 'Big', fields: bigFields, items: bigItems,
+                effects: [{ id: 'e_tired', name: 'Tired', mods: [{ f: 'f_a1', op: 'add', v: -1 }] }, { id: 'e_lift', name: 'Lift', mods: [{ f: 'f_cp', op: 'add', v: 2, part: 'max' }] }, { id: 'e_low', name: 'Low', auto: 'CP < 3', mods: [{ f: 'f_a4', op: 'add', v: -1 }] }, { id: 'e_hid', name: 'Hid', vis: 'gm', mods: [{ f: 'f_d30', op: 'add', v: 1 }] }],
+                rolls: [{ id: 'r_cp', label: 'Recover', apply: [{ f: 'f_cp', formula: '1', add: true }], needs: 'CP < CP.max', every: { n: 1, u: 'hour' } },
+                    { id: 'r_pw', label: 'Draw', apply: [{ f: 'f_pw', formula: '1' }], every: { n: 1, u: 'hour' } },
+                    { id: 'r_chk', label: 'Check', formula: '3d6 <= Skill.S4 + 8', then: [{ f: 'f_n0', formula: '1', add: true, when: 'hit' }], every: { n: 1, u: 'hour' } }] }, { F, gmView: true });
+            const bigCamp = () => {
+                const chars = {};
+                for (let c = 0; c < 160; c++) {
+                    const v = {};
+                    for (let i = 0; i < 10; i++) v['f_a' + i] = 8 + ((c * 7 + i * 3) % 8);
+                    for (let i = 0; i < 100; i += 9) v['f_s' + i] = (c + i) % 5;
+                    if (c % 3) v.f_cp = { cur: c % 9 };
+                    v.f_pw = { cur: 5 + (c % 20) }; v.f_n0 = c % 6;
+                    v.f_gear = Array.from({ length: 30 }, (_, g) => ({ id: 'w_g' + c + '_' + g, defId: 'i_g' + ((c + g * 3) % 30), qty: 1 + (g % 3) }));
+                    v.f_pow = Array.from({ length: 15 }, (_, p) => ({ id: 'w_p' + c + '_' + p, defId: 'i_p' + ((c + p * 5) % 20), qty: 1, lvl: 1 + (p % 4), on: p % 2 === 0 }));
+                    v.f_fx = c % 5 === 0 ? [{ id: 'x_' + c, ref: 'e_tired', on: true }] : c % 7 === 0 ? [{ id: 'x_' + c, ref: 'e_lift', on: true }, { id: 'y_' + c, ref: 'e_hid', on: true }] : [];
+                    const ch = { id: 'c_' + c, name: (c % 2 ? 'Unit ' : 'Kael ') + c, values: v }; if (c % 3 === 0) ch.ownerId = 'u_' + c; else ch.npc = true;
+                    chars[ch.id] = ch;
+                }
+                return { system: bigSys, chars: chars };
+            };
+            const bigFires = []; for (let c = 0; c < 160; c++) ['r_cp', 'r_pw', 'r_chk'].forEach(r => bigFires.push({ c: 'c_' + c, r: r, n: 1 }));
+            const scopeCalls = { n: 0 }, spyScope = function() { scopeCalls.n++; return S.applyScope.apply(null, arguments); };
+            const bNew = countF(diceOf(5)), bOld = countF(diceOf(5));
+            const outNew = trRun(bigCamp(), bigFires, true, bNew.F, undefined, spyScope), outOld = trRun(bigCamp(), bigFires, false, bOld.F);
+            check('1.5.5 an hour of three time rules on 160 characters of a sheet of ' + bigSys.fields.length + ' fields (a pool filled while its needs read the pool\'s most, a pool drawn, a roll of dice), through the real runTimeRules as the app runs it: no fire works the sheet out whole (the old path, handed neither ruleRunCtx nor chainsShallow: ' + bOld.c.spare + ' times for ' + bigFires.length + ' fires), the formula engine is asked at most 80 times a fire, its automatic effects worked out for each state included (' + bNew.c.asks + ' in all, the old path ' + bOld.c.asks + '), and whom a summary goes to is worked out once a rule, never once a fire (applyScope asked ' + scopeCalls.n + ' times)',
+                bigSys.fields.length >= 270 && bNew.c.spare === 0 && bOld.c.spare >= bigFires.length && bNew.c.asks <= 80 * bigFires.length && bOld.c.asks >= 250 * bigFires.length && scopeCalls.n <= 6 && shallowOf(bigSys, F) === true,
+                j([bigSys.fields.length, bNew.c, bOld.c, scopeCalls.n]));
+            check('1.5.5 and nothing it gives changes: every value the hour stores, every delta sent, every view redrawn, the save, how many characters changed and every summary word for word with its audience (the players\' own and the GM\'s alone) are byte for byte what the old path gives',
+                j(outNew) === j(outOld) && outNew.n === 160 && outNew.cards.length === 160 && outNew.cards.some(x => x[2] === false) && outNew.cards.some(x => x[2] === true) && outNew.saves === 1, j([outNew.n, outNew.cards.slice(0, 2), outOld.cards.slice(0, 2)]));
+            // 600 seeded fires over seeded systems (deep chains, a loop, GM-only fields and rules, needs, a choice and columns, automatic effects, dice
+            // with a malfunction, a roll with no dice, In a fight with its round, several runs a fire): the path as the app runs it, the old path, and
+            // the hash of what the old path gave, made by the code before the change (1.5.5, the commit "Words — the sheet website the outside
+            // reader was made for is named in no tracked file") and pinned here
+            const SEED_PIN = '6657a41a043e21545a5a22911b5d8a07827977741a19f83ffe2e5fabfd2fc8b6';
+            const seedSys = seed => {
+                const R = lcg(seed * 7919 + 1), RI = n => Math.floor(R() * n), fields = [], nA = 4 + RI(4), nD = 5 + RI(25), deep = R() < 0.15;
+                for (let i = 0; i < nA; i++) fields.push({ id: 'f_a' + i, key: 'A' + i, kind: 'number', def: 8 + RI(6), step: R() < 0.3 ? 0.5 : 1 });
+                for (let i = 0; i < nD; i++) { const a = 'A' + RI(nA), p = i ? 'Dv' + (deep ? i - 1 : RI(i)) : a, forms = [p + ' + ' + a, 'floor((' + p + ' + ' + a + ') / 2)', 'max(' + p + ', Gear.wt)', 'if(T0, ' + p + ', ' + a + ')', p + ' + Gear.on.Prot', 'Powers.max.lc + ' + p, p + ' * 2 - CombatRound', 'Gear.Ammo.qty + ' + p]; fields.push({ id: 'f_d' + i, key: 'Dv' + i, kind: 'formula', formula: forms[RI(forms.length)], vis: R() < 0.1 ? 'gm' : undefined }); }
+                if (deep) for (let i = nD; i < 70; i++) fields.push({ id: 'f_d' + i, key: 'Dv' + i, kind: 'formula', formula: 'Dv' + (i - 1) + ' + 1' });
+                const nAll = deep ? 70 : nD;
+                if (R() < 0.1) fields.push({ id: 'f_lp', key: 'Lp', kind: 'formula', formula: 'if(T1, Lp2, 1)' }, { id: 'f_lp2', key: 'Lp2', kind: 'formula', formula: 'Lp + 1' });
+                for (let i = 0; i < 6; i++) fields.push({ id: 'f_s' + i, key: 'Skill.S' + i, kind: 'skill', base: 'Dv' + RI(nAll) + ' - 10' });
+                fields.push({ id: 'f_cp', key: 'CP', label: 'Charge', kind: 'resource', maxFormula: 'Dv' + RI(nAll) + ' + 2', def: 'max', min: R() < 0.5 ? 0 : undefined, hover: R() < 0.5 });
+                fields.push({ id: 'f_pw', key: 'PW', kind: 'resource', maxFormula: R() < 0.2 ? 'CombatRound + 5' : '20', def: R() < 0.5 ? 'max' : 0, min: 0 });
+                fields.push({ id: 'f_hp', key: 'HP', kind: 'resource', maxFormula: 'A0 + Gear.Load', def: 'max' }, { id: 'f_sec', key: 'Sec', kind: 'resource', maxFormula: '5', def: 'max', vis: 'gm' });
+                for (let i = 0; i < 4; i++) fields.push({ id: 'f_n' + i, key: 'N' + i, kind: 'number', def: RI(3), step: i === 1 ? 0.1 : 1, decMax: i === 1 ? 2 : undefined, decMin: i === 1 ? 2 : undefined, max: i === 2 ? 5 : undefined });
+                fields.push({ id: 'f_t0', key: 'T0', kind: 'toggle' }, { id: 'f_t1', key: 'T1', kind: 'toggle' });
+                fields.push({ id: 'f_gear', key: 'Gear', kind: 'item-list', vis: 'all', list: { on: { label: 'On' }, stats: [{ key: 'wt' }, { key: 'dr' }, { key: 'kind', kind: 'pick', opts: [{ label: 'Light', name: 'A1' }, { label: 'Heavy', name: 'Dv' + RI(nAll) }] }], cols: [{ key: 'Load', formula: 'Row.wt * Row.qty', foot: true }, { key: 'Prot', formula: 'Row.dr + Row.kind' }] } });
+                fields.push({ id: 'f_pow', key: 'Powers', kind: 'item-list', vis: 'all', list: { lvl: { min: 1, max: 5, def: 1 }, stats: [{ key: 'lc' }] } }, { id: 'f_fx', key: 'Fx', kind: 'effects' });
+                const items = []; for (let i = 0; i < 8; i++) items.push({ id: 'i_g' + i, key: i === 0 ? 'Ammo' : undefined, name: 'Pebbles ' + i, category: 'Gear', stats: { wt: RI(5) + 0.5, dr: RI(3), kind: R() < 0.5 ? 'Light' : 'Heavy' }, mods: R() < 0.3 ? [{ f: 'f_n0', op: 'add', v: 1 }] : undefined });
+                for (let i = 0; i < 5; i++) items.push({ id: 'i_p' + i, name: 'Knack ' + i, category: 'Power', stats: { lc: RI(4) + 1 }, mods: R() < 0.3 ? [{ f: 'f_cp', op: 'add', v: 2, part: 'max' }] : undefined });
+                const effects = [{ id: 'e_t', name: 'Tired', mods: [{ f: 'f_a1', op: 'add', v: -1 }] }, { id: 'e_low', name: 'Low', auto: R() < 0.5 ? 'CP < 3' : 'PW > 10', mods: [{ f: 'f_a0', op: 'add', v: -1 }] }, { id: 'e_g', name: 'Hid', vis: 'gm', mods: [{ f: 'f_n2', op: 'add', v: 1 }] }];
+                const pool = [{ id: 'r_cp', label: 'Recover', apply: [{ f: 'f_cp', formula: '1', add: true }], needs: 'CP < CP.max', every: { n: 1, u: 'hour' } }, { id: 'r_draw', label: 'Draw', apply: [{ f: 'f_pw', formula: '1' }], every: { n: 1, u: 'hour' } },
+                    { id: 'r_two', label: 'Two', apply: [{ f: 'f_pw', formula: '2', add: true }, { f: 'f_hp', formula: 'Dv0 / 4' }, { f: 'f_n1', formula: '0.1', add: true }], every: { n: 1, u: 'hour' } },
+                    { id: 'r_chk', label: 'Check', formula: '3d6 <= Skill.S1 + 10', malf: R() < 0.3 ? '17' : undefined, then: [{ f: 'f_n0', formula: '1', add: true, when: 'hit' }, { f: 'f_hp', formula: '1', when: 'miss' }, { f: 'f_pw', formula: '3', when: 'malf' }], every: { n: 1, u: 'hour' } },
+                    { id: 'r_plain', label: 'Peek', formula: '1d6', every: { n: 1, u: 'hour' } }, { id: 'r_calc', label: 'Calc', formula: 'Dv1 + 2', then: [{ f: 'f_n3', formula: '1', add: true }], every: { n: 1, u: 'hour' } },
+                    { id: 'r_load', label: 'Load', apply: [{ f: 'f_n1', formula: 'Gear.Load / 7', add: true }], every: { n: 1, u: 'hour' }, inFight: { n: 1, u: 'rounds' } }, { id: 'r_gm', label: 'Seep', vis: 'gm', apply: [{ f: 'f_sec', formula: '1' }], every: { n: 1, u: 'hour' } },
+                    { id: 'r_sec', label: 'Peer', apply: [{ f: 'f_n2', formula: 'Sec.max - 4', add: true }], every: { n: 1, u: 'hour' } }, { id: 'r_set', label: 'Hold', apply: [{ f: 'f_n2', formula: '3', set: true }], every: { n: 1, u: 'hour' } },
+                    { id: 'r_rnd', label: 'Round', apply: [{ f: 'f_pw', formula: 'CombatRound', set: true }], needs: 'PW < PW.max + 1', every: { n: 1, u: 'hour' }, inFight: { n: 1, u: 'rounds' } },
+                    { id: 'r_err', label: 'Bad', apply: [{ f: 'f_n0', formula: 'Nope + 1', add: true }], every: { n: 1, u: 'hour' } }, { id: 'r_deep', label: 'Deep', apply: [{ f: 'f_n3', formula: 'Dv' + (nAll - 1) + ' / 100', add: true }], every: { n: 1, u: 'hour' } }];
+                return { v: 1, name: 'Seeded', fields, items, effects, rolls: pool.filter(() => R() < 0.75) };
+            };
+            const seedCamp = (seed, sys) => {
+                const R = lcg(seed * 104729 + 3), RI = n => Math.floor(R() * n), chars = {};
+                for (let c = 0; c < 12; c++) {
+                    const v = {};
+                    sys.fields.forEach(f => { if (f.kind === 'number' && R() < 0.5) v[f.id] = RI(12) - 2; if (f.kind === 'toggle' && R() < 0.3) v[f.id] = true; if (f.kind === 'resource' && R() < 0.6) v[f.id] = { cur: RI(25) }; if (f.kind === 'skill' && R() < 0.4) v[f.id] = RI(4); });
+                    v.f_gear = Array.from({ length: RI(6) }, (_, g) => ({ id: 'w_g' + c + '_' + g, defId: 'i_g' + RI(8), qty: 1 + RI(3), on: R() < 0.6 }));
+                    v.f_pow = Array.from({ length: RI(4) }, (_, p) => ({ id: 'w_p' + c + '_' + p, defId: 'i_p' + RI(5), qty: 1, lvl: 1 + RI(4) }));
+                    v.f_fx = R() < 0.3 ? [{ id: 'x_' + c, ref: 'e_t', on: true }] : R() < 0.3 ? [{ id: 'y_' + c, ref: 'e_g', on: true }] : [];
+                    const ch = { id: 'c_' + c, name: 'Unit ' + c, values: v }; if (R() < 0.4) ch.ownerId = 'u_' + c; else if (R() < 0.8) ch.npc = true;
+                    chars[ch.id] = ch;
+                }
+                const fires = [], ids = sys.rolls.map(r => r.id).concat(['r_none']);
+                for (let i = 0; i < 15; i++) { const f = { c: 'c_' + RI(13), r: ids[RI(ids.length)], n: R() < 0.8 ? 1 : 1 + RI(4) }; if (R() < 0.25) { f.x = 1; if (R() < 0.7) f.rd = RI(6); } fires.push(f); }
+                return { camp: { system: sys, chars: chars }, fires: fires, at: R() < 0.5 ? { round: RI(9) } : undefined };
+            };
+            let seedSame = 0, seedFlat = 0, seedFires = 0, seedCards = 0, seedLess = 0, seedMore = 0; const seedOut = [];
+            for (let s = 1; s <= 40; s++) {
+                const sys = cleanSystem(seedSys(s), { F, gmView: true }), a = seedCamp(s, sys), b = seedCamp(s, sys), fa = countF(diceOf(s)), fb = countF(diceOf(s));
+                const oa = trRun(a.camp, a.fires, true, fa.F, a.at), ob = trRun(b.camp, b.fires, false, fb.F, b.at);
+                if (j(oa) === j(ob)) seedSame++; if (shallowOf(sys, F)) { seedFlat++; seedLess += fa.c.asks; seedMore += fb.c.asks; }
+                seedFires += a.fires.length; seedCards += ob.cards.length; seedOut.push(oa);
+            }
+            const seedHash = require('crypto').createHash('sha256').update(j(seedOut)).digest('hex');
+            check('1.5.5 600 seeded fires on 40 seeded systems (deep chains, a loop, GM-only fields and rules, needs, a choice and columns, automatic effects, a malfunction, a roll with no dice, In a fight with its round, several runs a fire): what the run stores and says as the app runs it is byte for byte what the old path gives, and what the old path gives is what the code before the change gave, pinned by hash (' + seedHash + '); ' + seedFlat + ' of the systems share their resolvers and ask the engine less (' + seedLess + ' asks, the old path ' + seedMore + '), the rest go the old way',
+                seedSame === 40 && seedFires === 600 && seedCards > 100 && seedFlat >= 12 && seedFlat <= 32 && seedLess * 3 < seedMore && seedHash === SEED_PIN, j([seedSame, seedFires, seedCards, seedFlat, seedLess, seedMore]));
+            // chainsShallow: where every resolver of one state answers alike, and the warm resolver and a fresh one differ where it says no
+            const chainSys = (len, rev) => cleanSystem({ v: 1, name: 'C', fields: Array.from({ length: len }, (_, i) => ({ id: 'f_c' + i, key: 'C' + i, kind: 'formula', formula: rev ? (i === len - 1 ? '1' : 'C' + (i + 1) + ' + 1') : (i === 0 ? '1' : 'C' + (i - 1) + ' + 1') })) }, { F, gmView: true });
+            const chainAns = [[64, 0], [65, 0], [64, 1], [65, 1]].map(([len, rev]) => { const sy = chainSys(len, rev), top = rev ? 'C0' : 'C' + (len - 1), ch = { id: 'c', values: {} }; return [shallowOf(sy, F), S.resolveAll(sy, ch, F).vars(top), typeof S.makeResolver(sy, ch, F)(top)]; });
+            const loopIf = cleanSystem({ v: 1, name: 'L', fields: [{ id: 'f_a', key: 'A', kind: 'formula', formula: 'B + 1' }, { id: 'f_b', key: 'B', kind: 'formula', formula: 'if(T, A, 1)' }, { id: 'f_t', key: 'T', kind: 'toggle' }] }, { F, gmView: true });
+            const loopCol = cleanSystem({ v: 1, name: 'L2', fields: [{ id: 'f_g', key: 'G', kind: 'item-list', vis: 'all', list: { stats: [{ key: 'k', kind: 'pick', opts: [{ label: 'X', name: 'Z' }] }], cols: [{ key: 'W', formula: 'Row.k + 1' }] } }, { id: 'f_z', key: 'Z', kind: 'formula', formula: 'G.W' }] }, { F, gmView: true });
+            const loopMax = cleanSystem({ v: 1, name: 'L3', fields: [{ id: 'f_hp', key: 'HP', kind: 'resource', maxFormula: 'Q + 1' }, { id: 'f_q', key: 'Q', kind: 'formula', formula: 'HP.cur' }] }, { F, gmView: true });
+            const flatOnes = [cleanSystem(d20, { F, gmView: true }), cleanSystem(g3d6, { F, gmView: true }), bigSys, cleanSystem({ v: 1, name: 'E', fields: [] }, { F, gmView: true })].map(sy => shallowOf(sy, F));
+            check('1.5.5 chainsShallow (systemcore, run for real): the two starters, the sheet of 277 fields and an empty one pass; a chain of 64 formulas passes and one of 65 does not, in either order, since there resolveAll\'s resolver (which works every field out in order first) answers 65 where a fresh one is refused by the engine\'s depth; a loop through an if, a choice whose option reads a total of a column that reads the choice, a pool\'s most that reads its own current value, no engine and no system do not',
+                j(flatOnes) === j([true, true, true, true]) && j(chainAns) === j([[true, 64, 'number'], [false, 65, 'object'], [true, 64, 'number'], [false, 65, 'object']]) && [loopIf, loopCol, loopMax].every(sy => shallowOf(sy, F) === false) && shallowOf(bigSys, null) === false && shallowOf(null, F) === false && shallowOf(bigSys, { names: F.names, LIMITS: { maxDepth: 10 } }) === false,
+                j([flatOnes, chainAns, [loopIf, loopCol, loopMax].map(sy => shallowOf(sy, F))]));
+            // 1.5.5's review: chainsShallow counts every kind the resolver puts on its chain, at the engine's very depth: a skill's base, a list's
+            // highest and lowest, a column's total, a choice's option and a full pool's most. A time rule reads the top of each chain, run as the
+            // app runs it and handed neither: at 64 the shared path answers as the old one, at 65 the gate sends the run the old way
+            const rwE6 = Array.from({ length: 6 }, (_, i) => ({ id: 'f_e' + i, key: 'E' + i, kind: 'formula', formula: i === 0 ? '1' : 'E' + (i - 1) + ' + 1' }));
+            const rwChain = (n, first) => Array.from({ length: n }, (_, i) => ({ id: 'f_c' + i, key: 'C' + i, kind: 'formula', formula: i === 0 ? first : 'C' + (i - 1) + ' + 1' }));
+            const rwKind = (kind, nodes) => {   // a chain of that many nodes on the resolver's chain, read from its top
+                let fields, top, items = [], vals = {};
+                if (kind === 'skill') { fields = Array.from({ length: nodes }, (_, i) => ({ id: 'f_k' + i, key: 'K' + i, kind: 'skill', base: i === 0 ? '1' : 'K' + (i - 1) })); top = 'K' + (nodes - 1); }
+                else if (kind === 'pool') { fields = rwChain(nodes - 7, 'HP').concat(rwE6, [{ id: 'f_hp', key: 'HP', kind: 'resource', maxFormula: 'E5', def: 'max' }]); top = 'C' + (nodes - 8); }
+                else {
+                    const n = nodes - (kind === 'choice' ? 7 : 8);
+                    fields = rwChain(n, kind === 'choice' ? 'G.Peb.k' : kind === 'total' ? 'G.W' : 'G.' + kind + '.W').concat(rwE6, [{ id: 'f_g', key: 'G', kind: 'item-list', vis: 'all', list: { stats: [{ key: 'wt' }, { key: 'k', kind: 'pick', opts: [{ label: 'X', name: 'E5' }] }], cols: [{ key: 'W', formula: 'Row.wt + E5' }] } }]);
+                    items = [{ id: 'i_a', key: 'Peb', name: 'Pebbles', category: 'Gear', stats: { wt: 2, k: 'X' } }]; vals = { f_g: [{ id: 'w_1', defId: 'i_a', qty: 1 }] }; top = 'C' + (n - 1);
+                }
+                const sy = cleanSystem({ v: 1, name: 'K', fields: fields.concat([{ id: 'f_out', key: 'Out', label: 'Out', kind: 'number', def: 0 }]), items, rolls: [{ id: 'r_top', label: 'Top', apply: [{ f: 'f_out', formula: top + ' + 1', add: true }], every: { n: 1, u: 'hour' } }] }, { F, gmView: true });
+                return { sy, top, vals };
+            };
+            const rwKinds = ['skill', 'max', 'min', 'total', 'choice', 'pool'], rwAns = [], rwRun = [];
+            rwKinds.forEach(kind => [64, 65].forEach(nodes => {
+                const k = rwKind(kind, nodes), ch = () => ({ id: 'c_k', name: 'Kael', npc: true, values: JSON.parse(j(k.vals)) });
+                rwAns.push([kind, nodes, shallowOf(k.sy, F), typeof S.resolveAll(k.sy, ch(), F).vars(k.top), typeof S.makeResolver(k.sy, ch(), F)(k.top)]);
+                const fires = [{ c: 'c_k', r: 'r_top', n: 2 }], a = trRun({ system: k.sy, chars: { c_k: ch() } }, fires, true, countF(diceOf(3)).F), b = trRun({ system: k.sy, chars: { c_k: ch() } }, fires, false, countF(diceOf(3)).F);
+                rwRun.push([kind, nodes, j(a) === j(b), (b.chars[0][1] || {}).f_out]);
+            }));
+            check('1.5.5\'s review: chainsShallow counts a chain through each kind the resolver puts on its chain, at the engine\'s very depth (a skill\'s base; a list\'s highest and lowest into a column and on into more formulas; a column\'s total; a choice\'s option; a full pool\'s most): each passes at 64 and not at 65, where resolveAll\'s resolver still answers the top and a fresh one is refused; and a time rule that reads the top, run as the app runs it and handed neither, gives the same byte for byte at both depths, the top read each time',
+                j(rwAns) === j(rwKinds.flatMap(kd => [[kd, 64, true, 'number', 'number'], [kd, 65, false, 'number', 'object']])) && rwRun.length === 12 && rwRun.every(x => x[2] === true && typeof x[3] === 'number' && x[3] > 0), j([rwAns, rwRun]));
+            // 1.5.5's review: a chain thousands of nodes long is walked no deeper than the engine allows, and what cannot be read is no proof
+            const rwLongF = [];
+            for (let n = 0; n < 399; n++) rwLongF.push({ id: 'f_l' + n, key: 'L' + n, kind: 'item-list', vis: 'all', list: { cols: Array.from({ length: 12 }, (_, k) => ({ key: 'w' + k, formula: k === 0 ? (n < 398 ? 'L' + (n + 1) + '.w11 + 1' : '1') : 'Row.w' + (k - 1) + ' + 1' })) } });
+            const rwLong = cleanSystem({ v: 1, name: 'Long', fields: rwLongF.concat([{ id: 'f_top', key: 'Top', kind: 'formula', formula: 'L0.w11' }]) }, { F, gmView: true }), rwStack0 = Error.stackTraceLimit;
+            let rwStack = 0, rwThrew = null, rwLongAns = null;
+            const rwDeepF = Object.assign({}, F, { names: t => { Error.stackTraceLimit = Infinity; const d = String(new Error().stack).split(NL).length; Error.stackTraceLimit = rwStack0; if (d > rwStack) rwStack = d; return F.names(t); } });
+            try { rwLongAns = S.chainsShallow(rwLong, rwDeepF); } catch (e) { rwThrew = String(e && e.message); }
+            const rwThrowF = Object.assign({}, F, { names: () => { throw new Error('unreadable'); } }), rwThrown = [loopIf, bigSys, chainSys(10, 0)].map(sy => { try { return S.chainsShallow(sy, rwThrowF); } catch (e) { return 'it threw'; } });
+            check('1.5.5\'s review: chainsShallow walks a chain of some 5,000 nodes (399 lists of 12 columns, each reading the one before it and the first the next list\'s total) no deeper than the engine allows, so the stack never runs out and nothing is read cut short: it answers no, throws nothing, and the stack at the engine is ' + rwStack + ' frames deep at most (the walk before the review went thousands deep); and what it cannot read is no proof: with an engine whose names throws it answers no for a loop, the sheet of 277 fields and a short chain alike',
+                rwLongAns === false && rwThrew === null && rwStack > 0 && rwStack < 1000 && rwLong.fields.length === 400 && rwLong.fields[0].list.cols.length === 12 && j(rwThrown) === j([false, false, false]), j([rwLongAns, rwThrew, rwStack, rwLong.fields.length, rwThrown]));
+            // a system chainsShallow refuses still runs the old way, and gives what the old way gives
+            const deepRaw = { v: 1, name: 'Deep', fields: Array.from({ length: 70 }, (_, i) => ({ id: 'f_c' + i, key: 'C' + i, kind: 'formula', formula: i === 0 ? '1' : 'C' + (i - 1) + ' + 1' })).concat([{ id: 'f_spare', key: 'Spare', kind: 'formula', formula: SPARE }, { id: 'f_a0', key: 'A0', kind: 'number', def: 1 }, { id: 'f_a1', key: 'A1', kind: 'number', def: 1 }, { id: 'f_n', key: 'N', kind: 'number', def: 0 }]), rolls: [{ id: 'r_d', label: 'Deep', apply: [{ f: 'f_n', formula: 'C69 / 70', add: true }], every: { n: 1, u: 'hour' } }] };
+            const deepSys = cleanSystem(deepRaw, { F, gmView: true }), deepCamp = () => ({ system: deepSys, chars: { c_k: { id: 'c_k', name: 'Kael', npc: true, values: {} } } }), dN = countF(diceOf(9)), dO = countF(diceOf(9));
+            const deepNew = trRun(deepCamp(), [{ c: 'c_k', r: 'r_d', n: 2 }], true, dN.F), deepOld = trRun(deepCamp(), [{ c: 'c_k', r: 'r_d', n: 2 }], false, dO.F);
+            check('1.5.5 a system with a chain deeper than the engine allows still runs the old way (the sheet worked out whole each run, once a run of two), and gives what the old way gives: C69 read as 70, never as the engine\'s refusal',
+                shallowOf(deepSys, F) === false && dN.c.spare === 2 && dO.c.spare === 2 && j(deepNew) === j(deepOld) && j(deepNew.cards) === j([['c_k', '1 hour — Kael: Deep ×2: N +2 → 2', true]]), j([dN.c, deepNew.cards]));
+            // the three handed-in resolvers: each is the one read, and only where it is handed in
+            const hSys = cleanSystem({ v: 1, name: 'H', fields: [{ id: 'f_pw', key: 'PW', kind: 'resource', maxFormula: '20', def: 'max', min: 0 }, { id: 'f_n', key: 'N', kind: 'number', def: 0 }], rolls: [{ id: 'r_up', label: 'Up', apply: [{ f: 'f_pw', formula: '1' }], every: { n: 1, u: 'hour' } }] }, { F, gmView: true });
+            const hCh = { id: 'c_h', values: { f_pw: { cur: 5 } } }, held7 = n => (String(n).toLowerCase() === 'pw.max' ? 7 : String(n).toLowerCase() === 'pw' ? 3 : undefined);
+            const hEdit = [S.applyEdit(hSys, hCh, 'f_pw', { cur: 99 }, F, { vars: held7 }), S.applyEdit(hSys, hCh, 'f_pw', { cur: 99 }, F, {}), S.applyEdit(hSys, hCh, 'f_pw', { cur: 99 }, F, { vars: 'no' })].map(r => r.value);
+            const hAct = [S.applyAct(hSys, hCh, hSys.rolls[0], held7, F, null, null, true), S.applyAct(hSys, hCh, hSys.rolls[0], held7, F, null, null), S.applyAct(hSys, hCh, hSys.rolls[0], held7, F, null, null, 'yes')].map(r => r.values);
+            const hOther = S.makeResolver(hSys, { id: 'c_o', values: { f_pw: { cur: 9 } } }, F), hRun = [S.timeRuleRun(hSys, hCh, hSys.rolls[0], 2, F, DCk, undefined, { vars: hOther }), S.timeRuleRun(hSys, hCh, hSys.rolls[0], 2, F, DCk)].map(r => [r.values, r.lines]);
+            check('1.5.5 the resolvers handed in (systemcore, run for real): applyEdit\'s opts.vars reads a pool\'s most in place of a new resolver (99 held to 7, else to 20); applyAct\'s same, only as true, reads the pool\'s current value and its most from vars while nothing is changed yet (3 less 1 is 2, else the stored 5 less 1 is 4); timeRuleRun\'s opt.vars is its first run\'s resolver (9 less 1, then 7), else the run reads the character (5 less 1, then 3)',
+                j(hEdit) === j([{ cur: 7 }, { cur: 20 }, { cur: 20 }]) && j(hAct) === j([{ f_pw: { cur: 2 } }, { f_pw: { cur: 4 } }, { f_pw: { cur: 4 } }]) && j(hRun) === j([[{ f_pw: { cur: 7 } }, [{ f: 'f_pw', n: 'PW', d: -2, v: 7 }]], [{ f_pw: { cur: 3 } }, [{ f: 'f_pw', n: 'PW', d: -2, v: 3 }]]]), j([hEdit, hAct, hRun]));
+            // makeResolver's reuse: the automatic effects' first pass is the resolver, only where it answers every name as a new one would
+            const rSys = cleanSystem({ v: 1, name: 'R', fields: [{ id: 'f_cp', key: 'CP', kind: 'resource', maxFormula: 'A0 * 2', def: 'max' }, { id: 'f_a0', key: 'A0', kind: 'number', def: 4 }], effects: [{ id: 'e_low', name: 'Low', auto: 'CP < 3', mods: [{ f: 'f_a0', op: 'add', v: -1 }] }] }, { F, gmView: true });
+            const rFull = { id: 'c_r', values: {} }, rLow = { id: 'c_l', values: { f_cp: { cur: 1 } } }, rNone = cleanSystem({ v: 1, name: 'R0', fields: rSys.fields }, { F, gmView: true });
+            const asksFor = (sy, ch, ro, name) => { const k = countF(diceOf(1)), r = S.makeResolver(sy, ch, k.F, ro), before = k.c.asks, v = r(name); return [v, k.c.asks - before]; };
+            const reuseAns = [asksFor(rSys, rFull, { reuse: true }, 'CP.max'), asksFor(rSys, rFull, null, 'CP.max'), asksFor(rSys, rFull, { reuse: 'yes' }, 'CP.max'), asksFor(rSys, rFull, { reuse: true, combat: { round: 2 } }, 'CP.max'), asksFor(rSys, rLow, { reuse: true }, 'CP.max'), asksFor(rNone, rFull, { reuse: true }, 'CP.max')];
+            check('1.5.5 makeResolver\'s reuse (systemcore, run for real), only as true: with no automatic effect on and no token\'s context, the first pass that judged the automatic effects is the resolver, so a pool\'s most it already worked out asks the engine nothing more (else once); with a fight\'s round in its context, with an automatic effect on (its change applied: A0 reads 3, so the most reads 6), or in a system with no automatic effect, a resolver of its own as before',
+                j(reuseAns) === j([[8, 0], [8, 1], [8, 1], [8, 1], [6, 1], [8, 1]]), j(reuseAns));
+            // the index of keys a resolver keeps for a fields array follows a draft edited in place
+            const kSys = { fields: [{ id: 'f_a', key: 'A', kind: 'number', def: 2 }, { id: 'f_b', key: 'B', kind: 'formula', formula: 'A + 1' }] }, kCh = { id: 'c_k', values: {} }, kr = [];
+            kr.push(S.makeResolver(kSys, kCh, F)('B')); kSys.fields[0].key = 'Z'; kr.push(S.makeResolver(kSys, kCh, F)('Z'), typeof S.makeResolver(kSys, kCh, F)('A'), !!(S.makeResolver(kSys, kCh, F)('B') || {}).error);
+            kSys.fields[1] = { id: 'f_b', key: 'B', kind: 'formula', formula: 'Z * 10' }; kr.push(S.makeResolver(kSys, kCh, F)('B'));
+            kSys.fields.push({ id: 'f_c', key: 'C', kind: 'number', def: 7 }); kr.push(S.makeResolver(kSys, kCh, F)('C')); kSys.fields.splice(0, 1); kr.push(typeof S.makeResolver(kSys, kCh, F)('Z'), !!(S.makeResolver(kSys, kCh, F)('B') || {}).error);
+            check('1.5.5 a resolver\'s index of keys, kept for a fields array, follows the array edited in place as a draft is (systemcore, run for real): a key changed (Z reads the field, A no longer does, B that reads A fails), a field replaced by another object (B is 10 times Z), one added and one taken away are each read as they now stand',
+                j(kr) === j([3, 2, 'undefined', true, 20, 7, 'undefined', true]) && /function keyIndexOf\(sys\)/.test(fs.readFileSync(path.join(app, 'scripts', 'systemcore.js'), 'utf8')), j(kr));
+            // a tripwire: chainsShallow reads the five kinds of definition the resolver puts on its chain, and the two places it evaluates with its depth
+            const scSrc = fs.readFileSync(path.join(app, 'scripts', 'systemcore.js'), 'utf8'), mrSrc = scSrc.slice(scSrc.indexOf('function makeResolver('), scSrc.indexOf('// Stage 6: a caption\'s {…}'));
+            check('1.5.5 a tripwire on the resolver: makeResolver puts a definition on its chain in exactly five places (a formula, a skill\'s base or a pool\'s most; a choice\'s option; a column of one row; a total; a highest or lowest) and evaluates with its depth in exactly two, each of which chainsShallow reads: a new one must be taught to chainsShallow, or a run that shares its resolvers could answer a name the old path did not',
+                mrSrc.length > 1000 && mrSrc.split('chain.push(').length - 1 === 5 && mrSrc.split('depth: chain.length').length - 1 === 2 && /function chainsShallow\(sys, F\)/.test(scSrc), j([mrSrc.split('chain.push(').length - 1, mrSrc.split('depth: chain.length').length - 1]));
+            const rdBig = f => fs.readFileSync(path.join(app, '..', '..', f), 'utf8').replace(/\r\n/g, NL), noteBig = "- A time rule's run that moved nothing and rolled no dice now posts\n  nothing: no summary in chat and no Session Log line. So a rule that\n  fills a pool says nothing while the pool is full, and many NPCs at\n  their most no longer fill the chat every game hour.\n", rnLine ='- A game hour of time rules on a large campaign no longer stalls your\n  screen.\n';
+            check('1.5.5 both release notes say it in the 1.5.5 part, under Calendar, right after the flood fix\'s point',
+                [rdBig('WHATSNEW.txt'), rdBig('system/app/assets/whatsnew.txt')].every(t => { const p = t.indexOf('WAYPOINT 1.5.5'), q = t.indexOf('WAYPOINT 1.5.4'), k = t.indexOf(rnLine), f = t.indexOf(noteBig); return p >= 0 && f > p && k === f + noteBig.length && k < q && t.split(rnLine).length === 2; }));
+        }
         {   // backlog 152, fold 1 (the fight clock, docs/FIGHT_CLOCK_DESIGN.md 2 and 3): Waits in a fight, In a fight with Each fight starts again,
             // Ask me first (cleanEvery, cleanInFight, everyTargets, cleanRollDef and cleanApplyDef), and a time rule run in a fight's round
             // (timeRuleRun's at), in a scope of their own
@@ -7843,13 +8074,20 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             // By the clock reads none; the words head the summary, and an NPC's summary is the GM's alone
             const campR4 = { system: sysRd, chars: { c_k: { id: 'c_k', name: 'Kael', ownerId: 'u_a', values: { f_hp: { cur: 5 } } }, c_n: { id: 'c_n', name: 'Unit 7', npc: true, values: {} } } }, outR4 = { cards: [], deltas: [], views: [], saves: 0 };
             const netR4 = { active: true, role: 'host', syncCharDelta: (id, v) => outR4.deltas.push([id, JSON.parse(j(v))]), timeCard: (ch, text, gm) => outR4.cards.push([ch.id, text, gm]) };
-            const runR4 = new Function('getActiveCampaign', 'systemOf', 'net', 'F', 'charById', 'timeRuleRun', 'gmOnlyNames', 'applyScope', 'renderViews', 'save', 'window', 'makeResolver', 'hasDice', 'figText', "'use strict';" + NL + trSrc + NL + 'return runTimeRules;')(
-                () => campR4, c => c.system, () => netR4, () => F, (id, c) => (Object.prototype.hasOwnProperty.call(c.chars, id) ? c.chars[id] : null), S.timeRuleRun, S.gmOnlyNames, S.applyScope, id => outR4.views.push(id), () => outR4.saves++, { wpDiceCore: DCk, appRender: () => {} }, S.makeResolver, S.hasDice, S.figText);
-            const nR4 = runR4([{ c: 'c_k', r: 'r_set', n: 1, x: 1, rd: 3 }, { c: 'c_n', r: 'r_set', n: 1, x: 1 }], 'Round 3 on Docks', { round: 6 }), vR4 = [nR4, campR4.chars.c_k.values.f_rd, campR4.chars.c_n.values.f_rd, outR4.cards.slice()];
-            const nR4b = runR4([{ c: 'c_k', r: 'r_set', n: 1 }], 'An hour', { round: 9 }), vR4b = [nR4b, campR4.chars.c_k.values.f_rd];
+            const runR4 = new Function('getActiveCampaign', 'systemOf', 'net', 'F', 'charById', 'timeRuleRun', 'gmOnlyNames', 'applyScope', 'renderViews', 'save', 'window', 'makeResolver', 'hasDice', 'figText', 'ruleRunCtx', 'chainsShallow', "'use strict';" + NL + trSrc + NL + 'return runTimeRules;')(
+                () => campR4, c => c.system, () => netR4, () => F, (id, c) => (Object.prototype.hasOwnProperty.call(c.chars, id) ? c.chars[id] : null), S.timeRuleRun, S.gmOnlyNames, S.applyScope, id => outR4.views.push(id), () => outR4.saves++, { wpDiceCore: DCk, appRender: () => {} }, S.makeResolver, S.hasDice, S.figText, S.ruleRunCtx, trFlat('fold 4'));
+            const firesR4 = [{ c: 'c_k', r: 'r_set', n: 1, x: 1, rd: 3 }, { c: 'c_n', r: 'r_set', n: 1, x: 1 }], firesR4b = [{ c: 'c_k', r: 'r_set', n: 1 }];
+            trTwin('fold 4', trSrc, campR4, firesR4, 'Round 3 on Docks', { round: 6 }, DCk);
+            const nR4 = runR4(firesR4, 'Round 3 on Docks', { round: 6 }), vR4 = [nR4, campR4.chars.c_k.values.f_rd, campR4.chars.c_n.values.f_rd, outR4.cards.slice()];
+            trTwin('fold 4', trSrc, campR4, firesR4b, 'An hour', { round: 9 }, DCk);
+            const nR4b = runR4(firesR4b, 'An hour', { round: 9 }), vR4b = [nR4b, campR4.chars.c_k.values.f_rd];
             check('152 fold 4 runTimeRules (sheets.js, run for real): a rule set In a fight alone is found and run as one By the clock is; a fire In a fight runs in its fight\'s round (its own first, else the round handed in), so CombatRound reads 3 for Kael and 6 for Unit 7; its words head each summary, an NPC\'s the GM\'s alone; a fire By the clock reads no round, CombatRound 0',
                 j(vR4) === j([2, 3, 6, [['c_k', 'Round 3 on Docks \u2014 Kael: Set \u00d71: Rd +3 \u2192 3', false], ['c_n', 'Round 3 on Docks \u2014 Unit 7: Set \u00d71: Rd +6 \u2192 6', true]]]) && j(vR4b) === j([1, 0])
                 && /function runTimeRules\(fires, words, at\) \{/.test(trSrc) && /r\.id === fi\.r && \(r\.every \|\| r\.inFight\)/.test(trSrc), j([vR4, vR4b]));
+            // 1.5.5's review: the four older harnesses of runTimeRules run it as the app does, so their pins hold on the path it takes
+            const trTags = ['fold 2 (A)', 'K5', 'the flood fix', 'fold 4'], trOf = t => [trSeen.filter(s => s[0] === t).map(s => s[1]), trSeen.filter(s => s[0] === t + ':twin').map(s => s[1])];
+            check('1.5.5\'s review: the four older harnesses of runTimeRules (fold 2 (A), K5, the flood fix, fold 4) run it as the app does, handed ruleRunCtx and chainsShallow, and every run of theirs takes the shared path (chainsShallow said yes ' + trTags.map(t => trOf(t)[0].length).join(', ') + ' times, and never no), so their pins (the flood fix\'s silence, the audiences of GM-only rules and needs, CombatRound in a fight\'s round, full pools) hold on it; and each run, made again on two copies of its campaign, one so and one handed neither (the path every run took before), with the same dice, gives the same byte for byte',
+                trTags.every(t => { const [a, w] = trOf(t); return a.length >= 1 && a.every(x => x === true) && w.length === a.length && w.every(x => x === true); }), j(trTags.map(trOf)));
             // the review of fold 1: the pool's most read with the fight's round where an action ADDS to it too (applyEdit's opts.tctx, which applyAct hands on)
             const sysUp = cleanSystem({ v: 1, name: 'Up', fields: [{ id: 'f_ch', key: 'Ch', kind: 'resource', maxFormula: 'CombatRound + 5', def: 'max' }], rolls: [{ id: 'r_up', label: 'Up', apply: [{ f: 'f_ch', formula: '4', add: true }], each: 'round', inFight: { n: 1, u: 'round' } }] }, gmL);
             const chUp = { id: 'c_k', name: 'Kael', values: { f_ch: { cur: 3 } } }, keepUp = j(chUp), tcUp = { combat: { round: 4 } }, vfUp = w => S.resolveAll(sysUp, w, F, tcUp).vars;
