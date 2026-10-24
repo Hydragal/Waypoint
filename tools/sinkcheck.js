@@ -5138,6 +5138,25 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             && keysIn.includes(K) && keysIn.includes('nat') && made.filter(n => n.tag === 'select' && n.className === 'sys-dmgr-loclist').length === 1
             && !/innerHTML|insertAdjacentHTML|outerHTML|document\.write/.test(dbS) && saysD.errs.length > 0 && saysD.errs.every(e => typeof e.message === 'string' && Object.keys(e).join() === 'message'), JSON.stringify([marks, [...tags], hostileIn, saysD.errs.map(e => e.message)]));
     }
+    {   // 1.5.6 trading: the barter window drawn from a hostile host's view (trade.js twDraw, sliced by its tradewin markers, run on a page of plain objects that refuses markup)
+        const trS = fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', 'trade.js'), 'utf8').replace(/\r\n/g, '\n');
+        const twS = trS.slice(trS.indexOf('// [sinkcheck:tradewin-start]'), trS.indexOf('// [sinkcheck:tradewin-end]'));
+        const made = [], node = (tag) => { const n = { tag, children: [], className: '', attrs: {}, listeners: {}, get firstChild() { return this.children[0] || null; }, appendChild(c) { this.children.push(c); return c; }, removeChild(c) { this.children.splice(this.children.indexOf(c), 1); }, setAttribute(k, v) { this.attrs[k] = String(v); }, addEventListener(k, f) { this.listeners[k] = f; } }; Object.defineProperty(n, 'innerHTML', { set() { throw new Error('markup written'); } }); made.push(n); return n; };
+        const doc = { createElement: node };
+        const tw = new Function(twS + '\nreturn { twDraw: twDraw, twChoices: twChoices, twOffer: twOffer };')();
+        const H = '<img src=x onerror=alert(1)>';
+        const v = { tid: 't_abcdefgh', status: 'open', you: 'a', msg: H, a: { charId: 'c_1', name: H + 'A', ok: false, lines: [{ fid: 'f_g', rowId: 'w_1', name: H + 'Lamp', qty: 2, price: 20 }, { fid: 'f_c', rowId: 'w_2', name: H + 'Chip', key: '@lvl', amt: 40, label: H + 'Stored' }] }, b: { charId: 'c_2', name: H + 'B', ok: true, lines: [{ fid: 'f_g', rowId: 'w_9', name: H + 'Knife', qty: 1 }] } };
+        const off = { a: [{ fid: 'f_g', rowId: 'w_1', list: H + 'Gear', name: H + 'Lamp', qty: 3, split: [] }, { fid: 'f_g', rowId: 'w_3', list: H + 'Gear', name: H + 'Rope', qty: 1, split: [], no: H + 'stuck' }, { fid: 'f_c', rowId: 'w_4', list: 'Chips', name: 'Chip', qty: 1, split: [{ key: '@lvl', label: 'Stored', max: 12, step: 0.01 }] }], b: [] };
+        const acts = [], root = node('div'); tw.twDraw(doc, root, v, off, (k, s, a) => acts.push([k, s, a]));
+        const texts = made.map(n => n.textContent).filter(x => typeof x === 'string'), opts = made.filter(n => n.tag === 'option'), inputs = made.filter(n => n.tag === 'input'), sel = made.filter(n => n.tag === 'select');
+        inputs[0].value = '3'; inputs[0].listeners.change(); sel[0].value = opts[2].value; sel[0].listeners.change(); made.filter(n => n.tag === 'button' && n.className.indexOf('trade-ok') >= 0)[0].listeners.click();
+        check('1.5.6 trading, the barter window (trade.js twDraw, run for real on a hostile view): every name, label, list and message reaches the window as a text node, never markup; your side has a number box and a take-off button a line, the other side read-only with its confirm said; the list to add names each row and each split figure, a row that cannot be taken off greyed with its reason, and no row already on the table; the boxes, the list and Confirm hand their step to the window\'s own handler',
+            texts.includes(H + 'Lamp') && texts.includes(H + 'Stored from ' + H + 'Chip') && texts.includes(H) && texts.includes(H + 'B has confirmed.') && inputs.length === 2 && inputs[0].value === '3'
+            && opts.length === 4 && opts[1].textContent === H + 'Gear: ' + H + 'Rope \u2014 ' + H + 'stuck' && opts[1].disabled === true && opts[3].textContent === 'Chips: Stored from Chip (12)' && opts[3].value === 'a|f_c|w_4|@lvl'
+            && JSON.stringify(acts) === JSON.stringify([['num', 'a', { i: 0, n: 3 }], ['add', 'a', 'q|f_c|w_4'], ['ok', 'a', true]])
+            && JSON.stringify(tw.twOffer(v.a.lines)) === JSON.stringify([{ fid: 'f_g', rowId: 'w_1', qty: 2 }, { fid: 'f_c', rowId: 'w_2', key: '@lvl', amt: 40 }])
+            && !/innerHTML|insertAdjacentHTML|outerHTML|document\.write/.test(twS), JSON.stringify([texts.slice(0, 12), opts.map(o => o.textContent), acts]));
+    }
     summed = true;
     console.log('\n' + pass + ' passed, ' + fail + ' failed.');
     if (fail) process.exit(1);

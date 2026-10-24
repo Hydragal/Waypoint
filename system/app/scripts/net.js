@@ -3213,6 +3213,152 @@ net.damageCard = function(ch, lines) {
     pushChat(m);
     logEvent('char', t);
 };
+// [netcheck:trade-start]
+// 1.5.6 trading (backlog 157; docs/TRADE_V1_SPEC.md). The host keeps every trade (_trades) and judges every step; each side sees its view
+// (tradeView). A side is acted for by its player while that player is at the table, else by the GM (an NPC, a merchant, or a player's
+// character whose player is away: the GM's own hand). One trade at a time a character. Both confirm, then tradeApply moves everything at once
+var _trades = Object.create(null), _tradeViews = Object.create(null), TRADE_TID = /^t_[a-z0-9]{8}$/;
+function tradeForget() { _trades = Object.create(null); _tradeViews = Object.create(null); }
+function tradeChar(camp, id) { return camp && camp.chars && typeof id === 'string' && Object.prototype.hasOwnProperty.call(camp.chars, id) ? camp.chars[id] : null; }
+function tradeHere(pid) { return !!pid && net.active && net.role === 'host' && net.conns.some(function(c) { return c.open && net.roster[c.peer] && net.roster[c.peer].id === pid; }); }
+// who acts for a character: its player while at the table, '' for the GM (an NPC, one with no player, one whose player is away)
+function tradeBy(ch) { return ch && !ch.npc && ch.ownerId && tradeHere(ch.ownerId) ? ch.ownerId : ''; }
+function tradeOfChar(id) { var hit = null; Object.keys(_trades).forEach(function(k) { var tr = _trades[k]; if (!hit && (tr.a.charId === id || tr.b.charId === id)) hit = tr; }); return hit; }
+function tradeLines(S, sys, ch, off, who) {
+    var can = Object.create(null); S.tradeOfferable(sys, ch, who).forEach(function(e) { can[e.fid + '|' + e.rowId] = e; });
+    return (off || []).map(function(l) {
+        var e = can[l.fid + '|' + l.rowId]; if (!e) return null; var o = { fid: l.fid, rowId: l.rowId, name: e.name, list: e.list };
+        if (l.key === undefined) { o.qty = l.qty; if (typeof e.price === 'number') o.price = e.price; } else { var sp = e.split.filter(function(s) { return s.key === l.key; })[0]; o.key = l.key; o.amt = l.amt; o.label = sp ? sp.label : l.key; }
+        return o;
+    }).filter(Boolean);
+}
+function tradeView(tr, you, status, msg) {
+    var S = SC(), camp = getActiveCampaign(), ca = tradeChar(camp, tr.a.charId), cb = tradeChar(camp, tr.b.charId), sys = camp && camp.system;
+    var side = function(sd, ch, off, ok) { return { charId: sd.charId, name: String((ch && ch.name) || 'A character').slice(0, 60), ok: !!ok, lines: S && sys && ch ? tradeLines(S, sys, ch, off, sd.by ? 'player' : 'gm') : [] }; };
+    var v = { tid: tr.tid, status: status || tr.status, you: you, a: side(tr.a, ca, tr.offA, tr.okA), b: side(tr.b, cb, tr.offB, tr.okB) };
+    if (msg) v.msg = String(msg).slice(0, 200);
+    return v;
+}
+function tradeKeep(v) {   // a view on this screen: kept while it is open, said through the window event either way
+    if (!v || typeof v.tid !== 'string') return;
+    if (v.status === 'asking' || v.status === 'open') _tradeViews[v.tid] = v; else delete _tradeViews[v.tid];
+    if (v.status !== 'asking' && window.wpNotices && typeof window.wpNotices.done === 'function') { try { window.wpNotices.done('trade:' + v.tid); } catch (e) {} }   // the ask the bell kept is answered
+    try { window.dispatchEvent(new CustomEvent('wptrade', { detail: JSON.parse(JSON.stringify(v)) })); } catch (e) {}
+}
+function tradeTell(tr, status, msg) {   // each one who acts gets one view: a player's to their every connection, the GM's on this machine; one who holds both sides sees both as theirs
+    var by = Object.create(null); [['a', tr.a.by], ['b', tr.b.by]].forEach(function(s) { (by[s[1]] = by[s[1]] || []).push(s[0]); });
+    Object.keys(by).forEach(function(k) {
+        var v = tradeView(tr, by[k].length === 2 ? 'both' : by[k][0], status, msg);
+        if (!k) { tradeKeep(v); return; }
+        var m = { type: 'tradeState', view: v };
+        net.conns.forEach(function(c) { if (c.open && net.roster[c.peer] && net.roster[c.peer].id === k) { try { c.send(m); } catch (e) { sendFailed(e); } } });
+    });
+}
+function tradeEnd(tr, status, msg) { delete _trades[tr.tid]; tradeTell(tr, status, msg); }
+// a player's last connection closed: their trades end, the other side told
+function tradeConnGone(pid) { Object.keys(_trades).forEach(function(k) { var tr = _trades[k]; if (tr.a.by === pid || tr.b.by === pid) tradeEnd(tr, 'cancelled', 'A player left the table, so the trade ended.'); }); }
+// one step of a trade, on the host: actor { pid } for a player (by their profile id), {} for the GM. Answers { ok } or { error: words }
+function tradeDo(actor, msg) {
+    var S = SC(), camp = getActiveCampaign(), pid = actor && actor.pid ? actor.pid : ''; if (!S || !S.tradeApply || !camp || !camp.system) return { error: 'Trading is not ready.' };
+    if (net.paused) return { error: 'The table is paused.' };
+    if (window.wpVtt && !window.wpVtt.on('sheets')) return { error: 'Character sheets are off.' };
+    if (msg.op === 'ask') {
+        var fa = tradeChar(camp, msg.from), fb = tradeChar(camp, msg.to);
+        if (!fa || !fb || msg.from === msg.to || fa.partial || fb.partial || fa.making === 1 || fb.making === 1) return { error: 'That trade cannot start.' };
+        var byA = tradeBy(fa); if (pid ? byA !== pid : byA) return { error: 'You can only trade for your own character.' };
+        if (!pid && (fa.npc || !fa.ownerId) && (fb.npc || !fb.ownerId)) return { error: 'Two NPCs trade by hand: move the rows on their sheets.' };
+        if (tradeOfChar(msg.from) || tradeOfChar(msg.to)) return { error: (tradeOfChar(msg.to) ? fb.name : fa.name) + ' is trading with someone else. Ask again in a moment.' };
+        var byB = tradeBy(fb); if (pid && !byB && !fb.npc && fb.ownerId) return { error: (fb.name || 'That character') + '\u2019s player is not at the table.' };
+        var tid; do { tid = 't_' + Math.random().toString(36).slice(2, 10).padEnd(8, '0'); } while (_trades[tid]);
+        var tr = { tid: tid, a: { charId: msg.from, by: byA }, b: { charId: msg.to, by: byB }, status: byA === byB ? 'open' : 'asking', offA: [], offB: [], okA: false, okB: false };
+        _trades[tid] = tr; tradeTell(tr);
+        if (!byB && pid && typeof window.wpNotices === 'object' && window.wpNotices && typeof window.wpNotices.wait === 'function') { try { window.wpNotices.wait('trade:' + tid, (fa.name || 'A character') + ' asks to trade with ' + (fb.name || 'your character') + '.', 'trade', tid); } catch (e) {} }
+        logEvent('char', (fa.name || 'A character') + ' asked to trade with ' + (fb.name || 'a character'));
+        return { ok: true, tid: tid };
+    }
+    var tr2 = typeof msg.tid === 'string' && TRADE_TID.test(msg.tid) && _trades[msg.tid] ? _trades[msg.tid] : null; if (!tr2) return { error: 'That trade is over.' };
+    var sideA = tr2.a.by === pid, sideB = tr2.b.by === pid; if (!sideA && !sideB) return { error: 'That trade is not yours.' };
+    var ca = tradeChar(camp, tr2.a.charId), cb = tradeChar(camp, tr2.b.charId); if (!ca || !cb) { tradeEnd(tr2, 'cancelled', 'A character in the trade is gone.'); return { error: 'That trade is over.' }; }
+    var who = function(sd) { return sd.by ? 'player' : 'gm'; };
+    if (msg.op === 'cancel') { tradeEnd(tr2, 'cancelled', ((sideA ? ca : cb).name || 'Someone') + ' ended the trade.'); return { ok: true }; }
+    if (msg.op === 'answer') {
+        if (tr2.status !== 'asking' || !sideB) return { error: 'There is nothing to answer.' };
+        if (msg.yes !== true) { tradeEnd(tr2, 'cancelled', (cb.name || 'They') + ' declined the trade.'); return { ok: true }; }
+        tr2.status = 'open'; tradeTell(tr2); return { ok: true };
+    }
+    if (tr2.status !== 'open') return { error: 'The trade has not started yet.' };
+    var mine = msg.side === 'b' && sideB ? 'b' : msg.side === 'a' && sideA ? 'a' : sideA ? 'a' : 'b';   // the GM holding both sides names the side
+    if (msg.op === 'put') {
+        var chM = mine === 'a' ? ca : cb, off = S.cleanTradeOffer(camp.system, chM, msg.offer, who(tr2[mine]));
+        if (mine === 'a') tr2.offA = off; else tr2.offB = off; var had = tr2.okA || tr2.okB; tr2.okA = false; tr2.okB = false;
+        tradeTell(tr2, null, had ? 'The offer changed: confirm again.' : ''); return { ok: true };
+    }
+    if (msg.op === 'confirm') {
+        if (mine === 'a') tr2.okA = msg.on === true; else tr2.okB = msg.on === true;
+        if (!(tr2.okA && tr2.okB)) { tradeTell(tr2); return { ok: true }; }
+        var res = S.tradeApply(camp.system, ca, cb, tr2.offA, tr2.offB, who(tr2.a), who(tr2.b));
+        if (!res.ok) { tr2.okA = false; tr2.okB = false; tradeTell(tr2, null, res.msg); return { error: res.msg }; }
+        var now = Date.now(); ca.values = ca.values || {}; cb.values = cb.values || {};
+        Object.keys(res.valuesA).forEach(function(k) { ca.values[k] = res.valuesA[k]; }); Object.keys(res.valuesB).forEach(function(k) { cb.values[k] = res.valuesB[k]; }); ca.updated = now; cb.updated = now;
+        saveRemoteSoon();
+        if (Object.keys(res.valuesA).length) net.syncCharDelta(tr2.a.charId, res.valuesA); if (Object.keys(res.valuesB).length) net.syncCharDelta(tr2.b.charId, res.valuesB);
+        if (window.wpSheets) { window.wpSheets.charChanged(tr2.a.charId); window.wpSheets.charChanged(tr2.b.charId); }
+        var said = (ca.name || 'A character') + ' gave ' + (res.linesA.join(', ') || 'nothing') + '. ' + (cb.name || 'A character') + ' gave ' + (res.linesB.join(', ') || 'nothing') + '.';
+        tradeCard([ca, cb], 'Trade done. ' + said);
+        tradeEnd(tr2, 'done', 'Trade done. ' + said);
+        return { ok: true };
+    }
+    return { error: 'That is not a step of a trade.' };
+}
+// what a trade did: a private line to each side's player at the table and the GM (the damageCard pattern), and the Session Log
+function tradeCard(chars, text) {
+    var t = String(text).slice(0, 1500), m = { type: 'chat', scope: 'whisper', from: { id: net.myId || 'gm', name: 'GM', gm: true }, text: t, ts: Date.now() }, to = Object.create(null);
+    chars.forEach(function(ch) { if (ch && ch.ownerId && !ch.npc) to[ch.ownerId] = 1; });
+    if (net.active && net.role === 'host') net.conns.forEach(function(c) { if (c.open && net.roster[c.peer] && to[peerProfileId(c)] === 1) { try { c.send(m); } catch (e) { sendFailed(e); } } });
+    pushChat(m); logEvent('char', t);
+}
+// the API, the same on both ends: on a player's app one message to the synced host, on the GM's machine the host's own step
+function tradeSendUp(o) {
+    if (net.active && net.role === 'client') {
+        if (net.stream) return { error: 'Not here.' };
+        if (!net.foreign || !net.syncedPeer || !net.conns[0] || !net.conns[0].open || net.conns[0].peer !== net.syncedPeer) return { error: 'Not at the table yet.' };
+        o.type = 'trade'; try { net.conns[0].send(o); } catch (e) { return { error: 'Could not reach the GM.' }; } return { ok: true, pending: true };
+    }
+    if (net.stream) return { error: 'Not here.' };
+    return tradeDo({}, o);
+}
+net.tradeAsk = function(from, to) { return tradeSendUp({ op: 'ask', from: String(from || ''), to: String(to || '') }); };
+net.tradeAnswer = function(tid, yes) { if (window.wpNotices && window.wpNotices.done) { try { window.wpNotices.done('trade:' + tid); } catch (e) {} } return tradeSendUp({ op: 'answer', tid: String(tid || ''), yes: yes === true }); };
+net.tradePut = function(tid, offer, side) { var o = { op: 'put', tid: String(tid || ''), offer: Array.isArray(offer) ? offer.slice(0, 80) : [] }; if (side === 'a' || side === 'b') o.side = side; return tradeSendUp(o); };
+net.tradeConfirm = function(tid, on, side) { var o = { op: 'confirm', tid: String(tid || ''), on: on === true }; if (side === 'a' || side === 'b') o.side = side; return tradeSendUp(o); };
+net.tradeCancel = function(tid) { return tradeSendUp({ op: 'cancel', tid: String(tid || '') }); };
+net.tradeNow = function() { var ks = Object.keys(_tradeViews); return ks.length ? JSON.parse(JSON.stringify(_tradeViews[ks[ks.length - 1]])) : null; };
+net.tradeViews = function() { return Object.keys(_tradeViews).map(function(k) { return JSON.parse(JSON.stringify(_tradeViews[k])); }); };
+net.tradeOffer = function(charId, gm) {   // what this screen's side may put on the table, from its own copy of the character
+    var S = SC(), camp = getActiveCampaign(), ch = tradeChar(camp, charId); if (!S || !S.tradeOfferable || !camp || !camp.system || !ch) return [];
+    return S.tradeOfferable(camp.system, ch, gm ? 'gm' : 'player');
+};
+// a host's view, cleaned again on a player's app: ids by their patterns, names as short text, numbers as numbers, 40 lines a side
+function cleanTradeView(v) {
+    var S = SC(), N = S && S.TRADE_LINES ? S.TRADE_LINES : 40; if (!v || typeof v !== 'object' || typeof v.tid !== 'string' || !TRADE_TID.test(v.tid)) return null;
+    var st = ['asking', 'open', 'done', 'cancelled'].indexOf(v.status) >= 0 ? v.status : null, you = ['a', 'b', 'both'].indexOf(v.you) >= 0 ? v.you : null; if (!st || !you) return null;
+    var txt = function(s, n) { return typeof s === 'string' ? s.replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, ' ').slice(0, n).trim() : ''; };
+    var num = function(x) { return typeof x === 'number' && isFinite(x) && Math.abs(x) <= 1e9 ? x : null; };
+    var side = function(s) {
+        if (!s || typeof s !== 'object' || typeof s.charId !== 'string' || !/^c_[A-Za-z0-9_]{1,24}$/.test(s.charId)) return null;
+        var lines = (Array.isArray(s.lines) ? s.lines.slice(0, N) : []).map(function(l) {
+            if (!l || typeof l !== 'object' || typeof l.fid !== 'string' || typeof l.rowId !== 'string' || l.fid.length > 40 || l.rowId.length > 40) return null;
+            var o = { fid: l.fid, rowId: l.rowId, name: txt(l.name, 80) || 'Item', list: txt(l.list, 60) };
+            if (typeof l.key === 'string') { var a = num(l.amt); if (a === null) return null; o.key = l.key.slice(0, 40); o.amt = a; o.label = txt(l.label, 60) || o.key; }
+            else { var q = num(l.qty); if (q === null || q < 1) return null; o.qty = Math.floor(q); var p = num(l.price); if (p !== null) o.price = p; }
+            return o;
+        }).filter(Boolean);
+        return { charId: s.charId, name: txt(s.name, 60) || 'A character', ok: s.ok === true, lines: lines };
+    };
+    var a = side(v.a), b = side(v.b); if (!a || !b) return null;
+    var o = { tid: v.tid, status: st, you: you, a: a, b: b }; var m = txt(v.msg, 200); if (m) o.msg = m; return o;
+}
+// [netcheck:trade-end]
 // Turn-based combat T2 (owner, 2026-09-26): the token whose turn it is on the map in view, when it is this player's own — { mapId, rowId, tok }
 // or null (not at a table, turn-based combat off, no combat here, someone else's turn)
 net.myTurnTok = function() {
@@ -6723,6 +6869,17 @@ function handleMessage(msg, conn) {
         if (Object.keys(rd.values).length) { net.syncCharDelta(qd.charId, rd.values); if (window.wpSheets) window.wpSheets.charChanged(qd.charId); }
         net.damageCard(chD, rd.lines);
         // [netcheck:chardamage-end]
+    } else if (msg.type === 'trade' && net.role === 'host') {
+        // [netcheck:tradebranch-start]
+        // 1.5.6 trading: a player's step of a trade — admitted, its own limiter, then the host's own judge (tradeDo), whose refusal is said to them alone
+        var prTr = net.roster[conn.peer]; if (!prTr || !prTr.id || typeof msg.op !== 'string') return;
+        if (!allow('trade', { perMs: 100, burst: 20, windowMs: 4000, table: 400 }, conn.peer)) return;
+        if (peerPaused(conn.peer)) { try { conn.send({ type: 'tradeState', refused: 'The table is paused.' }); } catch (e) { sendFailed(e); } return; }
+        var qTr = { op: msg.op }; ['from', 'to', 'tid', 'side'].forEach(function(k) { if (typeof msg[k] === 'string' && msg[k].length <= 40) qTr[k] = msg[k]; });
+        if (msg.yes === true) qTr.yes = true; if (msg.on === true) qTr.on = true; if (Array.isArray(msg.offer)) qTr.offer = msg.offer.slice(0, 80);
+        var rTr = tradeDo({ pid: prTr.id }, qTr);
+        if (rTr && rTr.error) { try { conn.send({ type: 'tradeState', refused: String(rTr.error).slice(0, 200) }); } catch (e) { sendFailed(e); } }
+        // [netcheck:tradebranch-end]
     } else if ((msg.type === 'turn-hold' || msg.type === 'turn-act') && net.role === 'host') {
         // [netcheck:turnholdmsg-start]
         // Initiative O3: a player holds their own turn (the row on turn, theirs) or acts from their own hold — turn-based combat on, the combat on
@@ -7494,6 +7651,13 @@ function handleMessage(msg, conn) {
         } else return;
         if (window.wpSheets && window.wpSheets.charChanged) window.wpSheets.charChanged(msg.charId);
         // [netcheck:actsin-end]
+    } else if (msg.type === 'tradeState' && net.role === 'client') {
+        // [netcheck:tradestate-start]
+        // 1.5.6 trading: the host's view of a trade of theirs, or the words of a refusal — from the synced host only, cleaned again, never in the stream window
+        if (!net.foreign || conn.peer !== net.syncedPeer || net.stream) return;
+        if (typeof msg.refused === 'string') { var rfx = msg.refused.replace(/[ --​-‏‪-‮⁦-⁩]/g, ' ').slice(0, 200).trim(); if (rfx) toast(rfx); return; }
+        var tvx = cleanTradeView(msg.view); if (tvx) tradeKeep(tvx);
+        // [netcheck:tradestate-end]
     } else if (msg.type === 'trigmsg' && net.role === 'client') {
         // [netcheck:trigmsg-start]
         // Secrets (R2): a trigger zone's message, said by the host when a token of theirs landed in a shown zone (triggerFire) — from the synced host
@@ -7773,6 +7937,7 @@ function wireConn(conn) {
         if (p && p.id && !net.conns.some(function(c) { return c.open && net.roster[c.peer] && net.roster[c.peer].id === p.id; })) sensesForget(p.id);   // Senses S0: their last connection: what their copies were made by is forgotten, and no send waits for them
         if (net.role === 'host' && typeof fogDragSweep === 'function') fogDragSweep();   // fold M4: a drag this connection left open goes back where it began
         if (typeof fogForgetConn === 'function') fogForgetConn(conn.peer);   // fold M5: and what its copies held
+        if (p && p.id && net.role === 'host' && typeof tradeConnGone === 'function' && !net.conns.some(function(c) { return c.open && net.roster[c.peer] && net.roster[c.peer].id === p.id; })) tradeConnGone(p.id);   // 1.5.6: their last connection: their trades end, the other side told
         if (net.role === 'host' && typeof videoHang === 'function') { videoHang(conn.peer); videoTold(); }   // item 21 V2: and the call that showed it a video
         renderRoster();
         if (net.role === 'host') {
@@ -7991,6 +8156,7 @@ function startHosting(forceFresh) {
     if (window.wpFog && typeof window.wpFog.marksForget === 'function') window.wpFog.marksForget(null);   // senses S4b: and no marks held for anyone
     net._lastSnapSent = typeof window.wpSnapOn === 'function' && window.wpSnapOn() === true;   // the snap rule: the join snapshot carries Snap as it stands
     diceSessionReset(true);   // and from an empty chat: the last table's lines never reach the next one
+    if (typeof tradeForget === 'function') tradeForget();   // 1.5.6: a new table starts with no trade
     if (peerLibMissing()) return;
     if (forceFresh) net._hostGen = 0;
     cancelReconnect();   // a pending retry would otherwise tear the new host down and rejoin the old table

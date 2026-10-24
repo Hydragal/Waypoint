@@ -397,7 +397,7 @@ pendingChecks.push((async () => {
     check('M1: a Ban from the Players panel (its branch run for real) calls net.kickPlayer exactly once, with the first roster key of the profile, and that one call takes both of Pat\'s connections (told, closed, forgotten once); a profile not at the table and a player\'s machine call it not at all; in the source the Ban branch calls it once and never in a loop, net.js calls it twice (the roster\'s kick button, the Ban branch) and no other script does, and kickPlayer is the only place that sends \'kicked\'; the host has 25 message branches (the one new one is video-up, item 21)',
         js(ban1) === js({ threw: '', calls: ['pA1'], roster: ['pB', 'pX', 'pY'], kicked: ['pA1', 'pA2'], timers: 2, forgot: ['forget:u_a'], banned: ['u_a'], session: ['u_a'], saves: 1 }) && js(banAway.calls) === js([]) && banAway.kicked.length === 0 && banAway.threw === '' && js(banClient.calls) === js([]) && banClient.kicked.length === 0 && banClient.threw === ''
         && (noCom(banBody).match(/net\.kickPlayer\(/g) || []).length === 1 && !/forEach|\bfor \(|\bwhile \(/.test(noCom(banBody)) && js(kickCalls) === js([['net.js', 2]]) && (noCom(src).match(/net\.kickPlayer\(/g) || []).length === 2
-        && js(kickedSends) === js([['net.js', 1]]) && kickSrc.indexOf("conn.send({ type: 'kicked' });") >= 0 && (src.match(/msg\.type === '[a-z-]+' && net\.role === 'host'/g) || []).length === 29, js([ban1, banAway, banClient, kickCalls, kickedSends]));
+        && js(kickedSends) === js([['net.js', 1]]) && kickSrc.indexOf("conn.send({ type: 'kicked' });") >= 0 && (src.match(/msg\.type === '[a-z-]+' && net\.role === 'host'/g) || []).length === 30, js([ban1, banAway, banClient, kickCalls, kickedSends]));
 
     /* round 2: the review's three older gaps — a removed player's pointer and roster row, a second connection under one key, a queued request */
     const tg = { u_a: { mapId: 'm1', id: 'orc' }, u_b: { mapId: 'm1', id: 'gob' } }, withT = t => h => { h.env.net.targets = JSON.parse(js(t)); };
@@ -4648,7 +4648,7 @@ pendingChecks.push((async () => {
     check('fold M0 (source): combatHidden is defined once and read only by combatsFor and net.syncCombatHidden, inside the combats slice; net.syncCombatHidden is called once, from the host\'s save; the GM\'s own strip (whiteboard.js) reads neither; the host\'s message handler has the same number of branches as before',
         (src.match(/function combatHidden\(/g) || []).length === 1 && (src.match(/combatHidden\(/g) || []).length === 3 && (cbSrc.match(/combatHidden\(/g) || []).length === 3
         && (src.match(/syncCombatHidden/g) || []).length === 3 && (cbSrc.match(/syncCombatHidden/g) || []).length === 1 && (olsSrc.match(/syncCombatHidden/g) || []).length === 2 && (cbSrc.match(/_combatHidSig = combatHidSigNow\(\);/g) || []).length === 1
-        && !/combatsFor|combatHidden|syncCombatHidden/.test(wbAll) && (src.match(/msg\.type === '[a-z-]+' && net\.role === 'host'/g) || []).length === 29,
+        && !/combatsFor|combatHidden|syncCombatHidden/.test(wbAll) && (src.match(/msg\.type === '[a-z-]+' && net\.role === 'host'/g) || []).length === 30,
         j([(src.match(/combatHidden\(/g) || []).length, (src.match(/syncCombatHidden/g) || []).length, (src.match(/msg\.type === '[a-z-]+' && net\.role === 'host'/g) || []).length]));
 }
 
@@ -7654,7 +7654,7 @@ pendingChecks.push((async () => {
             && /if \(hosting\) \{ window\.wpNet\.applyingRemote = true; save\(true\); window\.wpNet\.applyingRemote = false; if \(window\.wpFog\) window\.wpFog\.invalidateVision\(\); if \(backS && backS\.length && typeof window\.wpNet\.strokesBack === 'function'\) window\.wpNet\.strokesBack\(item\.id, backS\); if \(window\.wpNet\.sendItem\) window\.wpNet\.sendItem\(camp\.id, item\.id\);/.test(ioT));
         const dmT = read('datamap.js'), posCode = posS2.replace(/\/\/[^\n]*/g, ''), patCode = patS2.replace(/\/\/[^\n]*/g, '');
         check('senses S0 (source): nothing new comes in from a player — no branch of the host\'s message handler was added or names sight or senses, the hook and its timer read nothing of a message or of a connection\'s word, and what is kept (what a copy was made by, the text last known, the sends that wait) is never saved or sent: it lives in the host\'s memory, named nowhere else',
-            hostBranches.length === 29 && !hostBranches.some(b => /sens|sight/i.test(b)) && !/msg\.type === '[^']*(sens|sight)/i.test(src) && !/\bmsg\b/.test(smCode) && !/\bconn\b/.test(smCode) && !/type: '(?!combats'|targets')/.test(smCode)
+            hostBranches.length === 30 && !hostBranches.some(b => /sens|sight/i.test(b)) && !/msg\.type === '[^']*(sens|sight)/i.test(src) && !/\bmsg\b/.test(smCode) && !/\bconn\b/.test(smCode) && !/type: '(?!combats'|targets')/.test(smCode)
             && count(src, /_sensesSig/g) === count(flS + smS, /_sensesSig/g) && count(src, /_sensesPend/g) === count(smS, /_sensesPend/g) && count(smS, /_sensesPend/g) > 0 && count(flS, /_sensesSig/g) > 0 && !/_senses(Sig|Pend|At)/.test(sheetsT + ioT + fogT + dmT + read('main.js'))
             && count(src, /_sensesAt/g) === count(flS + smS, /_sensesAt/g) && count(flS, /_sensesAt/g) > 0 && count(smS, /_sensesAt/g) > 0
             && !/sensesReads|sensesHidden/.test(src) && count(smCode, /setTimeout\(/g) === 1 && count(smCode, /SENSES_RESEND_MS/g) === 2, j([hostBranches.length, count(src, /_sensesSig/g), count(src, /_sensesPend/g), count(src, /_sensesAt/g), count(smCode, /setTimeout\(/g)]));
@@ -7694,7 +7694,7 @@ pendingChecks.push((async () => {
         const cnt = (s, re) => (s.match(re) || []).length, hostB = cnt(src, /msg\.type === '[a-z-]+' && net\.role === 'host'/g);
         check('fold M0 (source): no pointer message goes to all outside broadcastTargets — net.js broadcasts one only there, in its branch for a table without fog, and (hidden pieces) that one too is built by targetsFor; every other pointer message is a player\'s own copy built by targetsFor; the combats slice now defines broadcastTargets, and the host\'s message handler has the same number of branches as before',
             btSrc.length > 0 && cnt(src, /broadcast\(\{ type: 'targets'/g) === 1 && cnt(btSrc, /broadcast\(\{ type: 'targets'/g) === 1 && cnt(src, /targets: net\.targets/g) === 0 && /broadcast\(\{ type: 'targets', targets: targetsFor\(null\) \}, null\)/.test(btSrc)
-            && cnt(src, /type: 'targets'/g) === cnt(src, /type: 'targets', targets: targetsFor\(/g) && cbS.indexOf(btSrc) >= 0 && cbS.indexOf('function targetsFor(') >= 0 && hostB === 29,
+            && cnt(src, /type: 'targets'/g) === cnt(src, /type: 'targets', targets: targetsFor\(/g) && cbS.indexOf(btSrc) >= 0 && cbS.indexOf('function targetsFor(') >= 0 && hostB === 30,
             j([btSrc.length, cnt(src, /broadcast\(\{ type: 'targets'/g), cnt(src, /type: 'targets'/g), cbS.indexOf(btSrc), hostB]));
 
         // (c) the live position relay and the drag that feeds it
@@ -8028,8 +8028,8 @@ pendingChecks.push((async () => {
         J([pF.map('mA').whiteboard.length, pF.rec.asked, pB.rec, threw, pT.net.applyingRemote]));
 
     // (8) where it sits: a client branch (the host's branches still 25), and nothing sends the message yet
-    check('fold M3: the catch-up is a client branch only (the host\'s branches are 29: none new but video-up of item 21, char-delete of 1.5.4, char-style of item 35, char-ask of 1.5.5 and char-damage of 1.5.6); the host builds it in one place only, its catch-up of a copy (fold M7)',
-        (src.match(/msg\.type === '[a-z-]+' && net\.role === 'host'/g) || []).length === 29 && /\} else if \(msg\.type === 'fogDiff' && net\.role === 'client'\) \{\n\s*\/\/ \[netcheck:fogdiff-start\]/.test(src)
+    check('fold M3: the catch-up is a client branch only (the host\'s branches are 30: none new but video-up of item 21, char-delete of 1.5.4, char-style of item 35, char-ask of 1.5.5, char-damage and trade of 1.5.6); the host builds it in one place only, its catch-up of a copy (fold M7)',
+        (src.match(/msg\.type === '[a-z-]+' && net\.role === 'host'/g) || []).length === 30 && /\} else if \(msg\.type === 'fogDiff' && net\.role === 'client'\) \{\n\s*\/\/ \[netcheck:fogdiff-start\]/.test(src)
         && (src.match(/msg\.type === 'fogDiff'/g) || []).length === 1 && (src.match(/type: 'fogDiff'/g) || []).length === 1 && /function fogCatchUp\([^]*?type: 'fogDiff'/.test(between('// [netcheck:fogmove-start]', '// [netcheck:fogmove-end]', 'fogmove')));
 })());
 // fold M4: an open drag is judged where it began. The real pos gate, patch path, relay, sends, kick, senses and the fogmove slice are compiled as
@@ -15428,7 +15428,7 @@ pendingChecks.push((async () => {
         /combats: combatsFor\(prof\.id, prof\.location\), fights: true,/.test(src) && /\n    if \(typeof fightsKnow === 'function'\) fightsKnow\(msg\.fights\);[^\n]*\n    net\.combats = typeof cleanFightsIn === 'function' \? cleanFightsIn\(msg\.combats\) : cleanCombats\(msg\.combats\);/.test(snapBody)
         && src.split('fightsKnow(').length === 3 && /var before = net\.combats, after = typeof cleanFightsIn === 'function' \? cleanFightsIn\(msg\.combats\) : cleanCombats\(msg\.combats\);/.test(src)
         && !/combats\[(mapId|am\.id|map\.id|activeMap\.id|combatDraft\.mapId|getActiveMap\(\)\.id|msg\.mapId|locQ|locA|pr\.location|mid)\]/.test(src + rdApp('scripts/whiteboard.js') + rdApp('scripts/pills.js') + rdApp('scripts/sheets.js'))
-        && (src.match(/net\.combats\[fid\] = f;/g) || []).length === 1 && (src.match(/combatOver\(/g) || []).length === 4 && (src.match(/msg\.type === '[a-z-]+' && net\.role === 'host'/g) || []).length === 29);
+        && (src.match(/net\.combats\[fid\] = f;/g) || []).length === 1 && (src.match(/combatOver\(/g) || []).length === 4 && (src.match(/msg\.type === '[a-z-]+' && net\.role === 'host'/g) || []).length === 30);
 })());
 // Fold 4 (backlog 152, docs/FIGHT_CLOCK_DESIGN.md sections 1 and 4 to 6; the owner's answer to question 1, "Every character"): each fight keeps its own
 // time, and the clock reads the one furthest behind, counting every second once. net.js run for real (the combats slice, everything from combatRefresh
@@ -15729,6 +15729,93 @@ pendingChecks.push((async () => {
             s1.ok === true && sentP.length === 1 && sentP[0].type === 'char-damage' && sentP[0].amt === 9 && sentP[0].dtype === 'cut' && sentP[0].loc === 'w_body' && sentP[0].ad === 2 && typeof s2.error === 'string' && typeof s3.error === 'string', j([s1, s2, s3, sentP]));
         check('1.5.6 the damage step (pinned): one host branch for char-damage, named in the host\'s count; the GM\'s token menu and a damage roll\'s card open the window through wpSheets alone',
             (nsD.match(/msg\.type === 'char-damage' && net\.role === 'host'/g) || []).length === 1);
+    })());
+    /* ---- 1.5.6 trading on the wire: the host's trade branch, tradeDo and the API, and a player's tradeState branch, run for real ---- */
+    pendingChecks.push((async () => {
+        const url = f => 'file:///' + path.resolve(path.join(__dirname, '..', 'system', 'app', 'scripts', f)).replace(/[\\]/g, '/');
+        const Sx = await import(url('systemcore.js')), Fx = await import(url('formula.js'));
+        const nsT = src.split('\r\n').join('\n'), cutT = (a, b) => { const i = nsT.indexOf(a), k = nsT.indexOf(b, i); if (i < 0 || k < 0) throw new Error('trade slice ' + a.slice(0, 40)); return nsT.slice(i, k); };
+        const apiT = cutT('// [netcheck:trade-start]', '// [netcheck:trade-end]'), brT = cutT('        // [netcheck:tradebranch-start]', '        // [netcheck:tradebranch-end]'), stT = cutT('        // [netcheck:tradestate-start]', '        // [netcheck:tradestate-end]');
+        const sysT = Sx.cleanSystem({ v: 1, name: 'T', rolls: [], fields: [
+            { id: 'f_gear', key: 'Gear', label: 'Gear', kind: 'item-list', edit: 'owner', vis: 'all', list: { trade: true, price: 'cr', stats: [{ key: 'cr', label: 'Cost' }] } },
+            { id: 'f_chips', key: 'Chips', label: 'Chips', kind: 'item-list', edit: 'owner', vis: 'all', list: { trade: true, multi: true, lvl: { label: 'Stored value', min: 0, max: 1000, step: 0.01, def: 0, split: true } } }],
+            items: [{ id: 'i_lamp', name: 'Lamp', stats: { cr: 20 } }, { id: 'i_chip', name: 'Glimmer chip' }, { id: 'i_gm', name: 'Cursed', vis: 'gm' }] }, { F: Fx, gmView: true });
+        const mkW = (o) => {
+            o = o || {};
+            const camp = { id: 'k', system: sysT, items: {}, chars: {
+                c_1: { id: 'c_1', name: 'Kael', ownerId: 'u_a', npc: false, values: { f_chips: [{ id: 'w_k1', defId: 'i_chip', qty: 1, lvl: 500 }], f_gear: [] } },
+                c_2: { id: 'c_2', name: 'Pebbles', ownerId: 'u_b', npc: false, values: {} },
+                c_3: { id: 'c_3', name: 'Grunt', npc: true, values: { f_gear: [{ id: 'w_g1', defId: 'i_lamp', qty: 5 }, { id: 'w_g2', defId: 'i_gm', qty: 1 }], f_chips: [{ id: 'w_g9', defId: 'i_chip', qty: 1, lvl: 10 }] } },
+                c_4: { id: 'c_4', name: 'Sela', npc: true, values: {} } } };
+            const out = { a: [], b: [], gm: [], chat: [], logs: [], saves: 0, deltas: [], changed: [], waits: [], dones: [] };
+            const box = b => m => { packCheck(m); b.push(JSON.parse(JSON.stringify(m))); };
+            const conns = [{ peer: 'pA', open: true, send: box(out.a) }, { peer: 'pB', open: true, send: box(out.b) }];
+            const net = { active: true, role: o.role || 'host', paused: !!o.paused, conns, myId: 'gm', roster: { pA: { id: 'u_a', name: 'Kael P' }, pB: { id: 'u_b', name: 'Bo P' } }, foreign: true, syncedPeer: 'H', stream: false };
+            net.syncCharDelta = (id, v) => out.deltas.push([id, Object.keys(v).sort()]);
+            const win = { wpFormula: Fx, wpVtt: { on: () => true }, wpSheets: { charChanged(id) { out.changed.push(id); } }, wpNotices: { wait: (k) => { out.waits.push(k); return true; }, done: (k) => { out.dones.push(k); } }, dispatchEvent: e => out.gm.push(e.detail) };
+            function CustomEvent(type, init) { this.type = type; this.detail = init.detail; }
+            const api = new Function('net', 'SC', 'window', 'getActiveCampaign', 'saveRemoteSoon', 'sendFailed', 'peerProfileId', 'logEvent', 'pushChat', 'CustomEvent', 'allow', 'peerPaused', 'toast',
+                apiT + '\nreturn { tradeDo: tradeDo, tradeConnGone: tradeConnGone, trades: function() { return _trades; }, cleanTradeView: cleanTradeView, tradeKeep: tradeKeep,\n' +
+                ' branch: function(msg, conn) { if (msg.type === "trade" && net.role === "host") {\n' + brT + '\n} },\n client: function(msg, conn) { if (msg.type === "tradeState" && net.role === "client") {\n' + stT + '\n} } };')(
+                net, () => Sx, win, () => camp, () => { out.saves++; }, e => { throw e; }, c => (net.roster[c.peer] ? net.roster[c.peer].id : null), (k, tx) => out.logs.push([k, tx]), m => out.chat.push(JSON.parse(JSON.stringify(m))), CustomEvent,
+                (name, cfg, peer) => o.limit !== true, () => false, m => out.toasts = (out.toasts || []).concat([m]));
+            return { camp, out, net, api, conns };
+        };
+        const st = l => l.filter(m => m.type === 'tradeState').map(m => m.view ? m.view.status + ':' + m.view.you : 'refused:' + m.refused);
+        // a player asks the GM's NPC, the GM answers, both put and confirm
+        const W = mkW(), A = W.api;
+        A.branch({ type: 'trade', op: 'ask', from: 'c_1', to: 'c_3' }, W.conns[0]);
+        const tid = Object.keys(A.trades())[0], afterAsk = [st(W.out.a), W.out.gm.map(v => v.status + ':' + v.you), W.out.waits.slice()];
+        const gmYes = A.tradeDo({}, { op: 'answer', tid, yes: true });
+        A.branch({ type: 'trade', op: 'put', tid, offer: [{ fid: 'f_chips', rowId: 'w_k1', key: '@lvl', amt: 40 }] }, W.conns[0]);
+        A.tradeDo({}, { op: 'put', tid, offer: [{ fid: 'f_gear', rowId: 'w_g1', qty: 2 }, { fid: 'f_gear', rowId: 'w_g2', qty: 1 }] });
+        A.branch({ type: 'trade', op: 'confirm', tid, on: true }, W.conns[0]);
+        const lastA = W.out.a.filter(m => m.view).slice(-1)[0].view;
+        A.tradeDo({}, { op: 'put', tid, offer: [{ fid: 'f_gear', rowId: 'w_g1', qty: 2 }] });   // a change clears both confirms
+        const cleared = W.out.a.filter(m => m.view).slice(-1)[0].view;
+        A.branch({ type: 'trade', op: 'confirm', tid, on: true }, W.conns[0]); const savesBefore = W.out.saves; A.tradeDo({}, { op: 'confirm', tid, on: true });
+        const kael = W.camp.chars.c_1, grunt = W.camp.chars.c_3;
+        check('1.5.6 trading (the host, run for real): a player asks the GM\'s NPC and waits, the GM is asked on its own screen and in the bell; the GM says yes and the window opens for both; each side puts its offer (a GM-only row of the NPC never on the table); the player\'s view shows the NPC\'s lamps with their price; a change after a confirm clears both confirms and says so; when both confirm, everything moves at once: 40 of the chip\'s 500 to the NPC\'s chip, two lamps to the player, one save, both deltas, both sheets told, a private line to the player and the GM, and the trade forgotten with done said to both',
+            j(afterAsk[0]) === j(['asking:a']) && j(afterAsk[1]) === j(['asking:b']) && j(afterAsk[2]) === j(['trade:' + tid]) && gmYes.ok === true && W.out.a.some(m => m.view && m.view.status === 'open')
+            && lastA.b.lines.length === 1 && lastA.b.lines[0].name === 'Lamp' && lastA.b.lines[0].price === 20 && lastA.a.ok === true && cleared.a.ok === false && cleared.b.ok === false && /confirm again/.test(cleared.msg || '')
+            && kael.values.f_chips[0].lvl === 460 && grunt.values.f_chips[0].lvl === 50 && kael.values.f_gear.length === 1 && kael.values.f_gear[0].qty === 2 && grunt.values.f_gear[0].qty === 3 && W.out.saves === savesBefore + 1
+            && j(W.out.deltas) === j([['c_1', ['f_chips', 'f_gear']], ['c_3', ['f_chips', 'f_gear']]]) && j(W.out.changed) === j(['c_1', 'c_3']) && W.out.chat.length === 1 && /Kael gave 40 Stored value from Glimmer chip\. Grunt gave Lamp x2\./.test(W.out.chat[0].text)
+            && W.out.a.some(m => m.type === 'chat') && W.out.b.length === 0 && Object.keys(A.trades()).length === 0 && W.out.a.filter(m => m.view).slice(-1)[0].view.status === 'done' && W.out.gm.slice(-1)[0].status === 'done' && W.out.dones.indexOf('trade:' + tid) >= 0,
+            j([afterAsk, W.out.a.map(m => m.view ? m.view.status : m.type), W.out.chat, kael.values, grunt.values]));
+        // refusals
+        const R = mkW(), RA = R.api;
+        RA.branch({ type: 'trade', op: 'ask', from: 'c_2', to: 'c_3' }, R.conns[0]);   // not theirs
+        RA.branch({ type: 'trade', op: 'ask', from: 'c_1', to: 'c_1' }, R.conns[0]);
+        RA.branch({ type: 'trade', op: 'ask', from: 'c_1', to: 'c_3' }, R.conns[0]); const tR = Object.keys(RA.trades())[0];
+        RA.branch({ type: 'trade', op: 'ask', from: 'c_2', to: 'c_3' }, R.conns[1]);   // the NPC is busy
+        RA.branch({ type: 'trade', op: 'answer', tid: tR, yes: true }, R.conns[0]);   // only the side asked answers
+        RA.branch({ type: 'trade', op: 'cancel', tid: tR }, R.conns[1]);   // not their trade
+        const npcPair = RA.tradeDo({}, { op: 'ask', from: 'c_4', to: 'c_3' });
+        RA.branch({ type: 'trade', op: 'ask' }, { peer: 'zz', open: true, send: () => { throw new Error('a stranger is answered'); } });
+        check('1.5.6 trading (the host): a character not theirs, a trade with itself and an NPC already in a trade are refused in words to that player alone; only the side asked answers; another player cannot end a trade not theirs; two NPCs trade by hand; a connection not admitted is not answered; one trade at a time',
+            j(st(R.out.a)) === j(['refused:You can only trade for your own character.', 'refused:That trade cannot start.', 'asking:a', 'refused:There is nothing to answer.']) && j(st(R.out.b)) === j(['refused:Grunt is trading with someone else. Ask again in a moment.', 'refused:That trade is not yours.'])
+            && typeof npcPair.error === 'string' && Object.keys(RA.trades()).length === 1, j([st(R.out.a), st(R.out.b), npcPair]));
+        // the GM trades both sides for a player who is away; a paused table; the last connection closing
+        const G = mkW(); G.net.conns = [G.conns[1]]; const gA = G.api.tradeDo({}, { op: 'ask', from: 'c_3', to: 'c_1' }), tG = Object.keys(G.api.trades())[0];
+        const gView = G.out.gm.slice(-1)[0];
+        G.api.tradeDo({}, { op: 'put', tid: tG, side: 'a', offer: [{ fid: 'f_gear', rowId: 'w_g1', qty: 1 }] }); G.api.tradeDo({}, { op: 'confirm', tid: tG, side: 'a', on: true }); G.api.tradeDo({}, { op: 'confirm', tid: tG, side: 'b', on: true });
+        const Pz = mkW({ paused: true }), pz = Pz.api.tradeDo({}, { op: 'ask', from: 'c_3', to: 'c_1' });
+        const C = mkW(); C.api.branch({ type: 'trade', op: 'ask', from: 'c_1', to: 'c_3' }, C.conns[0]); C.api.tradeConnGone('u_a');
+        check('1.5.6 trading (the host): with the player away the GM holds both sides in one view and moves the lamp; a paused table refuses; a player\'s last connection closing ends their trade and the GM is told',
+            gA.ok && gView.status === 'open' && gView.you === 'both' && G.camp.chars.c_1.values.f_gear[0].qty === 1 && G.camp.chars.c_3.values.f_gear[0].qty === 4 && typeof pz.error === 'string' && Object.keys(Pz.api.trades()).length === 0
+            && Object.keys(C.api.trades()).length === 0 && C.out.gm.slice(-1)[0].status === 'cancelled' && /left the table/.test(C.out.gm.slice(-1)[0].msg), j([gView, C.out.gm]));
+        // a player's app: the host's view cleaned again, from the synced host only
+        const Cl = mkW({ role: 'client' }), host = { peer: 'H' }, other = { peer: 'X' }, good = { tid: 't_abcdefgh', status: 'open', you: 'a', a: { charId: 'c_1', name: 'Kael', ok: false, lines: [{ fid: 'f_gear', rowId: 'w_1', name: 'Lamp', list: 'Gear', qty: 2, price: 20 }] }, b: { charId: 'c_3', name: 'Grunt', ok: true, lines: [] } };
+        Cl.api.client({ type: 'tradeState', view: good }, other); const fromOther = Cl.out.gm.length;
+        Cl.api.client({ type: 'tradeState', view: good }, host); const kept = Cl.out.gm.slice(-1)[0];
+        const bad = [Object.assign({}, good, { tid: '__proto__' }), Object.assign({}, good, { status: 'own' }), Object.assign({}, good, { a: { charId: 'x', name: 'K', lines: [] } }), null, 'x'].map(v => Cl.api.cleanTradeView(v));
+        const ugly = Cl.api.cleanTradeView(Object.assign({}, good, { a: { charId: 'c_1', name: '<b>K\u202e</b>', ok: 'yes', lines: [{ fid: 'f', rowId: 'w', name: 7, qty: -1 }, { fid: 'f', rowId: 'w', name: 'Lamp', qty: 2.7, price: 'x' }, { fid: 'f', rowId: 'w', key: '@lvl', amt: 'no' }] } }));
+        Cl.api.client({ type: 'tradeState', refused: 'Nope\u0007.' }, host);
+        check('1.5.6 trading (a player\'s app): a host\'s view taken from the synced host alone and cleaned again, ids by their patterns, names as text, numbers as numbers, an ok only as true; a view that is no view kept as nothing; a refusal said as plain text',
+            fromOther === 0 && kept.tid === 't_abcdefgh' && kept.a.lines[0].price === 20 && bad.every(b => b === null) && ugly.a.name === '<b>K </b>' && ugly.a.ok === false && ugly.a.lines.length === 1 && ugly.a.lines[0].qty === 2 && ugly.a.lines[0].price === undefined && j(Cl.out.toasts) === j(['Nope .']),
+            j([kept, ugly, Cl.out.toasts]));
+        check('1.5.6 trading (pinned): one host branch for trade, its step judged in one place (tradeDo), the GM\'s side local; a trade ends with a player\'s last connection and a new table starts with none',
+            (nsT.match(/msg\.type === 'trade' && net\.role === 'host'/g) || []).length === 1 && nsT.indexOf("if (net.role === 'host' && typeof fogDragSweep === 'function') fogDragSweep();") >= 0 && /tradeConnGone\(p\.id\);/.test(nsT) && /diceSessionReset\(true\);[^\n]*\n\s*if \(typeof tradeForget === 'function'\) tradeForget\(\);/.test(nsT));
     })());
     /* ---- 1.5.6: Merge into… in Player History (mergeRecords, run for real) ---- */
     {

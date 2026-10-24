@@ -64,6 +64,7 @@
 <script type="module" src="scripts/docimport.js"></script>
 <script type="module" src="scripts/charlist.js"></script>
 <script type="module" src="scripts/notices.js"></script>
+<script type="module" src="scripts/trade.js"></script>
 <script type="module" src="scripts/tutorial.js"></script>
 <script type="module" src="scripts/devconsole.js"></script>
 <script src="scripts/tooltips.js"></script>
@@ -1976,6 +1977,15 @@ Plain paragraphs are text: **bold**, *italic*, ~~strike~~, &lt;u&gt;underline&lt
                                   <li><b>Weapons a blow tests</b> lose Dur and condition when a blow beats their Dur. A type that cuts destroys a weapon at 20 or more over it.</li>
                               </ul>
                           </li>
+                          <li><b>Trading</b> swaps items and money between two characters in one barter window. A player right-clicks another character&rsquo;s token and picks <b>Trade with</b>. As the GM, select one of your NPCs, then right-click another character&rsquo;s token to trade as it.
+                              <ul>
+                                  <li>The other side answers Trade or Cancel. The GM answers for an NPC, and for a character whose player is not at the table.</li>
+                                  <li>Only lists ticked <b>Tradable</b> in the System editor&rsquo;s Lists tab can be traded, such as gear and money.</li>
+                                  <li>Each side adds rows from its own sheet, with how many. A figure ticked <b>Split in trades</b> in the Lists tab, such as a chip&rsquo;s stored money, can be given in part.</li>
+                                  <li>Both sides see both offers. When both press <b>Confirm</b>, everything moves at once. Any change to an offer clears both confirms.</li>
+                                  <li>A merchant is an NPC whose sheet holds what it sells and its money. Bars and coins move whole. A GM-only row, and one that cannot be taken off, are not offered.</li>
+                              </ul>
+                          </li>
                           <li><b>Postures</b>, at the foot of the Combat card, name how your tokens can stand. Without a list they take the seven built-in postures: standing, crouching, sitting, kneeling, crawling, lying prone and lying face up. Each but standing is a smaller target.
                               <ul>
                                   <li><b>Name your own postures</b> starts from those seven, keeping their ids so a website sheet still sets them. Rename, reorder or add, up to 12.</li>
@@ -3828,7 +3838,7 @@ Plain paragraphs are text: **bold**, *italic*, ~~strike~~, &lt;u&gt;underline&lt
         </div>
         <div id="sysLists" class="sys-tab" style="display:none;">
             <div class="sys-toolbar"><span class="sys-note">Shape each <b>Item list</b> field: which item <b>categories</b> its picker offers, whether each row carries a <b>level</b> (with names) and a <b>switch</b> (Readied, Equipped&hellip;), whether the same item may be there more than once, and whether rows have a quantity; and its <b>stats</b> (numbers each of its items carries) and a <b>price</b>. At the top, <b>Item stats on players&rsquo; sheets</b>: whether players may change the stats of their own copies; and <b>A player&rsquo;s sheet upload</b>: whether the levels, switches and quantities of rows a player already carries apply at once when they send their sheet file, or wait for your review with the rest.</span><button class="tool ghost sys-key-btn" data-key="lists" aria-expanded="false" aria-controls="sysKeyLists" title="What each tick of a row on this tab does">What the ticks mean</button></div>
-            <div class="sys-key" id="sysKeyLists" hidden><b>Same item more than once</b><small>Adding an item the list already holds makes a new row.</small><b>No quantity</b><small>Rows have no quantity, as for skills and powers.</small><b>Custom rows</b><small>Players may add rows of their own on their sheet.</small><b>Rows have a level</b><small>Each row carries a level that its owner sets.</small><b>Rows have a switch</b><small>Each row can be switched on and off, as for Equipped.</small><b>Starts on</b><small>A new row starts switched on.</small><b>One at a time</b><small>Only one row is on at a time, or one for each value of the stat you pick.</small><b>Unit</b><small>After a stat or a column. Under Metric a measure shows metric too.</small><b>Metric</b><small>How that measure reads under Metric. Beside its figure, instead of it, or bare.</small><b>Decimals</b><small>The most decimals a measure shows, as five for an implant&rsquo;s weight.</small><b>On the row</b><small>The stat is shown beside the name on each row.</small><b>Hidden</b><small>The stat is worked with and never shown.</small><b>Total</b><small>The total of the stat shows under the list.</small></div>
+            <div class="sys-key" id="sysKeyLists" hidden><b>Same item more than once</b><small>Adding an item the list already holds makes a new row.</small><b>No quantity</b><small>Rows have no quantity, as for skills and powers.</small><b>Custom rows</b><small>Players may add rows of their own on their sheet.</small><b>Tradable</b><small>Rows of the list can be traded between characters.</small><b>Rows have a level</b><small>Each row carries a level that its owner sets.</small><b>Rows have a switch</b><small>Each row can be switched on and off, as for Equipped.</small><b>Starts on</b><small>A new row starts switched on.</small><b>One at a time</b><small>Only one row is on at a time, or one for each value of the stat you pick.</small><b>Unit</b><small>After a stat or a column. Under Metric a measure shows metric too.</small><b>Metric</b><small>How that measure reads under Metric. Beside its figure, instead of it, or bare.</small><b>Decimals</b><small>The most decimals a measure shows, as five for an implant&rsquo;s weight.</small><b>On the row</b><small>The stat is shown beside the name on each row.</small><b>Hidden</b><small>The stat is worked with and never shown.</small><b>Split in trades</b><small>A trade can give part of the figure, as money from a chip.</small><b>Total</b><small>The total of the stat shows under the list.</small></div>
             <div id="sysListRules"></div>
             <div id="sysBudgets"></div>
             <div id="sysListRows" class="sys-rows"></div>
@@ -3971,6 +3981,13 @@ Plain paragraphs are text: **bold**, *italic*, ~~strike~~, &lt;u&gt;underline&lt
     <div id="devConsoleRow">
         <span id="devConsolePrompt">&rsaquo;</span>
         <input type="text" id="devConsoleInput" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-label="Developer console input">
+    </div>
+</div>
+<div id="tradeModal" class="trade-modal" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="tradeTitle">
+    <div class="trade-box">
+        <h3><span id="tradeTitle">Trade</span> <button id="tradeCloseBtn" class="tool ghost modal-close" title="End this trade" aria-label="End this trade"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button></h3>
+        <div id="tradeBody" class="trade-body"></div>
+        <div class="trade-foot"><button id="tradeCancelBtn" type="button" class="tool ghost" title="End this trade for both sides">Cancel trade</button></div>
     </div>
 </div>
 </body>

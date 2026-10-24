@@ -62,6 +62,22 @@ The app
   app, so it updates through the installer. Press Update and Waypoint
   runs the installer for you.
 
+Trading
+- Two characters can trade in one barter window. A player right-clicks
+  another character's token and picks Trade with. The GM selects one of
+  their NPCs and right-clicks another character's token to trade as it.
+- The other side answers first. The GM answers for an NPC, and for a
+  character whose player is not at the table.
+- Each side puts rows of its own sheet on the table, with how many. Both
+  sides see both offers. When both confirm, everything moves at once,
+  and any change to an offer clears both confirms.
+- A merchant is an NPC whose sheet holds what it sells and its money.
+- Only lists ticked Tradable in the System editor's Lists tab can be
+  traded, such as gear and money.
+- A list's level or number stat can be ticked Split in trades in the
+  System editor's Lists tab. A trade can then give part of that figure,
+  such as money from a chip. Bars and coins move whole.
+
 Combat
 - Taking damage. A character token's right-click menu has Take damage,
   and a damage roll's card in chat has Apply to target for the GM. A

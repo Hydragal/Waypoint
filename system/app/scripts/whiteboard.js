@@ -2915,9 +2915,17 @@ window.wpFitToGrid = fitToGrid;
       cMenu.style.display = 'flex';
       placeMenu(cMenu, e);
       var row = cMenu.querySelector('.cm-target'); if (row) row.addEventListener('click', function(ce) { ce.stopPropagation(); cMenu.style.display = 'none'; toggleTarget(tok, mapId); });
+      if (typeof tradeRowInto === 'function') tradeRowInto(cMenu, tok);   // 1.5.6 trading: Trade with, for the character they play on this map
       return true;
   }
   // [sinkcheck:targetmenu-end]
+  // 1.5.6 trading: a row that asks to trade, made by name with its words as text (trade.js judges who may ask whom)
+  function tradeRowInto(cMenu, tok, sel) {
+      var T = window.wpTrade, am = typeof getActiveMap === 'function' ? getActiveMap() : null, q = T && T.canAsk ? T.canAsk(tok, am, sel || null) : null; if (!q) return false;
+      var r = document.createElement('div'); r.className = 'menu-item cm-trade'; r.title = 'Open a barter window with them: each side puts items and money on the table, and both confirm'; r.textContent = '\u21c4 ' + q.label;
+      r.addEventListener('click', function(ce) { ce.stopPropagation(); cMenu.style.display = 'none'; T.ask(q.from, q.to); });
+      cMenu.appendChild(r); return true;
+  }
   // [sinkcheck:portallock-start]
   // A portal's own lock (the owner, 2026-10-03: "maybe add the ability to lock a portal from the play map") on the board: what a hover says of
   // a locked portal, and the GM's menu row. A portal is fogcore isPortal's (its own Portal to Map, or its linked node's); only portalLock true
@@ -8729,6 +8737,7 @@ document.addEventListener('contextmenu', function(e) {
             var selNow = state.selWbIds && state.selWbIds.length ? state.selWbIds : (state.selWbId ? [state.selWbId] : []), selAs = isWb && selNow.length === 1 ? am.whiteboard.find(function(x) { return x.id === selNow[0]; }) : null;   // 158: the one token selected, which may target the token under the pointer
             var gmF = isWb ? gmFightModel(am, selectedIds.map(function(sid) { return am.whiteboard.find(function(x) { return x.id === sid; }); }).filter(Boolean), selAs) : null; html += gmFightHtml(gmF);   // the GM's own Target, Start combat, Add to the fight
             var gmR = isWb ? gmRulesModel(selectedIds.map(function(sid) { return am.whiteboard.find(function(x) { return x.id === sid; }); }).filter(Boolean)) : null; html += gmRulesHtml(gmR);   // 152 fold 4b: an NPC's Rules run switch
+            if (sheetTop && firstItem.charId && window.wpTrade && window.wpTrade.canAsk) { var trQ = window.wpTrade.canAsk(firstItem, am, selAs); if (trQ) html += '<div class="menu-item cm-trade" title="Open a barter window: each side puts items and money on the table, and both confirm">&#8644; ' + esc(trQ.label) + '</div>'; }   // 1.5.6 trading: as the one NPC selected
             
             if (isWb) {
                 if (selectedIds.length > 1) {
@@ -8975,6 +8984,11 @@ document.addEventListener('contextmenu', function(e) {
                 } else if (action.includes('cm-frame-pic')) {   // the token creator, the GM's side
                     cMenu.style.display = 'none';
                     frameGmPicture(am, selectedIds.slice());
+                    return;
+                } else if (action.includes('cm-trade')) {   // 1.5.6 trading
+                    var itTr = am.whiteboard.find(function(x) { return x.id === selectedIds[0]; }), qTr = itTr && window.wpTrade && window.wpTrade.canAsk ? window.wpTrade.canAsk(itTr, am, selAs) : null;
+                    cMenu.style.display = 'none';
+                    if (qTr) window.wpTrade.ask(qTr.from, qTr.to);
                     return;
                 } else if (action.includes('cm-dmg')) {   // 1.5.6, the damage step
                     var itDm = am.whiteboard.find(function(x) { return x.id === selectedIds[0]; });

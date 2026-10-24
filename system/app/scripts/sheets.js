@@ -5593,6 +5593,7 @@ function listCard(f, allCats, targets, acts) {   // acts (turn-based combat T1):
     fl.appendChild(checkLabel('sys-list-multi', sp.multi === true, 'Same item more than once', 'Adding an item it already holds makes a new row (a skill twice, with two specialties) instead of raising the quantity'));
     fl.appendChild(checkLabel('sys-list-noqty', sp.noQty === true, 'No quantity', 'Rows have no quantity (skills, powers): the \u2212/+ and \u00d7n go, and an item is on the list once unless the same item may be there more than once. Quantities already stored come back if you untick it'));
     fl.appendChild(checkLabel('sys-list-custom', sp.custom === true, 'Custom rows', 'Players may add rows of their own with + Custom\u2026 on their sheet (a name, an icon, a category, notes, a key and stats) and change the ones they made; you can add them on any shaped list'));   // Stage 6 F4c3
+    fl.appendChild(checkLabel('sys-list-trade', sp.trade === true, 'Tradable', 'Rows of this list can be put on the table in a trade between two characters: gear and money, never skills'));   // 1.5.6 trading
     card.appendChild(fl);
     var lv = sp.lvl && typeof sp.lvl === 'object' ? sp.lvl : null, lr = el('div', 'sys-flags sys-list-lvl');
     lr.appendChild(checkLabel('sys-list-haslvl', !!lv, 'Rows have a level', 'Each row carries a level its owner sets: a skill\u2019s level, a power\u2019s rank, a language\u2019s fluency'));
@@ -5603,6 +5604,7 @@ function listCard(f, allCats, targets, acts) {   // acts (turn-based combat T1):
         lr.appendChild(numField('sys-list-lvlstep', lv.step, 'The step between levels', 'step'));
         lr.appendChild(numField('sys-list-lvldef', lv.def, 'The level a new row starts at (an item\u2019s own Level in Items comes first); a row with no level of its own reads it', 'default'));
         lr.appendChild(input('sys-list-lvlnames field', (lv.labels || []).join(', '), 'Names for the levels from the minimum up, separated by commas (Broken, Accented, Fluent): the level becomes a dropdown', 'Value names (optional)'));
+        if (!(Array.isArray(lv.labels) && lv.labels.length)) lr.appendChild(checkLabel('sys-list-lvlsplit', lv.split === true, 'Split in trades', 'A trade may give part of this figure, as money from a chip. A row of quantity 1 only'));   // 1.5.6 trading: a chip's stored money as its level
     }
     card.appendChild(lr);
     var sw = sp.on && typeof sp.on === 'object' ? sp.on : null, orow = el('div', 'sys-flags sys-list-on');
@@ -5638,6 +5640,7 @@ function listCard(f, allCats, targets, acts) {   // acts (turn-based combat T1):
             var suI = input('sys-list-statunit field', typeof s.unit === 'string' ? s.unit : '', 'A unit after the figure (lb, yd). yd, ft, in, lb, mi and yd/s are measures: under Metric the figure shows in metric', 'Unit'); suI.maxLength = LIMITS.unit; if (typeof unitWordsOn === 'function') unitWordsOn(suI); sr.appendChild(suI);   // 1.5.4
             if (typeof metricSel === 'function') { sr.appendChild(metricSel('sys-list-statmetric', s.unitShow)); sr.appendChild(numField('sys-list-statdec', typeof s.decMax === 'number' ? s.decMax : '', 'The most decimals a measure shows, 0 to 5, its zeros taken off. Blank: four under Instead or Bare, and as before Beside. An implant\u2019s 0.11438 lbs needs five', 'decimals', '1')); }   // 1.5.4: how a measure reads under Metric, and its most decimals
         }
+        if (s.kind !== 'pick') sr.appendChild(checkLabel('sys-list-statsplit', s.split === true, 'Split in trades', 'A trade may give part of this figure, as money from a chip. A row of quantity 1 only'));   // 1.5.6 trading
         sr.appendChild(checkLabel('sys-list-statshow', s.show === true && s.hide !== true, 'On the row', 'Shown beside the name on each row (a column in a rich table); every stat that is not Hidden reads in the row’s 📝 line'));
         sr.appendChild(checkLabel('sys-list-stathide', s.hide === true, 'Hidden', 'A figure the row only works with, such as a cost per level. It is never shown on a row or in its 📝 details. Formulas still read it, and ✎ still shows it. It is no secret: use a GM-only list for that'));
         [['statup', '▲', 'Move up'], ['statdown', '▼', 'Move down'], ['statdel', '×', 'Remove this stat (Save drops its values)']].forEach(function(bd) { var bb = el('button', 'tool ghost sys-btn', bd[1]); bb.dataset.act = bd[0]; bb.title = bd[2]; sr.appendChild(bb); });
@@ -7128,6 +7131,9 @@ function onChange(e) {
         else if (c.indexOf('sys-list-multi') >= 0) { if (t.checked) lsc.multi = true; else delete lsc.multi; }
         else if (c.indexOf('sys-list-noqty') >= 0) { if (t.checked) lsc.noQty = true; else delete lsc.noQty; }
         else if (c.indexOf('sys-list-custom') >= 0) { if (t.checked) lsc.custom = true; else delete lsc.custom; }   // Stage 6 F4c3
+        else if (c.indexOf('sys-list-trade') >= 0) { if (t.checked) lsc.trade = true; else delete lsc.trade; }   // 1.5.6 Tradable
+        else if (c.indexOf('sys-list-lvlsplit') >= 0) { if (lsc.lvl && typeof lsc.lvl === 'object') { if (t.checked) lsc.lvl.split = true; else delete lsc.lvl.split; } }   // 1.5.6 trading
+        else if (c.indexOf('sys-list-statsplit') >= 0) { var sxr = t.closest('.sys-list-stat'), sxD = sxr && Array.isArray(lsc.stats) ? lsc.stats[+sxr.dataset.si] : null; if (!sxD || typeof sxD !== 'object') return; if (t.checked) sxD.split = true; else delete sxD.split; }
         else if (c.indexOf('sys-list-haslvl') >= 0) { if (t.checked) lsc.lvl = { label: 'Level', min: 0, step: 1, def: 0 }; else delete lsc.lvl; }
         else if (c.indexOf('sys-list-hason') >= 0) { if (t.checked) lsc.on = { label: 'On' }; else delete lsc.on; }
         else if (c.indexOf('sys-list-ondef') >= 0) { if (lsc.on && typeof lsc.on === 'object') { if (t.checked) lsc.on.def = true; else delete lsc.on.def; } }
