@@ -51,6 +51,12 @@ function renderCard(m) {
     var total = el('div', 'roll-total' + (mf ? ' roll-fail roll-malf' : v && v.kind === 'check' ? (v.pass ? ' roll-ok' : ' roll-fail') : rec.dmg === 1 ? ' roll-dmg' : ''), mf ? 'malfunction (Malf ' + rec.malf + ')' : v ? (v.kind === 'check' ? v.text : '= ' + v.text) : '');
     if (crit) total.appendChild(el('span', 'roll-' + crit, v && v.crit ? (crit === 'crit' ? 'critical success' : 'critical failure') : crit === 'crit' ? 'natural 20' : 'natural 1'));
     wrap.appendChild(total);
+    var dS = window.wpSheets, dv = res && typeof res.value === 'number' && isFinite(res.value) ? res.value : null;   // 1.5.6, the damage step: the GM takes a damage roll off its target in one press
+    if (rec.dmg === 1 && dv !== null && !mf && dS && typeof dS.damageOn === 'function' && typeof dS.damageFromRoll === 'function' && dS.damageOn()) {
+        var ab = el('button', 'tool ghost chat-dmgapply', 'Apply to target\u2026'); ab.type = 'button'; ab.title = 'Take this damage off the character its roller targets, through its DR. Its window opens first.';
+        ab.addEventListener('click', function() { dS.damageFromRoll(rec.from && rec.from.id, dv); });
+        wrap.appendChild(ab);
+    }
     return wrap;
 }
 // Stage 6 HUD H7: an apply action's card (a chat entry with m.apply = the cleaned record) — who, the tags, the action, then each change

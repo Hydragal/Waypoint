@@ -397,7 +397,7 @@ pendingChecks.push((async () => {
     check('M1: a Ban from the Players panel (its branch run for real) calls net.kickPlayer exactly once, with the first roster key of the profile, and that one call takes both of Pat\'s connections (told, closed, forgotten once); a profile not at the table and a player\'s machine call it not at all; in the source the Ban branch calls it once and never in a loop, net.js calls it twice (the roster\'s kick button, the Ban branch) and no other script does, and kickPlayer is the only place that sends \'kicked\'; the host has 25 message branches (the one new one is video-up, item 21)',
         js(ban1) === js({ threw: '', calls: ['pA1'], roster: ['pB', 'pX', 'pY'], kicked: ['pA1', 'pA2'], timers: 2, forgot: ['forget:u_a'], banned: ['u_a'], session: ['u_a'], saves: 1 }) && js(banAway.calls) === js([]) && banAway.kicked.length === 0 && banAway.threw === '' && js(banClient.calls) === js([]) && banClient.kicked.length === 0 && banClient.threw === ''
         && (noCom(banBody).match(/net\.kickPlayer\(/g) || []).length === 1 && !/forEach|\bfor \(|\bwhile \(/.test(noCom(banBody)) && js(kickCalls) === js([['net.js', 2]]) && (noCom(src).match(/net\.kickPlayer\(/g) || []).length === 2
-        && js(kickedSends) === js([['net.js', 1]]) && kickSrc.indexOf("conn.send({ type: 'kicked' });") >= 0 && (src.match(/msg\.type === '[a-z-]+' && net\.role === 'host'/g) || []).length === 28, js([ban1, banAway, banClient, kickCalls, kickedSends]));
+        && js(kickedSends) === js([['net.js', 1]]) && kickSrc.indexOf("conn.send({ type: 'kicked' });") >= 0 && (src.match(/msg\.type === '[a-z-]+' && net\.role === 'host'/g) || []).length === 29, js([ban1, banAway, banClient, kickCalls, kickedSends]));
 
     /* round 2: the review's three older gaps — a removed player's pointer and roster row, a second connection under one key, a queued request */
     const tg = { u_a: { mapId: 'm1', id: 'orc' }, u_b: { mapId: 'm1', id: 'gob' } }, withT = t => h => { h.env.net.targets = JSON.parse(js(t)); };
@@ -4648,7 +4648,7 @@ pendingChecks.push((async () => {
     check('fold M0 (source): combatHidden is defined once and read only by combatsFor and net.syncCombatHidden, inside the combats slice; net.syncCombatHidden is called once, from the host\'s save; the GM\'s own strip (whiteboard.js) reads neither; the host\'s message handler has the same number of branches as before',
         (src.match(/function combatHidden\(/g) || []).length === 1 && (src.match(/combatHidden\(/g) || []).length === 3 && (cbSrc.match(/combatHidden\(/g) || []).length === 3
         && (src.match(/syncCombatHidden/g) || []).length === 3 && (cbSrc.match(/syncCombatHidden/g) || []).length === 1 && (olsSrc.match(/syncCombatHidden/g) || []).length === 2 && (cbSrc.match(/_combatHidSig = combatHidSigNow\(\);/g) || []).length === 1
-        && !/combatsFor|combatHidden|syncCombatHidden/.test(wbAll) && (src.match(/msg\.type === '[a-z-]+' && net\.role === 'host'/g) || []).length === 28,
+        && !/combatsFor|combatHidden|syncCombatHidden/.test(wbAll) && (src.match(/msg\.type === '[a-z-]+' && net\.role === 'host'/g) || []).length === 29,
         j([(src.match(/combatHidden\(/g) || []).length, (src.match(/syncCombatHidden/g) || []).length, (src.match(/msg\.type === '[a-z-]+' && net\.role === 'host'/g) || []).length]));
 }
 
@@ -7654,7 +7654,7 @@ pendingChecks.push((async () => {
             && /if \(hosting\) \{ window\.wpNet\.applyingRemote = true; save\(true\); window\.wpNet\.applyingRemote = false; if \(window\.wpFog\) window\.wpFog\.invalidateVision\(\); if \(backS && backS\.length && typeof window\.wpNet\.strokesBack === 'function'\) window\.wpNet\.strokesBack\(item\.id, backS\); if \(window\.wpNet\.sendItem\) window\.wpNet\.sendItem\(camp\.id, item\.id\);/.test(ioT));
         const dmT = read('datamap.js'), posCode = posS2.replace(/\/\/[^\n]*/g, ''), patCode = patS2.replace(/\/\/[^\n]*/g, '');
         check('senses S0 (source): nothing new comes in from a player — no branch of the host\'s message handler was added or names sight or senses, the hook and its timer read nothing of a message or of a connection\'s word, and what is kept (what a copy was made by, the text last known, the sends that wait) is never saved or sent: it lives in the host\'s memory, named nowhere else',
-            hostBranches.length === 28 && !hostBranches.some(b => /sens|sight/i.test(b)) && !/msg\.type === '[^']*(sens|sight)/i.test(src) && !/\bmsg\b/.test(smCode) && !/\bconn\b/.test(smCode) && !/type: '(?!combats'|targets')/.test(smCode)
+            hostBranches.length === 29 && !hostBranches.some(b => /sens|sight/i.test(b)) && !/msg\.type === '[^']*(sens|sight)/i.test(src) && !/\bmsg\b/.test(smCode) && !/\bconn\b/.test(smCode) && !/type: '(?!combats'|targets')/.test(smCode)
             && count(src, /_sensesSig/g) === count(flS + smS, /_sensesSig/g) && count(src, /_sensesPend/g) === count(smS, /_sensesPend/g) && count(smS, /_sensesPend/g) > 0 && count(flS, /_sensesSig/g) > 0 && !/_senses(Sig|Pend|At)/.test(sheetsT + ioT + fogT + dmT + read('main.js'))
             && count(src, /_sensesAt/g) === count(flS + smS, /_sensesAt/g) && count(flS, /_sensesAt/g) > 0 && count(smS, /_sensesAt/g) > 0
             && !/sensesReads|sensesHidden/.test(src) && count(smCode, /setTimeout\(/g) === 1 && count(smCode, /SENSES_RESEND_MS/g) === 2, j([hostBranches.length, count(src, /_sensesSig/g), count(src, /_sensesPend/g), count(src, /_sensesAt/g), count(smCode, /setTimeout\(/g)]));
@@ -7694,7 +7694,7 @@ pendingChecks.push((async () => {
         const cnt = (s, re) => (s.match(re) || []).length, hostB = cnt(src, /msg\.type === '[a-z-]+' && net\.role === 'host'/g);
         check('fold M0 (source): no pointer message goes to all outside broadcastTargets — net.js broadcasts one only there, in its branch for a table without fog, and (hidden pieces) that one too is built by targetsFor; every other pointer message is a player\'s own copy built by targetsFor; the combats slice now defines broadcastTargets, and the host\'s message handler has the same number of branches as before',
             btSrc.length > 0 && cnt(src, /broadcast\(\{ type: 'targets'/g) === 1 && cnt(btSrc, /broadcast\(\{ type: 'targets'/g) === 1 && cnt(src, /targets: net\.targets/g) === 0 && /broadcast\(\{ type: 'targets', targets: targetsFor\(null\) \}, null\)/.test(btSrc)
-            && cnt(src, /type: 'targets'/g) === cnt(src, /type: 'targets', targets: targetsFor\(/g) && cbS.indexOf(btSrc) >= 0 && cbS.indexOf('function targetsFor(') >= 0 && hostB === 28,
+            && cnt(src, /type: 'targets'/g) === cnt(src, /type: 'targets', targets: targetsFor\(/g) && cbS.indexOf(btSrc) >= 0 && cbS.indexOf('function targetsFor(') >= 0 && hostB === 29,
             j([btSrc.length, cnt(src, /broadcast\(\{ type: 'targets'/g), cnt(src, /type: 'targets'/g), cbS.indexOf(btSrc), hostB]));
 
         // (c) the live position relay and the drag that feeds it
@@ -8028,8 +8028,8 @@ pendingChecks.push((async () => {
         J([pF.map('mA').whiteboard.length, pF.rec.asked, pB.rec, threw, pT.net.applyingRemote]));
 
     // (8) where it sits: a client branch (the host's branches still 25), and nothing sends the message yet
-    check('fold M3: the catch-up is a client branch only (the host\'s branches are 28: none new but video-up of item 21, char-delete of 1.5.4, char-style of item 35 and char-ask of 1.5.5); the host builds it in one place only, its catch-up of a copy (fold M7)',
-        (src.match(/msg\.type === '[a-z-]+' && net\.role === 'host'/g) || []).length === 28 && /\} else if \(msg\.type === 'fogDiff' && net\.role === 'client'\) \{\n\s*\/\/ \[netcheck:fogdiff-start\]/.test(src)
+    check('fold M3: the catch-up is a client branch only (the host\'s branches are 29: none new but video-up of item 21, char-delete of 1.5.4, char-style of item 35, char-ask of 1.5.5 and char-damage of 1.5.6); the host builds it in one place only, its catch-up of a copy (fold M7)',
+        (src.match(/msg\.type === '[a-z-]+' && net\.role === 'host'/g) || []).length === 29 && /\} else if \(msg\.type === 'fogDiff' && net\.role === 'client'\) \{\n\s*\/\/ \[netcheck:fogdiff-start\]/.test(src)
         && (src.match(/msg\.type === 'fogDiff'/g) || []).length === 1 && (src.match(/type: 'fogDiff'/g) || []).length === 1 && /function fogCatchUp\([^]*?type: 'fogDiff'/.test(between('// [netcheck:fogmove-start]', '// [netcheck:fogmove-end]', 'fogmove')));
 })());
 // fold M4: an open drag is judged where it began. The real pos gate, patch path, relay, sends, kick, senses and the fogmove slice are compiled as
@@ -15428,7 +15428,7 @@ pendingChecks.push((async () => {
         /combats: combatsFor\(prof\.id, prof\.location\), fights: true,/.test(src) && /\n    if \(typeof fightsKnow === 'function'\) fightsKnow\(msg\.fights\);[^\n]*\n    net\.combats = typeof cleanFightsIn === 'function' \? cleanFightsIn\(msg\.combats\) : cleanCombats\(msg\.combats\);/.test(snapBody)
         && src.split('fightsKnow(').length === 3 && /var before = net\.combats, after = typeof cleanFightsIn === 'function' \? cleanFightsIn\(msg\.combats\) : cleanCombats\(msg\.combats\);/.test(src)
         && !/combats\[(mapId|am\.id|map\.id|activeMap\.id|combatDraft\.mapId|getActiveMap\(\)\.id|msg\.mapId|locQ|locA|pr\.location|mid)\]/.test(src + rdApp('scripts/whiteboard.js') + rdApp('scripts/pills.js') + rdApp('scripts/sheets.js'))
-        && (src.match(/net\.combats\[fid\] = f;/g) || []).length === 1 && (src.match(/combatOver\(/g) || []).length === 4 && (src.match(/msg\.type === '[a-z-]+' && net\.role === 'host'/g) || []).length === 28);
+        && (src.match(/net\.combats\[fid\] = f;/g) || []).length === 1 && (src.match(/combatOver\(/g) || []).length === 4 && (src.match(/msg\.type === '[a-z-]+' && net\.role === 'host'/g) || []).length === 29);
 })());
 // Fold 4 (backlog 152, docs/FIGHT_CLOCK_DESIGN.md sections 1 and 4 to 6; the owner's answer to question 1, "Every character"): each fight keeps its own
 // time, and the clock reads the one furthest behind, counting every second once. net.js run for real (the combats slice, everything from combatRefresh
@@ -15676,6 +15676,60 @@ pendingChecks.push((async () => {
             ok && flat.includes("ts: Date.now(), kind: 'time' };") && flat.includes("if (typeof timeNote === 'function') timeNote(m); else pushChat(m);   // 1.5.6: the GM's own chat") && flat.includes("logEvent('time', t);   // the Session Log keeps every line") && flat.includes("if (msg.kind === 'time' && lineH.scope === 'whisper' && fromH.gm && typeof timeNote === 'function') timeNote(lineH); else pushChat(lineH);")
             && fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'index.html'), 'utf8').includes('<select id="setTimeNotes" class="field"'), JSON.stringify([A.pushed.length, B.pushed.length, cBefore, cTimers, C.pushed.map(m => m.text), dMs, D.pushed.length, E.pushed.length]));
     }
+    /* ---- 1.5.6, the damage step on the wire: the host's char-damage branch, net.damageCard and net.charDamage, run for real ---- */
+    pendingChecks.push((async () => {
+        const url = f => 'file:///' + path.resolve(path.join(__dirname, '..', 'system', 'app', 'scripts', f)).replace(/[\\]/g, '/');
+        const Sx = await import(url('systemcore.js')), Fx = await import(url('formula.js'));
+        const nsD = src.split('\r\n').join('\n'), cut =(a, b) => { const i = nsD.indexOf(a), k = nsD.indexOf(b, i); if (i < 0 || k < 0) throw new Error('damage slice ' + a.slice(0, 40)); return nsD.slice(i, k); };
+        const brD = cut('        // [netcheck:chardamage-start]', '        // [netcheck:chardamage-end]'), dlD = cut('// [netcheck:chardelta-start]', '// [netcheck:chardelta-end]');
+        const cardD = cut('net.damageCard = function(ch, lines) {', '// Turn-based combat T2 (owner, 2026-09-26)'), sendD = cut('net.charDamage = function(charId, q) {', '// 1.5.6, the damage step: what a blow did');
+        const sysD = Sx.cleanSystem({ v: 1, name: 'D', rolls: [], fields: [
+            { id: 'f_hp', key: 'HP', label: 'Hit Points', kind: 'resource', maxFormula: '12', def: 'max', min: -50, edit: 'owner', vis: 'all' },
+            { id: 'f_ep', key: 'EP', label: 'Endurance', kind: 'resource', maxFormula: '10', def: 'max', min: 0, edit: 'owner', vis: 'all' },
+            { id: 'f_locs', key: 'Locs', label: 'Locations', kind: 'item-list', edit: 'owner', vis: 'all', list: { stats: [{ key: 'loc', label: 'Loc' }, { key: 'nat', label: 'Natural' }], cols: [{ key: 'DR', label: 'DR', formula: 'Row.nat + if(Row.loc = 3, Kit.on.drBody, 0)' }] } },
+            { id: 'f_kit', key: 'Kit', label: 'Kit', kind: 'item-list', edit: 'owner', vis: 'all', list: { on: { label: 'Worn' }, stats: [{ key: 'drBody', label: 'Body' }, { key: 'wear', label: 'Wear' }] } }],
+            items: [{ id: 'i_body', name: 'Body', stats: { loc: 3, nat: 0 } }, { id: 'i_plate', name: 'Plate', stats: { drBody: 6 } }],
+            combat: { hpResource: 'f_hp', damage: { pool: 'f_hp', major: 'HP.max / 2', locs: { list: 'f_locs', dr: 'DR' }, types: [{ key: 'cut', label: 'Cutting', mult: 1.5 }, { key: 'stun', label: 'Stun', pool: 'f_ep', noWear: true }], layers: [{ list: 'f_kit', at: 'if(Hit.loc = 3, Row.drBody, 0)', wear: 'wear' }] } } }, { F: Fx, gmView: true });
+        const START = () => ({ f_locs: [{ defId: 'i_body', qty: 1 }], f_kit: [{ defId: 'i_plate', qty: 1, on: true }] });
+        const runD = (msg, o) => {
+            o = o || {};
+            const camp = { id: 'k', system: sysD, items: {}, chars: { c_1: { id: 'c_1', name: 'Kael', ownerId: 'u_a', npc: false, values: START() }, c_2: { id: 'c_2', name: 'Pebbles', ownerId: 'u_b', npc: false, values: START() }, c_3: { id: 'c_3', name: 'Grunt', npc: true, values: START() } } };
+            const out = { owner: [], mate: [], chat: [], logs: [], saves: 0, changed: [] }, box = b => m => { packCheck(m); b.push(JSON.parse(JSON.stringify(m))); };
+            const conns = [{ peer: 'pA', open: true, send: box(out.owner) }, { peer: 'pB', open: true, send: box(out.mate) }];
+            const net = { active: true, role: 'host', paused: !!o.paused, combats: {}, conns, myId: 'gm', roster: { pA: { id: 'u_a', name: 'Kael P' }, pB: { id: 'u_b', name: 'Bo P' } } };
+            const win = { wpFormula: Fx, wpVtt: { on: () => true }, wpSheets: { charChanged(id) { out.changed.push(id); }, playerSystem: c => Sx.cleanSystem(c.system, { F: Fx, gmView: false }) }, wpDiceCore: null };
+            new Function('msg', 'conn', 'net', 'SC', 'window', 'peerPaused', 'getActiveCampaign', 'saveRemoteSoon', 'sendFailed', 'peerProfileId', 'lim', 'own', 'pushChat', 'logEvent',
+                'var charLimit = lim, _charSlowSaid = {}, _charPending = {}, _charHost = {};\n' + dlD + '\n' + cardD + '\nif (msg.type === "char-damage" && net.role === "host") {\n' + brD + '\n}')(
+                msg, conns[0], net, () => Sx, win, () => false, () => camp, () => { out.saves++; }, e => { throw e; }, c => (net.roster[c.peer] ? net.roster[c.peer].id : null), { allow: () => true },
+                (ob, k) => !!ob && Object.prototype.hasOwnProperty.call(ob, k), m => out.chat.push(JSON.parse(JSON.stringify(m))), (k, tx) => out.logs.push([k, tx]));
+            out.camp = camp; return out;
+        };
+        const typ = list => list.map(m => m.type + (m.reason ? ':' + m.reason : ''));
+        const SCd = Sx, hp = (c) => SCd.makeResolver(sysD, c, Fx)('hp'), wear = (c) => { const r = c.values.f_kit[0]; return r.ov && r.ov.stats ? r.ov.stats.wear : undefined; };
+        const okT = runD({ type: 'char-damage', rid: 'd2', charId: 'c_1', amt: 14, dtype: 'cut', loc: 'w_body' }), okS = runD({ type: 'char-damage', rid: 'd2', charId: 'c_1', amt: 10, dtype: 'stun', loc: 'w_body' });
+        check('1.5.6 the damage step (the host, char-damage run for real): the owner\'s blow on their own character is worked out with the GM\'s full system, stored (HP 12, DR 6 at the body: cut: 8 through x1.5, 12 HP, a Major Wound, the worn plate loses a quarter of 6 rounded up, 2), saved once, acked once, its delta to the owner, the sheet told, and the line said to the GM and to the owner alone, not the other player; a stun of 10 against DR 6 takes 4 EP and wears nothing',
+            hp(okT.camp.chars.c_1) === 0 && SCd.makeResolver(sysD, okS.camp.chars.c_1, Fx)("ep") === 6 && hp(okS.camp.chars.c_1) === 12 && wear(okS.camp.chars.c_1) === undefined && wear(okT.camp.chars.c_1) === 2 && okT.saves === 1 && j(typ(okT.owner).filter(x => x !== 'charDelta')) === j(['char-ack', 'chat']) && okT.owner.some(m => m.type === 'charDelta') && j(okT.changed) === j(['c_1'])
+            && okT.chat.length === 1 && /^Kael: Cutting 14 to Body, DR 6: 8 through \u00d71\.5, 12 Hit Points A Major Wound\. Plate: 6 \u2192 4/.test(okT.chat[0].text) && okT.chat[0].scope === 'whisper' && !okT.mate.some(m => m.type === 'chat') && okT.logs.some(l => l[0] === 'char'), j([hp(okT.camp.chars.c_1), SCd.makeResolver(sysD, okS.camp.chars.c_1, Fx)('ep'), hp(okS.camp.chars.c_1), wear(okS.camp.chars.c_1), wear(okT.camp.chars.c_1), okT.saves, okT.changed, okT.mate.length]));
+        const quiet = r => r.saves === 0 && r.mate.length === 0 && r.chat.length === 0 && j(r.camp.chars.c_1.values) === j(START()) && j(r.camp.chars.c_2.values) === j(START());
+        const dOther = runD({ type: 'char-damage', rid: 'd3', charId: 'c_2', amt: 5 }), dNpc = runD({ type: 'char-damage', rid: 'd4', charId: 'c_3', amt: 5 }), dLoc = runD({ type: 'char-damage', rid: 'd5', charId: 'c_1', amt: 5, loc: 'w_nope' }), dPause = runD({ type: 'char-damage', rid: 'd6', charId: 'c_1', amt: 5 }, { paused: true });
+        const junk = [{ type: 'char-damage', rid: 'd7', charId: 'c_1', amt: -1 }, { type: 'char-damage', rid: 'd8', charId: 'c_1', amt: '5' }, { type: 'char-damage', rid: 'd9', charId: 'c_1', amt: 5, loc: '<b>' }, { type: 'char-damage', rid: 'da', charId: 'c_1', amt: 5, ad: 0 }, { type: 'char-damage', charId: 'c_1', amt: 5 }, { type: 'char-damage', rid: 'db', charId: 'c_1', amt: 2e6 }].map(m => runD(m));
+        check('1.5.6 the damage step (the host): another player\'s character and an NPC are refused as not theirs, a location they do not have as missing, a paused table as paused, each with nothing stored, saved or said; a message of the wrong shape (a negative, a text or a huge amount, a hostile location, an armour divisor of 0, no request id) is not answered at all',
+            j(typ(dOther.owner)) === j(['char-deny:owner']) && j(typ(dNpc.owner)) === j(['char-deny:owner']) && j(typ(dLoc.owner)) === j(['char-deny:missing']) && j(typ(dPause.owner)) === j(['char-deny:paused'])
+            && [dOther, dNpc, dLoc, dPause].every(quiet) && junk.every(r => r.owner.length === 0 && quiet(r)), j([dOther.owner, dNpc.owner, dLoc.owner, dPause.owner, junk.map(r => r.owner)]));
+        // the card: an NPC's line is the GM's alone
+        const cardOut = { sent: [], chat: [] }, netC = { active: true, role: 'host', myId: 'gm', roster: { pA: { id: 'u_a' } }, conns: [{ peer: 'pA', open: true, send: m => cardOut.sent.push(m) }] };
+        new Function('net', 'peerProfileId', 'sendFailed', 'pushChat', 'logEvent', cardD + '\nnet.damageCard({ name: "Grunt", npc: true, ownerId: "u_a" }, ["Cutting 5: nothing gets through"]);')(netC, c => netC.roster[c.peer].id, () => {}, m => cardOut.chat.push(m), () => {});
+        check('1.5.6 the damage step (the line): an NPC\'s blow is said to the GM alone, never to a player, even one named as its owner', cardOut.sent.length === 0 && cardOut.chat.length === 1 && cardOut.chat[0].text === 'Grunt: Cutting 5: nothing gets through');
+        // a player's send: their own character, one at a time, the shape cleaned before it leaves
+        const sentP = [], pend = {}, campP = { system: sysD, chars: { c_1: { id: 'c_1', ownerId: 'u_a' }, c_2: { id: 'c_2', ownerId: 'u_b' } } };
+        const netP = { active: true, role: 'client', stream: false, foreign: true, syncedPeer: 'H', myId: 'u_a', conns: [{ peer: 'H', open: true, send: m => sentP.push(JSON.parse(JSON.stringify(m))) }] };
+        const send = new Function('net', 'SC', 'getActiveCampaign', 'window', '_charPending', 'charPendingDone', 'setTimeout', sendD + '\nreturn net.charDamage;')(netP, () => Sx, () => campP, {}, pend, () => {}, () => 0);
+        const s1 = send('c_1', { amt: 9, type: 'cut', loc: 'w_body', ad: 2 }), s2 = send('c_1', { amt: 3 }), s3 = send('c_2', { amt: 3 });
+        check('1.5.6 the damage step (a player\'s app): a blow on their own character goes to the host as one char-damage with its damage, type, location and armour divisor, and waits; a second while the first waits, and one on a character not theirs, are refused here in words',
+            s1.ok === true && sentP.length === 1 && sentP[0].type === 'char-damage' && sentP[0].amt === 9 && sentP[0].dtype === 'cut' && sentP[0].loc === 'w_body' && sentP[0].ad === 2 && typeof s2.error === 'string' && typeof s3.error === 'string', j([s1, s2, s3, sentP]));
+        check('1.5.6 the damage step (pinned): one host branch for char-damage, named in the host\'s count; the GM\'s token menu and a damage roll\'s card open the window through wpSheets alone',
+            (nsD.match(/msg\.type === 'char-damage' && net\.role === 'host'/g) || []).length === 1);
+    })());
     /* ---- 1.5.6: Merge into… in Player History (mergeRecords, run for real) ---- */
     {
         const apM = src.slice(src.indexOf('// [netcheck:approval-start]'), src.indexOf('// [netcheck:approval-end]'));

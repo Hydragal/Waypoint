@@ -62,6 +62,23 @@ The app
   app, so it updates through the installer. Press Update and Waypoint
   runs the installer for you.
 
+Combat
+- Taking damage. A character token's right-click menu has Take damage,
+  and a damage roll's card in chat has Apply to target for the GM. A
+  window takes the damage, its type, the location and the armour
+  divisor, and shows what the blow does before you apply it.
+- It takes the location's DR off first, multiplies what gets through by
+  the type and the location, and takes it off the right pool. It says a
+  Major Wound and a crippling blow, wears the armour and clothing worn
+  there, and can test a weapon's Dur and condition.
+- You set the rules in the System editor's Items tab, in the Combat
+  card's new Taking damage box: the pool, the hit locations and their
+  DR, each damage type, what wears and the weapons a blow tests. A
+  system that sets none works as before.
+- A player may apply a blow to their own character. The GM's app works
+  it out, and the GM and that player get a private line saying what it
+  did.
+
 Planners and pages
 - Link to another page, or to one part of it. Press Page... beside the
   Link box and pick a planner, a handbook page, or one of its

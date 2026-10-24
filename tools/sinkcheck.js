@@ -1527,8 +1527,8 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             && /<span id="fogSensesText"[^>]*><\/span>/.test(read('../index.html')), fogSnLine.slice(0, 200));
         check('senses box (sheets.js): the Combat card builds it after the Light box, and its boxes, selects and buttons are handled after the Light box\'s',
             /\n    lightBox\(box, cm\);[^\n]*\n    sensesBox\(box, cm\);/.test(shL) && /if \(onLightInput\(t\)\) return;[^\n]*\n\s*if \(onSensesInput\(t\)\) return;/.test(shL) && /if \(onLightChange\(t\)\) return;[^\n]*\n\s*if \(onSensesChange\(t\)\) return;/.test(shL) && /if \(lightClick\(b\)\) return;[^\n]*\n\s*if \(sensesClick\(b\)\) return;/.test(shL));
-        check('light box (sheets.js): the Combat card builds it, and its boxes, selects and buttons are handled before the card\'s other handlers',
-            /\n    lightBox\(box, cm\);[^\n]*\n    sensesBox\(box, cm\);[^\n]*\n    turnBox\(box, cm\);/.test(shL) && /\n    if \(onLightInput\(t\)\) return;/.test(shL) && /\n    if \(onLightChange\(t\)\) return;/.test(shL) && /\n    if \(lightClick\(b\)\) return;/.test(shL));
+        check('light box (sheets.js): the Combat card builds it, and its boxes, selects and buttons are handled before the card\'s other handlers (1.5.6: the Taking damage box may stand between the Senses and the Turns boxes, moved on purpose)',
+            /\n    lightBox\(box, cm\);[^\n]*\n    sensesBox\(box, cm\);[^\n]*\n(?:    damageBox\(box, cm\);[^\n]*\n)?    turnBox\(box, cm\);/.test(shL) && /\n    if \(onLightInput\(t\)\) return;/.test(shL) && /\n    if \(onLightChange\(t\)\) return;/.test(shL) && /\n    if \(lightClick\(b\)\) return;/.test(shL));
         // range penalties R1: the Combat card's Range box (sheets.js rangeBox) on the same recording page, and the ruler's and a target mark's
         // words (whiteboard.js, sliced by its rangelabel markers)
         const rbSrc = slice('sheets.js', 'rangebox'), FRl = await import(modUrl('formula.js'));
@@ -5106,6 +5106,38 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             lgAll.includes("    doc.addEventListener('contextmenu', pageMenu(win), true);") && lgAll.includes("import { pageLink } from './textfmt.js';"));
     }
 
+    /* ---- 1.5.6: the System editor's Taking damage box against a hostile system file — every label, stat or column key, type's key and label and
+       formula reaches the box as a value, an option's text, a text node or a data value only, on a page that records every node and refuses markup ---- */
+    {
+        const SYd = await import(modUrl('systemcore.js') + '?dmg'), FOd = await import(modUrl('formula.js')), shd = read('sheets.js'), dbS = slice('sheets.js', 'dmgbox');
+        const one = a => { const i = shd.indexOf(a); return shd.slice(i, shd.indexOf('\n', i)); }, cut = (a, b) => { const i = shd.indexOf(a); return shd.slice(i, shd.indexOf(b, i + 1)); };
+        const domS = [one('function el(tag, cls, text) {'), one('function opt(value, text, selected) {'), one('function input(cls, value, title, placeholder) {'), one('function select(cls, options, value, title) {'), cut('function errorCell(', 'function errPrefix('), one('function errPrefix(')].join('\n');
+        const made = [], marks = [];
+        const node = (tag, text) => { const n = { tag, className: '', children: [], title: '', type: '', value: '', checked: false, disabled: false, selected: false, placeholder: '', dataset: {}, style: {}, get childNodes() { return this.children; }, get firstChild() { return this.children[0] || null; }, appendChild(x) { this.children.push(x); return x; } };
+            let tc = text === undefined ? '' : String(text); Object.defineProperty(n, 'textContent', { get() { return tc; }, set(v) { tc = String(v); }, enumerable: true });
+            ['innerHTML', 'outerHTML'].forEach(k => Object.defineProperty(n, k, { get() { return ''; }, set(v) { marks.push(k + ':' + String(v).slice(0, 60)); } }));
+            n.insertAdjacentHTML = v => marks.push('insertAdjacentHTML:' + v); n.setAttribute = (k, v) => marks.push('attr ' + k + '=' + v); made.push(n); return n; };
+        const docd = { createElement: t => node(t), createTextNode: t => node('#text', t) };
+        const T = '<img src=x onerror=alert(1)>', K = 'k"><svg onload=alert(2)>', Fm = '"><script>alert(3)</script>';
+        const draftd = { fields: [
+            { id: 'f_hp', key: 'HP', label: T, kind: 'resource', maxFormula: '10' },
+            { id: 'f_loc', key: 'Loc', label: T + 'list', kind: 'item-list', list: { stats: [{ key: K, label: T + 'stat' }, { key: 'nat', label: T }], cols: [{ key: K + 'c', label: T + 'col', formula: Fm }] } },
+            { id: 'f_kit', key: 'Kit', label: T + 'kit', kind: 'item-list', list: { stats: [{ key: K + 'w', label: T + 'wear' }] } }],
+            combat: { damage: { pool: K, major: Fm, locs: { list: 'f_loc', dr: K, crip: K + 'c', vital: Fm }, types: [{ key: K, label: T, mult: 2, plus: [K, 'nat'], pool: 'f_hp', alt: { if: Fm, pool: K } }],
+                layers: [{ list: 'f_kit', at: Fm, wear: K + 'w' }], weapons: [{ list: 'f_loc', dur: Fm, wear: K, cond: K + 'c' }] } } };
+        const api = new Function('draft', 'LIMITS', 'markDirty', 'renderAll', 'patchErrors', 'toast', 'document', 'errorsById', 'warningsById', 'formulaTextFor', 'NL', 'cleanDamageRules', "'use strict';\n" + domS + '\n' + dbS + '\nreturn { damageBox: damageBox, damageSays: damageSays };')(
+            draftd, SYd.LIMITS, () => {}, () => {}, () => {}, () => {}, docd, { damage: [{ message: T + ' said' }] }, {}, () => '', '\n', SYd.cleanDamageRules);
+        const box = node('div'); api.damageBox(box, draftd.combat);
+        const tags = new Set(made.map(n => n.tag)), texts = made.filter(n => n.tag === '#text' || n.tag === 'option' || n.tag === 'span' || n.tag === 'div' || n.tag === 'small').map(n => n.textContent), vals = made.filter(n => n.tag === 'input').map(n => n.value);
+        const hostileIn = made.filter(n => [n.title, n.placeholder, n.className].some(v => /[<>"]/.test(String(v)))).map(n => n.tag + ' ' + n.className);
+        const keysIn = made.filter(n => n.dataset && n.dataset.k !== undefined).map(n => n.dataset.k);
+        const saysD = api.damageSays(draftd.combat.damage, SYd.cleanSystem(Object.assign(SYd.emptySystem(), { name: 'H', fields: draftd.fields }), { F: FOd, gmView: true }), FOd);
+        check('1.5.6 the Taking damage box from a hostile system file (damageBox, run for real on a page that records every node): elements made by name only, nothing written as markup, every label, key and formula a value, an option\'s text, a text node or a data value, and no title, placeholder or class holding any of it; what Save drops is words for text nodes',
+            marks.length === 0 && [...tags].every(t => ['div', 'span', 'input', 'select', 'option', 'label', 'button', 'small', '#text'].indexOf(t) >= 0) && hostileIn.length === 0
+            && vals.includes(Fm) && texts.includes(T) && texts.includes(T + 'stat, ' + K) && texts.includes(' ' + T + 'col, ' + K + 'c') && texts.includes(T + ' said') && made.some(n => n.tag === 'option' && n.value === K)
+            && keysIn.includes(K) && keysIn.includes('nat') && made.filter(n => n.tag === 'select' && n.className === 'sys-dmgr-loclist').length === 1
+            && !/innerHTML|insertAdjacentHTML|outerHTML|document\.write/.test(dbS) && saysD.errs.length > 0 && saysD.errs.every(e => typeof e.message === 'string' && Object.keys(e).join() === 'message'), JSON.stringify([marks, [...tags], hostileIn, saysD.errs.map(e => e.message)]));
+    }
     summed = true;
     console.log('\n' + pass + ' passed, ' + fail + ' failed.');
     if (fail) process.exit(1);

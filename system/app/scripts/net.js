@@ -3190,6 +3190,29 @@ net.charApply = function(charId, actId, label, row) {   // row (H7b): { f, r, i 
     try { net.conns[0].send(req); } catch (e) { clearTimeout(_charPending[rid].timer); delete _charPending[rid]; return { error: 'Could not reach the GM.' }; }
     return { ok: true, pending: true };
 };
+// 1.5.6, the damage step: a player's blow on their own character — the host works it out with the full system and answers (charPendingDone)
+net.charDamage = function(charId, q) {
+    var S = SC(), camp = getActiveCampaign();
+    if (!S || !camp || !net.active || net.role !== 'client' || net.stream) return { error: 'Not at a table.' };
+    if (!net.foreign || !net.syncedPeer || !net.conns[0] || !net.conns[0].open || net.conns[0].peer !== net.syncedPeer) return { error: 'Not at the table yet.' };
+    var c = (camp && camp.chars && typeof charId === 'string' && Object.prototype.hasOwnProperty.call(camp.chars, charId) ? camp.chars[charId] : null); if (!c || c.partial || c.npc || !c.ownerId || c.ownerId !== net.myId) return { error: 'That character is not yours.' };
+    if (Object.keys(_charPending).some(function(k) { return _charPending[k].apply && _charPending[k].charId === charId; })) return { error: 'Waiting for the GM to apply the last one.' };
+    var rid = 'd' + Math.random().toString(36).slice(2, 10), qq = q && typeof q === 'object' ? q : {}, req = { type: 'char-damage', rid: rid, charId: charId, amt: qq.amt };   // the damage type rides as dtype: type is the message's own
+    if (qq.type !== undefined) req.dtype = qq.type; ['loc', 'ad', 'weapon', 'only'].forEach(function(k) { if (qq[k] !== undefined) req[k] = qq[k]; });
+    if (!S.cleanCharDamage || !S.cleanCharDamage(req)) return { error: 'Check the damage and its type.' };
+    _charPending[rid] = { charId: charId, apply: true, batch: [], timer: setTimeout(function() { charPendingDone(rid, false, 'timeout'); }, S.LIMITS.editTimeoutMs) };
+    try { net.conns[0].send(req); } catch (e) { clearTimeout(_charPending[rid].timer); delete _charPending[rid]; return { error: 'Could not reach the GM.' }; }
+    return { ok: true, pending: true };
+};
+// 1.5.6, the damage step: what a blow did — a private line for the GM, and one for the character's player at the table (an NPC's the GM's alone)
+net.damageCard = function(ch, lines) {
+    if (net.role === 'client' || net.stream || !ch || typeof ch !== 'object') return;
+    var t = (String(ch.name || 'A character').slice(0, 60) + ': ' + (Array.isArray(lines) ? lines : []).map(function(l) { return String(l); }).join(' ')).slice(0, 1500);
+    var m = { type: 'chat', scope: 'whisper', from: { id: net.myId || 'gm', name: 'GM', gm: true }, text: t, ts: Date.now() };
+    if (net.active && net.role === 'host' && ch.ownerId && !ch.npc) net.conns.forEach(function(c) { if (c.open && net.roster[c.peer] && peerProfileId(c) === ch.ownerId) { try { c.send(m); } catch (e) { sendFailed(e); } } });
+    pushChat(m);
+    logEvent('char', t);
+};
 // Turn-based combat T2 (owner, 2026-09-26): the token whose turn it is on the map in view, when it is this player's own — { mapId, rowId, tok }
 // or null (not at a table, turn-based combat off, no combat here, someone else's turn)
 net.myTurnTok = function() {
@@ -6676,6 +6699,30 @@ function handleMessage(msg, conn) {
         if (chA.name) recA.as = String(chA.name).slice(0, 60);
         postApply(recA, Sa.applyScope(campA.system, chA, actA, rowGmA, Fa), chA, conn);
         // [netcheck:charapply-end]
+    } else if (msg.type === 'char-damage' && net.role === 'host') {
+        // [netcheck:chardamage-start]
+        // 1.5.6, the damage step: a player's blow on their own character — char-apply's gates and ONE rate token; then the step worked out with the
+        // GM's full system (the rules are the GM's), stored all or nothing, one ack or one deny, one delta, the line to the GM and the player
+        var Sd = SC(), Fd = window.wpFormula; if (!Sd || !Fd || typeof Sd.cleanCharDamage !== 'function') return;
+        var qd = Sd.cleanCharDamage(msg); if (!qd) return;
+        var denyD = function(reason, text) { var d = { type: 'char-deny', rid: qd.rid, reason: reason }; if (text) d.msg = String(text).slice(0, Sd.LIMITS.rmMsg); try { conn.send(d); } catch (e) { sendFailed(e); } };
+        if (net.paused || peerPaused(conn.peer)) { denyD('paused'); return; }
+        if (!charLimit && window.wpDiceCore) charLimit = window.wpDiceCore.RateLimit({ perMs: 100, burst: Sd.LIMITS.editsPerWindow, windowMs: Sd.LIMITS.editWindowMs, table: 400 });
+        var limD = charLimit ? charLimit.allow(conn.peer, Date.now()) : true;
+        if (limD !== true) { var skD = conn.peer + '|slow'; if (!_charSlowSaid[skD] || Date.now() - _charSlowSaid[skD] > Sd.LIMITS.editWindowMs) { _charSlowSaid[skD] = Date.now(); denyD('slow'); } return; }
+        if (window.wpVtt && !window.wpVtt.on('sheets')) { denyD('off'); return; }
+        var campD = getActiveCampaign(), chD = (campD && campD.chars && Object.prototype.hasOwnProperty.call(campD.chars, qd.charId) ? campD.chars[qd.charId] : null);
+        if (!campD || !campD.system || !chD) { denyD('missing'); return; }
+        var profD = net.roster[conn.peer]; if (chD.npc || !chD.ownerId || !profD || chD.ownerId !== profD.id) { denyD('owner'); return; }
+        if (chD.making === 1) { denyD('making'); return; }
+        var rd = Sd.damageStep(campD.system, chD, qd.q, Fd);
+        if (!rd.ok) { denyD(rd.reason === 'error' ? 'error' : rd.reason === 'missing' ? 'missing' : rd.reason === 'field' ? 'field' : 'value', rd.message); return; }
+        chD.values = chD.values || {}; Object.keys(rd.values).forEach(function(k) { chD.values[k] = rd.values[k]; }); chD.updated = Date.now();
+        if (Object.keys(rd.values).length) saveRemoteSoon();
+        try { conn.send({ type: 'char-ack', rid: qd.rid }); } catch (e) { sendFailed(e); }
+        if (Object.keys(rd.values).length) { net.syncCharDelta(qd.charId, rd.values); if (window.wpSheets) window.wpSheets.charChanged(qd.charId); }
+        net.damageCard(chD, rd.lines);
+        // [netcheck:chardamage-end]
     } else if ((msg.type === 'turn-hold' || msg.type === 'turn-act') && net.role === 'host') {
         // [netcheck:turnholdmsg-start]
         // Initiative O3: a player holds their own turn (the row on turn, theirs) or acts from their own hold — turn-based combat on, the combat on

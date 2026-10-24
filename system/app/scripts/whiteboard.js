@@ -8725,6 +8725,7 @@ document.addEventListener('contextmenu', function(e) {
             // one character token: its sheet (and HUD) first, where a GM looks for them (they sat far down the menu)
             var sheetTop = !!(isWb && selectedIds.length === 1 && firstItem && (firstItem.isChar || firstItem.charId) && window.wpSheets);
             if (sheetTop) { html += '<div class="menu-item cm-sheet">&#128203; ' + (firstItem.charId ? 'Sheet&hellip;' : 'New character sheet&hellip;') + '</div>'; if (firstItem.charId && window.wpSheets.hudFor && window.wpSheets.hudFor(firstItem.charId)) html += '<div class="menu-item cm-hud">&#12336; HUD&hellip;</div>'; }
+            if (sheetTop && firstItem.charId && window.wpSheets.canDamage && window.wpSheets.canDamage(firstItem.charId)) html += '<div class="menu-item cm-dmg" title="Apply a blow to this character: its DR first, then its wounds, and the wear on what it wears">&#9876; Take damage&hellip;</div>';   // 1.5.6, the damage step
             var selNow = state.selWbIds && state.selWbIds.length ? state.selWbIds : (state.selWbId ? [state.selWbId] : []), selAs = isWb && selNow.length === 1 ? am.whiteboard.find(function(x) { return x.id === selNow[0]; }) : null;   // 158: the one token selected, which may target the token under the pointer
             var gmF = isWb ? gmFightModel(am, selectedIds.map(function(sid) { return am.whiteboard.find(function(x) { return x.id === sid; }); }).filter(Boolean), selAs) : null; html += gmFightHtml(gmF);   // the GM's own Target, Start combat, Add to the fight
             var gmR = isWb ? gmRulesModel(selectedIds.map(function(sid) { return am.whiteboard.find(function(x) { return x.id === sid; }); }).filter(Boolean)) : null; html += gmRulesHtml(gmR);   // 152 fold 4b: an NPC's Rules run switch
@@ -8974,6 +8975,11 @@ document.addEventListener('contextmenu', function(e) {
                 } else if (action.includes('cm-frame-pic')) {   // the token creator, the GM's side
                     cMenu.style.display = 'none';
                     frameGmPicture(am, selectedIds.slice());
+                    return;
+                } else if (action.includes('cm-dmg')) {   // 1.5.6, the damage step
+                    var itDm = am.whiteboard.find(function(x) { return x.id === selectedIds[0]; });
+                    cMenu.style.display = 'none';
+                    if (itDm && itDm.charId && window.wpSheets && window.wpSheets.takeDamage) window.wpSheets.takeDamage(itDm.charId);
                     return;
                 } else if (action.includes('cm-sheet')) {
                     var itS = am.whiteboard.find(function(x) { return x.id === selectedIds[0]; });

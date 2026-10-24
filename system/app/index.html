@@ -1966,6 +1966,16 @@ Plain paragraphs are text: **bold**, *italic*, ~~strike~~, &lt;u&gt;underline&lt
                                   <li>A <b>Sides roll</b>, such as <code>1d6</code>, plays the players&rsquo; characters against everyone else. Both sides roll it when the fight starts and at each new round, and again while they tie. The higher side goes first, each side in its own order. The turn strip says which side is first.</li>
                               </ul>
                           </li>
+                          <li><b>Taking damage</b>, on the Combat card, sets how a hit is taken. The <b>Take damage</b> window uses it. Open the window from a character token&rsquo;s right-click menu, or press <b>Apply to target</b> on a damage roll&rsquo;s card in Table Chat.
+                              <ul>
+                                  <li>A hit first meets the DR at its hit location, read from a stat or column of your list of locations. A damage type can add stats of its own to that DR. The armour divisor divides it.</li>
+                                  <li>What gets through is multiplied by the type&rsquo;s multiplier, or its vital one where <b>Vital where</b> holds. It then comes off the pool you pick, at least 1.</li>
+                                  <li><b>Major Wound at</b> is a formula, such as <code>HP.max / 2</code>. A wound that large in one blow is a Major Wound. <b>Cripple above</b> says when a location may be crippled.</li>
+                                  <li>Each damage type has a key, a name and its multipliers. It can ignore DR, come off another pool, wear nothing or cut. <b>Instead, if</b> gives it another pool and multiplier where a formula holds, as for ion on a droid.</li>
+                                  <li><b>What wears</b> lists armour or clothing. Where a hit gets through it loses 1 of its figure, or a quarter on a Major Wound.</li>
+                                  <li><b>Weapons a blow tests</b> lose Dur and condition when a blow beats their Dur. A type that cuts destroys a weapon at 20 or more over it.</li>
+                              </ul>
+                          </li>
                           <li><b>Postures</b>, at the foot of the Combat card, name how your tokens can stand. Without a list they take the seven built-in postures: standing, crouching, sitting, kneeling, crawling, lying prone and lying face up. Each but standing is a smaller target.
                               <ul>
                                   <li><b>Name your own postures</b> starts from those seven, keeping their ids so a website sheet still sets them. Rename, reorder or add, up to 12.</li>

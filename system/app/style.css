@@ -2584,6 +2584,11 @@
   .sys-light-row input[type=number] { width: 76px; }
   .sys-sense-row input.sys-sense-name { flex: 1 1 140px; min-width: 0; }   /* senses S2a: the Combat card's senses */
   .sys-postures { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); flex: 1 1 100%; }   /* conditions C3: the Combat card's postures, a row each in one or two lines */
+  .sys-dmgr { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); flex: 1 1 100%; }   /* 1.5.6: the Combat card's Taking damage box */
+  .sys-dmgr input[type=number] { width: 64px; }
+  .sys-dmgr input.sys-dmgr-major, .sys-dmgr input.sys-dmgr-locvital, .sys-dmgr input.sys-dmgr-locmult, .sys-dmgr input.sys-dmgr-aif, .sys-dmgr input.sys-dmgr-lat, .sys-dmgr input.sys-dmgr-wdur { flex: 1 1 140px; width: auto; min-width: 0; font-family: ui-monospace, Consolas, monospace; }
+  .sys-dmgr-type { display: flex; flex-direction: column; gap: 4px; padding: 4px 0; border-bottom: 1px dashed var(--border); }
+  .sys-dmgr .sys-btn[data-act$="add"] { align-self: flex-start; }
   .sys-init { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); flex: 1 1 100%; }   /* initiative O2: the Combat card's tie steps, one line */
   .sys-init-ties input.sys-init-tie { flex: 1 1 140px; width: auto; min-width: 0; font-family: ui-monospace, Consolas, monospace; }
   .sys-postures > .sys-flags, .sys-posture-row > .sys-flags:first-child { border-top: none; padding-top: 0; }
@@ -3508,6 +3513,20 @@
   .ts-box .tsr-link { color: var(--blue); }   /* a linked part looks like a link; in the editor it is not followed */
   .ts-bar { position: fixed; z-index: 46; left: 0; top: 0; box-sizing: border-box; display: flex; flex-wrap: wrap; align-items: center; gap: 2px; padding: 3px 5px; background: var(--panel2); border: 1px solid var(--gold); border-radius: 6px; box-shadow: var(--shadow); }
   .ts-bar[hidden] { display: none; }
+  .dmg-win { position: fixed; inset: 0; z-index: 95200; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.45); }
+  .dmg-card { box-sizing: border-box; width: min(420px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow-y: auto; padding: 16px 18px; background: var(--panel2); border: 1px solid var(--gold); border-radius: 8px; box-shadow: var(--shadow); }
+  .dmg-title { margin: 0 0 12px; font-size: 16px; }
+  .dmg-row { display: grid; grid-template-columns: 120px 1fr; align-items: center; gap: 2px 10px; margin-bottom: 10px; }
+  .dmg-row input, .dmg-row select { min-width: 0; background: var(--panel); color: var(--ink); border: 1px solid var(--edge); border-radius: 4px; padding: 5px 7px; font: inherit; font-size: 13px; color-scheme: dark; outline: none; }
+  .dmg-row input:hover, .dmg-row select:hover { border-color: var(--dim); }
+  .dmg-row input:focus, .dmg-row select:focus { border-color: var(--gold); }
+  .dmg-tick input { accent-color: var(--gold); }
+  .dmg-line { grid-column: 2; color: var(--dim); font-size: 11px; }
+  .dmg-tick { display: block; margin: -2px 0 10px 130px; font-size: 12px; }
+  .dmg-preview { margin: 6px 0 12px; padding: 8px 10px; border-radius: 6px; background: rgba(255, 255, 255, 0.04); font-size: 13px; line-height: 1.45; }
+  .dmg-hint { color: var(--dim); }
+  .dmg-btns { display: flex; justify-content: flex-end; gap: 8px; }
+  .chat-dmgapply { margin-top: 6px; font-size: 12px; }
   .pagelinks { position: fixed; z-index: 99000; box-sizing: border-box; max-height: 300px; overflow-y: auto; padding: 3px; background: var(--panel2); border: 1px solid var(--gold); border-radius: 6px; box-shadow: var(--shadow); }
   .pagelinks[hidden] { display: none; }
   .pagelinks-row { padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

@@ -1068,8 +1068,180 @@ function fxTick(sys, char, kind, now, secs) {
     });
     return out;
 }
+// [systemcheck:damage-start]
+// 1.5.6, the damage step (the owner, 2026-10-24: "taking damage and running down HP and running through anything that provides DR first, DR
+// degradation and DUR degradation. all of this generalized for waypoint"): camp.system.combat.damage, absent when a system takes no damage by it.
+//   pool    the resource a wound comes off (the Combat card's hpResource where none is named)
+//   major   a formula: a wound at or above it, in one blow, is a Major Wound ('' none)
+//   locs    { list, dr, crip, vital, mult }: the list of hit locations, the column or stat that is a location's DR, the column or stat at which a wound there
+//           may cripple it, a formula of the location's own names (Row.) that is true at a vital location, and a formula of the location's names and the
+//           character's that is the location's own multiplier for a wound to the main pool, whatever the type (0: none; the skull's x4, a droid's head x2)
+//   types   [{ key, label, mult, vital, plus, noDr, pool, alt, noWear, cuts }]: a damage type, its wounding multiplier, its multiplier at a vital location
+//           (0: as anywhere), the location's stats or columns added to its DR (typed DR), ignoring DR, the pool it comes off where not the main one, a
+//           second reading where a formula holds ({ if, pool, mult, noWear }: ion on a droid), wearing nothing (end, stun), and destroying a weapon at 20 over
+//   layers  [{ list, at, wear }]: what wears where a hit gets through: a list whose rows are worn (switched on where it has a switch), a formula of the
+//           row's names (Row.) and the hit location's (Hit.) that is the row's listed figure there (its DR, or a garment's Dur), and its stat of wear.
+//           A layer wears only where the damage rolled is more than its figure as it stands (the listed figure less its wear, never below 0)
+//   weapons [{ list, dur, wear, cond }]: a weapon tested by a blow: its listed Dur (a formula of Row.), its stat of wear and its stat of condition
+// The players' view keeps what the window asks (the pool, the types by name, the location list) and no formula: the host works the blow out.
+var DMG_LIM = Object.freeze({ types: 24, layers: 6, weapons: 4, plus: 8, mult: 10, amt: 1000000 });
+function dmgStatOk(fl, listId, key) {   // a number stat of that list, value names or not (a stat its rows may hold as their own), never a pick
+    var f = fl ? fl(listId) : null, sp = f && isObj(f.list) ? f.list : null; if (!sp || typeof key !== 'string' || !STAT_KEY.test(key)) return '';
+    var hit = ''; (Array.isArray(sp.stats) ? sp.stats : []).forEach(function(s) { if (!hit && isObj(s) && lower(s.key) === lower(key) && s.kind !== 'pick') hit = s.key; });
+    return hit;
+}
+function dmgNameOk(fl, listId, key) {   // a stat or a column of that list
+    var f = fl ? fl(listId) : null, sp = f && isObj(f.list) ? f.list : null; if (!sp || typeof key !== 'string' || !STAT_KEY.test(key)) return '';
+    var hit = ''; (Array.isArray(sp.stats) ? sp.stats : []).concat(Array.isArray(sp.cols) ? sp.cols : []).forEach(function(s) { if (!hit && isObj(s) && lower(s.key) === lower(key)) hit = s.key; });
+    return hit;
+}
+function dmgNum(v, lo, hi, d) { return typeof v === 'number' && fin(v) ? Math.round(clampNum(v, lo, hi) * 100) / 100 : d; }
+function cleanDamageRules(d, kinds, resIds, fl, pl) {
+    if (!isObj(d)) return null;
+    var isList = function(id) { return typeof id === 'string' && FIELD_ID.test(id) && !!kinds && kinds[id] === 'item-list'; }, isPool = function(id) { return typeof id === 'string' && !!resIds && resIds[id] === 1; };
+    var fx = function(s) { return pl ? '' : cleanFormulaText(s) || ''; };
+    var out = {}; if (isPool(d.pool)) out.pool = d.pool;
+    var mj = fx(d.major); if (mj) out.major = mj;
+    if (isObj(d.locs) && isList(d.locs.list)) {
+        var lc = { list: d.locs.list };
+        if (!pl) { var dr = dmgNameOk(fl, lc.list, d.locs.dr); if (dr) lc.dr = dr; var cr = dmgNameOk(fl, lc.list, d.locs.crip); if (cr) lc.crip = cr; var vt = fx(d.locs.vital); if (vt) lc.vital = vt; var lm = fx(d.locs.mult); if (lm) lc.mult = lm; }
+        out.locs = lc;
+    }
+    var seen = map(), types = [];
+    (Array.isArray(d.types) ? d.types : []).forEach(function(y) {
+        if (types.length >= DMG_LIM.types || !isObj(y) || typeof y.key !== 'string' || !STAT_KEY.test(y.key) || seen[lower(y.key)]) return; seen[lower(y.key)] = 1;
+        var o = { key: y.key, label: cutText(y.label, LIMITS.label) || y.key };
+        if (isPool(y.pool)) o.pool = y.pool;
+        if (!pl) {
+            o.mult = dmgNum(y.mult, 0, DMG_LIM.mult, 1);
+            var vm = dmgNum(y.vital, 0, DMG_LIM.mult, 0); if (vm > 0) o.vital = vm;
+            var pls = []; if (out.locs) (Array.isArray(y.plus) ? y.plus : []).forEach(function(k) { var n = dmgNameOk(fl, out.locs.list, k); if (n && pls.indexOf(n) < 0 && pls.length < DMG_LIM.plus) pls.push(n); }); if (pls.length) o.plus = pls;
+            if (y.noDr === true) o.noDr = true;
+            if (isObj(y.alt)) { var ai = cleanFormulaText(y.alt.if); if (ai) { var al = { if: ai }; if (isPool(y.alt.pool)) al.pool = y.alt.pool; if (typeof y.alt.mult === 'number' && fin(y.alt.mult)) al.mult = dmgNum(y.alt.mult, 0, DMG_LIM.mult, 1); if (y.alt.noWear === true) al.noWear = true; o.alt = al; } }
+            if (y.noWear === true) o.noWear = true;
+            if (y.cuts === true) o.cuts = true;
+        }
+        types.push(o);
+    });
+    if (types.length) out.types = types;
+    if (!pl) {
+        var lys = []; (Array.isArray(d.layers) ? d.layers : []).forEach(function(l) {
+            if (lys.length >= DMG_LIM.layers || !isObj(l) || !isList(l.list)) return;
+            var at = cleanFormulaText(l.at), w = dmgStatOk(fl, l.list, l.wear); if (!at || !w) return;
+            lys.push({ list: l.list, at: at, wear: w });
+        }); if (lys.length) out.layers = lys;
+        var wps = []; (Array.isArray(d.weapons) ? d.weapons : []).forEach(function(l) {
+            if (wps.length >= DMG_LIM.weapons || !isObj(l) || !isList(l.list)) return;
+            var du = cleanFormulaText(l.dur), w = dmgStatOk(fl, l.list, l.wear), c = dmgStatOk(fl, l.list, l.cond); if (!du || !w || !c) return;
+            wps.push({ list: l.list, dur: du, wear: w, cond: c });
+        }); if (wps.length) out.weapons = wps;
+    } else {   // the window offers the weapons the blow may test; the host reads their Dur
+        var wpl = []; (Array.isArray(d.weapons) ? d.weapons : []).forEach(function(l) { if (wpl.length < DMG_LIM.weapons && isObj(l) && isList(l.list)) wpl.push({ list: l.list }); }); if (wpl.length) out.weapons = wpl;
+    }
+    return out.pool || out.types || out.locs ? out : null;
+}
+// What a blow does: the pure step, the same on the host and on the GM's own screen. inp = { amt, type, loc, ad, weapon, only }: the damage rolled,
+// the type's key, the hit location's row id, the armour divisor (1: none), a weapon row tested by the blow and whether only that weapon was hit.
+// Returns { ok, values, lines, info } — values: the fields changed (the pool, each list a row of which wore), lines: what it did in words, info:
+// the figures — or { ok: false, reason }. The rule (the handbook's own order): DR at the location (typed DR added, divided by the armour divisor,
+// rounded down), what gets through times the type's multiplier (its vital one at a vital location), at least 1 when anything gets through, off
+// the type's pool; a Major Wound where the formula says; each worn layer at the location loses 1 of its listed figure, or a quarter of it rounded
+// up on a Major Wound, down to minus its listed figure; a weapon's Dur less the damage: 1 to 10 over wears it 1 and makes it Damaged, 11 to 19
+// takes it one condition down, 20 or more destroys it where the type cuts and else takes it one condition down (conditions 0 Fine, 1 Damaged,
+// 2 Broken, 3 Destroyed)
+function dmgRowPut(row, key, v) {   // a row's own stat: a library or system row's own values (held as the GM's), a row of the character's own its own
+    if (isObj(row.def) && typeof row.defId !== 'string') { row.def.stats = isObj(row.def.stats) ? row.def.stats : {}; row.def.stats[key] = v; return; }
+    row.ov = isObj(row.ov) ? row.ov : {}; row.ov.stats = isObj(row.ov.stats) ? row.ov.stats : {}; row.ov.stats[key] = v;
+    var held = Array.isArray(row.ov.held) ? row.ov.held : []; if (!held.some(function(h) { return lower(h) === lower(key); })) held.push(key); row.ov.held = held;
+}
+var DMG_CONDS = ['Fine', 'Damaged', 'Broken', 'Destroyed'];
+function damageStep(sys, char, inp, F, ropts) {
+    var rules = sys && isObj(sys.combat) && isObj(sys.combat.damage) ? sys.combat.damage : null; if (!rules || !F || !isObj(char)) return { ok: false, reason: 'field' };
+    if (!isObj(inp) || typeof inp.amt !== 'number' || !fin(inp.amt) || inp.amt < 0 || inp.amt > DMG_LIM.amt) return { ok: false, reason: 'value' };
+    var amt = Math.floor(inp.amt), ad = typeof inp.ad === 'number' && fin(inp.ad) && inp.ad > 0 ? clampNum(inp.ad, 0.1, 100) : 1;
+    var R = makeResolver(sys, char, F, ropts), num = function(v) { return typeof v === 'number' && fin(v) ? v : 0; }, yes = function(v) { return v === true || (typeof v === 'number' && v !== 0); };
+    var ev = function(text, vars) { var r = F.evaluate(text, { vars: vars, random: noDice }); return r && r.ok ? r.value : null; };
+    var ty = null; (rules.types || []).forEach(function(y) { if (!ty && typeof inp.type === 'string' && lower(y.key) === lower(inp.type)) ty = y; });
+    if (inp.type && !ty) return { ok: false, reason: 'value' };
+    var pool = (ty && ty.pool) || rules.pool || (sys.combat.hpResource || ''), mult = ty ? (typeof ty.mult === 'number' ? ty.mult : 1) : 1, noWear = !!(ty && ty.noWear);
+    if (ty && ty.alt && yes(ev(ty.alt.if, R))) { if (ty.alt.pool) pool = ty.alt.pool; if (typeof ty.alt.mult === 'number') mult = ty.alt.mult; noWear = ty.alt.noWear === true; }
+    var pf = pool ? fieldById(sys, pool) : null; if (!pf || pf.kind !== 'resource') return { ok: false, reason: 'field' };
+    var values = {}, lines = [], info = { amt: amt, ad: ad, dr: 0, through: 0, wound: 0, pool: pf.key, major: false, crip: false, wear: [], weapon: null };
+    var lf = rules.locs ? fieldById(sys, rules.locs.list) : null, lrows = lf && char.values && Array.isArray(char.values[lf.id]) ? char.values[lf.id] : [], lrow = null;
+    if (typeof inp.loc === 'string' && inp.loc) { lrows.forEach(function(r) { if (!lrow && rowIdOf(r) === inp.loc) lrow = r; }); if (!lrow) return { ok: false, reason: 'missing' }; }
+    var hitV = lrow ? R.row(lf.id, inp.loc) : null, lname = '';
+    if (lrow) { var lrd = rowDef(sys, lrow); lname = lrd && lrd.def && typeof lrd.def.name === 'string' ? lrd.def.name : 'the location'; }
+    var err = '', get = function(f, row, key) { var v = R.cell(f, row, key); if (v === undefined) v = R.stat(f, row, key); if (isObj(v) && v.error) { err = err || String(v.error.message || 'an error'); return 0; } return num(v); };
+    if (!inp.only) {
+        var dr = 0;
+        if (lrow && !(ty && ty.noDr)) { if (rules.locs.dr) dr = get(lf, lrow, rules.locs.dr); (ty && ty.plus ? ty.plus : []).forEach(function(k) { dr += get(lf, lrow, k); }); }
+        if (err) return { ok: false, reason: 'error', message: 'The DR there could not be worked out: ' + err };
+        dr = Math.max(0, dr); var eff = Math.floor(dr / ad), through = Math.max(0, amt - eff);
+        var mainPool = pool === (rules.pool || sys.combat.hpResource), lmv = lrow && mainPool && rules.locs.mult && hitV ? num(ev(rules.locs.mult, hitV)) : 0;
+        if (lmv > 0) mult = clampNum(lmv, 0, DMG_LIM.mult);   // the location's own multiplier (the skull's x4) before a type's vital one
+        else if (lrow && ty && ty.vital > 0 && rules.locs.vital && hitV && yes(ev(rules.locs.vital, hitV))) mult = ty.vital;
+        var wound = through > 0 && mult > 0 ? Math.max(1, Math.floor(through * mult)) : 0;
+        info.dr = eff; info.through = through; info.wound = wound;
+        lines.push((ty ? ty.label + ' ' : '') + amt + (lrow ? ' to ' + lname : '') + (eff ? ', DR ' + eff : '') + ': ' + (through ? through + ' through' + (mult !== 1 ? ' \u00d7' + mult : '') + ', ' + wound + ' ' + (pf.label || pf.key) : 'nothing gets through'));
+        if (wound > 0) {
+            var cur = num(R(pf.key)), mn = typeof pf.min === 'number' ? pf.min : 0, nv = Math.max(mn, cur - wound);
+            var ed = applyEdit(sys, char, pf.id, nv, F, { vars: R }); if (!ed.ok) return { ok: false, reason: ed.reason || 'value' };
+            values[pf.id] = ed.value;
+            if (pool === (rules.pool || sys.combat.hpResource) && rules.major) { var th = num(ev(rules.major, R)); if (th > 0 && wound >= th) { info.major = true; lines.push('A Major Wound.'); } }
+            if (lrow && rules.locs.crip) { var cp = get(lf, lrow, rules.locs.crip); if (cp > 0 && wound > cp) { info.crip = true; lines.push('Enough to cripple ' + lname + '.'); } }
+            if (lrow && !noWear) (rules.layers || []).forEach(function(ly) {
+                var f = fieldById(sys, ly.list), src = f && char.values && Array.isArray(char.values[f.id]) ? char.values[f.id] : null; if (!src || !f.list) return;
+                var list = JSON.parse(JSON.stringify(src)), changed = false, hasOn = isObj(f.list.on);
+                list.forEach(function(row) {
+                    if (!isObj(row) || row.hid === 1 || (hasOn && row.on !== true)) return;
+                    var rid = rowIdOf(row), rv = rid ? R.row(f.id, rid) : null; if (!rv) return;
+                    var both = function(l, text) { if (/^hit\./.test(l)) return hitV(l.replace(/^hit\./, 'row.'), text); return rv(l, text); };
+                    var listed = Math.floor(num(ev(ly.at, both))); if (listed <= 0) return;
+                    var w = num(R.stat(f, row, ly.wear)); if (!(amt > Math.max(0, listed - w))) return;   // the blow is more than it as it stands
+                    var step = info.major ? Math.ceil(listed / 4) : 1, nw = Math.min(listed * 2, w + step); if (nw === w) return;
+                    dmgRowPut(row, ly.wear, nw); changed = true;
+                    var rd = rowDef(sys, row), nm = rd && rd.def && rd.def.name ? rd.def.name : 'A piece';
+                    info.wear.push({ list: f.id, row: rid, from: listed - w, to: listed - nw });
+                    lines.push(nm + ': ' + (listed - w) + ' \u2192 ' + (listed - nw) + (listed - nw <= -listed ? ', destroyed' : listed - nw <= 0 ? ', broken' : ', damaged') + '.');
+                });
+                if (changed) values[f.id] = list;
+            });
+        }
+    }
+    if (typeof inp.weapon === 'string' && inp.weapon) {
+        var hit = null; (rules.weapons || []).forEach(function(wp) { if (hit) return; var f = fieldById(sys, wp.list), src = f && char.values && Array.isArray(char.values[f.id]) ? char.values[f.id] : null; if (src && src.some(function(r) { return rowIdOf(r) === inp.weapon; })) hit = { wp: wp, f: f, src: src }; });
+        if (!hit) return { ok: false, reason: 'missing' };
+        var wl = values[hit.f.id] || JSON.parse(JSON.stringify(hit.src)), wrow = null; wl.forEach(function(r) { if (!wrow && rowIdOf(r) === inp.weapon) wrow = r; });
+        var wv = R.row(hit.f.id, inp.weapon), ld = wv ? Math.floor(num(ev(hit.wp.dur, wv))) : 0, wear = num(R.stat(hit.f, wrow, hit.wp.wear)), cond = clampNum(Math.floor(num(R.stat(hit.f, wrow, hit.wp.cond))), 0, 3);
+        var over = amt - (ld - wear), nc = cond, nw2 = wear, wrd = rowDef(sys, wrow), wn = wrd && wrd.def && wrd.def.name ? wrd.def.name : 'The weapon';
+        if (ld > 0 && over >= 1 && cond < 3) {
+            if (over <= 10) { nw2 = Math.min(ld * 2, wear + 1); nc = Math.max(cond, 1); }
+            else if (over >= 20 && ty && ty.cuts) nc = 3;
+            else nc = cond >= 2 ? 3 : 2;
+            if (ld - nw2 <= -ld) nc = 3; else if (ld - nw2 <= 0) nc = Math.max(nc, 2);
+        }
+        if (nw2 !== wear) dmgRowPut(wrow, hit.wp.wear, nw2);
+        if (nc !== cond) dmgRowPut(wrow, hit.wp.cond, nc);
+        if (nw2 !== wear || nc !== cond) values[hit.f.id] = wl;
+        info.weapon = { list: hit.f.id, row: inp.weapon, dur: ld - nw2, cond: nc, over: over };
+        lines.push(wn + (ld > 0 ? ': Dur ' + (ld - wear) + (nw2 !== wear ? ' \u2192 ' + (ld - nw2) : '') : '') + ', ' + DMG_CONDS[nc] + (nc === cond ? ' still' : '') + '.');
+    }
+    return { ok: true, values: values, lines: lines, info: info };
+}
+// A player's blow on their own character, as it rides the wire: { rid, charId, q: damageStep's inp } or null
+function cleanCharDamage(msg) {
+    if (!isObj(msg) || typeof msg.rid !== 'string' || !RID_RE.test(msg.rid) || typeof msg.charId !== 'string' || !CHAR_ID.test(msg.charId)) return null;
+    if (typeof msg.amt !== 'number' || !fin(msg.amt) || msg.amt < 0 || msg.amt > DMG_LIM.amt) return null;
+    var q = { amt: Math.floor(msg.amt) };
+    if (msg.dtype !== undefined) { if (typeof msg.dtype !== 'string' || !STAT_KEY.test(msg.dtype)) return null; q.type = msg.dtype; }   // the damage type rides as dtype: type is the message's own
+    if (msg.loc !== undefined) { if (typeof msg.loc !== 'string' || !ROW_ID.test(msg.loc)) return null; q.loc = msg.loc; }
+    if (msg.ad !== undefined) { if (typeof msg.ad !== 'number' || !fin(msg.ad) || msg.ad < 0.1 || msg.ad > 100) return null; q.ad = msg.ad; }
+    if (msg.weapon !== undefined) { if (typeof msg.weapon !== 'string' || !ROW_ID.test(msg.weapon)) return null; q.weapon = msg.weapon; if (msg.only === true) q.only = true; }
+    return { rid: msg.rid, charId: msg.charId, q: q };
+}
+// [systemcheck:damage-end]
 // camp.system.combat — blast automation, who rolls, the resource damage subtracts from, and the cover rule. resIds: map of resource field ids.
-function cleanCombat(c, resIds, fieldIds, secretIds, F, viewKinds) {   // senses S1: fieldIds (id -> kind, the GM's view) and secretIds (secretFieldIds) for the senses; range R1: F for the range formula; conditions C3: viewKinds (id -> kind, this view's fields) for a posture's changes
+function cleanCombat(c, resIds, fieldIds, secretIds, F, viewKinds, pl, fl) {   // 1.5.6: pl, the players' view; fl, a field of this view by id (the damage step)   // senses S1: fieldIds (id -> kind, the GM's view) and secretIds (secretFieldIds) for the senses; range R1: F for the range formula; conditions C3: viewKinds (id -> kind, this view's fields) for a posture's changes
     c = isObj(c) ? c : {};
     var out = { blastAuto: BLAST_AUTO[c.blastAuto] ? c.blastAuto : 'full', blastRoller: c.blastRoller === 'gm' ? 'gm' : 'owner', hpResource: '', cover: cleanCover(c.cover) };
     if (typeof c.hpResource === 'string' && resIds && resIds[c.hpResource]) out.hpResource = c.hpResource;
@@ -1081,6 +1253,7 @@ function cleanCombat(c, resIds, fieldIds, secretIds, F, viewKinds) {   // senses
     var ps = cleanPostures(c.postures, viewKinds); if (ps) out.postures = ps;   // conditions C3: the system's own postures (absent: the seven)
     var ir = cleanInitRules(c.initiative, F); if (ir) out.initiative = ir;   // initiative O2: how ties of initiative break (absent: they keep their place)
     var hr = cleanHeightRules(c.height, F); if (hr) out.height = hr;   // item 19 H1: what height does (absent: nothing, as before); H2: its table or formula
+    var dm = cleanDamageRules(c.damage, viewKinds, resIds, fl, pl === true); if (dm) out.damage = dm;   // 1.5.6: the damage step (absent: none)
     return out;
 }
 // Item 19 H1 (the owner's answer, 2026-09-30: a rule of the system's): the system's height rules (combat.height) — rule 'clears'
@@ -1846,7 +2019,7 @@ function cleanSystem(sys, opts) {
     if (effs.length) out.effects = effs;
     var gmF = isObj(sys.combat) && sys.combat.senses !== undefined ? gmViewFields(sys, F) : null, gmKinds = map(), secret = null;   // senses S1: judged on the fields as the GM's view has them, in both views
     if (gmF) { gmF.forEach(function(f) { gmKinds[f.id] = f.kind; }); secret = secretFieldIds({ fields: gmF, items: sys.items, core: sys.core }, F); }
-    out.combat = cleanCombat(sys.combat, resIds, gmKinds, secret, F, fieldIds);
+    out.combat = cleanCombat(sys.combat, resIds, gmKinds, secret, F, fieldIds, !gmView, function(id) { var hitF = null; out.fields.forEach(function(x) { if (!hitF && x.id === id) hitF = x; }); return hitF; });
     if (out.combat.initiative && Array.isArray(out.combat.initiative.ties)) {   // initiative O2: a step that reads a GM-only value goes (the order is public: a player would learn which is higher), judged over the GM's view, in both views alike
         var sysTi = { fields: gmViewFields(sys, F), items: sys.items, core: sys.core };
         out.combat.initiative.ties = out.combat.initiative.ties.filter(function(t) { var pt = F.parse(t); return !!(pt && pt.ok && Array.isArray(pt.names)) && !gmDerivedNames(sysTi, F, pt.names).length; });
@@ -5044,6 +5217,6 @@ function orderBySide(rows, isPc, first) {
     var a = [], b = []; list.forEach(function(r) { (!!isPc(r) === (first === 'pc') ? a : b).push(r); });
     return a.concat(b);
 }
-var API = { VERSION: VERSION, cleanPlaceCats: cleanPlaceCats, catSplits: catSplits, catHome: catHome, catPlace: catPlace, cleanFieldUnit: cleanFieldUnit, metricOf: metricOf, unitTail: unitTail, readMeasure: readMeasure, heightWords: heightWords, MEASURES: MEASURES, measureWords: measureWords, unitWords: unitWords, unitHead: unitHead, listFig: listFig, listWords: listWords, unitOf: unitOf, figText: figText, figFmt: figFmt, weightWords: weightWords, textWords: textWords, measureStore: measureStore, rollNeedsOk: rollNeedsOk, rollNeedsSays: rollNeedsSays, onGroup: onGroup, onlyOne: onlyOne, onHeld: onHeld, cleanNeeds: cleanNeeds, hideNeeds: hideNeeds, needsMet: needsMet, needsSays: needsSays, needRule: needRule, ruleTrue: ruleTrue, setRuleJudge: setRuleJudge, cleanBudgets: cleanBudgets, budgetsOf: budgetsOf, budgetWatch: budgetWatch, budgetSays: budgetSays, cleanDesc: cleanDesc, cleanLvls: cleanLvls, EVERY_UNITS: EVERY_UNITS, cleanEvery: cleanEvery, FIGHT_UNITS: FIGHT_UNITS, cleanInFight: cleanInFight, timeRuleRun: timeRuleRun, ruleRunCtx: ruleRunCtx, needsHeld: needsHeld, chainsShallow: chainsShallow, cleanFace: cleanFace, charForView: charForView, mapGridOf: mapGridOf, tokenCell: tokenCell, shapeStandIn: shapeStandIn, cleanFrame: cleanFrame, openChar: openChar, newCharRules: newCharRules, charClash: charClash, coreOf: coreOf, setLibraryFind: setLibraryFind, statKeys: statKeys, statPicks: statPicks, cleanIcon: cleanIcon, droppedCounts: droppedCounts, parseLasts: parseLasts, lastsSecs: lastsSecs, roundSecs: roundSecs, fxLeftNow: fxLeftNow, fxTick: fxTick, mapCellScale: mapCellScale, moveAllowCells: moveAllowCells, dueActs: dueActs, gridCells: gridCells, cleanTurn: cleanTurn, TURN_UNITS: TURN_UNITS, TIME_WORDS: TIME_WORDS, roundActs: roundActs, combatChars: combatChars, applyRound: applyRound, thenChanges: thenChanges, showsIf: showsIf, rowRollNames: rowRollNames, applyAct: applyAct, applyScope: applyScope, cleanCharApply: cleanCharApply, APPLY_KINDS: APPLY_KINDS, hudView: hudView, hudHasContent: hudHasContent, pinTargetsAll: pinTargetsAll, TONES: TONES, valueTone: valueTone, cleanTones: cleanTones, playableChars: playableChars, activeCharOf: activeCharOf, activeChars: activeChars, ownedTokenPlan: ownedTokenPlan, applyOwnerOps: applyOwnerOps, migrateBindings: migrateBindings, tokenSourceFor: tokenSourceFor, playsAs: playsAs, cleanNewPlayers: cleanNewPlayers, newPlayerRules: newPlayerRules, waitingTokensOf: waitingTokensOf, waitingNeed: waitingNeed, stackZ: stackZ, LIMITS: LIMITS, PALETTE_KEYS: PALETTE_KEYS, headerEdits: headerEdits, pinTargets: pinTargets, pruneGroups: pruneGroups, GROUP_ID: GROUP_ID, GLYPHS: GLYPHS, glyphPath: glyphPath, ROLL_TONES: ROLL_TONES, KINDS: KINDS, STORED: STORED, DEF_PROP: DEF_PROP, LAYOUT: LAYOUT, validPageId: validPageId, BAND_KINDS: BAND_KINDS, IDENTITY_KINDS: IDENTITY_KINDS, LEDGER_KINDS: LEDGER_KINDS, headerEntry: headerEntry, captionParts: captionParts, capExpr: capExpr, labelNames: labelNames, labelGmNames: labelGmNames, valueOpts: valueOpts, rowIdOf: rowIdOf, cleanRowDef: cleanRowDef, rowDef: rowDef, projectRows: projectRows, cleanListSpec: cleanListSpec, STAT_KEY: STAT_KEY, statKey: statKey, cleanEntryStats: cleanEntryStats, rowStats: rowStats, rowStat: rowStat, plusText: plusText, rowPaid: rowPaid, cleanListRules: cleanListRules, cleanOv: cleanOv, mergeOv: mergeOv, itemReach: itemReach, OV_LOCK: OV_LOCK, lvlClamp: lvlClamp, rowLvl: rowLvl, rowOn: rowOn, cleanItemKey: cleanItemKey, ROW_WORDS: ROW_WORDS, applyRowOp: applyRowOp, orphanRows: orphanRows, stampRows: stampRows, libSnaps: libSnaps, carriedBy: carriedBy, cleanItemMods: cleanItemMods, fieldKinds: fieldKinds, unseenMods: unseenMods, cleanItemMsg: cleanItemMsg, RM_MODES: RM_MODES, applyEffectOp: applyEffectOp, cleanCharEffect: cleanCharEffect, gmEffectNames: gmEffectNames, fxText: fxText, activeEffects: activeEffects, tokenEffects: tokenEffects, autoEffectsOn: autoEffectsOn, tokenOwnEffects: tokenOwnEffects, projectEffects: projectEffects, FACING_NAMES: FACING_NAMES, TOKEN_NAMES: TOKEN_NAMES, POSTURE_IDS: POSTURE_IDS, POSTURE_NAMES: POSTURE_NAMES, DEFAULT_POSTURES: DEFAULT_POSTURES, cleanPostures: cleanPostures, postureList: postureList, ownPostures: ownPostures, postureAt: postureAt, postureSeven: postureSeven, stanceCtx: stanceCtx, tokenCtx: tokenCtx, setAimSource: setAimSource, bearingTo: bearingTo, aimsOf: aimsOf, facingNow: facingNow, withRound: withRound, rangeCtx: rangeCtx, withRange: withRange, sideOf: sideOf, threatArc: threatArc, cleanThreats: cleanThreats, facingCtx: facingCtx, charTokenOn: charTokenOn, cycleThreat: cycleThreat, RESERVED_SUFFIX: RESERVED_SUFFIX, emptySystem: emptySystem, uid: uid, validKey: validKey, cleanFormulaText: cleanFormulaText, hasDice: hasDice, cleanField: cleanField, cleanRollDef: cleanRollDef, cleanItemDef: cleanItemDef, cleanCombat: cleanCombat, cleanCover: cleanCover, cleanLightRules: cleanLightRules, lightName: lightName, lightPresets: lightPresets, LIGHT_UNITS: LIGHT_UNITS, cleanRangeRules: cleanRangeRules, rangeModOf: rangeModOf, rangeDist: rangeDist, rangeOf: rangeOf, RANGE_UNITS: RANGE_UNITS, cleanSenses: cleanSenses, secretFieldIds: secretFieldIds, gmViewFields: gmViewFields, coverTier: coverTier, coverOutcome: coverOutcome, coverDamage: coverDamage, cleanSystem: cleanSystem, cleanValue: cleanValue, cleanChar: cleanChar, cleanCharEdit: cleanCharEdit, cleanCharEdits: cleanCharEdits, resetTargets: resetTargets, cleanCharItem: cleanCharItem, cleanDenyReason: cleanDenyReason, cleanSheetStyle: cleanSheetStyle, fieldById: fieldById, itemDef: itemDef, keyIndex: keyIndex, makeResolver: makeResolver, resolveAll: resolveAll, hoverLines: hoverLines, gmOnlyNames: gmOnlyNames, gmDerivedNames: gmDerivedNames, gmPools: gmPools, initRoll: initRoll, orderByInit: orderByInit, cleanInitRules: cleanInitRules, cleanHeightRules: cleanHeightRules, heightModOf: heightModOf, heightOf: heightOf, HEIGHT_UNITS: HEIGHT_UNITS, initTie: initTie, sideFirst: sideFirst, orderBySide: orderBySide, validateSystem: validateSystem, charFor: charFor, applyEdit: applyEdit, autoLayout: autoLayout, cleanCharUpload: cleanCharUpload, cleanUploads: cleanUploads, fillMaking: fillMaking, applyProposal: applyProposal, statAsk: statAsk, readerKit: readerKit, registerReader: registerReader, dropReader: dropReader, readers: readers, readerById: readerById, readerFor: readerFor, fmtNum: fmtNum, suggest: suggest, lookRule: lookRule, cleanLooks: cleanLooks, applyStyle: applyStyle, cleanCharStyle: cleanCharStyle, lookOf: lookOf, lookFor: lookFor };
+var API = { VERSION: VERSION, cleanDamageRules: cleanDamageRules, damageStep: damageStep, cleanCharDamage: cleanCharDamage, DMG_CONDS: DMG_CONDS, cleanPlaceCats: cleanPlaceCats, catSplits: catSplits, catHome: catHome, catPlace: catPlace, cleanFieldUnit: cleanFieldUnit, metricOf: metricOf, unitTail: unitTail, readMeasure: readMeasure, heightWords: heightWords, MEASURES: MEASURES, measureWords: measureWords, unitWords: unitWords, unitHead: unitHead, listFig: listFig, listWords: listWords, unitOf: unitOf, figText: figText, figFmt: figFmt, weightWords: weightWords, textWords: textWords, measureStore: measureStore, rollNeedsOk: rollNeedsOk, rollNeedsSays: rollNeedsSays, onGroup: onGroup, onlyOne: onlyOne, onHeld: onHeld, cleanNeeds: cleanNeeds, hideNeeds: hideNeeds, needsMet: needsMet, needsSays: needsSays, needRule: needRule, ruleTrue: ruleTrue, setRuleJudge: setRuleJudge, cleanBudgets: cleanBudgets, budgetsOf: budgetsOf, budgetWatch: budgetWatch, budgetSays: budgetSays, cleanDesc: cleanDesc, cleanLvls: cleanLvls, EVERY_UNITS: EVERY_UNITS, cleanEvery: cleanEvery, FIGHT_UNITS: FIGHT_UNITS, cleanInFight: cleanInFight, timeRuleRun: timeRuleRun, ruleRunCtx: ruleRunCtx, needsHeld: needsHeld, chainsShallow: chainsShallow, cleanFace: cleanFace, charForView: charForView, mapGridOf: mapGridOf, tokenCell: tokenCell, shapeStandIn: shapeStandIn, cleanFrame: cleanFrame, openChar: openChar, newCharRules: newCharRules, charClash: charClash, coreOf: coreOf, setLibraryFind: setLibraryFind, statKeys: statKeys, statPicks: statPicks, cleanIcon: cleanIcon, droppedCounts: droppedCounts, parseLasts: parseLasts, lastsSecs: lastsSecs, roundSecs: roundSecs, fxLeftNow: fxLeftNow, fxTick: fxTick, mapCellScale: mapCellScale, moveAllowCells: moveAllowCells, dueActs: dueActs, gridCells: gridCells, cleanTurn: cleanTurn, TURN_UNITS: TURN_UNITS, TIME_WORDS: TIME_WORDS, roundActs: roundActs, combatChars: combatChars, applyRound: applyRound, thenChanges: thenChanges, showsIf: showsIf, rowRollNames: rowRollNames, applyAct: applyAct, applyScope: applyScope, cleanCharApply: cleanCharApply, APPLY_KINDS: APPLY_KINDS, hudView: hudView, hudHasContent: hudHasContent, pinTargetsAll: pinTargetsAll, TONES: TONES, valueTone: valueTone, cleanTones: cleanTones, playableChars: playableChars, activeCharOf: activeCharOf, activeChars: activeChars, ownedTokenPlan: ownedTokenPlan, applyOwnerOps: applyOwnerOps, migrateBindings: migrateBindings, tokenSourceFor: tokenSourceFor, playsAs: playsAs, cleanNewPlayers: cleanNewPlayers, newPlayerRules: newPlayerRules, waitingTokensOf: waitingTokensOf, waitingNeed: waitingNeed, stackZ: stackZ, LIMITS: LIMITS, PALETTE_KEYS: PALETTE_KEYS, headerEdits: headerEdits, pinTargets: pinTargets, pruneGroups: pruneGroups, GROUP_ID: GROUP_ID, GLYPHS: GLYPHS, glyphPath: glyphPath, ROLL_TONES: ROLL_TONES, KINDS: KINDS, STORED: STORED, DEF_PROP: DEF_PROP, LAYOUT: LAYOUT, validPageId: validPageId, BAND_KINDS: BAND_KINDS, IDENTITY_KINDS: IDENTITY_KINDS, LEDGER_KINDS: LEDGER_KINDS, headerEntry: headerEntry, captionParts: captionParts, capExpr: capExpr, labelNames: labelNames, labelGmNames: labelGmNames, valueOpts: valueOpts, rowIdOf: rowIdOf, cleanRowDef: cleanRowDef, rowDef: rowDef, projectRows: projectRows, cleanListSpec: cleanListSpec, STAT_KEY: STAT_KEY, statKey: statKey, cleanEntryStats: cleanEntryStats, rowStats: rowStats, rowStat: rowStat, plusText: plusText, rowPaid: rowPaid, cleanListRules: cleanListRules, cleanOv: cleanOv, mergeOv: mergeOv, itemReach: itemReach, OV_LOCK: OV_LOCK, lvlClamp: lvlClamp, rowLvl: rowLvl, rowOn: rowOn, cleanItemKey: cleanItemKey, ROW_WORDS: ROW_WORDS, applyRowOp: applyRowOp, orphanRows: orphanRows, stampRows: stampRows, libSnaps: libSnaps, carriedBy: carriedBy, cleanItemMods: cleanItemMods, fieldKinds: fieldKinds, unseenMods: unseenMods, cleanItemMsg: cleanItemMsg, RM_MODES: RM_MODES, applyEffectOp: applyEffectOp, cleanCharEffect: cleanCharEffect, gmEffectNames: gmEffectNames, fxText: fxText, activeEffects: activeEffects, tokenEffects: tokenEffects, autoEffectsOn: autoEffectsOn, tokenOwnEffects: tokenOwnEffects, projectEffects: projectEffects, FACING_NAMES: FACING_NAMES, TOKEN_NAMES: TOKEN_NAMES, POSTURE_IDS: POSTURE_IDS, POSTURE_NAMES: POSTURE_NAMES, DEFAULT_POSTURES: DEFAULT_POSTURES, cleanPostures: cleanPostures, postureList: postureList, ownPostures: ownPostures, postureAt: postureAt, postureSeven: postureSeven, stanceCtx: stanceCtx, tokenCtx: tokenCtx, setAimSource: setAimSource, bearingTo: bearingTo, aimsOf: aimsOf, facingNow: facingNow, withRound: withRound, rangeCtx: rangeCtx, withRange: withRange, sideOf: sideOf, threatArc: threatArc, cleanThreats: cleanThreats, facingCtx: facingCtx, charTokenOn: charTokenOn, cycleThreat: cycleThreat, RESERVED_SUFFIX: RESERVED_SUFFIX, emptySystem: emptySystem, uid: uid, validKey: validKey, cleanFormulaText: cleanFormulaText, hasDice: hasDice, cleanField: cleanField, cleanRollDef: cleanRollDef, cleanItemDef: cleanItemDef, cleanCombat: cleanCombat, cleanCover: cleanCover, cleanLightRules: cleanLightRules, lightName: lightName, lightPresets: lightPresets, LIGHT_UNITS: LIGHT_UNITS, cleanRangeRules: cleanRangeRules, rangeModOf: rangeModOf, rangeDist: rangeDist, rangeOf: rangeOf, RANGE_UNITS: RANGE_UNITS, cleanSenses: cleanSenses, secretFieldIds: secretFieldIds, gmViewFields: gmViewFields, coverTier: coverTier, coverOutcome: coverOutcome, coverDamage: coverDamage, cleanSystem: cleanSystem, cleanValue: cleanValue, cleanChar: cleanChar, cleanCharEdit: cleanCharEdit, cleanCharEdits: cleanCharEdits, resetTargets: resetTargets, cleanCharItem: cleanCharItem, cleanDenyReason: cleanDenyReason, cleanSheetStyle: cleanSheetStyle, fieldById: fieldById, itemDef: itemDef, keyIndex: keyIndex, makeResolver: makeResolver, resolveAll: resolveAll, hoverLines: hoverLines, gmOnlyNames: gmOnlyNames, gmDerivedNames: gmDerivedNames, gmPools: gmPools, initRoll: initRoll, orderByInit: orderByInit, cleanInitRules: cleanInitRules, cleanHeightRules: cleanHeightRules, heightModOf: heightModOf, heightOf: heightOf, HEIGHT_UNITS: HEIGHT_UNITS, initTie: initTie, sideFirst: sideFirst, orderBySide: orderBySide, validateSystem: validateSystem, charFor: charFor, applyEdit: applyEdit, autoLayout: autoLayout, cleanCharUpload: cleanCharUpload, cleanUploads: cleanUploads, fillMaking: fillMaking, applyProposal: applyProposal, statAsk: statAsk, readerKit: readerKit, registerReader: registerReader, dropReader: dropReader, readers: readers, readerById: readerById, readerFor: readerFor, fmtNum: fmtNum, suggest: suggest, lookRule: lookRule, cleanLooks: cleanLooks, applyStyle: applyStyle, cleanCharStyle: cleanCharStyle, lookOf: lookOf, lookFor: lookFor };
 if (typeof window !== 'undefined') window.wpSystemCore = API;
-export { VERSION, cleanPlaceCats, catSplits, catHome, catPlace, cleanFieldUnit, metricOf, unitTail, readMeasure, heightWords, MEASURES, measureWords, unitWords, unitHead, listFig, listWords, unitOf, figText, figFmt, weightWords, textWords, measureStore, rollNeedsOk, rollNeedsSays, onGroup, onlyOne, onHeld, cleanNeeds, hideNeeds, needsMet, needsSays, needRule, ruleTrue, setRuleJudge, cleanBudgets, budgetsOf, budgetWatch, budgetSays, cleanDesc, cleanLvls, EVERY_UNITS, cleanEvery, FIGHT_UNITS, cleanInFight, timeRuleRun, ruleRunCtx, needsHeld, chainsShallow, cleanFace, charForView, mapGridOf, tokenCell, shapeStandIn, cleanFrame, openChar, newCharRules, charClash, coreOf, setLibraryFind, statKeys, statPicks, cleanIcon, droppedCounts, parseLasts, lastsSecs, roundSecs, fxLeftNow, fxTick, mapCellScale, moveAllowCells, dueActs, gridCells, cleanTurn, TURN_UNITS, TIME_WORDS, roundActs, combatChars, applyRound, thenChanges, showsIf, rowRollNames, applyAct, applyScope, cleanCharApply, APPLY_KINDS, hudView, hudHasContent, pinTargetsAll, TONES, valueTone, cleanTones, playableChars, activeCharOf, activeChars, ownedTokenPlan, applyOwnerOps, migrateBindings, tokenSourceFor, playsAs, cleanNewPlayers, newPlayerRules, waitingTokensOf, waitingNeed, stackZ, LIMITS, PALETTE_KEYS, headerEdits, pinTargets, pruneGroups, GROUP_ID, GLYPHS, glyphPath, ROLL_TONES, KINDS, STORED, DEF_PROP, LAYOUT, validPageId, BAND_KINDS, IDENTITY_KINDS, LEDGER_KINDS, headerEntry, captionParts, capExpr, labelNames, labelGmNames, valueOpts, rowIdOf, cleanRowDef, rowDef, projectRows, cleanListSpec, STAT_KEY, statKey, cleanEntryStats, rowStats, rowStat, plusText, rowPaid, cleanListRules, cleanOv, mergeOv, itemReach, OV_LOCK, lvlClamp, rowLvl, rowOn, cleanItemKey, ROW_WORDS, applyRowOp, orphanRows, stampRows, libSnaps, carriedBy, cleanItemMods, fieldKinds, unseenMods, cleanItemMsg, RM_MODES, applyEffectOp, cleanCharEffect, gmEffectNames, fxText, activeEffects, tokenEffects, autoEffectsOn, tokenOwnEffects, projectEffects, FACING_NAMES, TOKEN_NAMES, POSTURE_IDS, POSTURE_NAMES, DEFAULT_POSTURES, cleanPostures, postureList, ownPostures, postureAt, postureSeven, stanceCtx, tokenCtx, setAimSource, bearingTo, aimsOf, facingNow, withRound, rangeCtx, withRange, sideOf, threatArc, cleanThreats, facingCtx, charTokenOn, cycleThreat, RESERVED_SUFFIX, emptySystem, uid, validKey, cleanFormulaText, hasDice, cleanField, cleanRollDef, cleanItemDef, cleanCombat, cleanCover, cleanLightRules, lightName, lightPresets, LIGHT_UNITS, cleanRangeRules, rangeModOf, rangeDist, rangeOf, RANGE_UNITS, cleanSenses, secretFieldIds, gmViewFields, coverTier, coverOutcome, coverDamage, cleanSystem, cleanValue, cleanChar, cleanCharEdit, cleanCharEdits, resetTargets, cleanCharItem, cleanDenyReason, cleanSheetStyle, fieldById, itemDef, keyIndex, makeResolver, resolveAll, hoverLines, gmOnlyNames, gmDerivedNames, gmPools, initRoll, orderByInit, cleanInitRules, cleanHeightRules, heightModOf, heightOf, HEIGHT_UNITS, initTie, sideFirst, orderBySide, validateSystem, charFor, applyEdit, autoLayout, cleanCharUpload, cleanUploads, fillMaking, applyProposal, statAsk, readerKit, registerReader, dropReader, readers, readerById, readerFor, fmtNum, suggest, lookRule, cleanLooks, applyStyle, cleanCharStyle, lookOf, lookFor };
+export { VERSION, cleanDamageRules, damageStep, cleanCharDamage, DMG_CONDS, cleanPlaceCats, catSplits, catHome, catPlace, cleanFieldUnit, metricOf, unitTail, readMeasure, heightWords, MEASURES, measureWords, unitWords, unitHead, listFig, listWords, unitOf, figText, figFmt, weightWords, textWords, measureStore, rollNeedsOk, rollNeedsSays, onGroup, onlyOne, onHeld, cleanNeeds, hideNeeds, needsMet, needsSays, needRule, ruleTrue, setRuleJudge, cleanBudgets, budgetsOf, budgetWatch, budgetSays, cleanDesc, cleanLvls, EVERY_UNITS, cleanEvery, FIGHT_UNITS, cleanInFight, timeRuleRun, ruleRunCtx, needsHeld, chainsShallow, cleanFace, charForView, mapGridOf, tokenCell, shapeStandIn, cleanFrame, openChar, newCharRules, charClash, coreOf, setLibraryFind, statKeys, statPicks, cleanIcon, droppedCounts, parseLasts, lastsSecs, roundSecs, fxLeftNow, fxTick, mapCellScale, moveAllowCells, dueActs, gridCells, cleanTurn, TURN_UNITS, TIME_WORDS, roundActs, combatChars, applyRound, thenChanges, showsIf, rowRollNames, applyAct, applyScope, cleanCharApply, APPLY_KINDS, hudView, hudHasContent, pinTargetsAll, TONES, valueTone, cleanTones, playableChars, activeCharOf, activeChars, ownedTokenPlan, applyOwnerOps, migrateBindings, tokenSourceFor, playsAs, cleanNewPlayers, newPlayerRules, waitingTokensOf, waitingNeed, stackZ, LIMITS, PALETTE_KEYS, headerEdits, pinTargets, pruneGroups, GROUP_ID, GLYPHS, glyphPath, ROLL_TONES, KINDS, STORED, DEF_PROP, LAYOUT, validPageId, BAND_KINDS, IDENTITY_KINDS, LEDGER_KINDS, headerEntry, captionParts, capExpr, labelNames, labelGmNames, valueOpts, rowIdOf, cleanRowDef, rowDef, projectRows, cleanListSpec, STAT_KEY, statKey, cleanEntryStats, rowStats, rowStat, plusText, rowPaid, cleanListRules, cleanOv, mergeOv, itemReach, OV_LOCK, lvlClamp, rowLvl, rowOn, cleanItemKey, ROW_WORDS, applyRowOp, orphanRows, stampRows, libSnaps, carriedBy, cleanItemMods, fieldKinds, unseenMods, cleanItemMsg, RM_MODES, applyEffectOp, cleanCharEffect, gmEffectNames, fxText, activeEffects, tokenEffects, autoEffectsOn, tokenOwnEffects, projectEffects, FACING_NAMES, TOKEN_NAMES, POSTURE_IDS, POSTURE_NAMES, DEFAULT_POSTURES, cleanPostures, postureList, ownPostures, postureAt, postureSeven, stanceCtx, tokenCtx, setAimSource, bearingTo, aimsOf, facingNow, withRound, rangeCtx, withRange, sideOf, threatArc, cleanThreats, facingCtx, charTokenOn, cycleThreat, RESERVED_SUFFIX, emptySystem, uid, validKey, cleanFormulaText, hasDice, cleanField, cleanRollDef, cleanItemDef, cleanCombat, cleanCover, cleanLightRules, lightName, lightPresets, LIGHT_UNITS, cleanRangeRules, rangeModOf, rangeDist, rangeOf, RANGE_UNITS, cleanSenses, secretFieldIds, gmViewFields, coverTier, coverOutcome, coverDamage, cleanSystem, cleanValue, cleanChar, cleanCharEdit, cleanCharEdits, resetTargets, cleanCharItem, cleanDenyReason, cleanSheetStyle, fieldById, itemDef, keyIndex, makeResolver, resolveAll, hoverLines, gmOnlyNames, gmDerivedNames, gmPools, initRoll, orderByInit, cleanInitRules, cleanHeightRules, heightModOf, heightOf, HEIGHT_UNITS, initTie, sideFirst, orderBySide, validateSystem, charFor, applyEdit, autoLayout, cleanCharUpload, cleanUploads, fillMaking, applyProposal, statAsk, readerKit, registerReader, dropReader, readers, readerById, readerFor, fmtNum, suggest, lookRule, cleanLooks, applyStyle, cleanCharStyle, lookOf, lookFor };

@@ -8,7 +8,7 @@ import { getActiveCampaign } from './models.js';
 import { save, toast } from './io.js';
 import { picRef } from './safecore.js';
 import { showConfirm, showPrompt } from './dialogs.js';
-import { catHome, catPlace, cleanPlaceCats, catSplits, cleanFieldUnit, unitTail, heightWords, measureWords, unitWords, unitHead, listWords, unitOf, textWords, measureStore, rollNeedsOk, rollNeedsSays, timeRuleRun, ruleRunCtx, chainsShallow, makeResolver, hasDice, figText, cleanEvery, cleanInFight, droppedCounts, validPageId, LIMITS, KINDS, showsIf, rowRollNames, gmOnlyNames, applyAct, applyScope, applyRound, dueActs, combatChars, roundSecs, fxLeftNow, lastsSecs, APPLY_KINDS, TURN_UNITS, LIGHT_UNITS, RANGE_UNITS, HEIGHT_UNITS, TIME_WORDS, STORED, DEF_PROP, BAND_KINDS, IDENTITY_KINDS, LEDGER_KINDS, headerEntry, captionParts, emptySystem, uid, validKey, cleanSystem, cleanChar, validateSystem, resolveAll, hoverLines, autoLayout, applyEdit, applyStyle, cleanLooks, lookOf, lookFor, lookRule, applyEffectOp, fxText, fmtNum, budgetsOf, budgetWatch, budgetSays, needsMet, needsSays, initRoll, applyProposal, cleanUploads, sideOf, threatArc, facingCtx, facingNow, setAimSource, stanceCtx, tokenCtx, POSTURE_IDS, POSTURE_NAMES, DEFAULT_POSTURES, postureList, postureAt, autoEffectsOn, initTie, charTokenOn, cycleThreat, valueTone, TONES, activeCharOf, playableChars, ownedTokenPlan, applyOwnerOps, migrateBindings, capExpr, cleanValue, fieldById, valueOpts, applyRowOp, rowIdOf, rowDef, orphanRows, stampRows, cleanRowDef, projectRows, STAT_KEY, PALETTE_KEYS, GLYPHS, glyphPath, headerEdits, pinTargets, pinTargetsAll, hudView, hudHasContent, resetTargets, cleanListSpec, statKey, rowStat, plusText, rowPaid, itemReach, gmDerivedNames, labelGmNames, gmEffectNames, labelNames, withRound, rangeCtx, withRange, rowLvl, rowOn, cleanItemKey, charForView, secretFieldIds, gmViewFields } from './systemcore.js';
+import { cleanDamageRules, catHome, catPlace, cleanPlaceCats, catSplits, cleanFieldUnit, unitTail, heightWords, measureWords, unitWords, unitHead, listWords, unitOf, textWords, measureStore, rollNeedsOk, rollNeedsSays, timeRuleRun, ruleRunCtx, chainsShallow, makeResolver, hasDice, figText, cleanEvery, cleanInFight, droppedCounts, validPageId, LIMITS, KINDS, showsIf, rowRollNames, gmOnlyNames, applyAct, applyScope, applyRound, dueActs, combatChars, roundSecs, fxLeftNow, lastsSecs, APPLY_KINDS, TURN_UNITS, LIGHT_UNITS, RANGE_UNITS, HEIGHT_UNITS, TIME_WORDS, STORED, DEF_PROP, BAND_KINDS, IDENTITY_KINDS, LEDGER_KINDS, headerEntry, captionParts, emptySystem, uid, validKey, cleanSystem, cleanChar, validateSystem, resolveAll, hoverLines, autoLayout, applyEdit, applyStyle, cleanLooks, lookOf, lookFor, lookRule, applyEffectOp, fxText, fmtNum, budgetsOf, budgetWatch, budgetSays, needsMet, needsSays, initRoll, applyProposal, cleanUploads, sideOf, threatArc, facingCtx, facingNow, setAimSource, stanceCtx, tokenCtx, POSTURE_IDS, POSTURE_NAMES, DEFAULT_POSTURES, postureList, postureAt, autoEffectsOn, initTie, charTokenOn, cycleThreat, valueTone, TONES, activeCharOf, playableChars, ownedTokenPlan, applyOwnerOps, migrateBindings, capExpr, cleanValue, fieldById, valueOpts, applyRowOp, rowIdOf, rowDef, orphanRows, stampRows, cleanRowDef, projectRows, STAT_KEY, PALETTE_KEYS, GLYPHS, glyphPath, headerEdits, pinTargets, pinTargetsAll, hudView, hudHasContent, resetTargets, cleanListSpec, statKey, rowStat, plusText, rowPaid, itemReach, gmDerivedNames, labelGmNames, gmEffectNames, labelNames, withRound, rangeCtx, withRange, rowLvl, rowOn, cleanItemKey, charForView, secretFieldIds, gmViewFields } from './systemcore.js';
 import { fileBase, charToJson, charFromJson, sheetToMarkdown, isCharFile } from './sheetexport.js';
 import { lvlsFromBox, lvlsToText } from './librarycore.js';
 import { cleanCalendar, fmtWhen, fmtDate, timeOf, calPreset, CAL_LIMITS } from './calendarcore.js';
@@ -5236,6 +5236,7 @@ function refreshErrors() {
         });
     });
     if (bErr.length) errorsById.budgets = bErr;
+    if (typeof damageSays === 'function') { var dmS = damageSays(draft.combat && draft.combat.damage, clean, F()); if (dmS.errs.length) errorsById.damage = dmS.errs; if (dmS.warns.length) warningsById.damage = dmS.warns; }   // 1.5.6: what Save drops of the damage rules, as the cleaner reads them
 }
 function errorCell(id) {
     var cell = el('div', 'sys-err');
@@ -5788,6 +5789,7 @@ function renderCombat() {
     heightBox(box, cm);   // item 19 H2: the system's height modifier, under range
     lightBox(box, cm);   // lighting L4: the system's light rules
     sensesBox(box, cm);   // senses S2a: the system's senses
+    damageBox(box, cm);   // 1.5.6: the damage step's rules, before the turns
     turnBox(box, cm);   // turn-based combat T1: the system's turn rules, under the blast and cover settings
     initBox(box, cm);   // initiative O2: how ties of initiative break
     postureBox(box, cm);   // conditions C3: the system's own postures, at the card's foot
@@ -5983,6 +5985,240 @@ function postureClick(b) {
     markDirty(); renderAll(); return true;
 }
 // [sinkcheck:posturebox-end]
+// 1.5.6, the damage step (docs/DAMAGE_STEP_DESIGN.md): the Combat card's Taking damage box. The pool a wound comes off, the Major Wound formula,
+// the hit locations (a list, the stat or column that is its DR and the one it cripples at, a vital formula), the damage types, what wears and
+// the weapons a blow tests. Every name reaches the box as a value or a text node. Save cleans it (systemcore cleanDamageRules); damageSays says
+// under the box what Save drops, judged a part at a time by the cleaner itself
+// [sinkcheck:dmgbox-start]
+var DBX_LIM = { types: 24, layers: 6, weapons: 4 };   // systemcore's DMG_LIM: what the cleaner keeps
+function dbxObj(v) { return !!v && typeof v === 'object' && !Array.isArray(v); }
+function dbxHas(c, k) { return typeof c === 'string' && (' ' + c + ' ').indexOf(' ' + k + ' ') >= 0; }
+function dbxCm() { return draft.combat || (draft.combat = { blastAuto: 'full', blastRoller: 'owner', hpResource: '' }); }
+function dbxDraft() { var cm = dbxCm(); return dbxObj(cm.damage) ? cm.damage : (cm.damage = {}); }
+function dbxTidy() { var cm = dbxCm(); if (dbxObj(cm.damage) && !Object.keys(cm.damage).length) delete cm.damage; }
+function dbxField(id) { return (draft.fields || []).filter(function(f) { return f && f.id === id; })[0] || null; }
+function dbxKeys(listId, numOnly) {   // [key, words]: a list's stats, and its columns unless only number stats are wanted
+    var f = dbxField(listId), sp = f && f.kind === 'item-list' && dbxObj(f.list) ? f.list : null, out = []; if (!sp) return out;
+    var take = function(s, col) { if (!dbxObj(s) || typeof s.key !== 'string' || !s.key) return; if (numOnly && (col || s.kind === 'pick')) return; out.push([s.key, typeof s.label === 'string' && s.label && s.label.toLowerCase() !== s.key.toLowerCase() ? s.label + ', ' + s.key : typeof s.label === 'string' && s.label ? s.label : s.key]); };
+    (Array.isArray(sp.stats) ? sp.stats : []).forEach(function(s) { take(s, false); });
+    if (!numOnly) (Array.isArray(sp.cols) ? sp.cols : []).forEach(function(s) { take(s, true); });
+    return out;
+}
+function dbxOpts(first, opts, val) {   // a select's choices, a value that is no choice now kept and said so
+    var o = [first].concat(opts); if (typeof val === 'string' && val && !opts.some(function(x) { return x[0] === val; })) o.push([val, 'One that is gone']); return o;
+}
+function dbxPools() { return (draft.fields || []).filter(function(f) { return f && f.kind === 'resource'; }).map(function(f) { return [f.id, f.label || f.key || f.id]; }); }
+function dbxLists() { return (draft.fields || []).filter(function(f) { return f && f.kind === 'item-list'; }).map(function(f) { return [f.id, f.label || f.key || f.id]; }); }
+function dbxStr(v) { return typeof v === 'string' ? v : ''; }
+function dbxTick(cls, on, text, title) { var l = el('label', 'sys-hover'), c = el('input', cls); c.type = 'checkbox'; c.checked = on === true; l.appendChild(c); l.appendChild(document.createTextNode(' ' + text)); l.title = title; return l; }
+function dbxCap(row, text) { row.appendChild(el('span', 'sys-num-cap', text)); }
+function dbxNum(cls, v, title, ph) { var n = el('input', 'field ' + cls); n.type = 'number'; n.min = '0'; n.max = '10'; n.step = 'any'; n.value = typeof v === 'number' && isFinite(v) ? String(v) : ''; n.title = title; if (ph) n.placeholder = ph; return n; }
+function dbxBtn(act, text, title, off) { var b = el('button', 'tool ghost sys-btn', text); b.dataset.act = act; b.title = title; if (off) b.disabled = true; return b; }
+function damageBox(box, cm) {
+    var d = dbxObj(cm.damage) ? cm.damage : {}, pools = dbxPools(), lists = dbxLists(), wrap = el('div', 'sys-dmgr');
+    wrap.appendChild(el('div', 'sys-light-head', 'Taking damage'));
+    wrap.appendChild(el('div', 'sys-note', 'How a hit is taken in the Take damage window. It goes through DR at the hit location, comes off a pool, and wears armour and weapons.'));
+    var r1 = el('div', 'sys-flags sys-dmgr-top');
+    dbxCap(r1, 'Wounds come off'); r1.appendChild(select('sys-dmgr-pool', dbxOpts(['', 'The pool Full auto damage comes off'], pools, d.pool), dbxStr(d.pool), 'The pool a wound comes off. Unset, the one Full auto damage is taken from'));
+    dbxCap(r1, 'Major Wound at'); var mj = input('sys-dmgr-major field', dbxStr(d.major), 'A wound this large or larger in one blow is a Major Wound. No dice', 'e.g. HP.max / 2'); mj.maxLength = LIMITS.formula; r1.appendChild(mj);
+    wrap.appendChild(r1);
+    var lc = dbxObj(d.locs) ? d.locs : {}, r2 = el('div', 'sys-flags sys-dmgr-locs'), lkeys = dbxKeys(lc.list, false);
+    dbxCap(r2, 'Hit locations'); r2.appendChild(select('sys-dmgr-loclist', dbxOpts(['', 'None'], lists, lc.list), dbxStr(lc.list), 'The item list whose rows are the places a hit can land'));
+    if (lc.list) {
+        dbxCap(r2, 'DR'); r2.appendChild(select('sys-dmgr-locdr', dbxOpts(['', 'No DR'], lkeys, lc.dr), dbxStr(lc.dr), 'The stat or column of that list that is the DR at a location'));
+        dbxCap(r2, 'Cripple above'); r2.appendChild(select('sys-dmgr-loccrip', dbxOpts(['', 'Never'], lkeys, lc.crip), dbxStr(lc.crip), 'The stat or column whose figure a wound must pass to cripple the location. 0 or unset never cripples'));
+        dbxCap(r2, 'Vital where'); var vt = input('sys-dmgr-locvital field', dbxStr(lc.vital), 'True at a vital location. It reads the location row as Row', 'e.g. Row.loc = 8'); vt.maxLength = LIMITS.formula; r2.appendChild(vt);
+        dbxCap(r2, 'Times there'); var lmx = input('sys-dmgr-locmult field', dbxStr(lc.mult), 'The location\u2019s own multiplier for a wound to the main pool, whatever the type. 0 for none. It reads the location row as Row and the character\u2019s own names', 'e.g. if(Row.loc = 1, 4, 0)'); lmx.maxLength = LIMITS.formula; r2.appendChild(lmx);   // 1.5.6: the skull's x4
+    }
+    wrap.appendChild(r2);
+    var types = Array.isArray(d.types) ? d.types : [];
+    wrap.appendChild(el('span', 'sys-num-cap', 'Damage types'));
+    types.forEach(function(y0, i) {
+        var y = dbxObj(y0) ? y0 : {}, tw = el('div', 'sys-dmgr-type'); tw.dataset.yi = String(i);
+        var a = el('div', 'sys-flags');
+        var k = input('sys-dmgr-ykey field', dbxStr(y.key), 'Its key: a letter, then letters, digits and _', 'Key'); k.maxLength = 24; a.appendChild(k);
+        var lb = input('sys-dmgr-ylabel field', dbxStr(y.label), 'Its name in the Take damage window', 'Name'); lb.maxLength = LIMITS.label; a.appendChild(lb);
+        dbxCap(a, 'Times'); a.appendChild(dbxNum('sys-dmgr-ymult', y.mult, 'What gets through is multiplied by this, 0 to 10. Unset is 1', '1'));
+        dbxCap(a, 'Vital times'); a.appendChild(dbxNum('sys-dmgr-yvital', y.vital, 'Its multiplier at a vital location. Unset or 0 is as anywhere', ''));
+        a.appendChild(select('sys-dmgr-ypool', dbxOpts(['', 'The main pool'], pools, y.pool), dbxStr(y.pool), 'The pool this type comes off, where not the main one'));
+        a.appendChild(dbxTick('sys-dmgr-ynodr', y.noDr, 'Ignores DR', 'Ticked: DR stops none of it'));
+        a.appendChild(dbxTick('sys-dmgr-ynowear', y.noWear, 'Wears nothing', 'Ticked: it wears no armour'));
+        a.appendChild(dbxTick('sys-dmgr-ycuts', y.cuts, 'Cuts', 'Ticked: 20 or more over a weapon’s Dur destroys it'));
+        a.appendChild(dbxBtn('dmgrydel', '×', 'Remove this type'));
+        tw.appendChild(a);
+        if (lc.list && lkeys.length) {
+            var p = el('div', 'sys-flags sys-dmgr-plus'), pl = Array.isArray(y.plus) ? y.plus.map(function(x) { return String(x).toLowerCase(); }) : [];
+            dbxCap(p, 'Adds to DR');
+            lkeys.forEach(function(kv) { var t = dbxTick('sys-dmgr-yplus', pl.indexOf(kv[0].toLowerCase()) >= 0, kv[1], 'Ticked: this stat or column of the location is added to its DR against this type'); t.firstChild.dataset.k = kv[0]; p.appendChild(t); });
+            tw.appendChild(p);
+        }
+        var al = dbxObj(y.alt) ? y.alt : {}, b = el('div', 'sys-flags sys-dmgr-alt');
+        dbxCap(b, 'Instead, if');
+        var ai = input('sys-dmgr-aif field', dbxStr(al.if), 'Where this holds for the character, the three after it take the place of the type’s own', 'e.g. Droid'); ai.maxLength = LIMITS.formula; b.appendChild(ai);
+        b.appendChild(select('sys-dmgr-apool', dbxOpts(['', 'The same pool'], pools, al.pool), dbxStr(al.pool), 'The pool it comes off then'));
+        dbxCap(b, 'Times'); b.appendChild(dbxNum('sys-dmgr-amult', al.mult, 'Its multiplier then. Unset is the type’s own', ''));
+        b.appendChild(dbxTick('sys-dmgr-anowear', al.noWear, 'Wears nothing', 'Ticked: then it wears no armour'));
+        tw.appendChild(b);
+        wrap.appendChild(tw);
+    });
+    wrap.appendChild(dbxBtn('dmgryadd', '+ Type', types.length >= DBX_LIM.types ? 'At most ' + DBX_LIM.types : 'A kind of damage, such as cutting or heat', types.length >= DBX_LIM.types));
+    var lys = Array.isArray(d.layers) ? d.layers : [];
+    wrap.appendChild(el('span', 'sys-num-cap', 'What wears'));
+    lys.forEach(function(l0, i) {
+        var l = dbxObj(l0) ? l0 : {}, rw = el('div', 'sys-flags sys-dmgr-layer'); rw.dataset.li = String(i);
+        rw.appendChild(select('sys-dmgr-llist', dbxOpts(['', 'Pick a list'], lists, l.list), dbxStr(l.list), 'A list whose rows wear when a hit gets through. Only rows switched on count, where it has a switch'));
+        var at = input('sys-dmgr-lat field', dbxStr(l.at), 'The row’s listed figure at the hit location. It reads the row as Row and the location as Hit', 'Figure, e.g. Row.DR'); at.maxLength = LIMITS.formula; rw.appendChild(at);
+        dbxCap(rw, 'Worn in'); rw.appendChild(select('sys-dmgr-lwear', dbxOpts(['', 'Pick a stat'], dbxKeys(l.list, true), l.wear), dbxStr(l.wear), 'The number stat of that list that holds how much has worn off'));
+        rw.appendChild(dbxBtn('dmgrldel', '×', 'Remove this'));
+        wrap.appendChild(rw);
+    });
+    wrap.appendChild(dbxBtn('dmgrladd', '+ Layer', lys.length >= DBX_LIM.layers ? 'At most ' + DBX_LIM.layers : 'Armour or clothing that wears where a hit gets through', lys.length >= DBX_LIM.layers));
+    var wps = Array.isArray(d.weapons) ? d.weapons : [];
+    wrap.appendChild(el('span', 'sys-num-cap', 'Weapons a blow tests'));
+    wps.forEach(function(w0, i) {
+        var w = dbxObj(w0) ? w0 : {}, rw = el('div', 'sys-flags sys-dmgr-weapon'), nk = dbxKeys(w.list, true); rw.dataset.wi = String(i);
+        rw.appendChild(select('sys-dmgr-wlist', dbxOpts(['', 'Pick a list'], lists, w.list), dbxStr(w.list), 'A list of weapons a blow may test'));
+        var du = input('sys-dmgr-wdur field', dbxStr(w.dur), 'The weapon’s listed Dur. It reads the row as Row', 'Dur, e.g. Row.dur'); du.maxLength = LIMITS.formula; rw.appendChild(du);
+        dbxCap(rw, 'Worn in'); rw.appendChild(select('sys-dmgr-wwear', dbxOpts(['', 'Pick a stat'], nk, w.wear), dbxStr(w.wear), 'The number stat that holds the Dur worn off'));
+        dbxCap(rw, 'Condition in'); rw.appendChild(select('sys-dmgr-wcond', dbxOpts(['', 'Pick a stat'], nk, w.cond), dbxStr(w.cond), 'The number stat that holds its condition: 0 Fine, 1 Damaged, 2 Broken, 3 Destroyed'));
+        rw.appendChild(dbxBtn('dmgrwdel', '×', 'Remove this'));
+        wrap.appendChild(rw);
+    });
+    wrap.appendChild(dbxBtn('dmgrwadd', '+ Weapon', wps.length >= DBX_LIM.weapons ? 'At most ' + DBX_LIM.weapons : 'A list of weapons whose Dur a blow tests', wps.length >= DBX_LIM.weapons));
+    var err = errorCell('damage'); err.dataset.errFor = 'damage'; wrap.appendChild(err);
+    box.appendChild(wrap);
+}
+function dbxRow(t, cls, key, arrKey) {   // the draft's row a control stands in, by its row's index
+    var rw = t.closest ? t.closest('.' + cls) : null, i = rw ? Number(rw.dataset[key]) : -1, d = dbxCm().damage, arr = dbxObj(d) && Array.isArray(d[arrKey]) ? d[arrKey] : [];
+    return i >= 0 && i < arr.length && Math.floor(i) === i && dbxObj(arr[i]) ? arr[i] : null;
+}
+function dbxSet(o, k, v) { if (v === '' || v === undefined || v === null || v === false) delete o[k]; else o[k] = v; }
+function dbxNumOf(t) { var s = String(t.value === undefined ? '' : t.value).trim(), n = Number(s); return s && isFinite(n) ? n : undefined; }
+function onDamageInput(t) {
+    var c = t.className || ''; if (typeof c !== 'string' || c.indexOf('sys-dmgr-') < 0) return false;
+    var txt = String(t.value === undefined ? '' : t.value).slice(0, LIMITS.formula);
+    if (dbxHas(c, 'sys-dmgr-major')) { dbxSet(dbxDraft(), 'major', txt.trim() ? txt : ''); dbxTidy(); }
+    else if (dbxHas(c, 'sys-dmgr-locvital')) { var d = dbxDraft(); if (!dbxObj(d.locs)) return true; dbxSet(d.locs, 'vital', txt.trim() ? txt : ''); }
+    else if (dbxHas(c, 'sys-dmgr-locmult')) { var dM = dbxDraft(); if (!dbxObj(dM.locs)) return true; dbxSet(dM.locs, 'mult', txt.trim() ? txt : ''); }
+    else if (dbxHas(c, 'sys-dmgr-ykey') || dbxHas(c, 'sys-dmgr-ylabel') || dbxHas(c, 'sys-dmgr-ymult') || dbxHas(c, 'sys-dmgr-yvital') || dbxHas(c, 'sys-dmgr-aif') || dbxHas(c, 'sys-dmgr-amult')) {
+        var y = dbxRow(t, 'sys-dmgr-type', 'yi', 'types'); if (!y) return true;
+        if (dbxHas(c, 'sys-dmgr-ykey')) y.key = txt.slice(0, 24);
+        else if (dbxHas(c, 'sys-dmgr-ylabel')) dbxSet(y, 'label', txt.slice(0, LIMITS.label));
+        else if (dbxHas(c, 'sys-dmgr-ymult')) dbxSet(y, 'mult', dbxNumOf(t));
+        else if (dbxHas(c, 'sys-dmgr-yvital')) dbxSet(y, 'vital', dbxNumOf(t));
+        else { var al = dbxObj(y.alt) ? y.alt : (y.alt = {}); if (dbxHas(c, 'sys-dmgr-aif')) dbxSet(al, 'if', txt.trim() ? txt : ''); else dbxSet(al, 'mult', dbxNumOf(t)); if (!Object.keys(al).length) delete y.alt; }
+    } else if (dbxHas(c, 'sys-dmgr-lat')) { var l = dbxRow(t, 'sys-dmgr-layer', 'li', 'layers'); if (!l) return true; dbxSet(l, 'at', txt.trim() ? txt : ''); }
+    else if (dbxHas(c, 'sys-dmgr-wdur')) { var w = dbxRow(t, 'sys-dmgr-weapon', 'wi', 'weapons'); if (!w) return true; dbxSet(w, 'dur', txt.trim() ? txt : ''); }
+    else return true;   // a select or a tick: its change event does the work
+    markDirty(); patchErrors(); return true;
+}
+function onDamageChange(t) {
+    var c = t.className || ''; if (typeof c !== 'string' || c.indexOf('sys-dmgr-') < 0) return false;
+    var v = typeof t.value === 'string' ? t.value : '', on = t.checked === true, redraw = false;
+    if (dbxHas(c, 'sys-dmgr-pool')) { dbxSet(dbxDraft(), 'pool', v); dbxTidy(); }
+    else if (dbxHas(c, 'sys-dmgr-loclist')) {   // another list: its DR, its cripple key and every type's typed DR belonged to the old one
+        var d = dbxDraft(), was = dbxObj(d.locs) ? d.locs : {};
+        if (!v) delete d.locs; else if (was.list !== v) { d.locs = { list: v }; if (was.vital) d.locs.vital = was.vital; (Array.isArray(d.types) ? d.types : []).forEach(function(y) { if (dbxObj(y)) delete y.plus; }); }
+        dbxTidy(); redraw = true;
+    } else if (dbxHas(c, 'sys-dmgr-locdr') || dbxHas(c, 'sys-dmgr-loccrip')) { var dl = dbxDraft(); if (!dbxObj(dl.locs)) return true; dbxSet(dl.locs, dbxHas(c, 'sys-dmgr-locdr') ? 'dr' : 'crip', v); }
+    else if (dbxHas(c, 'sys-dmgr-ypool') || dbxHas(c, 'sys-dmgr-ynodr') || dbxHas(c, 'sys-dmgr-ynowear') || dbxHas(c, 'sys-dmgr-ycuts') || dbxHas(c, 'sys-dmgr-yplus') || dbxHas(c, 'sys-dmgr-apool') || dbxHas(c, 'sys-dmgr-anowear')) {
+        var y = dbxRow(t, 'sys-dmgr-type', 'yi', 'types'); if (!y) return true;
+        if (dbxHas(c, 'sys-dmgr-ypool')) dbxSet(y, 'pool', v);
+        else if (dbxHas(c, 'sys-dmgr-ynodr')) dbxSet(y, 'noDr', on);
+        else if (dbxHas(c, 'sys-dmgr-ynowear')) dbxSet(y, 'noWear', on);
+        else if (dbxHas(c, 'sys-dmgr-ycuts')) dbxSet(y, 'cuts', on);
+        else if (dbxHas(c, 'sys-dmgr-yplus')) {
+            var k = t.dataset && typeof t.dataset.k === 'string' ? t.dataset.k : ''; if (!k) return true;
+            var pl = (Array.isArray(y.plus) ? y.plus : []).filter(function(x) { return typeof x === 'string' && x.toLowerCase() !== k.toLowerCase(); }); if (on) pl.push(k);
+            if (pl.length) y.plus = pl; else delete y.plus;
+        } else { var al = dbxObj(y.alt) ? y.alt : (y.alt = {}); if (dbxHas(c, 'sys-dmgr-apool')) dbxSet(al, 'pool', v); else dbxSet(al, 'noWear', on); if (!Object.keys(al).length) delete y.alt; }
+    } else if (dbxHas(c, 'sys-dmgr-llist') || dbxHas(c, 'sys-dmgr-lwear')) {
+        var l = dbxRow(t, 'sys-dmgr-layer', 'li', 'layers'); if (!l) return true;
+        if (dbxHas(c, 'sys-dmgr-llist')) { if (l.list !== v) delete l.wear; dbxSet(l, 'list', v); redraw = true; } else dbxSet(l, 'wear', v);
+    } else if (dbxHas(c, 'sys-dmgr-wlist') || dbxHas(c, 'sys-dmgr-wwear') || dbxHas(c, 'sys-dmgr-wcond')) {
+        var w = dbxRow(t, 'sys-dmgr-weapon', 'wi', 'weapons'); if (!w) return true;
+        if (dbxHas(c, 'sys-dmgr-wlist')) { if (w.list !== v) { delete w.wear; delete w.cond; } dbxSet(w, 'list', v); redraw = true; } else dbxSet(w, dbxHas(c, 'sys-dmgr-wwear') ? 'wear' : 'cond', v);
+    } else return true;   // a text box: its input event did the work
+    markDirty(); if (redraw) renderAll(); else patchErrors(); return true;
+}
+function damageClick(b) {
+    var m = /^dmgr(y|l|w)(add|del)$/.exec(b.dataset && b.dataset.act || ''); if (!m) return false;
+    var key = m[1] === 'y' ? 'types' : m[1] === 'l' ? 'layers' : 'weapons', cap = DBX_LIM[key], words = m[1] === 'y' ? 'damage types' : m[1] === 'l' ? 'layers' : 'weapon lists';
+    if (m[2] === 'add') {
+        var d = dbxDraft(), arr = Array.isArray(d[key]) ? d[key] : (d[key] = []);
+        if (arr.length >= cap) { toast('At most ' + cap + ' ' + words + '.'); return true; }
+        arr.push(m[1] === 'y' ? { key: '', label: '' } : {});
+    } else {   // a remove: only a row the draft holds
+        var dd = dbxCm().damage, ar = dbxObj(dd) && Array.isArray(dd[key]) ? dd[key] : [], cls = m[1] === 'y' ? 'sys-dmgr-type' : m[1] === 'l' ? 'sys-dmgr-layer' : 'sys-dmgr-weapon', ix = m[1] === 'y' ? 'yi' : m[1] === 'l' ? 'li' : 'wi';
+        var rw = b.closest ? b.closest('.' + cls) : null, i = rw ? Number(rw.dataset[ix]) : -1; if (!(i >= 0 && i < ar.length && Math.floor(i) === i)) return true;
+        ar.splice(i, 1); if (!ar.length) delete dd[key]; dbxTidy();
+    }
+    markDirty(); renderAll(); return true;
+}
+// What Save drops of the damage rules, said under the box: each part judged by the cleaner itself (cleanDamageRules, with the cleaned GM view's
+// fields), so the words agree with Save. A formula Save keeps but cannot read is a warning: it never holds. Returns { errs, warns }
+function damageSays(d, sys, Fx) {
+    var errs = [], warns = [], say = function(m) { errs.push({ message: m }); }, warn = function(m) { warns.push({ message: m }); };
+    if (!dbxObj(d) || typeof cleanDamageRules !== 'function' || !sys || !Array.isArray(sys.fields)) return { errs: errs, warns: warns };
+    var kinds = {}, res = {}, byId = {}; sys.fields.forEach(function(f) { if (!f || typeof f.id !== 'string') return; kinds[f.id] = f.kind; byId[f.id] = f; if (f.kind === 'resource') res[f.id] = 1; });
+    var fl = function(id) { return Object.prototype.hasOwnProperty.call(byId, id) ? byId[id] : null; };
+    var piece = function(o) { return cleanDamageRules(Object.assign({ types: [{ key: 'zq' }] }, o), kinds, res, fl, false) || {}; };
+    var reads = function(t, what) { if (typeof t !== 'string' || !t.trim() || !Fx || typeof Fx.parse !== 'function') return; var p = Fx.parse(t.trim()); if (!p || !p.ok) warn(what + ': Save keeps the formula, but it cannot be read, so it never holds.'); };
+    var low = function(a) { return (Array.isArray(a) ? a : []).map(function(x) { return String(x).toLowerCase(); }); };
+    var isList = function(id) { return typeof id === 'string' && kinds[id] === 'item-list'; };
+    var numStat = function(listId, k) { var f = fl(listId), sp = f && dbxObj(f.list) ? f.list : null; return !!sp && typeof k === 'string' && (Array.isArray(sp.stats) ? sp.stats : []).some(function(s) { return dbxObj(s) && String(s.key).toLowerCase() === k.toLowerCase() && s.kind !== 'pick'; }); };
+    var any = (typeof d.pool === 'string' && d.pool) || (typeof d.major === 'string' && d.major.trim()) || (dbxObj(d.locs) && d.locs.list) || ['types', 'layers', 'weapons'].some(function(k) { return Array.isArray(d[k]) && d[k].length; });
+    if (any && !cleanDamageRules(d, kinds, res, fl, false)) say('Taking damage: Save keeps these rules only with a pool, a damage type or hit locations, so it drops them.');
+    if (typeof d.pool === 'string' && d.pool && !piece({ pool: d.pool }).pool) say('Wounds come off: that pool is gone, so Save drops it.');
+    if (typeof d.major === 'string' && d.major.trim()) { if (!piece({ major: d.major }).major) say('Major Wound: the formula is too long or not on one line, so Save drops it.'); else reads(d.major, 'Major Wound'); }
+    var lk = null;
+    if (dbxObj(d.locs) && d.locs.list) {
+        lk = piece({ locs: d.locs }).locs || null;
+        if (!lk) say('Hit locations: that list is gone, so Save drops them.');
+        else {
+            if (typeof d.locs.dr === 'string' && d.locs.dr && !lk.dr) say('Hit locations: the DR is no stat or column of the list, so Save drops it.');
+            if (typeof d.locs.crip === 'string' && d.locs.crip && !lk.crip) say('Hit locations: Cripple above is no stat or column of the list, so Save drops it.');
+            if (typeof d.locs.vital === 'string' && d.locs.vital.trim()) { if (!lk.vital) say('Hit locations: the vital formula is too long or not on one line, so Save drops it.'); else reads(d.locs.vital, 'Vital where'); }
+            if (typeof d.locs.mult === 'string' && d.locs.mult.trim()) { if (!lk.mult) say('Hit locations: the Times there formula is too long or not on one line, so Save drops it.'); else reads(d.locs.mult, 'Times there'); }
+        }
+    }
+    var seen = {}, kept = 0;
+    (Array.isArray(d.types) ? d.types : []).forEach(function(y, i) {
+        var nm = 'Damage type ' + (i + 1) + (dbxObj(y) && typeof y.label === 'string' && y.label.trim() ? ', ' + y.label.trim() : dbxObj(y) && typeof y.key === 'string' && y.key ? ', ' + y.key : '');
+        if (!dbxObj(y)) { say(nm + ': Save cannot read it, so it drops it.'); return; }
+        var k = typeof y.key === 'string' ? y.key.toLowerCase() : '';
+        if (!k || !(piece({ types: [{ key: y.key }] }).types || []).length) { say(nm + ': its key must be a letter, then letters, digits and _, so Save drops it.'); return; }
+        if (seen[k]) { say(nm + ': another type has this key, so Save drops it.'); return; }
+        if (kept >= DBX_LIM.types) { say(nm + ': at most ' + DBX_LIM.types + ' types, so Save drops it.'); return; }
+        seen[k] = 1; kept++;
+        var cy = (piece({ locs: d.locs, types: [y] }).types || [])[0] || {};
+        if (y.mult !== undefined) { if (typeof y.mult !== 'number' || !isFinite(y.mult)) say(nm + ': its multiplier is no number, so Save takes 1.'); else if (cy.mult !== y.mult) say(nm + ': a multiplier is 0 to 10 to the hundredth, so Save keeps ' + cy.mult + '.'); }
+        if (y.vital !== undefined && y.vital !== 0) { if (typeof y.vital !== 'number' || !isFinite(y.vital)) say(nm + ': its vital multiplier is no number, so Save drops it.'); else if (!cy.vital) say(nm + ': a vital multiplier is above 0 and at most 10, so Save drops it.'); else if (cy.vital !== y.vital) say(nm + ': a vital multiplier is at most 10 to the hundredth, so Save keeps ' + cy.vital + '.'); }
+        var cp = low(cy.plus), lost = [];
+        (Array.isArray(y.plus) ? y.plus : []).forEach(function(p) { var s = String(p); if (cp.indexOf(s.toLowerCase()) < 0 && lost.indexOf(s) < 0) lost.push(s); });
+        if (lost.length) say(nm + ': ' + (!lk ? 'adding to DR needs hit locations' : 'Adds to DR takes only stats or columns of the location list, 8 at most') + ', so Save drops ' + lost.join(', ') + '.');
+        if (typeof y.pool === 'string' && y.pool && !cy.pool) say(nm + ': its pool is gone, so Save drops it.');
+        if (dbxObj(y.alt) && Object.keys(y.alt).length) {
+            if (!cy.alt) say(nm + ': Instead, if needs a formula Save can keep, so Save drops what it changes.');
+            else { if (typeof y.alt.pool === 'string' && y.alt.pool && !cy.alt.pool) say(nm + ': the pool for Instead, if is gone, so Save drops it.'); if (y.alt.mult !== undefined && cy.alt.mult === undefined) say(nm + ': the multiplier for Instead, if is no number, so Save drops it.'); reads(y.alt.if, nm + ', Instead, if'); }
+        }
+    });
+    [['layers', 'Layer', 'at', 'its figure', ['wear']], ['weapons', 'Weapon list', 'dur', 'its Dur', ['wear', 'cond']]].forEach(function(g) {
+        var n = 0;
+        (Array.isArray(d[g[0]]) ? d[g[0]] : []).forEach(function(l, i) {
+            var nm = g[1] + ' ' + (i + 1);
+            if (n >= DBX_LIM[g[0]]) { say(nm + ': at most ' + DBX_LIM[g[0]] + ', so Save drops it.'); return; }
+            var o = {}; o[g[0]] = [l]; if ((piece(o)[g[0]] || []).length) { n++; reads(l[g[2]], nm + ', ' + g[3]); return; }
+            if (!dbxObj(l) || !l.list) say(nm + ': pick a list, or Save drops it.');
+            else if (!isList(l.list)) say(nm + ': that list is gone, so Save drops it.');
+            else if (typeof l[g[2]] !== 'string' || !l[g[2]].trim()) say(nm + ': ' + g[3] + ' needs a formula, so Save drops it.');
+            else if (g[4].some(function(k) { return !numStat(l.list, l[k]); })) say(nm + ': pick a number stat of that list for each stat, so Save drops it.');
+            else say(nm + ': ' + g[3] + ' is too long or not on one line, so Save drops it.');
+        });
+    });
+    return { errs: errs, warns: warns };
+}
+// [sinkcheck:dmgbox-end]
 // Lighting L4: the system's light rules on the Combat card — what it calls a dim and a dark place (the ruler and a target mark show the names)
 // and its light presets (a light's Properties offer them; ticked, a player may pick one for their own token). Every text lands as a value or
 // a text node. Save cleans them; refreshErrors says what it would drop
@@ -6698,6 +6934,7 @@ function onInput(e) {
     if (onBudgetInput(t)) return;   // 126: the Lists tab's point budgets
     if (onHeightInput(t)) return;   // item 19 H2
     if (onCalendarInput(t)) return;   // item 20 K1
+    if (onDamageInput(t)) return;   // 1.5.6: the Taking damage box
     var fxd = fxOfRow(t);   // 5h: a library effect's text boxes
     if (fxd) {
         var fc = t.className || '';
@@ -6851,6 +7088,7 @@ function onChange(e) {
     if (onBudgetChange(t)) return;   // 126
     if (onHeightChange(t)) return;   // item 19 H2
     if (onCalendarChange(t)) return;   // item 20 K1
+    if (onDamageChange(t)) return;   // 1.5.6: the Taking damage box
     if (c.indexOf('sys-combat-auto') >= 0) { draft.combat.blastAuto = t.value; markDirty(); patchErrors(); return; }
     if (c.indexOf('sys-combat-roller') >= 0) { draft.combat.blastRoller = t.value; markDirty(); patchErrors(); return; }
     if (c.indexOf('sys-combat-checks') >= 0) { if (t.value === 'under3d6') draft.combat.checks = 'under3d6'; else delete draft.combat.checks; markDirty(); patchErrors(); return; }   // Stage 6 F8
@@ -6983,6 +7221,7 @@ function onClick(e) {
     if (heightClick(b)) return;   // item 19 H2: the Combat card's height table
     if (calendarClick(b)) return;   // item 20 K1: the Calendar tab
     if (budgetClick(b)) return;   // 126: the Lists tab's point budgets
+    if (damageClick(b)) return;   // 1.5.6: the Taking damage box
     var crow = b.closest('.sys-char-row');
     if (crow) {
         var camp = getActiveCampaign(), ch = charById(crow.dataset.cid, camp); if (!ch) return;
@@ -7212,6 +7451,109 @@ var _lastCamp = null;
 setInterval(function() { var c = getActiveCampaign(), id = c ? c.id : null; if (_lastCamp !== null && id !== _lastCamp) { if (sheetOpen) closeSheet(); closeHuds(); } _lastCamp = id; try { bellFx(null); } catch (e) { console.error(e); } try { renderReviewChip(); } catch (e) { console.error(e); } var chI = window.wpChat; if (chI && chI.lookSync) chI.lookSync(); }, 1000);   // (and the bell's effects feed, for a change no repaint followed)
 window.wpSheetsSync = sync;
 setTimeout(sync, 0);
+// [systemcheck:dmgwin-start]
+// 1.5.6, the damage step's window (the owner, 2026-10-24, by prompt: "Everything, weapons too"; of who presses it, 2026-10-14: the GM or that
+// character's player). The damage, its type, the location, the armour divisor and a weapon the blow tests; on the GM's machine a preview of what it
+// does, worked out by the very step the press runs (systemcore damageStep). The GM's press stores it as ONE change (Revert takes it all back) and
+// posts what it did to the GM and the character's player; a player's goes to the host, which works it out with the full system. Elements made by
+// name and text nodes only: a character's, a row's and a type's names are set as text
+function dmgObj(v) { return !!v && typeof v === 'object' && !Array.isArray(v); }
+function dmgRules(sys) { return sys && dmgObj(sys.combat) && dmgObj(sys.combat.damage) ? sys.combat.damage : null; }
+function canDamage(charId) {
+    var camp = getActiveCampaign(), sys = systemOf(camp), c = charById(charId, camp); if (!c || !dmgRules(sys) || !F()) return false;
+    if (window.wpVtt && !window.wpVtt.on('sheets')) return false;
+    if (isClient()) { var n = net(); return !!(c.ownerId && c.ownerId === myId() && !c.partial && !c.npc && c.making !== 1 && n && typeof n.charDamage === 'function'); }
+    return canWrite();
+}
+function dmgRowsOf(sys, c, listId) {   // [{ id, name }]: a list's rows the window offers
+    var SCd = window.wpSystemCore, f = listId ? fieldById(sys, listId) : null, src = f && c.values && Array.isArray(c.values[f.id]) ? c.values[f.id] : [], out = [];
+    if (!SCd) return out;
+    src.forEach(function(r) { if (!dmgObj(r) || r.hid === 1) return; var id = SCd.rowIdOf(r), d = SCd.rowDef(sys, r); if (id) out.push({ id: id, name: d && d.def && typeof d.def.name === 'string' && d.def.name ? d.def.name : 'Unnamed' }); });
+    return out;
+}
+function dmgWhy(r) { return !r ? 'It cannot be worked out here.' : r.reason === 'error' ? (r.message || 'A figure could not be worked out.') : r.reason === 'missing' ? 'That location or weapon is not on the character now.' : r.reason === 'value' ? 'Check the damage and its type.' : 'This character cannot take damage that way.'; }
+var _dmgWin = null;
+function dmgClose() { if (_dmgWin && _dmgWin.parentNode) _dmgWin.parentNode.removeChild(_dmgWin); _dmgWin = null; }
+function takeDamage(charId, pre) {
+    pre = dmgObj(pre) ? pre : {};
+    var camp = getActiveCampaign(), sys = systemOf(camp), c = charById(charId, camp), rules = dmgRules(sys), SCd = window.wpSystemCore;
+    if (!c || !rules || !SCd) { toast('This system takes no damage by the damage step. Set it up in the System editor\u2019s Combat card.'); return false; }
+    if (!canDamage(charId)) { toast('You may not apply damage to that character.'); return false; }
+    dmgClose();
+    var box = el('div', 'dmg-win'); box.id = 'dmgWin'; box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true');
+    var card = el('div', 'dmg-card'); box.appendChild(card);
+    card.appendChild(el('h3', 'dmg-title', 'Take damage \u2014 ' + (c.name || 'Unnamed')));
+    var row = function(label, ctl, line) { var r = el('label', 'dmg-row'), nm = el('span', 'dmg-name', label); r.appendChild(nm); r.appendChild(ctl); if (line) r.appendChild(el('small', 'dmg-line', line)); card.appendChild(r); return ctl; };
+    var amt = el('input', 'dmg-amt'); amt.type = 'number'; amt.min = '0'; amt.step = '1'; amt.value = typeof pre.amt === 'number' && isFinite(pre.amt) ? String(Math.max(0, Math.floor(pre.amt))) : '';
+    row('Damage', amt, 'The damage rolled, before DR.');
+    var types = Array.isArray(rules.types) ? rules.types : [], tsel = el('select', 'dmg-type');
+    types.forEach(function(t) { tsel.appendChild(new Option(t.label, t.key)); }); if (typeof pre.type === 'string') tsel.value = pre.type;
+    if (types.length) row('Type', tsel, 'How the blow wounds. It sets the multiplier and which DR counts.');
+    var locs = rules.locs ? dmgRowsOf(sys, c, rules.locs.list) : [], lsel = el('select', 'dmg-loc');
+    lsel.appendChild(new Option('No location', '')); locs.forEach(function(l) { lsel.appendChild(new Option(l.name, l.id)); });
+    var dl = locs.filter(function(l) { return /^torso$/i.test(l.name); })[0] || locs.filter(function(l) { return /torso/i.test(l.name); })[0] || locs[0]; if (dl) lsel.value = dl.id;
+    if (locs.length) row('Location', lsel, 'Where the blow lands. Its DR is taken off first.');
+    var ad = el('input', 'dmg-ad'); ad.type = 'number'; ad.min = '0.1'; ad.step = '0.5'; ad.value = '1';
+    row('Armour divisor', ad, '1 for none. DR is divided by it.');
+    var wps = []; (Array.isArray(rules.weapons) ? rules.weapons : []).forEach(function(w) { wps = wps.concat(dmgRowsOf(sys, c, w.list)); });
+    var wsel = el('select', 'dmg-weapon'), only = el('input', 'dmg-only'); only.type = 'checkbox';
+    if (wps.length) {
+        wsel.appendChild(new Option('None', '')); wps.forEach(function(w) { wsel.appendChild(new Option(w.name, w.id)); });
+        row('Weapon tested', wsel, 'A weapon targeted, or one held on a hard hit. Its Dur is tested.');
+        var ol = el('label', 'dmg-tick'); ol.appendChild(only); ol.appendChild(document.createTextNode(' Only the weapon was hit')); card.appendChild(ol);
+    }
+    var prev = el('div', 'dmg-preview'); card.appendChild(prev);
+    var inp = function() { var o = { amt: Number(amt.value) }; if (tsel.value) o.type = tsel.value; if (lsel.value) o.loc = lsel.value; var a = Number(ad.value); if (isFinite(a) && a > 0) o.ad = a; if (wps.length && wsel.value) { o.weapon = wsel.value; if (only.checked) o.only = true; } return o; };
+    var show = function() {
+        while (prev.firstChild) prev.removeChild(prev.firstChild);
+        var q = inp(); if (amt.value === '' || !(q.amt >= 0)) { prev.appendChild(el('div', 'dmg-hint', 'Type the damage.')); return; }
+        if (isClient()) { prev.appendChild(el('div', 'dmg-hint', 'The GM\u2019s app works it out when you press Apply.')); return; }
+        var cN = charById(charId, getActiveCampaign()), r = cN ? SCd.damageStep(sys, cN, q, F(), tokenCtxFor(charId)) : null;
+        if (!r || !r.ok) { prev.appendChild(el('div', 'dmg-hint', dmgWhy(r))); return; }
+        r.lines.forEach(function(l) { prev.appendChild(el('div', 'dmg-pl', l)); });
+    };
+    [amt, tsel, lsel, ad, wsel, only].forEach(function(x) { x.addEventListener('input', show); x.addEventListener('change', show); });
+    var bar = el('div', 'dmg-btns'), cancel = el('button', 'tool ghost', 'Cancel'), go = el('button', 'tool', 'Apply'); cancel.type = 'button'; go.type = 'button';
+    bar.appendChild(cancel); bar.appendChild(go); card.appendChild(bar);
+    cancel.addEventListener('click', dmgClose);
+    go.addEventListener('click', function() { var q = inp(); if (amt.value === '' || !(q.amt >= 0)) { toast('Type the damage first.'); try { amt.focus(); } catch (e) {} return; } if (dmgApply(charId, q)) dmgClose(); });
+    box.addEventListener('keydown', function(e) {   // the window's keys are its own: the page reads keys as its own (Backspace deletes what is selected on the map)
+        if (e.key === 'Escape') { e.preventDefault(); dmgClose(); }
+        else if (e.key === 'Enter' && e.target && e.target.tagName !== 'BUTTON') { e.preventDefault(); go.click(); }
+        e.stopPropagation();
+    });
+    box.addEventListener('mousedown', function(e) { if (e.target === box) dmgClose(); });
+    document.body.appendChild(box); _dmgWin = box; show();
+    try { amt.focus(); amt.select(); } catch (e) {}
+    return true;
+}
+function dmgApply(charId, q) {
+    var n = net(), camp = getActiveCampaign(), sys = systemOf(camp), c = charById(charId, camp), SCd = window.wpSystemCore; if (!c || !sys || !SCd) return false;
+    if (isClient()) { var a = n && typeof n.charDamage === 'function' ? n.charDamage(charId, q) : { error: 'Not at a table.' }; if (a && a.error) { toast(a.error); return false; } return true; }
+    if (!canWrite()) return false;
+    var r = SCd.damageStep(sys, c, q, F(), tokenCtxFor(charId, camp)); if (!r.ok) { toast(dmgWhy(r)); return false; }
+    var ids = Object.keys(r.values);
+    if (ids.length) {
+        var prevs = {}, extra = null;
+        ids.forEach(function(fid) { prevs[fid] = c.values && Object.prototype.hasOwnProperty.call(c.values, fid) ? clone(c.values[fid]) : undefined; });
+        ids.slice(1).forEach(function(fid) { (extra = extra || {})[fid] = prevs[fid]; });
+        lastChange = { charId: c.id, fieldId: ids[0], prev: prevs[ids[0]], extra: extra };
+        c.values = c.values || {}; ids.forEach(function(fid) { c.values[fid] = r.values[fid]; });
+        afterCharChange(c, false, r.values);
+    }
+    if (n && typeof n.damageCard === 'function') n.damageCard(c, r.lines);
+    return true;
+}
+// A damage roll's card: its total on the character its roller targets, else on the one character token selected here
+function damageFromRoll(fromId, total) {
+    var n = net(), camp = getActiveCampaign(), t = n && dmgObj(n.targets) && typeof fromId === 'string' && Object.prototype.hasOwnProperty.call(n.targets, fromId) ? n.targets[fromId] : null;
+    var mp = t && camp && camp.items && Object.prototype.hasOwnProperty.call(camp.items, t.mapId) ? camp.items[t.mapId] : null, tok = mp && Array.isArray(mp.whiteboard) ? mp.whiteboard.find(function(w) { return w && w.id === t.id; }) : null;
+    if (!tok) { var am = camp && camp.items ? camp.items[camp.activeItemId] : null, sel = state.selWbIds && state.selWbIds.length === 1 ? state.selWbIds[0] : state.selWbId; if (am && Array.isArray(am.whiteboard) && sel) tok = am.whiteboard.find(function(w) { return w && w.id === sel; }); }
+    if (!tok || typeof tok.charId !== 'string' || !tok.charId) { toast('Target a character first, or select its token, then press Apply to target again.'); return false; }
+    return takeDamage(tok.charId, { amt: total });
+}
+function damageOn() { var sys = systemOf(); return !!dmgRules(sys) && !isClient() && canWrite(); }   // the cards' Apply to target: the GM's own machine
+// [systemcheck:dmgwin-end]
 window.wpSheets = { bellNote: bellNote, runTimeRules: runTimeRules, startMaking: startMaking, inviteMaking: inviteMaking, applyTokenFace: applyTokenFace, open: open, close: close, playerSystem: playerSystem, readablePages: readablePages, openPage: openPage, sheetRefsChanged: sheetRefsChanged, systemOf: systemOf, save: saveDraft, startFrom: startFrom, sync: sync, roundHook: roundHook, turnHook: turnHook, runDue: runDue, draft: function() { return draft; },
     gmFinder: gmFinder, uploadsChanged: uploadsChanged, approveNote: approveNote, openReview: openReview, readersChanged: readersChanged, emojiSet: EMOJI_SET, applyCharFace: applyCharFace, applyCharFrame: applyCharFrame, applyTokenFrame: applyTokenFrame,
     charsOf: charsOf, charList: charList, charById: charById, newCharacter: newCharacter, addCharacter: addCharacter, askDeleteSheet: askDeleteSheet, deleteCharacter: deleteCharacter, linkToken: linkToken, newFromToken: newFromToken, syncOwners: syncOwners, giveCharacter: giveCharacter, unbindName: unbindName, ownerFromToken: ownerFromToken,
@@ -7219,6 +7561,7 @@ window.wpSheets = { bellNote: bellNote, runTimeRules: runTimeRules, startMaking:
     playerFinder: playerFinder, charFromJson: charFromJson, startFromFile: startFromFile,
     openSheet: openSheet, closeSheet: closeSheet, openHud: openHud, closeHud: closeHud, closeHuds: closeHuds, hudFor: hudFor, rolled: rolled, tokenTurned: tokenTurned, tokenCtxFor: tokenCtxFor, dialSig: dialSigFor, canOpen: canOpen, renderSheet: renderViews, renderSheetInto: renderSheetInto, charChanged: charChanged, charGone: charGone, editResult: editResult, styleResult: styleResult, commitLook: commitLook, sheetOpen: function() { return sheetOpen; }, canRoll: canRoll, hasInitRoll: hasInitRoll, rollInit: rollInit, initTieNow: initTieNow, LIMITS: LIMITS,
     readerKit: function() { return { exportView: exportView, charById: charById, tokenFlags: tokenFlags, facingTarget: facingTarget, stanceCtx: stanceCtx, el: el, saveTextFile: saveTextFile, systemOf: systemOf, F: F, isClient: isClient, canWrite: canWrite, newCharacter: newCharacter, linkToken: linkToken, afterCharChange: afterCharChange, openReview: openReview, gmFinder: gmFinder, renderViews: renderViews, sheetOpen: function() { return sheetOpen; } }; } };   // what an outside reader's page code reads the sheet by
+Object.assign(window.wpSheets, { takeDamage: takeDamage, canDamage: canDamage, damageFromRoll: damageFromRoll, damageOn: damageOn });   // 1.5.6, the damage step
 
 // An outside sheet reader (2026-10-18): a module of the GM's own may stand beside the app, in the repository's private/ folder, which only the
 // development server serves (none ships with the app). It is asked for once, after the page has drawn and never in the stream window; it
