@@ -1,3 +1,14 @@
+WAYPOINT 1.5.6 — What's New
+============================
+
+Multiplayer
+- A new player now lands on your map with a waiting token when they
+  join, even if you opened a planner or a page after you started
+  hosting. Before, a player who joined then landed on no map and
+  saw "You are not on this map" until you summoned them. While you
+  are on a planner, Follow me now names the map you last had open,
+  and that is where a new player lands.
+
 WAYPOINT 1.5.5 — What's New
 ============================
 

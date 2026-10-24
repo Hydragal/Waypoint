@@ -1373,6 +1373,19 @@ function landingFor(prof) {
 }
 // [netcheck:landing-end]
 
+// [netcheck:curstage-start]
+// The map this computer last had open in a campaign (sidebar.js keeps the list, wp_recent_<campaign>, newest first): the stage while the GM is
+// on a planner or a page and no map has been the table's yet. 1.5.6 (found live on 2026-10-24): the stage was noted only when the host saved
+// while the GM was on a map, so a GM who began hosting on a map and opened a planner before any save there gave a new player no landing at
+// all (no token, and their screen on a map they did not hold), while the Multiplayer window said Follow me with that map's name.
+function recentMapOf(camp) {
+    try {
+        var v = JSON.parse(localStorage.getItem('wp_recent_' + camp.id) || '[]');
+        if (!Array.isArray(v)) return null;
+        for (var i = 0; i < v.length && i < 8; i++) { var id = v[i]; if (typeof id === 'string' && own(camp.items, id) && camp.items[id] && camp.items[id].type === 'map') return id; }
+    } catch (e) {}
+    return null;
+}
 function currentStage() {
     var camp = getActiveCampaign();
     if (!camp) return net.lastMapStageObj || null;
@@ -1383,9 +1396,12 @@ function currentStage() {
     if (it && it.type === 'map') {
         net.lastMapStageObj = { campId: camp.id, itemId: camp.activeItemId };
     }
-    // if the GM is on a planner, players stay on the last map
-    return net.lastMapStageObj || null;
+    // if the GM is on a planner, players stay on the last map; with none yet, the map last open here
+    if (net.lastMapStageObj) return net.lastMapStageObj;
+    var rid = recentMapOf(camp);
+    return rid ? { campId: camp.id, itemId: rid } : null;
 }
+// [netcheck:curstage-end]
 
 // Onboarding F1a: the Host panel's "Players without a character" (the hosted campaign's; stored only when not the default)
 function refreshNewPlayersBox() {
@@ -1426,8 +1442,9 @@ function refreshStageSelect() {
     var camp = getActiveCampaign();
     if (!camp) { sel.innerHTML = ''; return; }
     var it = camp.items[camp.activeItemId];
+    var stF = (it && it.type === 'map') ? null : currentStage();   // 1.5.6: the label names the very map a new player would land on
     var followTitle = (it && it.type === 'map' && it.meta) ? it.meta.title
-        : (net.lastMapStageObj && camp.items[net.lastMapStageObj.itemId] && camp.items[net.lastMapStageObj.itemId].meta.title) || 'your current map';
+        : (stF && stF.campId === camp.id && camp.items[stF.itemId] && camp.items[stF.itemId].meta && camp.items[stF.itemId].meta.title) || 'your current map';
     var maps = Object.values(camp.items).filter(function(m) { return m.type === 'map'; });
     maps.sort(function(a, b) { return String((a.meta && a.meta.title) || '').localeCompare(String((b.meta && b.meta.title) || '')); });
     var mapOpts = maps.map(function(m) { return '<option value="' + escAttr(m.id) + '">' + escText((m.meta && m.meta.title) || m.id) + '</option>'; }).join('');
@@ -7873,6 +7890,7 @@ function startHosting(forceFresh) {
         }
         opened = true;
         net.active = true;
+        if (typeof currentStage === 'function') currentStage();   // 1.5.6: the map on screen as hosting begins is the table's, before any save there
         net._hostGen = gen;   // a later crash resumes under the generation after this one
         startHeartbeat();
         setStatus(codeLine());

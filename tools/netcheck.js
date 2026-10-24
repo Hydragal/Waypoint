@@ -15695,6 +15695,36 @@ Promise.all(pendingChecks).then(() => {   // the async checks land before the su
             && ixF.includes("'Player's last location' (the default) sends each player back to the map they were last on") && ixF.includes("'Follow me' puts them on the map you are on when they join, once: they do not follow you afterwards")
 );
     }
+    /* ---- 1.5.6: the stage while the GM is on a planner (found live on 2026-10-24: a website player joined to no map) ---- */
+    {
+        const NL = '\n', csSrc = src.slice(src.indexOf('// [netcheck:curstage-start]'), src.indexOf('// [netcheck:curstage-end]'));
+        const landSrcC = src.slice(src.indexOf('// [netcheck:landing-start]'), src.indexOf('// [netcheck:landing-end]'));
+        const campC = act => ({ id: 'c1', activeItemId: act, items: { m1: { id: 'm1', type: 'map', meta: { title: 'One' } }, m2: { id: 'm2', type: 'map', meta: { title: 'Two' } }, p1: { id: 'p1', type: 'planner' }, d1: { id: 'd1', type: 'doc' } }, players: {} });
+        const storeOf = v => ({ getItem: k => (k === 'wp_recent_c1' ? v : null) });
+        const run = (act, recent, over, pid, store) => { const camp = campC(act), net = Object.assign({ stageMode: 'last', stageFallback: null, stagePicked: {}, stageOverride: null, lastMapStageObj: null, active: true, role: 'host' }, over || {});
+            const api = new Function('net', 'getActiveCampaign', 'own', 'localStorage', "'use strict';" + NL + csSrc + NL + landSrcC + NL + 'return { currentStage, recentMapOf, landingFor };')(net, () => camp, H.own, store || storeOf(recent === undefined ? null : JSON.stringify(recent)));
+            const st = api.currentStage(), land = pid ? api.landingFor({ id: pid }) : null; return { st, land, kept: net.lastMapStageObj }; };
+        const throwing = { getItem() { throw new Error('no storage'); } };
+        const C = {
+            planner: run('p1', ['p1', 'm9', 'd1', 'm2', 'm1']),
+            none: run('p1', undefined),
+            onMap: run('m1', ['m2']),
+            kept: run('p1', ['m2'], { lastMapStageObj: { campId: 'c1', itemId: 'm1' } }),
+            junk: [run('p1', { m2: 1 }), run('p1', 'm2'), run('p1', [1, null, {}]), run('p1', null, null, null, throwing), run('p1', null, null, null, storeOf('{not json'))],
+            landNew: run('p1', ['m2'], null, 'u_new'),
+            pinned: run('p1', ['m2'], { stageOverride: 'm1' }),
+        };
+        check('1.5.6, the stage with the GM on a planner (currentStage and recentMapOf, run for real with the landing): with no map the table\'s yet, a new player lands on the map this computer last had open in the campaign (the first of the recent list that is still a map), never on a planner, a page or a map that is gone, and nothing is recorded for it; with none listed, or storage that cannot be read or holds no list, no stage as before; the map on screen is the stage and is kept; a map the table already had stays its stage; a pinned map still wins',
+            j(C.planner.st) === j({ campId: 'c1', itemId: 'm2' }) && C.planner.kept === null && C.none.st === null
+            && j(C.onMap.st) === j({ campId: 'c1', itemId: 'm1' }) && j(C.onMap.kept) === j({ campId: 'c1', itemId: 'm1' })
+            && j(C.kept.st) === j({ campId: 'c1', itemId: 'm1' }) && C.junk.every(r => r.st === null)
+            && j(C.landNew.land) === j({ stage: { campId: 'c1', itemId: 'm2' }, detached: true }) && j(C.pinned.st) === j({ campId: 'c1', itemId: 'm1' }), j(C));
+        const openAt = src.indexOf('        opened = true;\n        net.active = true;\n        if (typeof currentStage === \'function\') currentStage();');
+        check('1.5.6: the map on screen as hosting begins is noted as the table\'s (currentStage asked in the peer\'s first open, once the table is active), and the Multiplayer window\'s Follow me names the map a new player would land on while the GM is on a planner',
+            openAt > 0 && openAt < src.indexOf("toast(resumed ? 'Hosting resumed")
+            && src.includes("    var stF = (it && it.type === 'map') ? null : currentStage();")
+            && src.includes(": (stF && stF.campId === camp.id && camp.items[stF.itemId] && camp.items[stF.itemId].meta && camp.items[stF.itemId].meta.title) || 'your current map';"));
+    }
     /* ---- 1.5.4: a player deletes an extra sheet of their own (char-delete) ---- */
     {
         const NL = '\n', delSrc = src.slice(src.indexOf('// [netcheck:chardelete-start]'), src.indexOf('// [netcheck:chardelete-end]'));
