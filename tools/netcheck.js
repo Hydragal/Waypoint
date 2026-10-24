@@ -15676,6 +15676,21 @@ pendingChecks.push((async () => {
             ok && flat.includes("ts: Date.now(), kind: 'time' };") && flat.includes("if (typeof timeNote === 'function') timeNote(m); else pushChat(m);   // 1.5.6: the GM's own chat") && flat.includes("logEvent('time', t);   // the Session Log keeps every line") && flat.includes("if (msg.kind === 'time' && lineH.scope === 'whisper' && fromH.gm && typeof timeNote === 'function') timeNote(lineH); else pushChat(lineH);")
             && fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'index.html'), 'utf8').includes('<select id="setTimeNotes" class="field"'), JSON.stringify([A.pushed.length, B.pushed.length, cBefore, cTimers, C.pushed.map(m => m.text), dMs, D.pushed.length, E.pushed.length]));
     }
+    /* ---- 1.5.6: Merge into… in Player History (mergeRecords, run for real) ---- */
+    {
+        const apM = src.slice(src.indexOf('// [netcheck:approval-start]'), src.indexOf('// [netcheck:approval-end]'));
+        const MR = new Function('own', 'validProfileId', 'net', 'showConfirm', 'admitPlayer', 'toast', 'getActiveCampaign', 'pendingJoins', 'approvalOpen', 'bannedIds', 'denyJoin', apM + '\nreturn mergeRecords;')(H.own, H.validProfileId, {}, () => {}, () => {}, () => {}, () => null, [], false, {}, () => {});
+        const mk = () => ({ players: { u_app: { name: 'Kael (app)', key: 'K_OLD', charId: 'c_1', charName: 'Kael', lastMap: 'm2', firstSeen: 100, lastSeen: 500, joinCount: 7 }, u_web: { name: 'Kael (web)', key: 'K_WEB', firstSeen: 900, lastSeen: 950, joinCount: 1 }, u_o: { name: 'Other' } },
+            chars: { c_1: { id: 'c_1', ownerId: 'u_app' }, c_2: { id: 'c_2', ownerId: 'u_o' } }, items: { m1: { id: 'm1', type: 'map', whiteboard: [{ id: 't1', ownerId: 'u_app' }, { id: 't2', ownerId: 'u_web', waiting: true }] }, m2: { id: 'm2', type: 'map', whiteboard: [{ id: 't3', ownerId: 'u_app' }] } } });
+        const c = mk(), ok = MR(c, 'u_app', 'u_web'), k = c.players.u_web;
+        const bad = [MR(mk(), 'u_app', 'u_app'), MR(mk(), 'u_none', 'u_web'), MR(mk(), 'u_app', 'u_none'), MR(null, 'u_app', 'u_web')];
+        const flat = src.split('\r\n').join('\n');
+        check('1.5.6 Merge into… in Player History (mergeRecords run for real): the kept record keeps its own name and table key, takes the other\'s character binding and last map, the earlier first time seen, the later last time and both join counts, and notes the old id as was; every character and token the other owned becomes the kept one\'s on every map; the other record goes; nothing happens for one record, a record that is not there or no campaign; the button shows only for a player not at the table with another known player to merge into, and its ask is buttons only, one player at a time',
+            ok && !c.players.u_app && k.name === 'Kael (web)' && k.key === 'K_WEB' && k.charId === 'c_1' && k.charName === 'Kael' && k.lastMap === 'm2' && k.firstSeen === 100 && k.lastSeen === 950 && k.joinCount === 8 && k.was === 'u_app'
+            && c.chars.c_1.ownerId === 'u_web' && c.chars.c_2.ownerId === 'u_o' && c.items.m1.whiteboard[0].ownerId === 'u_web' && c.items.m2.whiteboard[0].ownerId === 'u_web' && c.items.m1.whiteboard[1].ownerId === 'u_web' && bad.every(b => b === false)
+            && flat.includes("(!online[pid] && ids.some(function(o) { return o !== pid && !online[o]; }) ? '<button class=\"tool ghost player-act\" data-merge=\"' + escTextRoster(pid) + '\"")
+            && flat.includes("}, { noEnter: true, noEscape: true, yes: 'Merge', alt: 'Not them' });") && flat.includes("    } else if (btn.dataset.merge) {\n        mergeAsk(camp, btn.dataset.merge);"), JSON.stringify([ok, c.players, bad]));
+    }
     /* ---- 1.5.6, backlog 185: "Same person as…" at the GM's Let them in? (the approval slice, run for real) ---- */
     {
         const apS = src.slice(src.indexOf('// [netcheck:approval-start]'), src.indexOf('// [netcheck:approval-end]'));

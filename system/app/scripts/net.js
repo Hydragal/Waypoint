@@ -5778,6 +5778,23 @@ function takeOver(camp, oldId, newId) {
     Object.keys(camp.items || {}).forEach(function(iid) { var it = camp.items[iid]; if (it && it.type === 'map' && Array.isArray(it.whiteboard)) it.whiteboard.forEach(function(w) { if (w && typeof w === 'object' && w.ownerId === oldId) w.ownerId = newId; }); });
     return true;
 }
+// 1.5.6 (the owner, 2026-10-24, asked whether Player History should fold two known records of one person, the app's and a website account's:
+// "yes"): Merge into… keeps one record and folds the other into it. The kept record keeps its own id, name and table key (so its player
+// walks straight in), and takes the other's character binding and last map, the earlier first time seen, the later last time and both join
+// counts; every character and token the other owned becomes the kept one's; the other record goes, its id kept as was
+function mergeRecords(camp, oldId, keptId) {
+    if (!camp || !camp.players || typeof camp.players !== 'object' || oldId === keptId || !own(camp.players, oldId) || !own(camp.players, keptId)) return false;
+    var o = camp.players[oldId] || {}, k = camp.players[keptId] || {}, nr = Object.assign({}, k);
+    ['charId', 'charName', 'lastMap'].forEach(function(f) { if (o[f] !== undefined && o[f] !== null && o[f] !== '') nr[f] = o[f]; });
+    var fs = [Number(o.firstSeen) || 0, Number(k.firstSeen) || 0].filter(function(n) { return n > 0; }); if (fs.length) nr.firstSeen = Math.min.apply(null, fs);
+    nr.lastSeen = Math.max(Number(o.lastSeen) || 0, Number(k.lastSeen) || 0) || nr.lastSeen;
+    nr.joinCount = (Number(o.joinCount) || 0) + (Number(k.joinCount) || 0);
+    nr.was = oldId;
+    camp.players[keptId] = nr; delete camp.players[oldId];
+    Object.keys(camp.chars || {}).forEach(function(cid) { var c = camp.chars[cid]; if (c && typeof c === 'object' && c.ownerId === oldId) c.ownerId = keptId; });
+    Object.keys(camp.items || {}).forEach(function(iid) { var it = camp.items[iid]; if (it && it.type === 'map' && Array.isArray(it.whiteboard)) it.whiteboard.forEach(function(w) { if (w && typeof w === 'object' && w.ownerId === oldId) w.ownerId = keptId; }); });
+    return true;
+}
 function processNextApproval() {
     if (approvalOpen) return;
     var next = pendingJoins.shift();
@@ -8834,6 +8851,7 @@ function renderPlayersPanel() {
                 ? '<button class="tool ghost player-act" data-unban="' + escTextRoster(pid) + '">Unban</button>'
                 : '<button class="tool ghost player-act" data-ban="' + escTextRoster(pid) + '">Ban</button>') +
             '<button class="tool ghost player-act" data-forget="' + escTextRoster(pid) + '" title="Remove from history — they\'ll need approval to join again">Forget</button>' +
+            (!online[pid] && ids.some(function(o) { return o !== pid && !online[o]; }) ? '<button class="tool ghost player-act" data-merge="' + escTextRoster(pid) + '" title="Fold this record into another of the same person, such as their website account: the other keeps its name and takes this one\'s character, tokens and history">Merge into&hellip;</button>' : '') +   // 1.5.6
             '</div>';
     });
 
@@ -8872,6 +8890,26 @@ function forgetPlayer(camp, fid) {
     });
 }
 // [netcheck:forget-end]
+// 1.5.6: Merge into…, one known player not at the table at a time, most recently seen first (buttons only)
+function mergeAsk(camp, oldId) {
+    if (!camp || !camp.players || !own(camp.players, oldId)) return;
+    var on = Object.create(null); Object.values(net.roster).forEach(function(p) { if (p && p.id) on[p.id] = 1; });
+    if (on[oldId]) { toast('Merge a player while they are not at the table.'); return; }
+    var nmO = String(camp.players[oldId].name || 'Player'), cands = Object.keys(camp.players).filter(function(pid) { return pid !== oldId && !on[pid]; })
+        .sort(function(a, b) { return (Number(camp.players[b].lastSeen) || 0) - (Number(camp.players[a].lastSeen) || 0); });
+    var ask = function(i) {
+        if (i >= cands.length || getActiveCampaign() !== camp) { renderPlayersPanel(); return; }
+        var kid = cands[i], nmK = String((camp.players[kid] || {}).name || 'Player');
+        showConfirm('Merge "' + nmO + '" into "' + nmK + '"? ' + nmK + ' keeps its name and table key, and takes ' + nmO + '\'s character, tokens and history. ' + nmO + '\'s record goes.', function(ans) {
+            if (ans === 'alt') { ask(i + 1); return; }
+            if (ans !== true || getActiveCampaign() !== camp) { renderPlayersPanel(); return; }
+            if (Object.values(net.roster).some(function(p) { return p && (p.id === oldId || p.id === kid); })) { toast('One of them is at the table now. Merge when neither is.'); renderPlayersPanel(); return; }
+            if (mergeRecords(camp, oldId, kid)) { save(); if (typeof logEvent === 'function') logEvent('player', nmO + ' merged into ' + nmK); toast(nmO + ' merged into ' + nmK + '.'); if (typeof render === 'function') render(); }
+            renderPlayersPanel();
+        }, { noEnter: true, noEscape: true, yes: 'Merge', alt: 'Not them' });
+    };
+    ask(0);
+}
 
 var _playersBtn = ui('netPlayersBtn');
 if (_playersBtn) _playersBtn.addEventListener('click', function() {
@@ -8909,6 +8947,9 @@ if (_playersList) _playersList.addEventListener('click', function(e) {
     } else if (btn.dataset.forget) {
         forgetPlayer(camp, btn.dataset.forget);
         return;   // the panel redraws once the GM answers
+    } else if (btn.dataset.merge) {
+        mergeAsk(camp, btn.dataset.merge);
+        return;   // 1.5.6: the panel redraws once the GM answers
     }
     renderPlayersPanel();
 });

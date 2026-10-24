@@ -13,6 +13,10 @@ Multiplayer
   let them in offers Same person as... You are asked about each player
   not at the table, most recent first. Yes gives them that player's
   character, tokens and place, and a fresh table key.
+- Merge into... in Player History folds two records of one person into
+  one, such as the app's and a website account's that both joined
+  already. The kept one keeps its name and table key and takes the
+  other's character, tokens and history.
 - A player's token turns now step to the grid by your Snap, as their
   drops do. Before, a player whose own magnet was off left their token
   a little off the grid's angle.
