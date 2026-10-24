@@ -164,7 +164,7 @@ function stop(fadeSec) {
 // The transport's play button with nothing loaded (no song or playlist started yet, or Stop pressed) used to do nothing. It plays this map's
 // own music when the map has one the library still holds, else the playlist picked in the panel, else it says what to press.
 function mapPreset() {
-    var it = activeMapItem(), cfg = it && it.music ? cleanMapMusic(it.music, idSets()) : null; if (!cfg) return null;
+    var it = activeMapItem(), camp = typeof getActiveCampaign === 'function' ? getActiveCampaign() : null, mm = typeof mapSetting === 'function' && camp ? mapSetting(it, camp.activeItemId) : it && it.music, cfg = mm ? cleanMapMusic(mm, idSets()) : null; if (!cfg) return null;
     var kind = cfg.playlist ? 'playlist' : 'track', id = cfg.playlist || cfg.track, e = kind === 'playlist' ? playlistById(id) : trackById(id);
     return e ? { kind: kind, id: id, loop: cfg.loop, shuffle: !!cfg.shuffle, name: String(e.name == null ? '' : e.name) } : null;
 }
@@ -210,7 +210,14 @@ document.addEventListener('keydown', function() { if (gateShown || (ctx && ctx.s
 var lastKey = '', lastMapId = null, lastSet = '', autoStarted = false;   // what auto-play last did (lastSet: the map's setting it read); autoStarted = the current music was started by auto-play (not the panel)
 function activeMapItem() { var camp = getActiveCampaign(); if (!camp) return null; var it = camp.items && camp.items[camp.activeItemId]; return (it && it.type === 'map') ? it : null; }
 function sessionLive() { var n = net(); return !!(n && n.active); }
-function soloAutoOn() { return pref('wp_musicSolo', 'off') === 'on'; }   // GM option: auto-play map music even when NOT in a session (off by default)
+function soloAutoOn() { return pref('wp_musicSolo', 'off') === 'on'; }
+// 1.5.6: a fight runs on this map (net.js's fights by their map, on the GM's machine and on a player's app alike)
+function fightOn(mapId) { var n = net(); try { return !!(mapId && n && typeof n.fightsOn === 'function' && n.fightsOn(mapId).length); } catch (e) { return false; } }
+// What a map plays now: its In a fight music while a fight runs there and it has one, else its own music. null for none
+function mapSetting(it, mapId) {
+    var mm = it && it.music && typeof it.music === 'object' ? it.music : null; if (!mm) return null;
+    return mm.fight && typeof mm.fight === 'object' && fightOn(mapId) ? mm.fight : mm;
+}   // GM option: auto-play map music even when NOT in a session (off by default)
 // Runs on every render() — MUST be cheap in the common case (zoom / pan re-renders on the same map). It only does
 // real work when the active MAP changes, and only auto-plays while a multiplayer session is live (solo prep can
 // still play from the panel; that music is left alone here).
@@ -226,14 +233,14 @@ function tick() {
     if (!featureOn() || (!sessionLive() && !soloAutoOn())) { if (autoStarted && (cur || source)) { stop(0.5); autoStarted = false; } lastKey = ''; lastMapId = null; return; }   // no auto-play unless a session is live or the GM opted into solo auto-play
     var camp = getActiveCampaign(), it = camp && camp.items ? camp.items[camp.activeItemId] : null;
     it = (it && it.type === 'map') ? it : null;
-    var mapId = it ? camp.activeItemId : null, mm = it && it.music && typeof it.music === 'object' ? it.music : null;
-    var set = mm ? [mm.playlist || '', mm.track || '', mm.loop || '', mm.shuffle ? 1 : 0].join('|') : '';   // what this map is set to play, as written (cheap: this runs on every render)
+    var mapId = it ? camp.activeItemId : null, mm = mapSetting(it, mapId);   // 1.5.6: the In a fight music while a fight runs on this map
+    var set = mm ? [mm.playlist || '', mm.track || '', mm.loop || '', mm.shuffle ? 1 : 0, mm === (it && it.music) ? '' : 'F'].join('|') : '';   // what this map is set to play, as written (cheap: this runs on every render)
     if (mapId === lastMapId && set === lastSet) return;   // same map, same setting (or still no map): nothing to do — the cheap path for zoom/pan
     var same = mapId === lastMapId;   // the map on screen had its setting changed (Remember on this map, or the GM's change arriving on a player's app): it plays at once
     lastMapId = mapId; lastSet = set;
     if (!it || !it.music) { if (same && autoStarted && (cur || source)) { stop(0.5); autoStarted = false; lastKey = ''; } return; }   // no map open, or a map with no preset: leave the current music alone (seamless) — but a setting cleared on this very map ends what it started
-    var cfg = cleanMapMusic(it.music, idSets());
-    if (!cfg) return;
+    var cfg = cleanMapMusic(mm, idSets());
+    if (!cfg) { if (same && autoStarted && (cur || source)) { stop(0.5); autoStarted = false; lastKey = ''; } return; }   // 1.5.6: a fight that ends on a map with no music of its own stops the fight's music
     var kind = cfg.playlist ? 'playlist' : 'track', id = cfg.playlist || cfg.track, key = kind + ':' + id;
     if (!same && key === lastKey && source && source.kind === kind && source.id === id) return;   // already playing this one
     lastKey = key;
@@ -243,7 +250,12 @@ function tick() {
 // A session that begins or ends redraws nothing, and tick() runs on a redraw: the map's music is asked for on the app's own clock too
 // (boot: once a second; all it does in the common case is ask whether a session is live). A table that opens plays its map's music.
 var liveWas = false;
-function watchLive() { var live = sessionLive(); if (live === liveWas) return; liveWas = live; tick(); if (panelOpen()) renderPanel(); }   // the panel too: Take control is offered only at a table
+var fightWas = false;
+function watchLive() {
+    var live = sessionLive(), it = activeMapItem(), camp = getActiveCampaign(), f = !!(it && it.music && it.music.fight) && fightOn(camp ? camp.activeItemId : null);   // 1.5.6: a fight that begins or ends on the map on screen
+    if (live === liveWas && f === fightWas) return;
+    var lc = live !== liveWas; liveWas = live; fightWas = f; tick(); if (lc && panelOpen()) renderPanel();
+}   // the panel too: Take control is offered only at a table
 // [musiccheck:tick-end]
 
 /* ---------- multiplayer: the music library travels like sounds; the GM can take control of the table's music ---------- */
@@ -570,14 +582,24 @@ function renderPanel() {
         bindWrap.appendChild(bsel);
         var loopSel = el('select', 'music-bindloop'); [['list', 'Loop list'], ['one', 'Loop one'], ['off', 'No loop']].forEach(function(o) { var op = new Option(o[1], o[0]); if (cfg && cfg.loop === o[0]) op.selected = true; loopSel.appendChild(op); }); bindWrap.appendChild(loopSel);
         var shufL = el('label', 'music-bindshuf'); var shc = el('input'); shc.type = 'checkbox'; shc.checked = !!(cfg && cfg.shuffle); shufL.appendChild(shc); shufL.appendChild(document.createTextNode(' Shuffle')); bindWrap.appendChild(shufL);
+        // 1.5.6: In a fight. Its own song or playlist, played on this map while a fight runs here, and the map's own music again when it ends
+        var fcfg = it.music && it.music.fight ? cleanMapMusic(it.music.fight, idSets()) : null;
+        var fHead = el('div', 'music-fighthead', 'In a fight on this map'); fHead.title = 'Plays while a fight runs on this map, for everyone on it. When the fight ends the map’s own music comes back.'; bindWrap.appendChild(fHead);
+        var fsel = el('select', 'music-fightpl'); fsel.appendChild(new Option('— the map’s own music —', ''));
+        m.playlists.forEach(function(pl) { var o = new Option('▶ ' + pl.name, 'pl:' + pl.id); if (fcfg && fcfg.playlist === pl.id) o.selected = true; fsel.appendChild(o); });
+        m.tracks.forEach(function(tr) { var o = new Option('♪ ' + tr.name, 'tr:' + tr.id); if (fcfg && fcfg.track === tr.id) o.selected = true; fsel.appendChild(o); });
+        bindWrap.appendChild(fsel);
+        var floop = el('select', 'music-fightloop'); [['list', 'Loop list'], ['one', 'Loop one'], ['off', 'No loop']].forEach(function(o) { var op = new Option(o[1], o[0]); if (fcfg && fcfg.loop === o[0]) op.selected = true; floop.appendChild(op); }); bindWrap.appendChild(floop);
+        var fshL = el('label', 'music-bindshuf'); var fsh = el('input'); fsh.type = 'checkbox'; fsh.checked = !!(fcfg && fcfg.shuffle); fshL.appendChild(fsh); fshL.appendChild(document.createTextNode(' Shuffle')); bindWrap.appendChild(fshL);
         var setB = el('button', 'tool music-bindset', 'Remember on this map'); setB.addEventListener('click', function() {
             if (activeMapItem() !== it) { renderPanel(); toast('Another map is open now: the panel shows it. Pick its music and press again.'); return; }   // never the map this part was drawn for
-            var v = bsel.value;
-            if (!v) { delete it.music; }
-            else { var mm = { loop: loopSel.value, shuffle: shc.checked }; if (v.indexOf('pl:') === 0) mm.playlist = v.slice(3); else mm.track = v.slice(3); it.music = mm; }
-            save(true); toast(v ? 'Saved this map’s music.' : 'Cleared this map’s music.'); lastKey = ''; tick(); renderPanel();
+            var v = bsel.value, fv = fsel.value, mm = {};
+            if (v) { mm.loop = loopSel.value; mm.shuffle = shc.checked; if (v.indexOf('pl:') === 0) mm.playlist = v.slice(3); else mm.track = v.slice(3); }
+            if (fv) { var fm = { loop: floop.value, shuffle: fsh.checked }; if (fv.indexOf('pl:') === 0) fm.playlist = fv.slice(3); else fm.track = fv.slice(3); mm.fight = fm; }
+            if (v || fv) it.music = mm; else delete it.music;
+            save(true); toast(v || fv ? 'Saved this map’s music.' : 'Cleared this map’s music.'); lastKey = ''; tick(); renderPanel();
         }); bindWrap.appendChild(setB);
-        if (cfg) bindWrap.appendChild(el('div', 'music-empty music-bindnote', 'It starts by itself while a session is live' + (soloAutoOn() ? ', and while you are alone (ticked above).' : '. Alone, press ▶ above, or tick “Auto-play map music while solo”.')));
+        if (cfg || fcfg) bindWrap.appendChild(el('div', 'music-empty music-bindnote', 'It starts by itself while a session is live' + (soloAutoOn() ? ', and while you are alone (ticked above).' : '. Alone, press ▶ above, or tick “Auto-play map music while solo”.')));
         p.appendChild(bindWrap);
     }
 

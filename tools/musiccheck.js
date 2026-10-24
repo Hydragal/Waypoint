@@ -189,6 +189,8 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
     check('the maps that came with the file (remapMapMusic): a map\'s remembered playlist or song is pointed at wherever it now is — a new id, the song already here, a kept id; one naming nothing that came, a map with no music and a name like a prototype\'s key are left as they are',
         itemsM.m1.music.playlist === newP && itemsM.m1.music.loop === 'list' && itemsM.m2.music.track === 't_own2' && itemsM.m3.music.track === newT && itemsM.m4.music.playlist === 'pl_gone' && itemsM.m5.music === 'x' && itemsM.m6 === null && itemsM.m7.music.playlist === '__proto__' && itemsM.m8.music.playlist === 'pl_7'
         && (remapMapMusic(null, pM.ids), remapMapMusic(itemsM, null), remapMapMusic(itemsM, {}), true), j(itemsM));
+    { const fi = { m: { type: 'map', music: { track: 'old_t', fight: { playlist: 'old_p', loop: 'one' } } } }; remapMapMusic(fi, { playlists: { old_p: 'new_p' }, tracks: { old_t: 'new_t' } });
+      check('1.5.6 the map\'s In a fight music is pointed at wherever its song or playlist now is, as the map\'s own is', fi.m.music.track === 'new_t' && fi.m.music.fight.playlist === 'new_p' && fi.m.music.fight.loop === 'one', j(fi)); }
     const mainSrcM = read('system/app/scripts/main.js'), muSrc = read('system/app/scripts/music.js');
     // the import's Merge itself (main.js mergeAppState, sliced and run for real on plain objects with the real musiccore)
     const mergeSrc = mainSrcM.slice(mainSrcM.indexOf('  function mergeAppState(imported) {'), mainSrcM.indexOf("  var _el_importMergeBtn = document.getElementById('importMergeBtn');"));
@@ -285,9 +287,19 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             const w = { calls: [], live: true, solo: false, on: true, camp: null };
             w.tick = new Function('getActiveCampaign', 'net', 'pref', 'featureOn', 'cleanMapMusic', 'idSets', 'W',
                 '"use strict"; var cur = null, source = null, controlling = false, controlled = false; function play(s) { W.calls.push(["play", s.kind, s.id, s.loop, !!s.shuffle]); source = s; cur = {}; } function stop() { W.calls.push(["stop"]); source = null; cur = null; } function panelOpen() { return W.panel === true; } function renderPanel() { W.calls.push(["panel"]); }' + NL + cut('tick') + NL + 'tick.watch = watchLive; return tick;')(
-                () => w.camp, () => ({ active: w.live }), (k, d) => (k === 'wp_musicSolo' ? (w.solo ? 'on' : 'off') : d), () => w.on, cleanMapMusic, () => ({ trackIds: { t_a: 1, t_b: 1 }, playlistIds: { pl_1: 1 } }), w);
+                () => w.camp, () => ({ active: w.live, fightsOn: id => (w.fights && w.fights[id]) || [] }), (k, d) => (k === 'wp_musicSolo' ? (w.solo ? 'on' : 'off') : d), () => w.on, cleanMapMusic, () => ({ trackIds: { t_a: 1, t_b: 1 }, playlistIds: { pl_1: 1 } }), w);
             return w;
         };
+        {   // 1.5.6, backlog 88: a map's own music while a fight runs there
+            const F = mkTick(), fm = { type: 'map', music: { track: 't_a', loop: 'list', fight: { playlist: 'pl_1', loop: 'list', shuffle: true } } }, om = { type: 'map', music: { fight: { track: 't_b', loop: 'one' } } };
+            F.fights = {}; F.camp = { activeItemId: 'fm', items: { fm: fm, om: om } };
+            F.tick(); F.tick(); const a = j(F.calls); F.fights.fm = ['f_1']; F.tick(); F.tick(); const b = j(F.calls.slice(1)); F.fights.fm = []; F.tick(); const c = j(F.calls.slice(2));
+            F.calls.length = 0; F.camp.activeItemId = 'om'; F.tick(); const d = F.calls.length; F.fights.om = ['f_2']; F.tick(); const e = j(F.calls); F.fights.om = []; F.tick(); const g = j(F.calls.slice(1));
+            const W2 = mkTick(); W2.fights = {}; W2.camp = { activeItemId: 'fm', items: { fm: { type: 'map', music: { track: 't_a', loop: 'list', fight: { track: 't_b', loop: 'one' } } } } }; W2.tick(); W2.fights.fm = ['f_9']; W2.tick.watch(); const h = j(W2.calls);
+            check('1.5.6 a map\'s music in a fight (tick run for real): while a fight runs on the map its In a fight song or playlist plays in place of the map\'s own, once, and the map\'s own comes back when the fight ends; a map with only fight music plays it in the fight and stops it after; the once-a-second watch starts it with no redraw',
+                a === j([['play', 'track', 't_a', 'list', false]]) && b === j([['play', 'playlist', 'pl_1', 'list', true]]) && c === j([['play', 'track', 't_a', 'list', false]])
+                && d === 0 && e === j([['play', 'track', 't_b', 'one', false]]) && g === j([['stop']]) && h === j([['play', 'track', 't_a', 'list', false], ['play', 'track', 't_b', 'one', false]]), j([a, b, c, d, e, g, h]));
+        }
         const T = mkTick(), m1 = { type: 'map', music: { track: 't_a', loop: 'one', shuffle: false } }, m2 = { type: 'map' };
         T.camp = { activeItemId: 'm1', items: { m1: m1, m2: m2 } };
         T.tick(); T.tick(); const tFirst = j(T.calls);
@@ -351,7 +363,7 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             muSrc.includes("    var now = st.entry ? st.entry.name : (m.tracks.length ? (source ? 'Stopped' : idleNow()) : 'No tracks yet');")
             && muSrc.includes("if (now) now.textContent = st.entry ? st.entry.name : (campMusic().tracks.length ? (source ? 'Stopped' : idleNow()) : 'No tracks yet');")
             && muSrc.includes("bindWrap.appendChild(el('div', 'music-sec-head', 'On this map (' + ((it.meta && typeof it.meta.title === 'string' && it.meta.title) || it.name || 'map') + ')'));")
-            && muSrc.includes("if (cfg) bindWrap.appendChild(el('div', 'music-empty music-bindnote', 'It starts by itself while a session is live' + (soloAutoOn() ? ', and while you are alone (ticked above).' : '. Alone, press ▶ above, or tick “Auto-play map music while solo”.')));")
+            && muSrc.includes("if (cfg || fcfg) bindWrap.appendChild(el('div', 'music-empty music-bindnote', 'It starts by itself while a session is live' + (soloAutoOn() ? ', and while you are alone (ticked above).' : '. Alone, press ▶ above, or tick “Auto-play map music while solo”.')));")
             && muSrc.includes("lastKey = ''; lastMapId = ''; tick(); renderPanel(); });")
             && ixM.includes('A map&rsquo;s music starts by itself while a session is live. Alone, it starts only with <b>Auto-play map music while solo</b> ticked. With nothing playing, the panel&rsquo;s &#9654; plays this map&rsquo;s music, or the playlist you picked, and the panel says which.')
             && wnM.includes('- The panel\'s play button with nothing loaded plays this map\'s music, or') && wnM.includes('- A map\'s own music starts for the GM when the table opens.') && wnM.includes('- The Music panel, left open while you went to another map, kept showing')

@@ -240,8 +240,11 @@ function remapMapMusic(items, ids) {
     if (!items || typeof items !== 'object' || !ids || !ids.playlists || !ids.tracks) return;
     Object.keys(items).forEach(function(k) {
         var mm = items[k] && typeof items[k] === 'object' ? items[k].music : null; if (!mm || typeof mm !== 'object') return;
-        if (typeof mm.playlist === 'string' && typeof ids.playlists[mm.playlist] === 'string') mm.playlist = ids.playlists[mm.playlist];
-        else if (typeof mm.track === 'string' && typeof ids.tracks[mm.track] === 'string') mm.track = ids.tracks[mm.track];
+        [mm, mm.fight && typeof mm.fight === 'object' ? mm.fight : null].forEach(function(x) {   // 1.5.6: and its In a fight music
+            if (!x) return;
+            if (typeof x.playlist === 'string' && typeof ids.playlists[x.playlist] === 'string') x.playlist = ids.playlists[x.playlist];
+            else if (typeof x.track === 'string' && typeof ids.tracks[x.track] === 'string') x.track = ids.tracks[x.track];
+        });
     });
 }
 

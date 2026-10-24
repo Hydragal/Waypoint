@@ -30,6 +30,12 @@ Multiplayer
   sheet, with Open sheet, right after Is Character. The sheet list shows
   player characters first, then NPCs. Portal to Map, Link Node and a
   page pin fold into Map links, which opens by itself where it is used.
+- A map's own fight music. In the Music panel, In a fight on this map
+  gives a map a second song or playlist. It plays while a fight runs on
+  that map, and the map's own music comes back when the fight ends.
+- The token creator says the best size for a token picture: a square
+  of 256 by 256 pixels or larger. On a hex map keep the subject in the
+  middle, since the corners are cut off.
 - A press in the page panel, Music, Video, Effects, the notepad or Table
   Chat no longer clears what is selected on the map, as the sheet and
   Sound never did.
