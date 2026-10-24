@@ -120,6 +120,30 @@ function devToolsKey(input) {
     return letter && (!!input.control || !!input.meta) && (!!input.shift || !!input.alt);
 }
 
+// The right-click menu of a text box (backlog 106; the owner, 2026-10-04: "No right-click Copy / Paste"): the shell shows no
+// menu of its own on a right-click, so a field gets Cut, Copy, Paste and Select all here, each only where the field allows it
+// (the engine's own editFlags), and selected words that cannot be edited get Copy and Select all. Anywhere else there is no
+// menu: the app's own right-click menus call preventDefault on the page's contextmenu, and the engine then asks nothing here.
+// params: what the engine says of the right-click (isEditable, selectionText, editFlags). Returns a template of role items,
+// or null for no menu. Only true counts as a yes, and nothing that is not a plain object is read.
+function editMenuTemplate(params) {
+    if (!params || typeof params !== 'object') return null;
+    const f = (params.editFlags && typeof params.editFlags === 'object') ? params.editFlags : {};
+    const yes = k => f[k] === true;
+    const t = [];
+    if (params.isEditable === true) {
+        if (yes('canCut')) t.push({ role: 'cut', label: 'Cut' });
+        if (yes('canCopy')) t.push({ role: 'copy', label: 'Copy' });
+        if (yes('canPaste')) t.push({ role: 'paste', label: 'Paste' });
+    } else {
+        const sel = typeof params.selectionText === 'string' ? params.selectionText : '';
+        if (!sel.trim() || !yes('canCopy')) return null;
+        t.push({ role: 'copy', label: 'Copy' });
+    }
+    if (yes('canSelectAll')) { if (t.length) t.push({ type: 'separator' }); t.push({ role: 'selectAll', label: 'Select all' }); }
+    return t.length ? t : null;
+}
+
 /* ---------- the page's policy ---------- */
 
 // What a page of the app may run and load, sent as a response header with every page by both servers (the main window, the
@@ -202,6 +226,18 @@ function install(electron, opts) {
         // Developer mode off: the keys that open the developer tools do nothing, and tools opened any other way are closed at once
         wc.on('before-input-event', (e, input) => { if (!dev && devToolsKey(input)) e.preventDefault(); });
         wc.on('devtools-opened', () => { if (!dev) { try { wc.closeDevTools(); } catch (e) { /* gone meanwhile */ } } });
+        // a right-click in a text box, or on selected words: Cut, Copy, Paste and Select all as the field allows (editMenuTemplate);
+        // the developer tools' own window keeps its own menu
+        wc.on('context-menu', (e, params) => {
+            let at = ''; try { at = String(wc.getURL() || ''); } catch (er) { at = ''; }
+            if (at.indexOf('devtools://') === 0) return;
+            const t = editMenuTemplate(params);
+            if (!t) return;
+            try {
+                const BW = electron.BrowserWindow, win = BW && typeof BW.fromWebContents === 'function' ? BW.fromWebContents(wc) : null;
+                Menu.buildFromTemplate(t).popup(win ? { window: win } : {});
+            } catch (er) { /* no menu shown */ }
+        });
     });
 
     session.defaultSession.setPermissionRequestHandler((wc, perm, cb, details) => {
@@ -261,4 +297,4 @@ function scratchSystemDir(ownSystem, named) {
 }
 
 module.exports = { ownOrigin, isOwn, childWindowOk, childWindowOptions, webLinkOk, releaseLink, PERMS_ASK, PERMS_CHECK, permOk,
-    devModeOf, menuTemplate, devToolsKey, SIGNAL_HOST, pagePolicy, pageHeaders, savesType, install, listenLoopback, scratchSystemDir };
+    devModeOf, menuTemplate, devToolsKey, editMenuTemplate, SIGNAL_HOST, pagePolicy, pageHeaders, savesType, install, listenLoopback, scratchSystemDir };

@@ -243,6 +243,39 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             { type: 'keyDown', key: 'r', code: 'KeyR', control: true }, { type: 'keyDown', key: '0', code: 'Digit0', control: true }, { type: 'keyDown', key: '`', code: 'Backquote' }, { type: 'keyDown', key: 'Z', code: 'KeyZ', control: true, shift: true }, null, undefined, 'F12', {}];
         check('Developer mode (shellguard.devToolsKey, run for real): the keys that open the developer tools are Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+Shift+C and F12 (going down or coming up, by the key or by its place on the keyboard); a letter alone, Ctrl+C, Ctrl+R, Ctrl+0, Ctrl+Shift+Z, F11 and ~ are not',
             !!sg && toolKeys.every(k => sg.devToolsKey(k) === true) && plainKeys.every(k => tryF(() => sg.devToolsKey(k), 'threw') === false));
+        // backlog 106: the right-click menu of a text box
+        const FL = { canCut: true, canCopy: true, canPaste: true, canSelectAll: true }, flOff = k => Object.assign({}, FL, { [k]: false });
+        const em = p => tryF(() => sg.editMenuTemplate(p), 'threw'), emR = p => { const t = em(p); return Array.isArray(t) ? t.map(i => i.role || i.type) : t; };
+        const emCases = [
+            [{ isEditable: true, editFlags: FL, selectionText: '' }, ['cut', 'copy', 'paste', 'separator', 'selectAll']],
+            [{ isEditable: true, editFlags: flOff('canCut') }, ['copy', 'paste', 'separator', 'selectAll']],
+            [{ isEditable: true, editFlags: flOff('canCopy') }, ['cut', 'paste', 'separator', 'selectAll']],
+            [{ isEditable: true, editFlags: flOff('canPaste') }, ['cut', 'copy', 'separator', 'selectAll']],
+            [{ isEditable: true, editFlags: flOff('canSelectAll') }, ['cut', 'copy', 'paste']],
+            [{ isEditable: true, editFlags: { canSelectAll: true } }, ['selectAll']],
+            [{ isEditable: true, editFlags: { canPaste: true } }, ['paste']],
+            [{ isEditable: true, editFlags: { canCopy: true, canSelectAll: true } }, ['copy', 'separator', 'selectAll']],
+            [{ isEditable: true, editFlags: {} }, null],
+            [{ isEditable: true }, null],
+            [{ isEditable: true, editFlags: { canCut: 1, canCopy: 'true', canPaste: {}, canSelectAll: [true] } }, null],
+            [{ isEditable: true, editFlags: 'all' }, null],
+            [{ isEditable: false, selectionText: 'a few words', editFlags: FL }, ['copy', 'separator', 'selectAll']],
+            [{ isEditable: false, selectionText: 'a few words', editFlags: { canCopy: true } }, ['copy']],
+            [{ selectionText: 'a few words', editFlags: { canCopy: true, canCut: true, canPaste: true } }, ['copy']],
+            [{ isEditable: 'true', selectionText: 'x', editFlags: FL }, ['copy', 'separator', 'selectAll']],
+            [{ isEditable: false, selectionText: 'a few words', editFlags: { canCopy: false, canSelectAll: true } }, null],
+            [{ isEditable: false, selectionText: '  \n\t ', editFlags: FL }, null],
+            [{ isEditable: false, selectionText: '', editFlags: FL }, null],
+            [{ isEditable: false, selectionText: ['x'], editFlags: FL }, null],
+            [{ isEditable: false, editFlags: FL }, null],
+            [{ isEditable: 'true', editFlags: FL }, null],
+            [{}, null], [undefined, null], [null, null], [7, null], ['editable', null], [[], null], [{ editFlags: null, isEditable: true }, null]
+        ];
+        const emBad = emCases.filter(([p, want]) => j(emR(p)) !== j(want));
+        const emAll = em({ isEditable: true, editFlags: FL }), emOk = Array.isArray(emAll) && emAll.every(i => (i.type === 'separator' && Object.keys(i).length === 1) || (Object.keys(i).length === 2 && typeof i.role === 'string' && typeof i.label === 'string'))
+            && j(emAll.filter(i => i.label).map(i => i.label)) === j(['Cut', 'Copy', 'Paste', 'Select all']) && j(em({ isEditable: true, editFlags: FL })) !== j(null) && em({ isEditable: true, editFlags: FL }) !== emAll;
+        check('a text box\'s right-click menu (shellguard.editMenuTemplate, run for real; backlog 106, the owner: "No right-click Copy / Paste"): in an editable field Cut, Copy and Paste each only where the engine says the field allows it and Select all after a rule; on selected words that cannot be edited Copy and Select all, never Cut or Paste; nothing selected outside a field, words of white space alone, a flag that is not exactly true, and anything that is not a plain object give no menu; the items are role items with plain labels and nothing else, a fresh list each time',
+            !!sg && emBad.length === 0 && emOk, sg ? j([emBad.map(([p, w]) => [p, w, emR(p)]), emAll]) : 'no shellguard.js');
 
         // ---- the one address the update walk-through may open ----
         const REPO = 'ImmuneMoon/Waypoint', GH = 'https://github.com/' + REPO;
@@ -344,6 +377,8 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
                 ['navOwn' + w, { do: 'nav', wc: w, url: '{OWN}/?reopen=doc%7Cx' }], ['navOwnOld' + w, { do: 'nav', wc: w, url: '{OWN}/', old: true }], ['webview' + w, { do: 'webview', wc: w }]);
             toolKeys.slice(0, 4).forEach((k, i) => planA.push(['keyOff' + w + '_' + i, { do: 'key', wc: w, input: k }]));
             planA.push(['keyPlain' + w, { do: 'key', wc: w, input: { type: 'keyDown', key: 'r', code: 'KeyR', control: true } }], ['toolsOff' + w, { do: 'devtools', wc: w }]);
+            planA.push(['menuEdit' + w, { do: 'menu', wc: w, params: { isEditable: true, selectionText: 'abc', editFlags: FL } }], ['menuRO' + w, { do: 'menu', wc: w, params: { isEditable: true, editFlags: { canCopy: true, canSelectAll: true } } }],
+                ['menuSel' + w, { do: 'menu', wc: w, params: { isEditable: false, selectionText: 'abc', editFlags: { canCopy: true, canSelectAll: true } } }], ['menuNone' + w, { do: 'menu', wc: w, params: { isEditable: false, selectionText: '', editFlags: { canSelectAll: true } } }], ['menuJunk' + w, { do: 'menu', wc: w, params: 'x' }]);
         });
         ASK.concat(['media', 'openExternal', 'clipboard-read', 'notifications', 'geolocation', 'display-capture', 'hid', 'nonsense']).forEach(p => planA.push(['askOwn_' + p, { do: 'ask', wc: 0, perm: p, url: '{OWN}/' }], ['askWeb_' + p, { do: 'ask', wc: 1, perm: p, url: 'https://example.com/' }], ['askTwin_' + p, { do: 'ask', wc: 1, perm: p, url: '{OWN}.evil.example/' }],
             ['chkOwn_' + p, { do: 'check', wc: 0, perm: p, origin: '{OWN}/' }], ['chkBare_' + p, { do: 'check', wc: 0, perm: p, origin: '{OWN}' }], ['chkWeb_' + p, { do: 'check', wc: 1, perm: p, origin: 'https://example.com' }], ['chkNone_' + p, { do: 'check', wc: null, perm: p, origin: '' }]));
@@ -367,6 +402,10 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         const everyWin = fn => [0, 1, 2].every(fn), extOf = k => j((a[k] || {}).ext || null);
         check('every window is guarded, not the main one alone (main.js run for real: the main window\'s contents, a pop-out\'s, and a window opened from the pop-out): each has a new-window rule and a navigation rule of its own, and each refuses a webview',
             A.ok && A.r.handlers.length === 3 && A.r.handlers.every(h => h.open === true && h.nav === 1 && h.webview === 1 && h.keys === 1 && h.tools === 1) && everyWin(w => a['webview' + w].prevented === true), j(A.r.handlers));
+        const popRoles = k => j(((a[k] || {}).popups || []).map(t => t.map(i => i.role || i.type)));
+        check('a right-click in a text box in any window (main.js run for real over the stand-in, the main window, a pop-out and a window opened from one alike; backlog 106): one native menu pops up with Cut, Copy, Paste and Select all for a field that allows them all, Copy and Select all for a read-only field and for selected words that cannot be edited, and no menu where nothing is selected outside a field or the engine says something that is no plain object; each window listens once',
+            A.ok && A.r.handlers.every(h => h.menu === 1) && everyWin(w => popRoles('menuEdit' + w) === j([['cut', 'copy', 'paste', 'separator', 'selectAll']]) && popRoles('menuRO' + w) === j([['copy', 'separator', 'selectAll']])
+                && popRoles('menuSel' + w) === j([['copy', 'separator', 'selectAll']]) && popRoles('menuNone' + w) === '[]' && popRoles('menuJunk' + w) === '[]'), j([A.r.handlers, [0, 1, 2].map(w => ['menuEdit', 'menuRO', 'menuSel', 'menuNone', 'menuJunk'].map(k => popRoles(k + w)))]));
         check('a link clicked in any window (main.js run for real, the main window, a pop-out and a window opened from one alike): a web page, a mail address, a look-alike host and a local tool on another port open in the system browser and never in a window of the app; another spelling of the app\'s own server, a file, a settings page and a script open nothing anywhere; the app\'s own front page, an API route and an empty ?popout= open no second copy of the app',
             A.ok && everyWin(w => foreign.every((u, i) => a['open' + w + '_' + i].action === 'deny' && a['open' + w + '_' + i].width === undefined)
                 && extOf('open' + w + '_1') === j(['https://example.com/a']) && extOf('open' + w + '_2') === j(['http://localhost.evil.example/']) && extOf('open' + w + '_8') === j(['mailto:a@b.c']) && [0, 5, 6, 7, 9, 10, 11].every(i => extOf('open' + w + '_' + i) === '[]')
@@ -400,8 +439,10 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         const planB = [['state0', { do: 'state' }], ['wc1', { do: 'wc', url: '{OWN}/?stream=1' }], ['tools0', { do: 'devtools', wc: 0 }], ['tools1', { do: 'devtools', wc: 1 }], ['navTools', { do: 'nav', wc: 1, url: 'https://example.com/x' }], ['state1', { do: 'state' }]];
         toolKeys.slice(0, 4).forEach((k, i) => planB.push(['key' + i, { do: 'key', wc: 0, input: k }]));
         const toolsWin = [['wcT', { do: 'wc', url: 'devtools://devtools/bundled/devtools_app.html' }], ['navInTools', { do: 'nav', wc: 0, url: 'devtools://devtools/bundled/other.html' }]];   // the developer tools' own window: wc is set to its number below
-        planB.push(toolsWin[0], ['navInTools', Object.assign({}, toolsWin[1][1], { wc: 2 })]);
+        planB.push(toolsWin[0], ['navInTools', Object.assign({}, toolsWin[1][1], { wc: 2 })], ['menuInTools', { do: 'menu', wc: 2, params: { isEditable: true, editFlags: FL } }], ['menuMain', { do: 'menu', wc: 0, params: { isEditable: true, editFlags: FL } }]);
         const B = await stub(planB, j({ updated: 9, prefs: { wp_devconsole: 'on' } })), b = B.by;
+        check('the developer tools\' own window keeps its own right-click menu (main.js run for real in Developer mode, backlog 106): a right-click in a field there pops up nothing of Waypoint\'s, while one in the main window still does',
+            B.ok && j(((b.menuInTools || {}).popups) || null) === '[]' && ((b.menuMain || {}).popups || []).length === 1, j([b.menuInTools, b.menuMain]));
         const C = await stub([['state0', { do: 'state' }], ['key', { do: 'key', wc: 0, input: toolKeys[0] }], ['tools', { do: 'devtools', wc: 0 }], toolsWin[0], ['navInTools', Object.assign({}, toolsWin[1][1], { wc: 1 })]], '{"updated":9,"prefs":{"wp_devconsole":"on"');
         check('Developer mode at launch (main.js run for real with a settings file already there): a file that says "on" starts with Developer tools on the menu, the keys let through and opened tools left open — an install that had the console on keeps it —, while a link in a window still goes to the system browser and the window the developer tools open in is left to itself; a file cut short (unreadable) starts off: no Developer tools, the key swallowed, tools closed at once, and nothing navigates anywhere but to the pages of the app itself',
             B.ok && b.state0.menus === 1 && hasTools(b.state0.menu) && helpless(b.state0.menu) && b.tools0.open === true && b.tools1.open === true && [0, 1, 2, 3].every(i => b['key' + i].prevented === false) && b.navTools.prevented === true && j(b.navTools.ext) === j(['https://example.com/x']) && j(b.state1.closed) === j([0, 0])

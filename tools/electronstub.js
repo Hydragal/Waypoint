@@ -18,6 +18,7 @@
      { do: 'webview', wc }                      a page there attaches a webview             -> { prevented }
      { do: 'key', wc, input }                   a key goes down there                       -> { prevented }
      { do: 'devtools', wc }                     the developer tools open there              -> { open }
+     { do: 'menu', wc, params }                 a right-click there, as the engine tells it -> { popups } (each menu popped up by that step: its template)
      { do: 'ask', wc, perm, url }               a page asks for a permission                -> { granted }
      { do: 'check', wc, perm, origin }          the engine checks a permission              -> { granted }
      { do: 'http', method, path, body, v6 }     a request to the local server (v6: over [::1]) -> { code, text, ext, h: { csp, sniff, type } } (h: the answer's policy, type-guessing and type headers)
@@ -32,7 +33,7 @@ if (!process.argv[2] || !(base > 1024) || !planFile) { console.error('usage: nod
 const appPath = path.join(root, 'system', 'resources', 'app');
 const mainJs = path.join(__dirname, '..', 'system', 'resources', 'app', 'main.js');
 
-const rec = { order: [], ext: [], menus: [], windows: [], loads: [], cookies: [], quit: 0, unknown: [], errors: [] };
+const rec = { order: [], ext: [], menus: [], windows: [], loads: [], cookies: [], popups: [], quit: 0, unknown: [], errors: [] };
 const contents = [];
 function newContents() {
     const wc = new EventEmitter();
@@ -72,7 +73,7 @@ const electron = {
     BrowserWindow,
     shell: loose('shell', { openExternal: u => { rec.ext.push(u); return Promise.resolve(); } }),
     Menu: loose('Menu', {
-        buildFromTemplate: t => ({ template: t }),
+        buildFromTemplate: t => ({ template: t, popup: o => { rec.popups.push({ template: t, opts: o === undefined ? null : o }); } }),
         setApplicationMenu: m => { rec.order.push('menu'); rec.menus.push(m ? m.template : null); }
     }),
     session: {
@@ -134,6 +135,7 @@ async function play(plan, port) {
             else if (step.do === 'nav') { const e = ev(); if (!step.old) e.url = step.url; wc.emit('will-navigate', e, step.url); r = { prevented: e.prevented, listeners: wc.listenerCount('will-navigate'), ext: ext() }; }
             else if (step.do === 'webview') { const e = ev(); wc.emit('will-attach-webview', e, {}, {}); r = { prevented: e.prevented, listeners: wc.listenerCount('will-attach-webview') }; }
             else if (step.do === 'key') { const e = ev(); wc.emit('before-input-event', e, step.input); r = { prevented: e.prevented }; }
+            else if (step.do === 'menu') { const p0 = rec.popups.length; wc.emit('context-menu', ev(), step.params); r = { popups: rec.popups.slice(p0).map(p => p.template), listeners: wc.listenerCount('context-menu') }; }
             else if (step.do === 'devtools') { wc.devOpen = true; wc.emit('devtools-opened'); r = { open: wc.devOpen }; }
             else if (step.do === 'ask') { let granted = 'no handler'; if (rec.ask) rec.ask(step.wc === null ? null : wc, step.perm, g => { granted = g; }, step.noDetails ? undefined : { requestingUrl: step.url, isMainFrame: true }); r = { granted }; }
             else if (step.do === 'check') { r = { granted: rec.check ? rec.check(step.wc === null ? null : wc, step.perm, step.origin, {}) : 'no handler' }; }
@@ -153,5 +155,5 @@ async function play(plan, port) {
     const loaded = rec.loads[0] || '', port = parseInt((/:(\d+)$/.exec(loaded) || [])[1], 10) || 0;
     const steps = port ? await play(plan, port) : [];
     console.error = realError;
-    process.stdout.write(JSON.stringify({ started: !!port, port, held: bound.has(port), bound: Array.from(bound), loaded, order: rec.order, windows: rec.windows, menus: rec.menus, handlers: contents.map(c => ({ open: typeof c.openHandler === 'function', nav: c.listenerCount('will-navigate'), webview: c.listenerCount('will-attach-webview'), keys: c.listenerCount('before-input-event'), tools: c.listenerCount('devtools-opened') })), ask: typeof rec.ask === 'function', check: typeof rec.check === 'function', quit: rec.quit, unknown: rec.unknown, errors: rec.errors, steps }) + '\n', () => process.exit(0));
+    process.stdout.write(JSON.stringify({ started: !!port, port, held: bound.has(port), bound: Array.from(bound), loaded, order: rec.order, windows: rec.windows, menus: rec.menus, handlers: contents.map(c => ({ open: typeof c.openHandler === 'function', nav: c.listenerCount('will-navigate'), webview: c.listenerCount('will-attach-webview'), keys: c.listenerCount('before-input-event'), tools: c.listenerCount('devtools-opened'), menu: c.listenerCount('context-menu') })), ask: typeof rec.ask === 'function', check: typeof rec.check === 'function', quit: rec.quit, unknown: rec.unknown, errors: rec.errors, steps }) + '\n', () => process.exit(0));
 })();

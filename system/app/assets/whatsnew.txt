@@ -55,6 +55,12 @@ Multiplayer
 The app
 - Waypoint now names itself an alpha: the version reads Waypoint Alpha
   1.5.6 in About, the update notices and the release's name.
+- A right-click in a text box now offers Cut, Copy, Paste and Select all
+  in the desktop app, and a right-click on words you selected offers
+  Copy. Ctrl+C, Ctrl+X and Ctrl+V work as before.
+- This release changes Waypoint's core, the local program behind the
+  app, so it updates through the installer. Press Update and Waypoint
+  runs the installer for you.
 
 Planners and pages
 - Link to another page, or to one part of it. Press Page... beside the
