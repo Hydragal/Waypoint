@@ -1318,6 +1318,14 @@ process.on('exit', code => { if (!summed && !code) { console.log(NL + 'FAIL     
 
     try { if (server.closeAllConnections) server.closeAllConnections(); server.close(); } catch (e) {}
     try { fs.rmSync(tmp, { recursive: true, force: true }); } catch (e) {}
+
+    {   // 1.5.6 (the owner's ruling of 2026-10-24, via the Marketing session): Basic 3d6 is kept out of every build until it is rebuilt from the handbook's design spec
+        const R0 = path.join(__dirname, '..'), rl = fs.readFileSync(path.join(R0, 'tools', 'release.js'), 'utf8'), ixS = fs.readFileSync(path.join(R0, 'system', 'app', 'index.html'), 'utf8');
+        check('1.5.6 Basic 3d6 is out of every build: not in the app folder, kept for the tests in tools/fixtures, not offered by Start from, and the release build refuses one found back in the app folder before it writes anything',
+            !fs.existsSync(path.join(R0, 'system', 'app', 'assets', 'systems', '3d6.json')) && fs.existsSync(path.join(R0, 'tools', 'fixtures', 'starter-3d6.json')) && !ixS.includes('<option value="3d6">')
+            && rl.includes("const HELD_OUT = ['system/app/assets/systems/3d6.json'], heldOut = HELD_OUT.filter(f => fs.existsSync(path.join(ROOT, f)));") && rl.indexOf('HELD_OUT') < rl.indexOf("const dist = path.join(ROOT, 'dist', VERSION);"));
+    }
+
     summed = true;
     console.log(NL + pass + ' passed, ' + fail + ' failed.');
     if (fail) process.exit(1);

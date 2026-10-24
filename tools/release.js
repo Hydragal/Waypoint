@@ -197,6 +197,10 @@ if (!NOTES_ONLY) {
     let issP = ''; try { issP = fs.readFileSync(path.join(ROOT, 'installer.iss'), 'utf8'); } catch (e) { issP = ''; }
     const pg = privateGuard(sl.files.concat(sl.dirs).some(f => /^private(\/|$)/i.test(f)), fs.existsSync(path.join(SYSTEM, 'app', 'private')), issP);
     if (pg) { console.error(pg); process.exit(1); }
+    // 1.5.6 (the owner's ruling of 2026-10-24): a starter kept out of every build. Basic 3d6 lives in the tests' fixtures until it is rebuilt
+    // from the handbook's design spec; one found back in the app folder refuses the build
+    const HELD_OUT = ['system/app/assets/systems/3d6.json'], heldOut = HELD_OUT.filter(f => fs.existsSync(path.join(ROOT, f)));
+    if (heldOut.length) { console.error('Refusing to build: ' + heldOut.join(', ') + ' is kept out of every release. Take it out of the app folder.'); process.exit(1); }
 }
 
 const dist = path.join(ROOT, 'dist', VERSION);

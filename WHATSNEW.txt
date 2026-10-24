@@ -32,6 +32,9 @@ Multiplayer
 - Backspace no longer deletes the selected piece while a button has the
   focus, such as the selection toolbar's bin after Shift+Tab out of
   Properties. Delete still deletes.
+- The System editor's Start from... offers Basic d20 and a blank. The
+  Basic 3d6 starter is gone for now. A system you made from it is not
+  touched.
 - Time rule notes: a player chooses in their own Settings how the
   notes of their character's time rules reach their chat, such as a
   pool that fills by the hour. Every time, gathered into one note every

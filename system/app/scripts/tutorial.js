@@ -21,7 +21,7 @@ import { save, toast, canPersistLocal, resetHistory, takeSafetyCopy, withoutHist
 import { updateCampaignSelect, updateSidebarNav, navigateToMap } from './sidebar.js';
 import { showConfirm } from './dialogs.js';
 
-var TUTORIAL_VERSION = '1.5.4';          // bump when STEPS or the demo campaign change
+var TUTORIAL_VERSION = '1.5.6';          // bump when STEPS or the demo campaign change
 var TUTORIAL_CAMP_ID = 'camp_tutorial';  // one Tutorial campaign per save
 var TUTORIAL_NAME = 'Tutorial';
 var TUTORIAL_ART_CAT = 'Default';   // the category every tutorial picture sits in (its own shelf, not under All)
@@ -768,7 +768,7 @@ var STEPS = [
       html: '<kbd>Ctrl</kbd> + <kbd>K</kbd> jumps anywhere: type a map, planner or room name from any campaign and press Enter. Right-click <b>Planners</b> or <b>Maps</b> for a search that filters its list. The <b>Recent</b> chips above the Maps tree remember where you have been.',
       help: ['start', 'Getting around fast'] },
     { section: 'Character system', target: '#systemBtn', title: 'The system',
-      html: 'Your game&rsquo;s rules, with no code. The <b>System</b> editor holds the campaign&rsquo;s <b>fields</b>: attributes, formulas worked out from them, pools such as HP, skills, toggles and text. It also holds its <b>rolls</b>, such as <code>d20 + STRmod</code>. <b>Start from&hellip;</b> gives you Basic d20 or Basic 3d6 to edit. Players get every field you leave visible, and GM-only fields never leave your machine.',
+      html: 'Your game&rsquo;s rules, with no code. The <b>System</b> editor holds the campaign&rsquo;s <b>fields</b>: attributes, formulas worked out from them, pools such as HP, skills, toggles and text. It also holds its <b>rolls</b>, such as <code>d20 + STRmod</code>. <b>Start from&hellip;</b> gives you Basic d20 to edit. Players get every field you leave visible, and GM-only fields never leave your machine.',
       help: ['sheets', 'The system'],
       before: function() { if (window.wpSheets) { window.wpSheets.close(true); window.wpSheets.closeSheet(); } if (window.wpTopRow) window.wpTopRow.open('campMenu'); } },   // System is a row of the campaign's menu: the menu is opened, so the row can be seen
     { target: '#sysLayout', title: 'Designing the sheet',

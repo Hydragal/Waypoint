@@ -7,6 +7,7 @@
 const path = require('path'), fs = require('fs');
 const NL = String.fromCharCode(10);
 const app = path.join(__dirname, '..', 'system', 'app');
+const starterFile = n => n === '3d6' ? path.join(__dirname, 'fixtures', 'starter-3d6.json') : path.join(app, 'assets', 'systems', n + '.json');   // 1.5.6: Basic 3d6 is out of the app, kept here for the tests
 const url = f => 'file:///' + path.resolve(path.join(app, 'scripts', f)).replace(/[\\]/g, '/');
 let pass = 0, fail = 0;
 function check(name, ok, detail) { if (ok) { pass++; console.log('ok       ', name); } else { fail++; console.log('FAIL     ', name, detail !== undefined ? '-> ' + String(detail).slice(0, 300) : ''); } }
@@ -22,7 +23,7 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
     if (!S || !F) { console.log(NL + pass + ' passed, ' + fail + ' failed.'); process.exit(1); }
     const { LIMITS, validKey, cleanField, cleanSystem, cleanValue, cleanChar, cleanCharEdit, makeResolver, resolveAll, hoverLines, validateSystem, charFor, applyEdit, autoLayout, emptySystem } = S;
     const d20 = JSON.parse(fs.readFileSync(path.join(app, 'assets', 'systems', 'd20.json'), 'utf8'));
-    const g3d6 = JSON.parse(fs.readFileSync(path.join(app, 'assets', 'systems', '3d6.json'), 'utf8'));
+    const g3d6 = JSON.parse(fs.readFileSync(starterFile('3d6'), 'utf8'));
     // 1.5.5's review (a large campaign's hour): every harness that runs runTimeRules (sheets.js) runs it as the app does, handed ruleRunCtx and
     // chainsShallow (trFlat, which keeps in trSeen what chainsShallow answered for that harness), and trTwin runs the same fires on two copies of
     // the campaign, one so and one handed neither (the path every run took before), with the same dice, and keeps in trSeen whether the two
@@ -2667,7 +2668,7 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         const tutSrc = fs.readFileSync(path.join(app, 'scripts', 'tutorial.js'), 'utf8');
         const fnSrc = name => { const i = tutSrc.indexOf('function ' + name + '('); let d = 0; const k = tutSrc.indexOf('{', i); for (let p = k; p < tutSrc.length; p++) { if (tutSrc[p] === '{') d++; else if (tutSrc[p] === '}') { d--; if (d === 0) return tutSrc.slice(i, p + 1); } } return ''; };
         const tutorialSystem = new Function(fnSrc('tutorialEffects') + '\n' + fnSrc('tutorialHud') + '\n' + fnSrc('tutorialSenses') + '\n' + fnSrc('tutorialSystem') + '\nreturn tutorialSystem;')();
-        const preset = n => JSON.parse(fs.readFileSync(path.join(app, 'assets', 'systems', n + '.json'), 'utf8'));
+        const preset = n => JSON.parse(fs.readFileSync(starterFile(n), 'utf8'));
         // the pre-fold hashes (taken at 516b22b, before any look-fold key existed): a system without the new keys cleans exactly as before;
         // the two starters' GM and players' views re-taken at lighting L4 — a deliberate change (the owner's answer 8): each gained light presets
         // and level names in its combat block (the automatic layout's hash is unchanged);
@@ -8144,7 +8145,7 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
                 && j(S.FIGHT_UNITS) === j({ round: 1, min: 1, hour: 1 }) && Object.isFrozen(S.FIGHT_UNITS) && S.cleanInFight(JSON.parse('{"__proto__": {"n": 1, "u": "round"}}')) === null && S.cleanInFight(null) === null
                 && j(S.cleanEvery({ n: 2, u: 'min', wait: true })) === j({ n: 2, u: 'min', wait: true }) && S.cleanEvery({ n: 2, u: 'ROUND' }) === null, j([rowsF(gF), rowsF(pF)]));
             const keysOf = (s, id) => Object.keys(s.rolls.find(r => r.id === id));
-            const hU2 = o => require('crypto').createHash('sha256').update(JSON.stringify(o)).digest('hex').slice(0, 16), st2 = ['d20', '3d6'].map(n => { const p = JSON.parse(fs.readFileSync(path.join(app, 'assets', 'systems', n + '.json'), 'utf8')); return [hU2(cleanSystem(p, gmL)), hU2(cleanSystem(p, plF))]; });
+            const hU2 = o => require('crypto').createHash('sha256').update(JSON.stringify(o)).digest('hex').slice(0, 16), st2 = ['d20', '3d6'].map(n => { const p = JSON.parse(fs.readFileSync(starterFile(n), 'utf8')); return [hU2(cleanSystem(p, gmL)), hU2(cleanSystem(p, plF))]; });
             check('152 fold 1 written where the design puts them: In a fight right after By the clock, then Ask me first, in a roll and in an apply action alike; cleaned twice the same in both views; a system with none of the three keys cleans byte for byte as before (the two starters\' view hashes the units fold pinned)',
                 j(keysOf(gF, 'r_f2')) === j(['id', 'label', 'formula', 'vis', 'every', 'inFight', 'ask']) && j(keysOf(gF, 'r_a1')) === j(['id', 'label', 'apply', 'vis', 'every', 'ask']) && j(keysOf(gF, 'r_f1')) === j(['id', 'label', 'apply', 'vis', 'inFight']) && j(keysOf(pF, 'r_f2')) === j(['id', 'label', 'formula', 'vis', 'every', 'inFight'])
                 && j(cleanSystem(gF, gmL)) === j(gF) && j(cleanSystem(pF, plF)) === j(pF) && j(st2) === j([['8dc662673f58bf48', 'c9c9efa2abb0b675'], ['4304a54a60ddddcb', 'c571cb18d44d94fe']]), j([keysOf(gF, 'r_f2'), keysOf(gF, 'r_a1'), st2]));
@@ -11767,7 +11768,7 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             && j(S.cleanSystem(sysUG, { F, gmView: true })) === j(sysUG) && j(S.cleanSystem(sysUP, { F, gmView: false })) === j(sysUP), j([cleanW, unitsOf(sysUG), unitsOf(sysUP)]));
         // the two starters, byte for byte: their systems as cleaned before this fold, in both views (the hash of the very JSON the cleaner gives)
         const cryU = require('crypto'), hU = o => cryU.createHash('sha256').update(JSON.stringify(o)).digest('hex').slice(0, 16);
-        const startU = ['d20', '3d6'].map(n => { const p = JSON.parse(fs.readFileSync(path.join(app, 'assets', 'systems', n + '.json'), 'utf8')); return [hU(S.cleanSystem(p, { F, gmView: true })), hU(S.cleanSystem(p, { F, gmView: false })), p.fields.filter(f => 'unit' in f).length]; });
+        const startU = ['d20', '3d6'].map(n => { const p = JSON.parse(fs.readFileSync(starterFile(n), 'utf8')); return [hU(S.cleanSystem(p, { F, gmView: true })), hU(S.cleanSystem(p, { F, gmView: false })), p.fields.filter(f => 'unit' in f).length]; });
         check('a field\'s display unit, the two starters unchanged: the d20 and the 3d6 systems clean in both views to the very JSON they gave before this fold (pinned by hash), and neither carries a unit, so nothing of theirs is drawn otherwise',
             j(startU) === j([['8dc662673f58bf48', 'c9c9efa2abb0b675', 0], ['4304a54a60ddddcb', 'c571cb18d44d94fe', 0]]), j(startU));
         // the figure in metric (metricOf, unitTail): the site's own precision rule (display-units.ts), the exact definitions
@@ -11851,7 +11852,7 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             j(hostU) === j([[['<img src'], [['<b>6\'7"</b> / 2.00 m', '']], [['6\'7" / <i>2.00 m</i>', '']]], [['<img src'], [['<b>6\'7"</b> / 2.00 m', '']], [['6\'7" / <i>2.00 m</i>', '']]]]), j(hostU));
         // the two starters drawn: every field the same under Imperial, under Metric, and with no helper in reach at all (the sheet before this fold)
         const starterDraw = ['d20', '3d6'].map(n => {
-            const sy = Object.assign({}, S.cleanSystem(JSON.parse(fs.readFileSync(path.join(app, 'assets', 'systems', n + '.json'), 'utf8')), { F, gmView: true }), { sheet: { look: {} } }), ch = { id: 'c_s', name: 'S', ownerId: 'u_a', values: {} }, all = S.resolveAll(sy, ch, F, null);
+            const sy = Object.assign({}, S.cleanSystem(JSON.parse(fs.readFileSync(starterFile(n), 'utf8')), { F, gmView: true }), { sheet: { look: {} } }), ch = { id: 'c_s', name: 'S', ownerId: 'u_a', values: {} }, all = S.resolveAll(sy, ch, F, null);
             const A = FNU(sy), O = FNO(sy), shown = sy.fields.filter(f => ['number', 'formula', 'skill', 'resource', 'text', 'notes', 'toggle', 'select'].indexOf(f.kind) >= 0);
             const draw = (X, u) => shown.map(f => { stU.measureUnit = u; try { return j(serU(X.fieldNode(f, ch, all[f.id], true, false, sy, null, null))); } catch (e) { return 'error ' + e.message; } finally { stU.measureUnit = 'imperial'; } });
             const hdrs = m => sy.fields.map(f => j(S.headerEntry(f, all[f.id], m)));
@@ -12137,7 +12138,7 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             && j(hostE) === j([[['7 <img src'], '7 <script> and 7 yd', ['7 yd'], ['<b>77 kg</b> / <i>170 lb</i>'], ['Wt 3 "><img s'], ['C 3 <i>x</i>']], [['7 <img src'], '7 <script> and 6.4 m', ['7 yd (6.4 m)'], ['<b>77 kg</b> / <i>170 lb</i>'], ['Wt 3 "><img s'], ['C 3 <i>x</i>']]]) && protoH === j([[], undefined, undefined]), j([hostE, sysH2.fields.map(f => [f.unit, f.unitShow])]));
         // J. the two starters: as they were, cleaned and drawn, under either setting, on the sheet and on the readable page
         const cryE = require('crypto'), hE2 = o => cryE.createHash('sha256').update(JSON.stringify(o)).digest('hex').slice(0, 16);
-        const startE = ['d20', '3d6'].map(nm => { const p = JSON.parse(fs.readFileSync(path.join(app, 'assets', 'systems', nm + '.json'), 'utf8')), sy = Object.assign({}, S.cleanSystem(p, { F, gmView: true }), { sheet: Object.assign({ look: {} }, S.cleanSystem(p, { F, gmView: true }).sheet) }), ch = { id: 'c_s', name: 'S', ownerId: 'u_a', values: {} }, all = S.resolveAll(sy, ch, F, null);
+        const startE = ['d20', '3d6'].map(nm => { const p = JSON.parse(fs.readFileSync(starterFile(nm), 'utf8')), sy = Object.assign({}, S.cleanSystem(p, { F, gmView: true }), { sheet: Object.assign({ look: {} }, S.cleanSystem(p, { F, gmView: true }).sheet) }), ch = { id: 'c_s', name: 'S', ownerId: 'u_a', values: {} }, all = S.resolveAll(sy, ch, F, null);
             const A = new Function(...depsE, itE + fxE + fuE + fnE + NL + 'return { fieldNode: fieldNode };')(...argsE(sy)), O = new Function(...depsE, itE + fxE + fnE + NL + 'return { fieldNode: fieldNode };')(...argsE(sy)), shown = sy.fields.filter(f => ['number', 'formula', 'skill', 'resource', 'text', 'notes', 'toggle', 'select'].indexOf(f.kind) >= 0);
             const ser = nd => nd ? { t: nd.tag, c: nd.className, x: nd.textContent, v: nd.value, ti: nd.title, k: (nd.children || []).map(ser) } : null, draw = (X, u) => shown.map(f => at(u, () => { try { return j(ser(X.fieldNode(f, ch, all[f.id], true, true, sy, null, null))); } catch (e) { return 'error ' + e.message; } }));
             const md = m => SX.sheetToMarkdown(sy, ch, all, m === undefined ? { F, gm: true } : { F, gm: true, metric: m });
