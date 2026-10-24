@@ -25,6 +25,8 @@ Not used/
 scratch/
 # the house reference for the coding tool: kept on the maintainer's machine, never in the repository
 CLAUDE.md
+# the roadmap: kept on the maintainer's machine, never in the repository (the Marketing project's legal work order, 2026-10-24)
+IMPROVEMENTS.md
 log.txt
 Waypoint.lnk
 *.bak
