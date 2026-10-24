@@ -456,6 +456,11 @@ import { webReady } from './webmode.js';   // 1.5.5: what a website's plan allow
   var HIST_BTN_IDS = { dataUndoBtn: 1, dataRedoBtn: 1, wbUndoBtn: 1, wbRedoBtn: 1, plannerUndoBtn: 1, plannerRedoBtn: 1 };
 
   // "May this window write to this disk right now?" One answer for every write to disk.
+  // [cleanupcheck:bkspheld-start]
+  // 1.5.6: whether Backspace leaves the selection alone: the focus on a button, a link or anything that says it is a button (the selection
+  // toolbar's trash among them), never the page itself, the board or a box that is no field
+  function bkspHeld(el) { return !!(el && el.nodeType === 1 && typeof el.closest === 'function' && el.closest('button, a[href], [role="button"]')); }
+  // [cleanupcheck:bkspheld-end]
   function canPersistLocal() {
       var n = window.wpNet, W = window.wpWebMode;
       if (W && typeof W.joinOnly === 'function' && W.joinOnly() === true) return false;   // 1.5.5: a website's plan that joins tables alone keeps nothing of the player's (webmode.js): the site answers a save with 403
@@ -1563,6 +1568,12 @@ import { webReady } from './webmode.js';   // 1.5.5: what a website's plan allow
 
       }
 
+      // [cleanupcheck:bksp-start]
+      // 1.5.6 (the sweep of 2026-10-17, seen live): Backspace deletes nothing while a button or a link has the focus. Shift+Tab out of
+      // Properties' first field lands on the selection toolbar's trash button, and the Backspace that kept on correcting a typo deleted the
+      // piece. Delete still deletes, wherever the focus is
+      if (e.key === 'Backspace' && bkspHeld(document.activeElement)) return;
+      // [cleanupcheck:bksp-end]
       if (e.key === 'Delete' || e.key === 'Backspace') {
 
           var m = getActiveMap();

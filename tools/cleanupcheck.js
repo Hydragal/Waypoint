@@ -2386,6 +2386,26 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         } catch (e) { check('saves/data.json parses', false, e.message); }
     } else console.log('skip      saves/data.json not present');
 
+
+    {   // 1.5.6 (the sweep of 2026-10-17, seen live): Backspace deletes nothing while a button or a link has the focus (io.js bkspHeld, run for real)
+
+        const ioB = fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', 'io.js'), 'utf8').split('\r\n').join('\n');
+
+        const bA = ioB.indexOf('  // [cleanupcheck:bkspheld-start]'), bZ = ioB.indexOf('  // [cleanupcheck:bkspheld-end]');
+
+        const held = new Function("'use strict';\n" + ioB.slice(bA, bZ) + '\nreturn bkspHeld;')();
+
+        const el = (tags) => ({ nodeType: 1, closest: sel => (sel.split(',').map(s => s.trim()).some(s => tags.indexOf(s) >= 0) ? {} : null) });
+
+        const R = [held(el(['button'])), held(el(['a[href]'])), held(el(['[role="button"]'])), held(el([])), held(null), held({ nodeType: 3 }), held({ nodeType: 1 })];
+
+        check('1.5.6 Backspace deletes nothing while a button or a link has the focus (io.js bkspHeld, run for real): the selection toolbar\'s trash, a link, anything that says it is a button; never the page, the board, a box that is no field or no element at all; the key handler asks it before its Delete and Backspace branch, so Delete still deletes',
+
+            JSON.stringify(R) === JSON.stringify([true, true, true, false, false, false, false]) && ioB.includes("      if (e.key === 'Backspace' && bkspHeld(document.activeElement)) return;\n      // [cleanupcheck:bksp-end]\n      if (e.key === 'Delete' || e.key === 'Backspace') {"), JSON.stringify(R));
+
+    }
+
+
     summed = true;
     console.log('\n' + pass + ' passed, ' + fail + ' failed.');
     if (fail) process.exit(1);

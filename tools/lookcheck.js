@@ -2847,6 +2847,11 @@ const swSrc = sliceOf(setSrc, 'viewswitch'), cornerSrc = sliceOf(mainSrc, 'corne
         return [err, st.selWbId, renders]; };
     const body = elOf('body'), main = elOf('div', 'main', [], body), strip = elOf('div', 'combatStrip', [], main), nextBtn = elOf('button', '', ['combat-strip-btn'], strip), party = elOf('div', 'partyStrip', [], main), wrap = elOf('div', 'whiteboardWrap', [], main), onMap = elOf('div', '', [], wrap);
     const away = [awayRun(nextBtn), awayRun(strip), awayRun(onMap), awayRun(party), awayRun(body)];
+    {   // 1.5.6 (the sweep of 2026-10-17, seen live): a press in any floating box keeps the map's selection, as the sheet and Sound always did
+        const boxes = ['docPanel', 'musicPanel', 'videoPanel', 'fxPanel', 'notepadPanel', 'chatPanel', 'sheetPanel', 'soundPanel', 'dicePanel'].map(id => { const box = elOf('div', id, [], main); return awayRun(elOf('button', '', [], box)); });
+        check('1.5.6 a press in any floating box keeps the map\'s selection (the click-away deselect, run for real): the page panel, Music, Video, Effects, the notepad and Table Chat as the sheet, Sound and the dice roller always did; a press on the party strip still lets it go',
+            boxes.every(r => r[0] === '' && r[1] === 'w1' && r[2] === 0) && awayRun(party)[1] === null, J(boxes));
+    }
     // the strip, drawn by its own code twice over with nothing changed between: the second draw writes nothing, so the button pressed stays
     const fSl = sliceOf(wbSrc, 'combatfind'), cutWb = (a, z) => { const i = wbSrc.indexOf(a), k = wbSrc.indexOf(z, i + 1); return i >= 0 && k > i && count(wbSrc, a) === 1 ? wbSrc.slice(i, k) : ''; };
     const stripSrc = cutWb('function renderCombatStrip() {', '\nwindow.wpRenderCombatStrip = renderCombatStrip;'), escSrc = (/\n  (function esc\(s\)\{return [^\n]*\})\n/.exec(read('scripts/inspector.js')) || [])[1] || '';
