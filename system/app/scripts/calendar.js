@@ -175,7 +175,7 @@ function groupRules(camp, sys, g, spans, only) {
         var rn = firesOf(camp, sys, now, g, spans), go = [];
         commitAcc(rn.acc, g.live === true); heldFollow(now, rn.acc);
         rn.fires.forEach(function(f) { rd(f); if (!off(f.c)) go.push(f); else if (cal) list.push(f); });
-        if (go.length && window.wpSheets && window.wpSheets.runTimeRules) { var backs = []; window.wpSheets.runTimeRules(go, groupWords(g), fight && typeof g.round === 'number' ? { round: g.round } : undefined, backTo(backs)); heldBack(camp, sys, backs, true, g.live === true); }   // 1.5.5's review: a run held back keeps its time
+        if (go.length && window.wpSheets && window.wpSheets.runTimeRules) { var backs = []; window.wpSheets.runTimeRules(go, groupWords(g), fight && typeof g.round === 'number' ? { round: g.round } : undefined, backTo(backs)); heldBack(camp, sys, backs, true, g.live === true); }   // 1.5.5's review: a run held back keeps its time, or spends it after another count's run in this go (heldBack)
     }
     if (later.length && !cal) { var rx = firesOf(camp, sys, later, g, spans); commitAcc(rx.acc, g.live === true); heldFollow(later, rx.acc); if (rx.fires.length) bellUp(camp, sys, rx.fires.map(rd), groupWords(g)); }   // the Calendar off: counted, and its runs wait in the bell for the GM's word (fold 4b)
     else if (later.length && pend) queueStretch(camp, g, spans, later, rules);   // 159: a list waits for the GM's word, and this time is judged once it is answered
@@ -201,9 +201,11 @@ function firesOf(camp, sys, rules, g, spans) {   // the fires of these rules ove
 // of the running clock). A stretch counts whole or not at all, but outside a fight one is judged again at each moment within it that a timed effect of
 // the character runs out (systemcore needsHeld). 1.5.5's review (a draw counted while a nap held its needs was lost, since the nap ran out before the
 // run was made): a run is made as its character stood where it came due, with the timed effects it had there (dueOn, timeRuleRun's opt.due); a fire
-// whose first run its needs hold back all the same (another rule's run before it, a change made before a list is answered, time judged when it was
-// lived) gives its runs' time back to its count, so they come due again and nothing counted is lost; and a fire run at once whose own runs make its
-// needs fail stops there, its count at none, since the time after its last run was not time they held (heldBack). No second counts twice.
+// whose first run its needs hold back all the same (a change made before a list is answered, time judged when it was lived) gives its runs' time back
+// to its count, so they come due again and nothing counted is lost, unless a run of another of its character's counts was made before it in the same
+// go (one runTimeRules: the rules run at once in a stretch, one Apply of the list, one bell item), when it does nothing and its time is spent (the
+// owner, 2026-10-23, by prompt: "Spent, nothing done"); and a fire run at once whose own runs make its needs fail stops there, its count at none,
+// since the time after its last run was not time they held (heldBack). No second counts twice.
 // needsAt: { charId: { count key: seconds its needs held } } for each count ticked so that counts in this stretch (as groupRules counts: a count that
 // does not count here is not judged), each judged with the sheet's own resolver as the rule's run reads it; null where no rule is ticked, and every
 // count is then as it was. With no formula engine at hand a ticked count holds for none of the stretch, as a needs formula that cannot be worked out does.
@@ -285,18 +287,32 @@ function dueJoin(a, b) {
 function backTo(list) { return function(fi, ran, held) { list.push({ fi: fi, ran: typeof ran === 'number' ? ran : 0, held: held === true }); }; }
 // 1.5.5's review: a fire of a count ticked Only while its needs hold that its needs held back. Its time was counted while they held, so where its first
 // run was held back (and no run of that count was made before it in the same go: those would have been its own) its runs go back to the count, n
-// periods on what it holds now, and come due again the next time it counts on. Where its own runs made its needs fail part way, the time after its last
-// run was not time they held: fresh (a fire run at once, its count this very stretch's) leaves the count at none; otherwise (a list or the bell answered
-// later, while the count may have counted on) the count stands as it is. A list's own counts follow, as heldFollow keeps them. live: as commitAcc's
+// periods on what it holds now, and come due again the next time it counts on, unless a run of ANOTHER count of its character was made before it in the
+// same go: then its time is spent, nothing goes back and the count stays as ruleFires (a fire run at once) or keepAsked (a list) left it, so a period
+// lived while its needs held is gone and its run did nothing (the owner, 2026-10-23, by prompt: "Spent, nothing done": where two recoveries come due at
+// the same moment and the first fills the pool, the second restores nothing and its time is not kept for later). Where its own runs made its needs fail
+// part way, the time after its last run was not time they held: fresh (a fire run at once, its count this very stretch's) leaves the count at none;
+// otherwise (a list or the bell answered later, while the count may have counted on) the count stands as it is. A list's own counts follow, as
+// heldFollow keeps them. live: as commitAcc's.
+// A go is one call of runTimeRules, whose backs this is: the rules run at once in one stretch (groupRules), one Apply of the list (pendDone) or one bell
+// item (bellDone). An earlier entry of backs is a run made before this one in it: calendarcore ruleFires walks each character's rules in the order it
+// is handed them, clockRules(sys), which is the order of the System editor's Rolls tab (sys.rolls), a rule's By the clock count before its In a fight
+// count, so the rules run at once go in the system's order; sheets.js runTimeRules runs each character's fires in the order it is handed them, all of
+// one fire's runs before the next fire's, so in one long step a later rule's runs are all made after an earlier rule's; a waiting list keeps its fires
+// in the order they were first listed (listUp: a fire of a count already listed joins it in its place), which is the system's order only for what one
+// stretch listed; and the rules that wait for the GM's word (Ask me, Ask me first, an NPC switched off) run in a go of their own, after those that ran
+// at once, so a run made at once is never a run before them. The bell runs an item's runs, one count's, as they came due.
 function heldBack(camp, sys, backs, fresh, live) {
     if (!camp || !sys || !Array.isArray(backs) || !backs.length || typeof everySecs !== 'function' || typeof fightSecs !== 'function') return false;
-    var rules = clockRules(sys), cal = sysCal(), un = sysUnits(sys), ck = clockOf(camp) || { t: 0 }, acc = JSON.parse(JSON.stringify(ck.acc || {})), ran = Object.create(null), ask = heldOf(camp), moved = false;
+    var rules = clockRules(sys), cal = sysCal(), un = sysUnits(sys), ck = clockOf(camp) || { t: 0 }, acc = JSON.parse(JSON.stringify(ck.acc || {})), ran = Object.create(null), by = Object.create(null), ask = heldOf(camp), moved = false;
     backs.forEach(function(b) {
         var fi = b && b.fi; if (!fi || typeof fi.c !== 'string' || !HELD_ID.test(fi.c) || typeof fi.r !== 'string' || !(typeof fi.n === 'number' && fi.n >= 1)) return;
-        var rl = rules.filter(function(r) { return r.id === fi.r; })[0], fx = fi.x === 1, pc = rl ? (fx ? rl.inFight : rl.every) : null; if (!pc || pc.whileNeeds !== true) return;
-        var k = fx ? 'x_' + rl.id.slice(2) : rl.id, sk = fi.c + ' ' + k, own = b.ran > 0 || ran[sk] === 1;
-        if (b.ran > 0) ran[sk] = 1;
+        var fx = fi.x === 1, k = fx ? 'x_' + fi.r.slice(2) : fi.r, sk = fi.c + ' ' + k, own = b.ran > 0 || ran[sk] === 1, mine = by[fi.c] || (by[fi.c] = []);
+        var other = mine.some(function(x) { return x !== k; });   // a run of another count of this character made before it in this go, ticked or not: a rule's id or x_ and its tail, so the same rule's other count is another
+        if (b.ran > 0) { ran[sk] = 1; if (mine.indexOf(k) < 0) mine.push(k); }
+        var rl = rules.filter(function(r) { return r.id === fi.r; })[0], pc = rl ? (fx ? rl.inFight : rl.every) : null; if (!pc || pc.whileNeeds !== true) return;
         if (b.held !== true || (own && fresh !== true)) return;
+        if (!own && other) return;   // 1.5.5 (the owner, 2026-10-23: "Spent, nothing done"): its first run held back after another count's run in this go did nothing, and its time is spent
         var per = fx ? fightSecs(cal, un, rl.inFight, roundSecs(sys)) : everySecs(cal, un, rl.every); if (!own && !(per > 0)) return;
         var put = function(o) {
             var m = hasOwn(o, fi.c) && o[fi.c] && typeof o[fi.c] === 'object' ? o[fi.c] : (o[fi.c] = {}), cur = hasOwn(m, k) && typeof m[k] === 'number' && m[k] > 0 ? m[k] : 0;
@@ -520,7 +536,7 @@ function pendDone(apply) {
     if (apply) { var go = p.fires.filter(function(f) { return p.on[f.c] === true; }); if (go.length && window.wpSheets && window.wpSheets.runTimeRules) window.wpSheets.runTimeRules(go, p.words || spanWords(cal, p.secs, p.rest, p.live), undefined, backTo(backs)); }
     keepAsked(camp, p);   // 152: only the counts of the rules this list asked for: a count another rule made since stays
     var sysD = sysNow();
-    heldBack(camp, sysD, backs, false);   // 1.5.5's review: a run its needs held back gives its time back, on the count as the list kept it
+    heldBack(camp, sysD, backs, false);   // 1.5.5's review: a run its needs held back gives its time back, on the count as the list kept it, or spends it after another count's run in this Apply (heldBack)
     if (livePend > 0) { var lp = livePend; livePend = 0; groupRules(camp, sysD, { kind: 'clock', secs: lp, rest: false, live: true }, evenSpans(camp, lp), true); }   // 1.5.4: the time that passed while this list waited (the clock running)
     while (!pend && pendQ.length) { var qd = pendQ.shift(); groupRules(camp, sysD, qGroup(qd), qd.c && typeof qd.c === 'object' ? qd.c : evenSpans(camp, qd.s), Array.isArray(qd.k) ? qd.k : true); }   // 159: then the time moved on meanwhile, in order, until a stretch makes rules due again
     renderWin(); refresh(); return true;

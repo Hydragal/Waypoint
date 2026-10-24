@@ -973,15 +973,6 @@ process.on('exit', code => { if (!summed && !code) { console.log(NL + 'FAIL     
             E.W.api.onWinClick({ target: findN(E.W.body, 'cal-pend-apply')[0] }); out.push([ppE(ch), canon(E.camp.clock.acc), E.cards.length]);
             return [j(out) === j([['c_a:r_sl:1'], [20, canon({ c_a: { r_sl: 86400 } }), 0], ['c_a:r_sl:1'], [19, canon({ c_a: { r_sl: 60 } }), 1]]), j(out)];
         });
-        tcH('1.5.5\'s review: a run held back by another rule\'s run before it in the same stretch gives its time back too: Drain takes Kael from 3 PP to 2 before Glow, which needs more than 2 and counted the hour while he had 3, is made; Glow keeps the hour and is made the next time its count moves on and its needs hold. A rule with no tick, held back, keeps nothing, as before', () => {
-            if (!trSrcE) return [false, 'sheets.js has no timerules slice'];
-            const E = mkE(sysOfE(['r_dr', 'r_gl']), kaelE({ f_pp: { cur: 3 } })), ch = E.camp.chars.c_a, out = [];
-            E.W.api.moveBy(3600); out.push([ppE(ch), lmE(ch), canon(E.camp.clock.acc)]);
-            ch.values.f_pp = { cur: 10 }; E.W.api.moveBy(60); out.push([ppE(ch), lmE(ch), canon(E.camp.clock.acc)]);
-            const plain = Object.assign({}, RE('r_gl'), { every: { n: 1, u: 'hour' } }), E2 = mkE(Object.assign({}, sysE, { rolls: [RE('r_dr'), plain] }), kaelE({ f_pp: { cur: 3 } }));
-            E2.W.api.moveBy(3600); out.push([ppE(E2.camp.chars.c_a), lmE(E2.camp.chars.c_a), canon(E2.camp.clock.acc)]);
-            return [j(out) === j([[2, 0, canon({ c_a: { r_gl: 3600 } })], [10, 1, canon({ c_a: { r_dr: 60, r_gl: 60 } })], [2, 0, null]]), j(out)];
-        });
         tcH('1.5.5\'s review: a rule whose own runs make its needs fail stops there with its count at none, since the time after its last run was not time they held (heldBack, fresh): Kael\'s Hourly draw, which needs PP above 0, takes his last 3 PP in a step of 10 and a half hours and keeps no half hour, so with 5 PP and half an hour more it draws nothing, exactly as the same time stepped an hour at a time gives', () => {
             if (!trSrcE) return [false, 'sheets.js has no timerules slice'];
             const run = steps => { const E = mkE(sysOfE(['r_hd']), kaelE({ f_pp: { cur: 3 } })), ch = E.camp.chars.c_a; steps.forEach(s => E.W.api.moveBy(s)); const mid = [ppE(ch), canon(E.camp.clock.acc)]; ch.values.f_pp = { cur: 5 }; E.W.api.moveBy(1800); return [mid, ppE(ch), canon(E.camp.clock.acc)]; };
@@ -1011,6 +1002,114 @@ process.on('exit', code => { if (!summed && !code) { console.log(NL + 'FAIL     
             W.W.win.wpFormula = Object.assign({}, F, { evaluate: (t, o) => { asks++; return F.evaluate(t, o); }, evaluateAst: (a, o) => { asks++; return F.evaluateAst(a, o); } });
             const t0 = Date.now(); W.W.api.moveBy(60); const ms = Date.now() - t0, acc = W.camp.clock.acc || {}, held = Object.keys(acc).length;
             return [shallow === 1 && asks <= 160 * 8 && ms < 1000 && held === 80 && acc.c_0 && acc.c_0.r_sl === 60 && !acc.c_1, j({ shallow, asks, ms, held })];
+        });
+
+        // (5) two rules due at the same moment (the owner, 2026-10-23, by prompt: "Spent, nothing done (Recommended)", which they wrote as a rule of their
+        // own system: where two recoveries come due at the same moment and the first fills a pool, the second restores nothing to that pool and its time
+        // is not kept for later). calendar.js heldBack: a fire of a ticked count whose first run its needs hold back, where a run of another count of the
+        // same character was made before it in the same go (one runTimeRules: the rules run at once in a stretch, one Apply of the list, one bell item),
+        // spends its time: nothing goes back on its count. Within a go a character's fires run in the system's order, a list's in the order they were
+        // first listed, each fire's runs before the next fire's. The Glow pin below moved on purpose: Glow kept the hour, and was made a minute later for
+        // nothing. The checks up to the one under Ask me fail with heldBack as it was; those after it pin where the time still goes back and where it is
+        // still spent, each failing with a heldBack that reads the go otherwise (a held run counted as a run, a later run, another character's, the same
+        // rule's other count not counted, a fire's own runs spent as another's, or a cause in place of the order)
+        tcH('1.5.5, a deliberate change of a pin of 1.5.5\'s review (the owner, 2026-10-23, by prompt: "Spent, nothing done"): a run held back by another rule\'s run before it at the same moment does nothing and its time is spent: Drain takes Kael from 3 PP to 2 before Glow, which needs more than 2 and counted the hour while he had 3, is made; Glow does nothing and keeps no hour, so the next step counts on from nothing and gives no Lumen. A rule with no tick, held back, keeps nothing, as before', () => {
+            if (!trSrcE) return [false, 'sheets.js has no timerules slice'];
+            const E = mkE(sysOfE(['r_dr', 'r_gl']), kaelE({ f_pp: { cur: 3 } })), ch = E.camp.chars.c_a, out = [];
+            E.W.api.moveBy(3600); out.push([ppE(ch), lmE(ch), canon(E.camp.clock.acc)]);
+            ch.values.f_pp = { cur: 10 }; E.W.api.moveBy(60); out.push([ppE(ch), lmE(ch), canon(E.camp.clock.acc)]);
+            const plain = Object.assign({}, RE('r_gl'), { every: { n: 1, u: 'hour' } }), E2 = mkE(Object.assign({}, sysE, { rolls: [RE('r_dr'), plain] }), kaelE({ f_pp: { cur: 3 } }));
+            E2.W.api.moveBy(3600); out.push([ppE(E2.camp.chars.c_a), lmE(E2.camp.chars.c_a), canon(E2.camp.clock.acc)]);
+            return [j(out) === j([[2, 0, null], [10, 0, canon({ c_a: { r_dr: 60, r_gl: 60 } })], [2, 0, null]]), j(out)];
+        });
+        const rawK = { v: 1, name: 'Pools', calendar: tw, combat: { turn: { secs: 6 } },
+            fields: [{ id: 'f_fp', key: 'FP', kind: 'resource', maxFormula: '16', def: 'max', min: 0 }, { id: 'f_hp', key: 'HP', kind: 'resource', maxFormula: '12', def: 'max', min: 0 }],
+            rolls: [{ id: 'r_br', label: 'Breath', apply: [{ f: 'f_fp', formula: '1', add: true }], needs: 'FP < FP.max', every: { n: 1, u: 'hour', whileNeeds: true } },
+                { id: 'r_rs', label: 'Rest', apply: [{ f: 'f_fp', formula: 'floor(FP / 8)', add: true }], needs: 'FP < FP.max', every: { n: 1, u: 'hour', rest: true, whileNeeds: true } },
+                { id: 'r_md', label: 'Mend', apply: [{ f: 'f_hp', formula: '1', add: true }], needs: 'HP < HP.max', every: { n: 1, u: 'hour', whileNeeds: true } },
+                { id: 'r_rf', label: 'Restore', apply: [{ f: 'f_fp', formula: 'FP.max', set: true }, { f: 'f_hp', formula: 'HP.max', set: true }], needs: 'FP < FP.max or HP < HP.max', every: { n: 8, u: 'hour', whileNeeds: true } }] };
+        const sysK = S.cleanSystem(rawK, { F, gmView: true }), RK = id => sysK.rolls.find(r => r.id === id), sysOfK = ids => Object.assign({}, sysK, { rolls: ids.map(RK) });
+        const okK = !!trSrcE && sysK.rolls.length === 4 && sysK.rolls.every(r => r.every && r.every.whileNeeds === true) && RK('r_rs').every.rest === true && RK('r_rf').apply.every(c => c.set === true);   // the four rules as written
+        const fpK = ch => ch.values.f_fp && typeof ch.values.f_fp.cur === 'number' ? ch.values.f_fp.cur : 16, hpK = ch => ch.values.f_hp && typeof ch.values.f_hp.cur === 'number' ? ch.values.f_hp.cur : 12;
+        const pendK = E => (E.W.api.st().pend || { fires: [] }).fires.map(f => f.c + ':' + f.r + ':' + f.n);
+        tcH('1.5.5, two rules due at one moment (the owner\'s "Spent, nothing done"): Breath adds 1 FP an hour and Rest an eighth of what FP holds an hour, both needing FP below its most and listed in that order; from 15 of 16 Breath fills the pool at the hour, so Rest, made after it, does nothing and keeps no time, and 8 FP spent and a minute more give nothing; the same in steps of an hour, of 10 minutes and of a minute, all as rest', () => {
+            if (!okK) return [false, 'sheets.js has no timerules slice, or the rules did not clean as written'];
+            const run = (step, n) => { const E = mkE(sysOfK(['r_br', 'r_rs']), kaelE({ f_fp: { cur: 15 } })), ch = E.camp.chars.c_a; for (let i = 0; i < n; i++) E.W.api.moveBy(step, true); const at = [fpK(ch), canon(E.camp.clock.acc)]; ch.values.f_fp = { cur: 8 }; E.W.api.moveBy(60, true); return [at, fpK(ch), canon(E.camp.clock.acc), E.W.runs.length]; };
+            const outK = [run(3600, 1), run(600, 6), run(60, 60)];
+            return [outK.every(o => j(o) === j([[16, null], 8, canon({ c_a: { r_br: 60, r_rs: 60 } }), 1])), j(outK)];
+        });
+        tcH('1.5.5, two rules due at one moment, the review\'s own case: a pool of 16 holding 13, Breath and Rest, 3 hours of rest stepped an hour at a time, then 6 spent and a minute more of rest: the pool holds 10 and no hour is kept, where Rest\'s kept hour gave 11', () => {
+            // By hand. Hour 1, judged at 13: both count it and both are made, Breath 13 to 14, Rest an eighth of 14, so 1, to 15. Hour 2, judged at 15:
+            // both count it, Breath 15 to 16, and Rest, made after it on a full pool, is held back: its hour is spent (heldBack as it was put it back on
+            // its count). Hour 3, judged at 16: neither counts. 6 spent: 10. A minute, judged at 10: each counts 60 seconds and nothing comes due, so 10.
+            // With the hour kept, Rest came due at once in that minute and gave an eighth of 10, so 1: 11
+            if (!okK) return [false, 'sheets.js has no timerules slice, or the rules did not clean as written'];
+            const E = mkE(sysOfK(['r_br', 'r_rs']), kaelE({ f_fp: { cur: 13 } })), ch = E.camp.chars.c_a, out = [];
+            for (let i = 0; i < 3; i++) { E.W.api.moveBy(3600, true); out.push(fpK(ch)); }
+            ch.values.f_fp = { cur: fpK(ch) - 6 }; E.W.api.moveBy(60, true); out.push(fpK(ch), canon(E.camp.clock.acc));
+            return [j(out) === j([15, 16, 16, 10, canon({ c_a: { r_br: 60, r_rs: 60 } })]), j(out)];
+        });
+        tcH('1.5.5, two rules due at one moment, a third after them: Restore, every 8 hours, sets FP and HP to their most and needs either below it; listed after Breath and Mend, which each add 1 an hour to FP and to HP while below its most, it comes due at the 8th hour just as they fill both pools, does nothing and keeps no time, so 5 FP spent and a minute more restore nothing; stepped an hour at a time', () => {
+            if (!okK) return [false, 'sheets.js has no timerules slice, or the rules did not clean as written'];
+            const E = mkE(sysOfK(['r_br', 'r_md', 'r_rf']), kaelE({ f_fp: { cur: 8 }, f_hp: { cur: 4 } })), ch = E.camp.chars.c_a, out = [];
+            for (let i = 0; i < 8; i++) E.W.api.moveBy(3600);
+            out.push([fpK(ch), hpK(ch), canon(E.camp.clock.acc)]);
+            ch.values.f_fp = { cur: 11 }; E.W.api.moveBy(60); out.push([fpK(ch), hpK(ch), canon(E.camp.clock.acc)]);
+            return [j(out) === j([[16, 12, null], [11, 12, canon({ c_a: { r_br: 60, r_rf: 60 } })]]), j(out)];
+        });
+        tcH('1.5.5, two rules due at one moment under Ask me: an hour of rest from 15 FP of 16 lists Breath and Rest, and one Apply runs both: Breath fills the pool and Rest, made after it, does nothing and keeps no time, so 8 FP spent and a minute more of rest list nothing and give nothing', () => {
+            if (!okK) return [false, 'sheets.js has no timerules slice, or the rules did not clean as written'];
+            const E = mkE(sysOfK(['r_br', 'r_rs']), kaelE({ f_fp: { cur: 15 } }), { time: 'confirm' }), ch = E.camp.chars.c_a, out = [];
+            E.W.api.moveBy(3600, true); out.push(pendK(E));
+            E.W.api.onWinClick({ target: findN(E.W.body, 'cal-pend-apply')[0] }); out.push([fpK(ch), canon(E.camp.clock.acc), E.W.runs.length]);
+            ch.values.f_fp = { cur: 8 }; E.W.api.moveBy(60, true); out.push([pendK(E), fpK(ch), canon(E.camp.clock.acc)]);
+            return [j(out) === j([['c_a:r_br:1', 'c_a:r_rs:1'], [16, null, 1], [[], 8, canon({ c_a: { r_br: 60, r_rs: 60 } })]]), j(out)];
+        });
+        tcH('1.5.5, the same rule\'s other count is another count: Battery adds 1 PP an hour by the clock and in a fight, both ticked and needing PP below its most; in a fight\'s round of an hour from 19 of 20 its By the clock run fills the pool, and its In a fight run, made after it in the same go, does nothing and keeps no time (heldBack names a count by the rule\'s id, or x_ and its tail)', () => {
+            if (!trSrcE) return [false, 'sheets.js has no timerules slice'];
+            const sysB = S.cleanSystem({ v: 1, name: 'B', calendar: tw, combat: { turn: { secs: 6 } }, fields: [{ id: 'f_pp', key: 'PP', kind: 'resource', maxFormula: '20', def: 'max', min: 0 }],
+                rolls: [{ id: 'r_bt', label: 'Battery', apply: [{ f: 'f_pp', formula: '1', add: true }], needs: 'PP < PP.max', every: { n: 1, u: 'hour', whileNeeds: true }, inFight: { n: 1, u: 'hour', whileNeeds: true } }] }, { F, gmView: true });
+            const ok = sysB.rolls.length === 1 && sysB.rolls[0].every.whileNeeds === true && sysB.rolls[0].inFight.whileNeeds === true;
+            const E = mkE(sysB, kaelE({ f_pp: { cur: 19 } })), ch = E.camp.chars.c_a;
+            E.W.api.ownTime([{ kind: 'fight', ids: ['c_a'], t0: { s: 0 }, t1: { s: 3600 }, round: 1, rs: 6, words: 'Round 1 on Docks' }]);
+            const out = [ppE(ch), canon(E.camp.clock.acc), E.W.runs.map(r => r[0])];
+            return [ok && j(out) === j([20, null, [[{ c: 'c_a', r: 'r_bt', n: 1 }, { c: 'c_a', r: 'r_bt', n: 1, x: 1, rd: 1 }]]]), j(out)];
+        });
+        tcH('1.5.5, another character\'s runs are no runs before it: under Ask me Kael (20 PP) and Ilsa (3 PP) each have Glow then Drain listed after an hour; you take Ilsa to 2 PP and apply: Kael\'s Glow and Drain are made before hers, yet Ilsa\'s Glow, held back with no run of hers before it, keeps its hour', () => {
+            if (!trSrcE) return [false, 'sheets.js has no timerules slice'];
+            const E = mkE(sysOfE(['r_gl', 'r_dr']), { c_a: { id: 'c_a', name: 'Kael', ownerId: 'u_a', values: { f_pp: { cur: 20 } } }, c_b: { id: 'c_b', name: 'Ilsa', ownerId: 'u_b', values: { f_pp: { cur: 3 } } } }, { time: 'confirm' });
+            E.W.api.moveBy(3600); const l = (E.W.api.st().pend || { fires: [] }).fires.map(x => x.c + ':' + x.r + ':' + x.n);
+            E.camp.chars.c_b.values.f_pp = { cur: 2 }; E.W.api.onWinClick({ target: findN(E.W.body, 'cal-pend-apply')[0] });
+            const out = [l, ppE(E.camp.chars.c_a), lmE(E.camp.chars.c_a), ppE(E.camp.chars.c_b), lmE(E.camp.chars.c_b), canon(E.camp.clock.acc)];
+            return [j(out) === j([['c_a:r_gl:1', 'c_a:r_dr:1', 'c_b:r_gl:1', 'c_b:r_dr:1'], 19, 1, 1, 0, canon({ c_b: { r_gl: 3600 } })]), j(out)];
+        });
+        tcH('1.5.5, a run held back is no run before the next: under Ask me an hour of rest from 15 FP of 16 lists Breath and Rest; you fill FP and apply: both are held back, neither makes a run, and both keep their hour, with no summary', () => {
+            if (!okK) return [false, 'sheets.js has no timerules slice, or the rules did not clean as written'];
+            const E = mkE(sysOfK(['r_br', 'r_rs']), kaelE({ f_fp: { cur: 15 } }), { time: 'confirm' }), ch = E.camp.chars.c_a;
+            E.W.api.moveBy(3600, true); const l = pendK(E); ch.values.f_fp = { cur: 16 }; E.W.api.onWinClick({ target: findN(E.W.body, 'cal-pend-apply')[0] });
+            const out = [l, fpK(ch), canon(E.camp.clock.acc), E.W.runs.length, E.cards.length];
+            return [j(out) === j([['c_a:r_br:1', 'c_a:r_rs:1'], 16, canon({ c_a: { r_br: 3600, r_rs: 3600 } }), 1, 0]), j(out)];
+        });
+        tcH('1.5.5, a run made after it is no run before it: under Ask me an hour from 3 PP lists Glow then Drain; you take PP to 2 and apply: Glow, held back with no run before it, keeps its hour though Drain\'s run is made after it', () => {
+            if (!trSrcE) return [false, 'sheets.js has no timerules slice'];
+            const E = mkE(sysOfE(['r_gl', 'r_dr']), kaelE({ f_pp: { cur: 3 } }), { time: 'confirm' }), ch = E.camp.chars.c_a;
+            E.W.api.moveBy(3600); const l = (E.W.api.st().pend || { fires: [] }).fires.map(x => x.c + ':' + x.r + ':' + x.n); ch.values.f_pp = { cur: 2 }; E.W.api.onWinClick({ target: findN(E.W.body, 'cal-pend-apply')[0] });
+            const out = [l, ppE(ch), lmE(ch), canon(E.camp.clock.acc)];
+            return [j(out) === j([['c_a:r_gl:1', 'c_a:r_dr:1'], 1, 0, canon({ c_a: { r_gl: 3600 } })]), j(out)];
+        });
+        tcH('1.5.5, a rule\'s own runs that make its needs fail follow the own-runs rule after another count\'s run too: Drain then Hourly draw in a step of 10 and a half hours from 15 PP; Drain takes 10 and Hourly draw\'s own runs take the last 5, its needs then fail, and its count is none, since the time after its last run was not time they held, though Drain ran before it', () => {
+            if (!trSrcE) return [false, 'sheets.js has no timerules slice'];
+            const E = mkE(sysOfE(['r_dr', 'r_hd']), kaelE({ f_pp: { cur: 15 } })), ch = E.camp.chars.c_a; E.W.api.moveBy(37800);
+            const out = [ppE(ch), canon(E.camp.clock.acc)];
+            return [j(out) === j([0, canon({ c_a: { r_dr: 1800 } })]), j(out)];
+        });
+        // heldBack reads the go and not the cause: a run of another count before it spends the time of a run held back for any reason, here a change the
+        // GM made before answering the list. This case is a question for the owner (2026-10-23); until they answer, this is the rule Help says
+        tcH('1.5.5, any run of the character\'s before it is a run before it, whatever held it back: under Ask me a day Kael slept lists Drain and the Sleep draw; you wake him and apply: Drain is made first, and the draw, held back, does nothing and its day is spent; listed the other way round, the draw is made first, held back with no run before it, and keeps its day', () => {
+            if (!trSrcE) return [false, 'sheets.js has no timerules slice'];
+            const run = ids => { const E = mkE(sysOfE(ids), kaelE({ f_sl: true }), { time: 'confirm' }), ch = E.camp.chars.c_a; E.W.api.moveBy(86400); const l = (E.W.api.st().pend || { fires: [] }).fires.map(x => x.c + ':' + x.r + ':' + x.n); ch.values.f_sl = false; E.W.api.onWinClick({ target: findN(E.W.body, 'cal-pend-apply')[0] }); return [l, ppE(ch), canon(E.camp.clock.acc)]; };
+            const out = [run(['r_dr', 'r_sl']), run(['r_sl', 'r_dr'])];
+            return [j(out) === j([[['c_a:r_dr:24', 'c_a:r_sl:1'], 0, null], [['c_a:r_sl:1', 'c_a:r_dr:24'], 0, canon({ c_a: { r_sl: 86400 } })]]), j(out)];
         });
     }
     check('the running clock is wired and said (pinned): one look a second from the page\'s wiring; a minute banked tells the table and writes quietly, never through a save; the chip\'s mark in the page; Help\'s Calendar list, the integration guide\'s keys and What\'s New in both copies; its styles',

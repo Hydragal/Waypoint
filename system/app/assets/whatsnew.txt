@@ -41,7 +41,9 @@ System editor
   grows only while the rule's Needs hold for the character. It stands
   still the rest of the time. So a rule every day that needs its
   character asleep runs once the character has slept a whole day in
-  all, however the days were broken up.
+  all, however the days were broken up. Where rules come due together,
+  a run its needs hold back after another of the character's runs
+  does nothing and its time is spent.
 - A section on the Layout tab can start closed. Pick Starts closed
   beside Fixed and Collapsible: the section is folded when the sheet
   opens, until the reader opens it.
