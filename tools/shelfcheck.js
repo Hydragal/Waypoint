@@ -960,6 +960,22 @@ const tabsSrc = dpSlice('tabs'), tabdoSrc = dpSlice('tabdo');
     const missing = suites.filter(s => s !== 'fuzzcheck.js' && count(yml, '        run: node tools/' + s + '\n') !== 1);
     check('CI runs every suite once: each tools/*check.js but fuzzcheck, the diagnostic one, has exactly one step, and every step names a suite that is there',
         missing.length === 0 && runs.every(r => suites.includes(r)) && !runs.includes('fuzzcheck.js') && runs.length === suites.length - 1 && new Set(runs).size === runs.length, J([missing, runs.filter(r => !suites.includes(r))]));
+    // the release notifier
+    // .github/workflows/notify-website.yml tells the website that a release was published (the owner, 2026-10-23, by prompt: "Add it
+    // (Recommended)"). Its secret can write to the website's repository, so what may start it and what it may do are held here: it runs on
+    // a published release alone (never pull_request_target, workflow_run, issue_comment or anything a fork can start), its own token has no
+    // permission, it checks out no code, it reads the one secret only in its one step, and it sends no payload but the dispatch's type
+    const nf = path.join(root, '.github/workflows/notify-website.yml');
+    const ny = fs.existsSync(nf) ? fs.readFileSync(nf, 'utf8').replace(/\r\n/g, '\n') : '';
+    const nNames = ny.split('\n').map(l => { const m = /^\s*(?:- )?name:\s?(.*)$/.exec(l); return m ? m[1] : null; }).filter(v => v !== null);
+    const nOn = (/^on:\n((?:[ #].*\n|\n)*)/m.exec(ny) || ['', ''])[1].split('\n').map(l => l.replace(/#.*$/, '').trimEnd()).filter(Boolean);
+    const secrets = ny.match(/secrets\.[A-Za-z_]+/g) || [];
+    check('the release notifier runs on a published release alone, with no permission for its own token, no code checked out, the one secret read in its one step and nothing sent but the dispatch\'s type; its names keep the CI file\'s rule',
+        ny !== '' && JSON.stringify(nOn) === JSON.stringify(['  release:', '    types: [published]']) && /^permissions: \{\}$/m.test(ny)
+        && !/pull_request|workflow_run|issue_comment|workflow_dispatch|push:|schedule:|actions\/checkout|uses:/.test(ny)
+        && secrets.length === 1 && secrets[0] === 'secrets.WEBSITE_DISPATCH_TOKEN' && count(ny, 'https://api.github.com/repos/ImmuneMoon/Waypoint-Website/dispatches') === 1
+        && count(ny, '-d \'{"event_type":"waypoint-release"}\'') === 1 && nNames.length === 2 && nNames.every(v => nameBad(v) === ''),
+        J([nOn, secrets, nNames]));
 }
 
 /* ---------- what git keeps out of the repository ---------- */
