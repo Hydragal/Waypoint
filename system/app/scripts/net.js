@@ -729,10 +729,12 @@ function cleanPosture(v, sys) {   // '' for the first posture (none stored)
     if (S && S.ownPostures && S.ownPostures(sys)) { var at = S.postureAt(sys, typeof v === 'string' ? v : ''); return at.i > 0 && at.p ? at.p.id : ''; }
     v = String(v || 'standing').toLowerCase(); v = POSTURE_OLD[v] || v; return POSTURE_SET[v] && v !== 'standing' ? v : '';
 }
+// 1.5.6: a page nested under a GM-only page is GM only too (docrender pageHid), judged in the hosted campaign (the one on screen)
+function docHidHere(id) { var c = typeof getActiveCampaign === 'function' ? getActiveCampaign() : null, R = window.wpDocRender; return !!(c && c.items && R && typeof R.pageHid === 'function' && R.pageHid(c.items, id)); }
 function sanitizeItem(item) {
     if (!item) return item;
     if (item.type === 'planner') return null;
-    if (item.type === 'doc') return window.wpDocRender ? window.wpDocRender.cleanDoc(item) : null;   // GM-only pages and unknown block types never leave the host; without the renderer, no page at all
+    if (item.type === 'doc') { if (typeof docHidHere === 'function' && docHidHere(item.id)) return null; return window.wpDocRender ? window.wpDocRender.cleanDoc(item) : null; }   // GM-only pages and unknown block types never leave the host; without the renderer, no page at all (1.5.6: nor a page nested under a GM-only one)
     if (item.type !== 'map') return item;
     var m = JSON.parse(JSON.stringify(item), wireNum);
     if (m.meta && typeof m.meta === 'object') { delete m.meta.lastX; delete m.meta.lastY; delete m.meta.lastZoom; delete m.meta.lastWbX; delete m.meta.lastWbY; delete m.meta.lastWbZoom; }   // the camera (CAM_KEYS, written out here): where the GM last looked may be on a hidden token, and is the GM's screen's own; a player's app opens on its own (camLand)
@@ -2100,6 +2102,19 @@ net.broadcastItemFiltered = function(campId, itemId) {
 // Host: an item leaves every admitted player's copy — a deleted map or planner, a page turned GM-only.
 // The send baseline goes too, so the next send after off→on is whole. Never through broadcast(): admitted only.
 // title: a deleted map's own name as it was, which the end of a fight on it names (fold 0); none says the deleted map
+// 1.5.6: the pages of the hosted campaign players may read, as the last save left them. A page whose own switch or whose place under a
+// GM-only page keeps it from players now leaves every player's copy (net.itemGone), one shown again reaches them (broadcastItemFiltered).
+// The one path for both: the two switches and every move in the tree end in a save. Seeded with no sends when a table opens.
+var _pagesShown = null, _pagesShownCamp = null;
+function pagesSync(fresh) {   // fresh (true only): note the pages as they stand and send nothing
+    var camp = getActiveCampaign(), R = window.wpDocRender; if (!camp || !camp.items || !R || typeof R.pageHid !== 'function') return;
+    var now = Object.create(null);
+    Object.keys(camp.items).forEach(function(id) { var it = camp.items[id]; if (it && it.type === 'doc' && !R.pageHid(camp.items, id)) now[id] = 1; });
+    var was = fresh === true ? null : _pagesShown, same = _pagesShownCamp === camp.id; _pagesShown = now; _pagesShownCamp = camp.id;
+    if (!was || !same || !(net.active && net.role === 'host')) return;
+    Object.keys(was).forEach(function(id) { if (!now[id] && own(camp.items, id)) net.itemGone(camp.id, id); });   // a deleted page has its own word already
+    Object.keys(now).forEach(function(id) { if (!was[id]) net.broadcastItemFiltered(camp.id, id); });
+}
 net.itemGone = function(campId, itemId, title) {
     delete _lastSent[itemId];
     if (typeof sensesForgetMap === 'function') sensesForgetMap(itemId);   // Senses S0: and what anyone's copy of it was made by
@@ -2135,6 +2150,7 @@ net.onLocalSave = function() {
         net.syncNewPlayers(); // and the rules for players without a character (Onboarding F1a), the same way
         net.syncCampFog();  // and its fog defaults (an empty map's fog, the default sight), the same way
         net.syncClock();    // and its clock (item 20 K2), the same way
+        if (typeof pagesSync === 'function') pagesSync();   // 1.5.6: and which pages players may read: a page that is kept from them now goes, one shown now comes (before the item, so a page shown now is not sent twice)
         if (patch) net.sendItem(patch.campId, patch.itemId);
         if (net.syncMapStubs) net.syncMapStubs();   // possession: a map renamed, re-nested or moved in the Maps list reaches the connections holding only its stub, as its stub
         if (net.syncCombatHidden) net.syncCombatHidden();   // fold M0: after the map (the token gone from it first): a token hidden or shown mid-fight changes its row
@@ -7891,6 +7907,7 @@ function startHosting(forceFresh) {
         opened = true;
         net.active = true;
         if (typeof currentStage === 'function') currentStage();   // 1.5.6: the map on screen as hosting begins is the table's, before any save there
+        if (typeof pagesSync === 'function') pagesSync(true);   // 1.5.6: the pages players may read as the table opens, noted before anyone joins
         net._hostGen = gen;   // a later crash resumes under the generation after this one
         startHeartbeat();
         setStatus(codeLine());

@@ -3722,7 +3722,7 @@ pendingChecks.push((async () => {
         (src.match(/combatOver\(/g) || []).length === 4 && /\} else if \(!combat\) combatOver\(fid, had\);/.test(src) && /var fightsOver = wasHost && !net\.stream && typeof combatsOverAll === 'function' \? combatsOverAll\(\) : 0;/.test(lvS)
         && lvS.indexOf('combatsOverAll()') > lvS.indexOf('fogDragSweep(true)') && lvS.indexOf('combatsOverAll()') < lvS.indexOf("broadcast({ type: 'end' }") && lvS.indexOf('combatsOverAll()') < lvS.indexOf('net.active = false')
         && igS.indexOf('combatOver(fid') > igS.indexOf("if (!(net.active && net.role === 'host')) return;") && igS.indexOf('combatOver(fid') < igS.indexOf("type: 'itemGone'")
-        && /fightsOn\(itemId\)\.filter\(function\(fid\) \{ return combatOver\(fid, net\.combats\[fid\], false, title\); \}\)/.test(igS) && (dlgJs.match(/window\.wpNet\.itemGone\(/g) || []).length === 3
+        && /fightsOn\(itemId\)\.filter\(function\(fid\) \{ return combatOver\(fid, net\.combats\[fid\], false, title\); \}\)/.test(igS) && (dlgJs.match(/window\.wpNet\.itemGone\(/g) || []).length === 2   // 1.5.6: moved on purpose, the page switch's own call gone (the save takes a page from players, net.js pagesSync)
         && /window\.wpNet\.itemGone\(camp\.id, id, removed && removed\.meta \? removed\.meta\.title : undefined\);/.test(dlgJs) && /var goneId = camp\.activeItemId, goneIt = camp\.items\[goneId\];\r?\n\s*delete camp\.items\[goneId\];\r?\n\s*if \(window\.wpNet && window\.wpNet\.itemGone\) window\.wpNet\.itemGone\(camp\.id, goneId, goneIt && goneIt\.meta \? goneIt\.meta\.title : undefined\);/.test(dlgJs));
 })());
 
@@ -15653,6 +15653,35 @@ pendingChecks.push((async () => {
         && src.includes("fightStep(fidT, 1, 'player');") && src.includes("fightHold(fidH, 'player');") && src.includes('net.fightOn = null; net.second = null;')
         && (calJs.match(/livedSpans\(/g) || []).length === 2 && !/function rounds\(|fightEnded|roundPend/.test(calJs) && errs.length === 0, J(errs.slice(0, 3)));
 })());
+    /* ---- 1.5.6: a GM-only page keeps every page nested under it from players (found at a test join on 2026-10-24: 55 old pages under a GM-only folder reached a player) ---- */
+    pendingChecks.push((async () => { try {
+        const urlW = f => 'file:///' + path.resolve(path.join(__dirname, '..', 'system', 'app', 'scripts', f)).split(String.fromCharCode(92)).join('/');
+        const DRh = await import(urlW('docrender.js')), win = { wpDocRender: DRh }, J2 = JSON.stringify;
+        const pg = (id, players, parentId) => ({ id, type: 'doc', meta: Object.assign({ title: id }, players === false ? { players: false } : {}, parentId ? { parentId } : {}), blocks: [{ id: 'b1', type: 'text', content: '<p>' + id + '</p>' }] });
+        const camp = { id: 'k', name: 'K', activeItemId: 'm', items: { m: { id: 'm', type: 'map', meta: { title: 'M' }, whiteboard: [], rooms: [], links: [] }, f: pg('f', false), c: pg('c', true, 'f'), g: pg('g', true, 'c'), p: pg('p', true) } };
+        const saSrcH = src.slice(src.indexOf('var POSTURE_SET = '), src.indexOf('function sanitizeItem(')) + '\n' + siSrc() + '\n' + fnSrc('function sanitizeAppState(', '\nfunction fogNow()', 'sanitizeAppState');
+        const [SAh, SIh] = new Function('own', 'window', 'fxLib', 'itemLib', 'withHoverLines', 'fogCopyFor', 'fogPartyCopy', 'getActiveCampaign', "'use strict';\n" + saSrcH + '\nreturn [sanitizeAppState, sanitizeItem];')(H.own, win, () => ({}), () => ({}), v => v, it => it, it => it, () => camp);
+        const snap = SAh({ activeCampaignId: 'k', campaigns: { k: camp } }, 'u_a', null), keys = Object.keys(snap.campaigns.k.items).sort().join(), stream = Object.keys(SAh({ activeCampaignId: 'k', campaigns: { k: camp } }).campaigns.k.items).sort().join();
+        const one = { c: SIh(camp.items.c), g: SIh(camp.items.g), p: !!SIh(camp.items.p), f: SIh(camp.items.f) };
+        check('1.5.6 the real sanitizeAppState and sanitizeItem with the real docrender: a page nested under a GM-only page is in no join snapshot and no stream window, at any depth, and is never sent alone; a page under no GM-only page is, as before',
+            keys === 'm,p' && stream === 'm,p' && one.c === null && one.g === null && one.f === null && one.p === true, J2({ keys, stream, one }));
+        const psA = src.indexOf('var _pagesShown = null'), psZ = src.indexOf('net.itemGone = function(campId, itemId, title) {');
+        const sent = [], netP = { active: true, role: 'host', itemGone: (c, id) => sent.push('gone:' + id), broadcastItemFiltered: (c, id) => sent.push('send:' + id) };
+        const pagesSync = new Function('net', 'getActiveCampaign', 'own', 'window', "'use strict';\n" + src.slice(psA, psZ) + '\nreturn pagesSync;')(netP, () => camp, H.own, win);
+        const step = fn => { sent.length = 0; fn(); pagesSync(); return sent.slice().sort().join(); };
+        const seed = (() => { sent.length = 0; pagesSync(true); return sent.join(); })();
+        const S = { seed, none: step(() => {}), open: step(() => { camp.items.f.meta.players = true; }), close: step(() => { camp.items.f.meta.players = false; }), moveIn: step(() => { camp.items.p.meta.parentId = 'g'; }),
+            moveOut: step(() => { camp.items.p.meta.parentId = null; }), made: step(() => { camp.items.n = pg('n', true); }), madeHid: step(() => { camp.items.h = pg('h', true, 'f'); }), deleted: step(() => { delete camp.items.p; }) };
+        netP.role = 'client'; const client = step(() => { camp.items.f.meta.players = true; }); netP.role = 'host';
+        check('1.5.6 pagesSync, run for real at each save: noted with nothing sent as a table opens; a GM-only page turned back on sends it and every page under it, turned GM only takes all of them from every player; a page moved under a GM-only page is taken, moved out sent again; a new page is sent, one made under a GM-only page is not; a deleted page has its own word; a player\'s app sends nothing',
+            S.seed === '' && S.none === '' && S.open === 'send:c,send:f,send:g' && S.close === 'gone:c,gone:f,gone:g' && S.moveIn === 'gone:p' && S.moveOut === 'send:p' && S.made === 'send:n' && S.madeHid === '' && S.deleted === '' && client === '', J2(S));
+        const ixH = fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'index.html'), 'utf8'), wn = ['WHATSNEW.txt', 'system/app/assets/whatsnew.txt'].map(f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8').replace(/\r\n/g, '\n'));
+        check('1.5.6 the hidden parent is wired and said: the save asks pagesSync after the clock and before the item, the table\'s open notes it with nothing sent, the page switch in the tree and in the editor take nothing away themselves; Help and both release notes say it',
+            /net\.syncClock\(\);[^\n]*\n\s*if \(typeof pagesSync === 'function'\) pagesSync\(\);[^\n]*\n\s*if \(patch\) net\.sendItem/.test(src.replace(/\r\n/g, '\n')) && src.includes("if (typeof pagesSync === 'function') pagesSync(true);")
+            && !fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', 'planner.js'), 'utf8').includes('itemGone(campD.id, am.id)') && !fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', 'dialogs.js'), 'utf8').includes('itemGone(camp.id, it.id)')
+            && ixH.includes('The pages nested under it are GM only too, whatever their own switch says.') && ixH.includes('removes it, and the pages under it, from every player at once. Moving a page under a GM-only page does the same.')
+            && wn.every(t => { const a = t.indexOf('WAYPOINT 1.5.6'), b = t.indexOf('WAYPOINT 1.5.5'), k = t.indexOf('Handbook\n- A page set GM only now keeps every page nested under it from your\n'); return a >= 0 && k > a && k < b; }));
+    } catch (e) { check('1.5.6 the hidden parent checks ran', false, String(e && e.stack || e)); } })());
 Promise.all(pendingChecks).then(() => {   // the async checks land before the summary
     /* ---- 1.5.4: the follow ruling (the owner, 2026-10-04): nobody follows the GM around unless the table is set to ---- */
     {

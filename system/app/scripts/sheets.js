@@ -51,13 +51,15 @@ function playerSystem(camp) {
 }
 // Stage 5f: the handbook pages players may read in a campaign (the "Players can read" switch: meta.players !== false) — the host's
 // filter for chips and links in the players' view of the system (here and in net.js's join snapshot)
-function readablePages(camp) { var items = (camp && camp.items) || {}, out = []; Object.keys(items).forEach(function(id) { var it = items[id]; if (it && it.type === 'doc' && !(it.meta && it.meta.players === false)) out.push(id); }); return out; }
+function readablePages(camp) { var items = (camp && camp.items) || {}, out = []; Object.keys(items).forEach(function(id) { var it = items[id]; if (it && it.type === 'doc' && !(typeof pageGmOnly === 'function' ? pageGmOnly(items, id) : !!(it.meta && it.meta.players === false))) out.push(id); }); return out; }
+// 1.5.6: GM only by its own switch or by a GM-only page it is nested under (docrender pageHid); its own switch alone where the renderer is not at hand
+function pageGmOnly(items, id) { var R = typeof window !== 'undefined' ? window.wpDocRender : null, it = items && Object.prototype.hasOwnProperty.call(items, id) ? items[id] : null; if (R && typeof R.pageHid === 'function') return R.pageHid(items, id); return !!(it && it.meta && it.meta.players === false); }
 // The page a chip or link names, from this machine's copy of the campaign: { title, gmOnly }, or null when it is not here (deleted,
 // hidden from this player, or not arrived yet — net.js redraws the sheet when a page arrives or goes)
 function pageRef(id) {
     var camp = getActiveCampaign(), items = camp && camp.items; if (!items || typeof id !== 'string' || !Object.prototype.hasOwnProperty.call(items, id)) return null;
     var it = items[id]; if (!it || it.type !== 'doc') return null;
-    return { title: String((it.meta && it.meta.title) || 'Page'), gmOnly: !!(it.meta && it.meta.players === false) };
+    return { title: String((it.meta && it.meta.title) || 'Page'), gmOnly: (typeof pageGmOnly === 'function' ? pageGmOnly(items, id) : !!(it.meta && it.meta.players === false)) };
 }
 // Open a handbook page from the sheet: a player in the reader (pictures, live edits, closes when the GM hides it); the GM in the
 // floating doc panel beside the sheet; a pop-out sheet hands it to the main window. Looked up again at click time.
@@ -124,7 +126,7 @@ function hbKey(vctx, c, sec, i) { return ((vctx && vctx.preview) ? 'p' : (vctx &
 function hbState(key) { return _hb[key] || (_hb[key] = { q: '', deep: null, view: null, more: Object.create(null), timer: 0, go: false }); }
 function hbPages() {
     var camp = getActiveCampaign(), items = (camp && camp.items) || {}, out = [];
-    Object.keys(items).forEach(function(id) { var it = items[id]; if (!it || it.type !== 'doc') return; out.push({ id: id, title: String((it.meta && it.meta.title) || 'Page'), doc: it, gmOnly: !!(it.meta && it.meta.players === false) }); });
+    Object.keys(items).forEach(function(id) { var it = items[id]; if (!it || it.type !== 'doc') return; out.push({ id: id, title: String((it.meta && it.meta.title) || 'Page'), doc: it, gmOnly: (typeof pageGmOnly === 'function' ? pageGmOnly(items, id) : !!(it.meta && it.meta.players === false)) }); });
     out.sort(function(a, b) { return a.title.localeCompare(b.title); });
     return out;
 }
@@ -242,7 +244,7 @@ function linkNode(pl, c) {
 // id stays selectable as "(page not found)" so a system imported from another campaign can be re-pointed rather than silently lost
 function pageOptions(cur, none) {
     var camp = getActiveCampaign(), items = (camp && camp.items) || {}, list = [];
-    Object.keys(items).forEach(function(id) { var it = items[id]; if (it && it.type === 'doc' && validPageId(id)) list.push([id, String((it.meta && it.meta.title) || 'Page') + (it.meta && it.meta.players === false ? ' (GM only)' : '')]); });   // only ids a chip or link can store (the rest would vanish on Save)
+    Object.keys(items).forEach(function(id) { var it = items[id]; if (it && it.type === 'doc' && validPageId(id)) list.push([id, String((it.meta && it.meta.title) || 'Page') + ((typeof pageGmOnly === 'function' ? pageGmOnly(items, id) : !!(it.meta && it.meta.players === false)) ? ' (GM only)' : '')]); });   // only ids a chip or link can store (the rest would vanish on Save)
     list.sort(function(a, b) { return a[1].localeCompare(b[1]); });
     var opts = none === null ? list : [['', none]].concat(list);
     if (cur && !list.some(function(o) { return o[0] === cur; })) opts.push([cur, '(page not found)']);

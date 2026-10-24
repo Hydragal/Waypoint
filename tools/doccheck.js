@@ -1384,6 +1384,19 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             cellH.includes('<td>one\ntwo &lt;b&gt;x&lt;/b&gt;</td>') && cellH.includes('<th>A\nB</th>') && cellD.blocks[0].rows[1][0].length === D.LIMITS.cell
             && cssT.includes('.doc-view .doc-table th, .doc-view .doc-table td { white-space: pre-line; }'), cellH.slice(0, 300));
     }
+    /* ---- 1.5.6: a GM-only page keeps every page nested under it from players (the owner, 2026-10-24, by prompt: "Hidden parent hides all") ---- */
+    {
+        const pg = (id, players, parentId) => ({ id, type: 'doc', meta: Object.assign({ title: id }, players === false ? { players: false } : {}, parentId ? { parentId } : {}) });
+        const items = { f: pg('f', false), c: pg('c', true, 'f'), g: pg('g', true, 'c'), p: pg('p', true), q: pg('q', true, 'p'), m: { id: 'm', type: 'map', meta: { players: false } }, under: pg('under', true, 'm'), dang: pg('dang', true, 'gone'),
+            l1: pg('l1', true, 'l2'), l2: pg('l2', true, 'l1'), own: pg('own', false, 'p') };
+        const chain = {}; for (let i = 0; i < 260; i++) chain['k' + i] = pg('k' + i, true, i ? 'k' + (i - 1) : null); chain.k0.meta.players = false;
+        const proto = Object.create({ inh: pg('inh', false) }); proto.kid = pg('kid', true, 'inh');
+        const H = id => D.pageHid(items, id);
+        const R = { f: H('f'), c: H('c'), g: H('g'), p: H('p'), q: H('q'), own: H('own'), under: H('under'), dang: H('dang'), loop: H('l1'), map: H('m'), none: H('nope'), proto: D.pageHid(items, '__proto__'), inh: D.pageHid(proto, 'kid'),
+            deep: D.pageHid(chain, 'k199'), past: D.pageHid(chain, 'k259'), junk: [D.pageHid(null, 'c'), D.pageHid('x', 'c'), D.pageHid(items, null), D.pageHid(items, 7), D.pageHid(items, '')] };
+        check('1.5.6 a GM-only page hides the pages under it (docrender pageHid): a page is kept from players when it or any page it is nested under is GM only, whatever its own switch says, down every level; a page under no GM-only page, or under a map (a page nests only under pages), is shown; a parent that is not there, a loop and a chain past 200 pages stop the walk; items are read by own keys only; anything that is no page or no list answers no',
+            R.f && R.c && R.g && !R.p && !R.q && R.own && !R.under && !R.dang && !R.loop && !R.map && !R.none && !R.proto && !R.inh && R.deep && !R.past && R.junk.every(v => v === false), JSON.stringify(R));
+    }
     summed = true;
     console.log('\n' + pass + ' passed, ' + fail + ' failed.');
     if (fail) process.exit(1);

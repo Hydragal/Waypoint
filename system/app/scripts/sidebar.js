@@ -336,7 +336,7 @@ function panelJudge(chN) { var camp = getActiveCampaign(); return panelHeld(docu
 
                  guides + caret + (item.type === 'planner' && /^(next|played|skipped)$/.test(item.meta.status) ? '<span class="si-status si-' + item.meta.status + '" title="' + (item.meta.status === 'next' ? 'Next scene' : item.meta.status === 'played' ? 'Played' : 'Skipped') + '">' + (item.meta.status === 'next' ? '▶' : item.meta.status === 'played' ? '✅' : '⏭') + '</span>' : '') +
                  (item.type === 'map' && item.meta.playerLock ? '<span class="si-status si-lock" title="Locked for players — closed both ways until you unlock it: no player travels here, and no player who is here leaves through a portal (your summon and Bring still move them). A player who is not here holds only its name, nothing of what is on it">&#128274;</span>' : '') +
-                 (item.type === 'doc' && item.meta.players === false ? '<span class="si-status si-lock" title="GM only — players cannot read this page">&#128274;</span>' : '') +
+                 (item.type === 'doc' && item.meta.players === false ? '<span class="si-status si-lock" title="GM only — players cannot read this page">&#128274;</span>' : (item.type === 'doc' && window.wpDocRender && window.wpDocRender.pageHid && window.wpDocRender.pageHid(camp.items, item.id)) ? '<span class="si-status si-lock si-lock-under" title="GM only, because a page it is under is GM only — players cannot read this page">&#128274;</span>' : '') +
                  '<span class="si-title">' + esc(item.meta.title || 'Unnamed') + '</span>' +
                  (item.type === 'map' ? mapPresenceHtml(item.id) : '') +
 

@@ -603,9 +603,7 @@ if(_el_ctxRenameItem) _el_ctxRenameItem.addEventListener('click', function() {
       it.meta = it.meta || {};
       var off = it.meta.players !== false;
       it.meta.players = !off;
-      if (off && window.wpNet && window.wpNet.itemGone) window.wpNet.itemGone(camp.id, it.id);
-      save(true); updateSidebarNav(); if (camp.activeItemId === it.id) render();
-      if (!off && window.wpNet && window.wpNet.pushItems) window.wpNet.pushItems([it.id]);
+      save(true); updateSidebarNav(); if (camp.activeItemId === it.id) render();   // hosting: the save takes the page, and every page under it, from the players or sends them (net.js pagesSync)
       toast(off ? '\u201c' + (it.meta.title || 'Page') + '\u201d is GM only now.' : 'Players can read \u201c' + (it.meta.title || 'Page') + '\u201d.');
   });
 
@@ -792,11 +790,11 @@ if(_el_delItemBtn) _el_delItemBtn.addEventListener('click', function() {
               keys.sort((a,b) => String(camp.items[a].meta.title || '').localeCompare(String(camp.items[b].meta.title || '')));
               keys.forEach(k => {
                   var p = camp.items[k];
-                  html += '<button class="tool ghost doc-search-res" data-id="' + esc(k) + '"><span class="dsr-title">' + (p.meta.players === false ? '&#128274; ' : '') + esc(p.meta.title || '') + '</span></button>';
+                  html += '<button class="tool ghost doc-search-res" data-id="' + esc(k) + '"><span class="dsr-title">' + ((window.wpDocRender && window.wpDocRender.pageHid ? window.wpDocRender.pageHid(camp.items, k) : p.meta.players === false) ? '&#128274; ' : '') + esc(p.meta.title || '') + '</span></button>';
               });
           } else {                                    // typed query → smart search of page CONTENT + titles, ranked, with a snippet
               (window.wpDocSearch ? window.wpDocSearch(q, camp, ['doc']) : []).forEach(r => {
-                  var it = camp.items[r.id], locked = it && it.meta && it.meta.players === false;
+                  var it = camp.items[r.id], locked = !!it && (window.wpDocRender && window.wpDocRender.pageHid ? window.wpDocRender.pageHid(camp.items, r.id) : !!(it.meta && it.meta.players === false));
                   html += '<button class="tool ghost doc-search-res" data-id="' + esc(r.id) + '"><span class="dsr-title">' + (locked ? '&#128274; ' : '') + esc(r.title) + '</span><span class="dsr-snip">' + r.snippet + '</span></button>';
               });
           }

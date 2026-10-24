@@ -2785,8 +2785,7 @@ if (_el_docPlayersBtn) _el_docPlayersBtn.addEventListener('click', function() {
     var off = am.meta.players !== false;
     if (off) am.meta.players = false; else am.meta.players = true;
     var campD = getActiveCampaign();
-    if (off && window.wpNet && window.wpNet.itemGone) window.wpNet.itemGone(campD.id, am.id);
-    save(true); updateSidebarNav(); renderPlanner();
+    save(true); updateSidebarNav(); renderPlanner();   // hosting: the save takes the page, and every page under it, from the players or sends it (net.js pagesSync)
     toast(off ? 'GM only — players no longer receive this page.' : 'Players can read this page.');
 });
 if(_el_renderPlannerBtn) _el_renderPlannerBtn.addEventListener('click', function() {

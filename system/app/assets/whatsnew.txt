@@ -9,6 +9,13 @@ Multiplayer
   are on a planner, Follow me now names the map you last had open,
   and that is where a new player lands.
 
+Handbook
+- A page set GM only now keeps every page nested under it from your
+  players too, whatever each of those pages says. Before, a page
+  under a GM-only page still reached players, loose in their list.
+  The tree marks such a page with a lock. Moving a page under a
+  GM-only page takes it from your players at once.
+
 WAYPOINT 1.5.5 — What's New
 ============================
 
