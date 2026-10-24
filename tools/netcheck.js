@@ -15656,9 +15656,9 @@ pendingChecks.push((async () => {
     /* ---- 1.5.6, backlog 173: a player's time rule notes, as they chose (the timenote slice, run for real) ---- */
     {
         const tnS = src.slice(src.indexOf('// [netcheck:timenote-start]'), src.indexOf('// [netcheck:timenote-end]'));
-        const world = mode => { const st = { pushed: [], timers: [], store: { wp_timeNotes: mode } };
+        const world = (mode, role) => { const st = { pushed: [], timers: [], store: { wp_timeNotes: mode } };
             const ls = { getItem: k => (k in st.store ? st.store[k] : null) };
-            const net = { active: true };
+            const net = { active: true, role: role === undefined ? 'client' : role };
             const api = new Function('net', 'pushChat', 'localStorage', 'setTimeout', 'clearTimeout', "'use strict';\n" + tnS + '\nreturn { timeNote, timeFlush, timeNotesMode };')(net, m => st.pushed.push(m), ls, (fn, ms) => { st.timers.push({ fn, ms }); return st.timers.length; }, () => {});
             st.net = net; st.api = api; return st; };
         const note = s => ({ type: 'chat', scope: 'whisper', from: { id: 'gm', name: 'GM', gm: true }, text: s, ts: 1 });
@@ -15668,11 +15668,12 @@ pendingChecks.push((async () => {
         const D = world('1h'); D.api.timeNote(note('solo')); const dMs = D.timers[0].ms; D.timers[0].fn();
         const E = world('10m'); E.api.timeNote(note('lost')); E.net.active = false; E.timers[0].fn();
         const F = world('junk');
+        const G = world('10m', null); G.net.active = false; G.api.timeNote(note('gm alone')); G.timers[0].fn();   // the GM's own note with no table: kept
         const ok = A.pushed.length === 2 && B.pushed.length === 0 && cBefore === 0 && JSON.stringify(cTimers) === '[600000]' && C.pushed.length === 1 && C.pushed[0].text === 'Time rules, 2 notes:\none\ntwo' && C.pushed[0].scope === 'whisper'
-            && dMs === 3600000 && D.pushed.length === 1 && D.pushed[0].text === 'solo' && E.pushed.length === 0 && F.api.timeNotesMode() === 'all';
+            && dMs === 3600000 && D.pushed.length === 1 && D.pushed[0].text === 'solo' && E.pushed.length === 0 && F.api.timeNotesMode() === 'all' && G.pushed.length === 1 && G.pushed[0].text === 'gm alone';
         const flat = src.split('\r\n').join('\n');
         check('1.5.6 a time rule\'s notes reach a player as they chose (backlog 173, the owner: "notify the player privately, with the option of them turning off these notifications, or change how often they come in"; timeNote run for real): every time as ever, and with no choice or one that is no choice; Off none; gathered into one note every 10 minutes or every hour; what waits let go when the table ends; the host marks its notes kind time, and a player\'s app routes only a whisper from the GM so marked; Settings\' row',
-            ok && flat.includes("ts: Date.now(), kind: 'time' };") && flat.includes("if (msg.kind === 'time' && lineH.scope === 'whisper' && fromH.gm && typeof timeNote === 'function') timeNote(lineH); else pushChat(lineH);")
+            ok && flat.includes("ts: Date.now(), kind: 'time' };") && flat.includes("if (typeof timeNote === 'function') timeNote(m); else pushChat(m);   // 1.5.6: the GM's own chat") && flat.includes("logEvent('time', t);   // the Session Log keeps every line") && flat.includes("if (msg.kind === 'time' && lineH.scope === 'whisper' && fromH.gm && typeof timeNote === 'function') timeNote(lineH); else pushChat(lineH);")
             && fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'index.html'), 'utf8').includes('<select id="setTimeNotes" class="field"'), JSON.stringify([A.pushed.length, B.pushed.length, cBefore, cTimers, C.pushed.map(m => m.text), dMs, D.pushed.length, E.pushed.length]));
     }
     /* ---- 1.5.6, backlog 185: "Same person as…" at the GM's Let them in? (the approval slice, run for real) ---- */

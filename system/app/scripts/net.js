@@ -4595,7 +4595,8 @@ net.timeCard = function(ch, text, gmOnly) {
     if (net.role === 'client' || net.stream || !ch || typeof ch !== 'object') return;
     var t = String(text || '').slice(0, 1500), m = { type: 'chat', scope: 'whisper', from: { id: net.myId || 'gm', name: 'GM', gm: true }, text: t, ts: Date.now(), kind: 'time' };   // 1.5.6: kind time, so a player's app shows it as they chose (timeNote)
     if (!gmOnly && net.active && net.role === 'host' && ch.ownerId && !ch.npc) net.conns.forEach(function(c) { if (c.open && net.roster[c.peer] && peerProfileId(c) === ch.ownerId) { try { c.send(m); } catch (e) { sendFailed(e); } } });
-    pushChat(m); logEvent('time', t);
+    if (typeof timeNote === 'function') timeNote(m); else pushChat(m);   // 1.5.6: the GM's own chat by the GM's own Time rule notes choice
+    logEvent('time', t);   // the Session Log keeps every line whatever the chat shows
 };
 // [netcheck:timecard-end]
 // [netcheck:timenote-start]
@@ -4609,16 +4610,17 @@ function timeFlush() {
     if (_timeTimer) { clearTimeout(_timeTimer); _timeTimer = null; }
     if (!_timeBuf.length) return;
     var lines = _timeBuf.splice(0, _timeBuf.length), first = lines[0];
-    if (!net.active) return;   // the table ended: what waited goes with it
+    if (first.fromHost && !(net.active && net.role === 'client')) return;   // a player's table ended: what waited goes with it (the GM's own notes run with no table too)
     var text = lines.length === 1 ? first.text : ('Time rules, ' + lines.length + ' notes:\n' + lines.map(function(m) { return m.text; }).join('\n'));
-    pushChat({ type: 'chat', scope: 'whisper', from: first.from, text: text.slice(0, 2000), ts: Date.now(), toName: '' });
+    var outT = { type: 'chat', scope: 'whisper', from: first.from, text: text.slice(0, 2000), ts: Date.now() }; if (first.fromHost) outT.toName = '';
+    pushChat(outT);
 }
 function timeNote(m) {
     var mode = timeNotesMode();
     if (mode === 'off') return;
     if (mode === 'all') { pushChat(m); return; }
     if (_timeBuf.length >= 200) _timeBuf.shift();
-    _timeBuf.push(m);
+    _timeBuf.push(net.role === 'client' ? Object.assign({}, m, { fromHost: true }) : m);
     if (!_timeTimer) _timeTimer = setTimeout(timeFlush, mode === '1h' ? 3600000 : 600000);
 }
 net.timeNotesNow = function() { var mode = timeNotesMode(); if (mode === 'off') { _timeBuf.length = 0; if (_timeTimer) { clearTimeout(_timeTimer); _timeTimer = null; } } else timeFlush(); };

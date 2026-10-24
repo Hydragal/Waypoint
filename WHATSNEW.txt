@@ -29,7 +29,9 @@ Multiplayer
 - Time rule notes: a player chooses in their own Settings how the
   notes of their character's time rules reach their chat, such as a
   pool that fills by the hour. Every time, gathered into one note every
-  10 minutes or every hour, or off. The rules run either way.
+  10 minutes or every hour, or off. The rules run either way. The GM's
+  own choice there works for the GM's chat too, and the Session Log
+  keeps every line.
 
 The app
 - Waypoint now names itself an alpha: the version reads Waypoint Alpha
