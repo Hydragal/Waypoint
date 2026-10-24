@@ -424,7 +424,10 @@ function charSelectHtml(w) {
     var esc = function(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); };
     var cur = w.charId && charById(w.charId, camp) ? w.charId : '';
     var opts = '<option value=""' + (cur ? '' : ' selected') + '>' + (w.charId && !cur ? '(missing character)' : '&mdash; none &mdash;') + '</option>';
-    charList(camp).forEach(function(c) { opts += '<option value="' + esc(c.id) + '"' + (c.id === cur ? ' selected' : '') + '>' + esc(c.name) + (c.npc ? ' (NPC)' : c.ownerId ? ' (' + esc(ownerName(c, camp)) + ')' : '') + '</option>'; });
+    var optOf = function(c) { return '<option value="' + esc(c.id) + '"' + (c.id === cur ? ' selected' : '') + '>' + esc(c.name) + (!c.npc && c.ownerId ? ' (' + esc(ownerName(c, camp)) + ')' : '') + '</option>'; };
+    var pcs = charList(camp).filter(function(c) { return !c.npc; }), npcs = charList(camp).filter(function(c) { return !!c.npc; });   // 1.5.6 (backlog 186 (2), the owner: "segregating player characters from npcs would be a good start"): players first, then NPCs
+    if (pcs.length) opts += '<optgroup label="Player characters">' + pcs.map(optOf).join('') + '</optgroup>';
+    if (npcs.length) opts += '<optgroup label="NPCs">' + npcs.map(optOf).join('') + '</optgroup>';
     opts += '<option value="__new">New character from this token&hellip;</option>';
     return '<div class="field"><label for="wbCharSel">Character (sheet)</label><select id="wbCharSel">' + opts + '</select>' + (cur ? '<button class="tool ghost" id="wbCharOpen" style="width:100%; margin-top:4px;" title="Open this character\'s sheet over the play map">Open sheet</button>' : '') + (cur && hudFor(cur) ? '<button class="tool ghost" id="wbHudOpen" style="width:100%; margin-top:4px;" title="Open this character\'s HUD over the play map">Open HUD</button>' : '') + '</div>';
 }

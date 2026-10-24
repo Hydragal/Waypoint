@@ -217,6 +217,18 @@ if (_capSel) {
         toast(cv === 'never' ? 'Sense captions over tokens: never shown on this machine.' : cv === 'hover' ? 'Sense captions over tokens: only on hover or for a selected token.' : 'Sense captions over tokens: always shown.');
     });
 }
+// 1.5.6, backlog 173: how a time rule's notes reach this player's chat at a table (net.js timeNote reads wp_timeNotes): every time, gathered
+// every 10 minutes or every hour, or off
+var _tnSel = ui('setTimeNotes');
+if (_tnSel) {
+    try { var tn0 = localStorage.getItem('wp_timeNotes'); _tnSel.value = tn0 === '10m' || tn0 === '1h' || tn0 === 'off' ? tn0 : 'all'; } catch (e) {}
+    _tnSel.addEventListener('change', function() {
+        var tv = _tnSel.value === '10m' || _tnSel.value === '1h' || _tnSel.value === 'off' ? _tnSel.value : 'all';
+        try { localStorage.setItem('wp_timeNotes', tv); } catch (e) {}
+        if (window.wpNet && typeof window.wpNet.timeNotesNow === 'function') window.wpNet.timeNotesNow();
+        toast(tv === 'off' ? 'Time rule notes: off on this machine. The rules still run.' : tv === '10m' ? 'Time rule notes: gathered into one every 10 minutes.' : tv === '1h' ? 'Time rule notes: gathered into one every hour.' : 'Time rule notes: every time.');
+    });
+}
 var _streamFx = ui('setStreamFxChk');
 if (_streamFx) { try { _streamFx.checked = localStorage.getItem('wp_streamFx') !== '0'; } catch (e) {} _streamFx.addEventListener('change', function() { try { localStorage.setItem('wp_streamFx', _streamFx.checked ? '1' : '0'); } catch (e) {} toast(_streamFx.checked ? 'The stream window shows effects.' : 'The stream window hides effects.'); }); }
 

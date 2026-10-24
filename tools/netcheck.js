@@ -15653,6 +15653,28 @@ pendingChecks.push((async () => {
         && src.includes("fightStep(fidT, 1, 'player');") && src.includes("fightHold(fidH, 'player');") && src.includes('net.fightOn = null; net.second = null;')
         && (calJs.match(/livedSpans\(/g) || []).length === 2 && !/function rounds\(|fightEnded|roundPend/.test(calJs) && errs.length === 0, J(errs.slice(0, 3)));
 })());
+    /* ---- 1.5.6, backlog 173: a player's time rule notes, as they chose (the timenote slice, run for real) ---- */
+    {
+        const tnS = src.slice(src.indexOf('// [netcheck:timenote-start]'), src.indexOf('// [netcheck:timenote-end]'));
+        const world = mode => { const st = { pushed: [], timers: [], store: { wp_timeNotes: mode } };
+            const ls = { getItem: k => (k in st.store ? st.store[k] : null) };
+            const net = { active: true };
+            const api = new Function('net', 'pushChat', 'localStorage', 'setTimeout', 'clearTimeout', "'use strict';\n" + tnS + '\nreturn { timeNote, timeFlush, timeNotesMode };')(net, m => st.pushed.push(m), ls, (fn, ms) => { st.timers.push({ fn, ms }); return st.timers.length; }, () => {});
+            st.net = net; st.api = api; return st; };
+        const note = s => ({ type: 'chat', scope: 'whisper', from: { id: 'gm', name: 'GM', gm: true }, text: s, ts: 1 });
+        const A = world(null); A.api.timeNote(note('Battery +1')); A.api.timeNote(note('Battery +1'));
+        const B = world('off'); B.api.timeNote(note('x'));
+        const C = world('10m'); C.api.timeNote(note('one')); C.api.timeNote(note('two')); const cBefore = C.pushed.length, cTimers = C.timers.map(x => x.ms); C.timers[0].fn();
+        const D = world('1h'); D.api.timeNote(note('solo')); const dMs = D.timers[0].ms; D.timers[0].fn();
+        const E = world('10m'); E.api.timeNote(note('lost')); E.net.active = false; E.timers[0].fn();
+        const F = world('junk');
+        const ok = A.pushed.length === 2 && B.pushed.length === 0 && cBefore === 0 && JSON.stringify(cTimers) === '[600000]' && C.pushed.length === 1 && C.pushed[0].text === 'Time rules, 2 notes:\none\ntwo' && C.pushed[0].scope === 'whisper'
+            && dMs === 3600000 && D.pushed.length === 1 && D.pushed[0].text === 'solo' && E.pushed.length === 0 && F.api.timeNotesMode() === 'all';
+        const flat = src.split('\r\n').join('\n');
+        check('1.5.6 a time rule\'s notes reach a player as they chose (backlog 173, the owner: "notify the player privately, with the option of them turning off these notifications, or change how often they come in"; timeNote run for real): every time as ever, and with no choice or one that is no choice; Off none; gathered into one note every 10 minutes or every hour; what waits let go when the table ends; the host marks its notes kind time, and a player\'s app routes only a whisper from the GM so marked; Settings\' row',
+            ok && flat.includes("ts: Date.now(), kind: 'time' };") && flat.includes("if (msg.kind === 'time' && lineH.scope === 'whisper' && fromH.gm && typeof timeNote === 'function') timeNote(lineH); else pushChat(lineH);")
+            && fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'index.html'), 'utf8').includes('<select id="setTimeNotes" class="field"'), JSON.stringify([A.pushed.length, B.pushed.length, cBefore, cTimers, C.pushed.map(m => m.text), dMs, D.pushed.length, E.pushed.length]));
+    }
     /* ---- 1.5.6, backlog 185: "Same person as…" at the GM's Let them in? (the approval slice, run for real) ---- */
     {
         const apS = src.slice(src.indexOf('// [netcheck:approval-start]'), src.indexOf('// [netcheck:approval-end]'));

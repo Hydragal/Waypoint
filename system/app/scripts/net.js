@@ -4593,11 +4593,36 @@ function fxEnded(ch, name) {   // "Bless ran out on Pat." — a private line for
 // is the GM's alone (an NPC, or a rule that moves or reads what the player cannot see); and the Session Log's Time
 net.timeCard = function(ch, text, gmOnly) {
     if (net.role === 'client' || net.stream || !ch || typeof ch !== 'object') return;
-    var t = String(text || '').slice(0, 1500), m = { type: 'chat', scope: 'whisper', from: { id: net.myId || 'gm', name: 'GM', gm: true }, text: t, ts: Date.now() };
+    var t = String(text || '').slice(0, 1500), m = { type: 'chat', scope: 'whisper', from: { id: net.myId || 'gm', name: 'GM', gm: true }, text: t, ts: Date.now(), kind: 'time' };   // 1.5.6: kind time, so a player's app shows it as they chose (timeNote)
     if (!gmOnly && net.active && net.role === 'host' && ch.ownerId && !ch.npc) net.conns.forEach(function(c) { if (c.open && net.roster[c.peer] && peerProfileId(c) === ch.ownerId) { try { c.send(m); } catch (e) { sendFailed(e); } } });
     pushChat(m); logEvent('time', t);
 };
 // [netcheck:timecard-end]
+// [netcheck:timenote-start]
+// 1.5.6, backlog 173 (the owner, 2026-10-24: "notify the player privately, with the option of them turning off these notifications, or change
+// how often they come in"): on a player's app a time rule's note from the GM (kind time) reaches chat as this player chose in Settings
+// (wp_timeNotes): every time as ever; gathered, one note holding every line since the last, every 10 minutes or every hour; or off, none. The
+// rules run on the GM's machine whatever this says. What waits is let go when the table ends; a change of the choice says what waits at once
+var _timeBuf = [], _timeTimer = null;
+function timeNotesMode() { try { var v = localStorage.getItem('wp_timeNotes'); return v === '10m' || v === '1h' || v === 'off' ? v : 'all'; } catch (e) { return 'all'; } }
+function timeFlush() {
+    if (_timeTimer) { clearTimeout(_timeTimer); _timeTimer = null; }
+    if (!_timeBuf.length) return;
+    var lines = _timeBuf.splice(0, _timeBuf.length), first = lines[0];
+    if (!net.active) return;   // the table ended: what waited goes with it
+    var text = lines.length === 1 ? first.text : ('Time rules, ' + lines.length + ' notes:\n' + lines.map(function(m) { return m.text; }).join('\n'));
+    pushChat({ type: 'chat', scope: 'whisper', from: first.from, text: text.slice(0, 2000), ts: Date.now(), toName: '' });
+}
+function timeNote(m) {
+    var mode = timeNotesMode();
+    if (mode === 'off') return;
+    if (mode === 'all') { pushChat(m); return; }
+    if (_timeBuf.length >= 200) _timeBuf.shift();
+    _timeBuf.push(m);
+    if (!_timeTimer) _timeTimer = setTimeout(timeFlush, mode === '1h' ? 3600000 : 600000);
+}
+net.timeNotesNow = function() { var mode = timeNotesMode(); if (mode === 'off') { _timeBuf.length = 0; if (_timeTimer) { clearTimeout(_timeTimer); _timeTimer = null; } } else timeFlush(); };
+// [netcheck:timenote-end]
 function fxCombatChars(mapId, combat) { var camp = getActiveCampaign(); if (!camp || !camp.system) return []; var S = SC(), mp = camp && camp.items && own(camp.items, mapId) ? camp.items[mapId] : null; return S && S.combatChars && mp ? S.combatChars(mp, combat, camp.chars || {}).map(function(e) { return camp.chars[e.charId]; }).filter(Boolean) : []; }
 function turnFxStart(mapId, c) {   // the character whose turn begins: a round of its timed effects passes, once in each round of that fight (fold 3: c.turned, so two rows of one sheet count once)
     var camp = getActiveCampaign(), row = c && Array.isArray(c.rows) ? c.rows[c.turn] : null; if (!camp || !row) return;
@@ -7467,7 +7492,8 @@ function handleMessage(msg, conn) {
             if (conn.peer !== net.syncedPeer || typeof msg.text !== 'string' || !msg.from || typeof msg.from !== 'object') return;
             var fromH = { id: String(msg.from.id || '').slice(0, 60), name: String(msg.from.name || '').slice(0, 60), gm: msg.from.gm === true };
             if (safeColor(msg.from.color)) fromH.color = msg.from.color;
-            pushChat({ type: 'chat', scope: msg.scope === 'whisper' ? 'whisper' : 'global', from: fromH, text: msg.text.slice(0, 2000), ts: Number(msg.ts) || Date.now(), toName: typeof msg.toName === 'string' ? msg.toName.slice(0, 60) : '' });
+            var lineH = { type: 'chat', scope: msg.scope === 'whisper' ? 'whisper' : 'global', from: fromH, text: msg.text.slice(0, 2000), ts: Number(msg.ts) || Date.now(), toName: typeof msg.toName === 'string' ? msg.toName.slice(0, 60) : '' };
+            if (msg.kind === 'time' && lineH.scope === 'whisper' && fromH.gm && typeof timeNote === 'function') timeNote(lineH); else pushChat(lineH);   // 1.5.6: a time rule's note, as this player chose
         }
         // [netcheck:chat-end]
     } else if (msg.type === 'chat-history' && net.role === 'client') {

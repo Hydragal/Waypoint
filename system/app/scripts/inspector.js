@@ -43,6 +43,36 @@ import { showPrompt, showConfirm, isCampaignNameTaken, getUniqueCampaignTitle, p
 import { renderPlanner, renderPlannerPreview, RTE_CMDS, RTE_SYMS, rteSyncBar, rteLookHtml, rteLook } from './planner.js';
 
 import * as TF from './textfmt.js';   // Waypoint's own fonts (FONTS) and the one cleaner of a stored font
+// [sinkcheck:faceall-start]
+// 1.5.6 (the owner, 2026-10-24: "we should have a master GM setting that changes every characters turning rules (arrow moving vs token
+// rotating) at once"): under a character token's Turning, the GM's Set for every character gives every character token of the campaign on
+// screen, on every map, the Turning chosen there (faceModeSet: 'arrow' kept as the key, the art turning with the arrow as no key), after one
+// question that says how many. The GM's alone, on the machine that owns the campaign; a hosted table is sent each map that changed
+function faceAllMay() { var n = window.wpNet; return !(n && n.active && n.role === 'client') && !window.wpStream && (!window.wpCanPersistLocal || window.wpCanPersistLocal() !== false); }
+function faceModeSet(camp, arrow) {   // the maps changed and the tokens changed: { maps: [ids], n }
+    var out = { maps: [], n: 0 };
+    Object.keys((camp && camp.items) || {}).forEach(function(id) {
+        var it = camp.items[id], hit = 0; if (!it || it.type !== 'map' || !Array.isArray(it.whiteboard)) return;
+        it.whiteboard.forEach(function(w) { if (!w || typeof w !== 'object' || !w.isChar) return; if (arrow && w.faceMode !== 'arrow') { w.faceMode = 'arrow'; hit++; } else if (!arrow && w.faceMode !== undefined) { delete w.faceMode; hit++; } });
+        if (hit) { out.maps.push(id); out.n += hit; }
+    });
+    return out;
+}
+function faceModeAll(arrow) {
+    var camp = getActiveCampaign(); if (!camp || !faceAllMay()) return;
+    var words = arrow ? 'Arrow only (art stays upright)' : 'Art turns with the arrow', count = 0;
+    Object.keys(camp.items || {}).forEach(function(id) { var it = camp.items[id]; if (it && it.type === 'map' && Array.isArray(it.whiteboard)) it.whiteboard.forEach(function(w) { if (w && w.isChar && (arrow ? w.faceMode !== 'arrow' : w.faceMode !== undefined)) count++; }); });
+    if (!count) { toast('Every character token already turns as ' + words.toLowerCase() + '.'); return; }
+    showConfirm('Set ' + count + ' character token' + (count === 1 ? '' : 's') + ' in this campaign to ' + words + '? Tokens on every map change. You can still set one token on its own afterwards.', function(yes) {
+        if (!yes) return;
+        var campN = getActiveCampaign(); if (!campN || campN !== camp) return;
+        var r = faceModeSet(campN, arrow);
+        save(); renderWhiteboard();
+        var n = window.wpNet; if (n && n.active && n.role === 'host' && typeof n.broadcastItemFiltered === 'function') r.maps.forEach(function(id) { if (id !== campN.activeItemId) n.broadcastItemFiltered(campN.id, id); });   // the map on screen goes with the save
+        toast(r.n + ' character token' + (r.n === 1 ? '' : 's') + ' now turn as ' + words.toLowerCase() + '.');
+    });
+}
+// [sinkcheck:faceall-end]
 
 import { renderDataMap, clearSnaps, drawSnap, doSmartSnapping, attachDrag, attachPanning, isLinkMode, setLinkMode, removeLinkAt } from './datamap.js';
 
@@ -933,6 +963,7 @@ if(_el_addCatBtn) _el_addCatBtn.addEventListener('click', function() {
             } else if (w.type !== 'light') {   // a light source is never a character
                 html += '<div class="field check-row"><input type="checkbox" id="wbIsChar" '+(w.isChar?'checked':'')+'> <label for="wbIsChar">Is Character</label></div>';
                 if(w.isChar) {
+                    if (window.wpSheets) html += window.wpSheets.charSelectHtml(w);   // 1.5.6 (backlog 186 (1), the owner: "hes not linked"): who this token is, first: its character sheet, with Open sheet
                     html += '<div class="field"><label for="wbCharName">Character Name</label><input type="text" id="wbCharName" value="'+esc(w.charName||'')+'"></div>';
                     html += '<div class="field"><label for="wbCharStats">Stats / Notes</label><textarea id="wbCharStats">'+esc(w.charStats||'')+'</textarea></div>';
                     if (!(window.wpNet && window.wpNet.active && window.wpNet.role === 'client')) html += '<div class="field"><label for="wbGmInfo">GM note / dialogue <span class="muted">(this token only — hidden from players)</span></label><textarea id="wbGmInfo" placeholder="Private notes, read-aloud dialogue…">'+esc(w.gmInfo||'')+'</textarea></div>';
@@ -958,6 +989,7 @@ if(_el_addCatBtn) _el_addCatBtn.addEventListener('click', function() {
                     html += '<div class="field"><label for="wbFront">Front Side <span class="muted">(the little arrow)</span></label><select id="wbFront">' +
                         [[0, 'Top'], [90, 'Right'], [180, 'Bottom'], [270, 'Left']].concat((num(w.front, 0) && [0, 90, 180, 270].indexOf(num(w.front, 0)) < 0) ? [[num(w.front, 0), num(w.front, 0) + '\u00b0 (turned)']] : []).map(function(o) { return '<option value="' + o[0] + '"' + (num(w.front, 0) === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></div>';
                     html += '<div class="field"><label for="wbFaceMode">Turning</label><select id="wbFaceMode"><option value="art"' + (w.faceMode !== 'arrow' ? ' selected' : '') + '>Art turns with the arrow</option><option value="arrow"' + (w.faceMode === 'arrow' ? ' selected' : '') + '>Arrow only (art stays upright)</option></select></div>';
+                    if (faceAllMay()) html += '<div class="field"><button type="button" class="tool ghost" id="wbFaceModeAll" title="Give every character token of this campaign, on every map, the Turning chosen above">Set for every character</button></div>';   // 1.5.6: the GM's one press for the whole campaign
                     // Elevation (yards) and posture — only while the campaign's VTT features are on (Settings ▸ VTT features; at a table, the GM's setting and the player's own "off for me")
                     var stanceApi = window.wpStance, elevOnI = !!(stanceApi && stanceApi.on('elevation')), postOnI = !!(stanceApi && stanceApi.on('posture'));
                     if (elevOnI) html += '<div class="field"><label for="wbElev">Elevation <span class="muted">(' + (stanceApi.lenUnit && stanceApi.lenUnit() === 'm' ? 'metres' : 'yards') + ' above the ground; a pit is negative)</span></label><input type="number" id="wbElev" step="' + (stanceApi.ydStep ? stanceApi.ydStep() : 1) + '" value="' + (stanceApi.ydBox ? stanceApi.ydBox(stanceApi.tokenElevation(w)) : stanceApi.tokenElevation(w)) + '"></div>';   // item 19 H1: in the viewer's unit; 1.5.4: its arrows step one yard in both, from the figure shown
@@ -982,7 +1014,6 @@ if(_el_addCatBtn) _el_addCatBtn.addEventListener('click', function() {
                     }).join('');
                     var npcTok = !!(w.charId && campNow && campNow.chars && Object.prototype.hasOwnProperty.call(campNow.chars, w.charId) && campNow.chars[w.charId] && campNow.chars[w.charId].npc);   // a player never owns an NPC's token
                     html += '<div class="field"><label for="wbOwner">Player Owner (can move this token)</label><select id="wbOwner"' + (npcTok ? ' disabled title="An NPC\u2019s token \u2014 unlink it from the NPC first"' : '') + '>'+ownerOpts+'</select></div>';
-                    if (window.wpSheets) html += window.wpSheets.charSelectHtml(w);   // character sheets (1.5.0): which campaign character this token stands for
                     var rdT = sheetReaderTok(); if (rdT) html += '<div class="field" id="wbReaderBox"></div>';   // an outside sheet reader's own part of a token's Properties (2026-10-18): its page code fills it below
                 }
             }
@@ -1014,6 +1045,10 @@ if(_el_addCatBtn) _el_addCatBtn.addEventListener('click', function() {
                 }).join('');
                 html += '<div class="field"><label for="wbTrigShape">Trigger Shape</label><select id="wbTrigShape">' + shapeOpts + '</select></div>';
             }
+            // 1.5.6 (backlog 186 (3), the owner: "why are the elements for every map in every character's properties?"): on a character token the
+            // map links (Portal to Map, Link Node, a portal's lock, a page pin) stand in one fold, Map links, closed unless the token uses one of them
+            var linkFold = !!w.isChar && w.type !== 'text';
+            if (linkFold) html += '<details class="insp-fold" id="wbMapLinks"' + (w.targetMapId || w.nodeId || w.page ? ' open' : '') + '><summary title="Portal to Map, Link Node and a page pin: what a character token seldom needs">Map links</summary>';
             if (w.type !== 'text') {
                 html += '<div class="field"><label for="wbPortalMap">Portal to Map</label><select id="wbPortalMap">' + portalOpts + '</select>' +
                         (w.targetMapId ? '<div style="display:flex; gap:6px; align-items:center; margin-top:5px;"><span class="muted" style="white-space:nowrap;">Marker</span><select id="wbPortalIcon" style="flex:1;">' + portalIconOpts + '</select></div>' : '') +
@@ -1024,6 +1059,7 @@ if(_el_addCatBtn) _el_addCatBtn.addEventListener('click', function() {
             html += '<div class="field"><label for="wbNodeLink">Link Node</label><select id="wbNodeLink">'+nodeOpts+'</select></div>'+
               portalLockFieldHtml(w, activeMap)+   // a portal's own lock: Locked for players, on a piece that is a portal (its own Portal to Map, or its linked node's)
               pagePinFieldHtml(w)+   // 1.5.4: a pin, the page this piece opens (the GM's alone)
+              (linkFold ? '</details>' : '') +   // 1.5.6: the end of a character token's Map links
               (w.type !== 'image' && w.type !== 'trigger' && w.type !== 'light' ? '<div class="field"><label>' + (w.type === 'text' ? 'Text Color' : w.type === 'path' ? 'Pen Color' : 'Fill Color') + '</label><div class="color-row">' + ((w.type === 'path' || w.type === 'text') ? penHtml : colorHtml) + '</div></div>' : '') +
               (w.type === 'text' ? textStyleHtml(w) : '') +
               (w.type !== 'path' && w.type !== 'text' ? '<div class="field check-row"><input type="checkbox" id="wbLockRatio" '+(w.lockRatio?'checked':'')+'> <label for="wbLockRatio">Lock proportions when resizing</label></div>' : '') +
@@ -1244,6 +1280,8 @@ if(_el_addCatBtn) _el_addCatBtn.addEventListener('click', function() {
                 if (this.value === 'arrow') w.faceMode = 'arrow'; else delete w.faceMode;
                 save(); toast(this.value === 'arrow' ? 'Only the arrow turns on this token.' : 'The art turns with the arrow.');
             });
+            var _el_wbFaceAll = document.getElementById('wbFaceModeAll');
+            if (_el_wbFaceAll) _el_wbFaceAll.addEventListener('click', function() { var sel = document.getElementById('wbFaceMode'); faceModeAll(!!sel && sel.value === 'arrow'); });
             var _el_wbFront = document.getElementById('wbFront');
             if (_el_wbFront) _el_wbFront.addEventListener('change', function() {
                 w.front = parseInt(this.value, 10) || 0;

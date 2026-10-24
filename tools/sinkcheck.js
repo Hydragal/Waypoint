@@ -5019,6 +5019,59 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         check('the notifications\' bell (notices.js) writes no markup: no innerHTML, outerHTML, insertAdjacentHTML or document.write in the module, and a hostile notice run through its real draw reaches the list as a text node, with only elements made by name',
             ok && !/innerHTML|outerHTML|insertAdjacentHTML|document\.write/.test(nS) && txt.indexOf(HOST) >= 0 && made.every(t => ['div', 'span', 'button'].indexOf(t) >= 0), JSON.stringify([ok, txt.slice(0, 4), made.slice(0, 8)]));
     }
+
+    {   // 1.5.6: Set for every character (the owner, 2026-10-24: a master GM setting for every character's turning; inspector.js faceall slice, run for real)
+        const insF = fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', 'inspector.js'), 'utf8').split('\r\n').join('\n');
+        const fa = insF.slice(insF.indexOf('// [sinkcheck:faceall-start]'), insF.indexOf('// [sinkcheck:faceall-end]'));
+        const mkC = () => ({ id: 'k', activeItemId: 'm1', items: { m1: { id: 'm1', type: 'map', whiteboard: [{ id: 'a', isChar: true }, { id: 'b', isChar: true, faceMode: 'arrow' }, { id: 'c' }, null] }, m2: { id: 'm2', type: 'map', whiteboard: [{ id: 'd', isChar: true }] }, m3: { id: 'm3', type: 'map', whiteboard: [{ id: 'e', isChar: true, faceMode: 'arrow' }] }, p: { id: 'p', type: 'doc' } } });
+        const world = (win, answer) => { const camp = mkC(), log = { asks: [], toasts: [], saves: 0, sent: [] }; win.wpNet = win.wpNet || null;
+            const api = new Function('window', 'getActiveCampaign', 'showConfirm', 'save', 'renderWhiteboard', 'toast', "'use strict';\n" + fa + '\nreturn { faceAllMay, faceModeSet, faceModeAll };')(win, () => camp, (q, cb) => { log.asks.push(q); cb(answer); }, () => { log.saves++; }, () => {}, s => log.toasts.push(s));
+            return { camp, log, api }; };
+        const A = world({ wpNet: { active: true, role: 'host', broadcastItemFiltered: (c, id) => A.log.sent.push(id) } }, true); A.api.faceModeAll(true);
+        const B = world({}, true); B.api.faceModeAll(false);
+        const C = world({}, false); C.api.faceModeAll(true);
+        const D = world({ wpNet: { active: true, role: 'client' } }, true); D.api.faceModeAll(true);
+        const E = world({ wpStream: true }, true), F = world({ wpCanPersistLocal: () => false }, true);
+        const modes = c => Object.values(c.items).filter(i => i.type === 'map').map(i => i.whiteboard.filter(Boolean).map(w => w.id + ':' + (w.faceMode || '-')).join(',')).join('|');
+        check('1.5.6 Set for every character (faceAllMay, faceModeSet and faceModeAll run for real): one question says how many character tokens change, then every character token of the campaign on every map takes the Turning chosen (Arrow only as the key, the art turning as no key), never a piece that is no character; a hosted table is sent every changed map but the one on screen, which goes with the save; No changes nothing; nothing on a player\'s app, in the stream window or where the campaign cannot be written; the button only where it may act, its words fixed',
+            modes(A.camp) === 'a:arrow,b:arrow,c:-|d:arrow|e:arrow' && A.log.asks.length === 1 && /Set 2 character tokens in this campaign to Arrow only/.test(A.log.asks[0]) && A.log.saves === 1 && JSON.stringify(A.log.sent) === JSON.stringify(['m2']) && /2 character tokens now turn/.test(A.log.toasts[0])
+            && modes(B.camp) === 'a:-,b:-,c:-|d:-|e:-' && /Set 2 character tokens/.test(B.log.asks[0]) && modes(C.camp) === modes(mkC()) && C.log.saves === 0
+            && D.api.faceAllMay() === false && D.log.asks.length === 0 && modes(D.camp) === modes(mkC()) && E.api.faceAllMay() === false && F.api.faceAllMay() === false && A.api.faceAllMay() === true
+            && insF.includes("if (faceAllMay()) html += '<div class=\"field\"><button type=\"button\" class=\"tool ghost\" id=\"wbFaceModeAll\"") && insF.includes("faceModeAll(!!sel && sel.value === 'arrow');"), JSON.stringify([modes(A.camp), A.log, modes(B.camp), D.log]));
+    }
+
+
+    {   // 1.5.6, backlog 186 (1)-(3): Properties leads with who a character token is, the sheet picker groups players first, the map links fold
+
+        const shP = fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', 'sheets.js'), 'utf8').split('\r\n').join('\n');
+
+        const csA = shP.indexOf('function charSelectHtml('), csB = shP.indexOf('\nfunction wireCharSelect(', csA);
+
+        const camp = { id: 'k', chars: { c1: { id: 'c1', name: 'Kael <b>', ownerId: 'u_a' }, c2: { id: 'c2', name: 'Orc', npc: true }, c3: { id: 'c3', name: 'Lone' } } };
+
+        const csel = new Function('getActiveCampaign', 'charById', 'charList', 'ownerName', 'hudFor', "'use strict';\n" + shP.slice(csA, csB) + '\nreturn charSelectHtml;')(() => camp, id => camp.chars[id], c => Object.values(c.chars), () => 'Ana <i>', () => false);
+
+        const hsel = csel({ charId: 'c2' });
+
+        const pcAt = hsel.indexOf('<optgroup label="Player characters">'), npAt = hsel.indexOf('<optgroup label="NPCs">');
+
+        const insP = fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', 'inspector.js'), 'utf8').split('\r\n').join('\n');
+
+        const isCharAt = insP.indexOf("<label for=\"wbIsChar\">Is Character</label></div>';"), selAt = insP.indexOf('if (window.wpSheets) html += window.wpSheets.charSelectHtml(w);'), nameAt = insP.indexOf('<label for="wbCharName">Character Name</label>');
+
+        check('1.5.6 a character token\'s Properties (backlog 186 (1)-(3)): its character sheet picker, with Open sheet, stands first, right after Is Character, and once; the picker lists player characters first and then NPCs, each in a group, a name and a player\'s name escaped; the map links (Portal to Map, Link Node, a portal\'s lock and a page pin) stand in one fold, Map links, open only where the token uses one; its style',
+
+            pcAt > 0 && npAt > pcAt && hsel.indexOf('Kael &lt;b&gt; (Ana &lt;i&gt;)') > pcAt && hsel.indexOf('Kael') < npAt && hsel.indexOf('>Orc</option>') > npAt && hsel.indexOf('value="c2" selected') > npAt && !/\(NPC\)/.test(hsel) && hsel.indexOf('Lone') < npAt
+
+            && isCharAt > 0 && selAt > isCharAt && nameAt > selAt && insP.split('window.wpSheets.charSelectHtml(w)').length === 2
+
+            && insP.includes("if (linkFold) html += '<details class=\"insp-fold\" id=\"wbMapLinks\"' + (w.targetMapId || w.nodeId || w.page ? ' open' : '') + '><summary") && insP.includes("(linkFold ? '</details>' : '') +")
+
+            && fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'style.css'), 'utf8').includes('.insp-fold > summary {'), hsel.slice(0, 400));
+
+    }
+
+
     summed = true;
     console.log('\n' + pass + ' passed, ' + fail + ' failed.');
     if (fail) process.exit(1);
