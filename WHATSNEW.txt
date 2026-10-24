@@ -166,6 +166,12 @@ Combat
 Multiplayer
 - On Waypoint's website a player account opens straight to Join a game.
 
+Updates
+- When a newer Waypoint is out, the welcome screen now says so too,
+  above its cards, with the same Update, Notes and Later buttons as the
+  notice in the app. Update and Notes take you into Waypoint first, as
+  Enter Waypoint does, so you see each step of the update.
+
 Going back to 1.5.4
 - Restore the previous version back to 1.5.4 keeps your campaign, but
   its next save drops what 1.5.5 added: a row's own Description and By

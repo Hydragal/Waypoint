@@ -768,6 +768,7 @@ function coreNudge(firstTime) {
         if (go) go.textContent = 'Get Installer';
         var hdr = document.querySelector('header'); if (hdr) bar.style.top = (hdr.getBoundingClientRect().bottom + 8) + 'px';
         bar.style.display = 'flex';
+        wcStrip();   // 1.5.5: and the welcome screen's strip with it
     }
     updateUI();
     if (firstTime) {
@@ -836,13 +837,13 @@ function runHotUpdate() {
             if (!yes) return;   // No means no: nothing downloads
             toast('Downloading Waypoint ' + i.latest + '…');
             var btns = [ui('setUpdateNowBtn'), ui('updateBannerGo'), ui('updateBtn')];
-            btns.forEach(function(b) { if (b) b.disabled = true; });
+            btns.forEach(function(b) { if (b) b.disabled = true; }); wcStrip();
             fetch('/api/update-apply', { method: 'POST' }).then(function(r) { return r.json(); }).then(function(r) {
                 if (!r.ok) throw new Error(r.error || 'update failed');
                 toast('Updated to ' + r.version + ' — reloading… If you had a Stream window open, close and reopen it.');
                 try { new BroadcastChannel('waypoint').postMessage({ type: 'reload' }); } catch (e) {}   // a stream window on the new code reloads itself
                 setTimeout(function() { location.reload(); }, 900);
-            }).catch(function(e) { btns.forEach(function(b) { if (b) b.disabled = false; }); toast('Update failed: ' + (e.message || e)); });
+            }).catch(function(e) { btns.forEach(function(b) { if (b) b.disabled = false; }); wcStrip(); toast('Update failed: ' + (e.message || e)); });
         });
     });
 }
@@ -968,8 +969,9 @@ function showUpdateBanner(i) {
     var go = ui('updateBannerGo'); if (go) go.textContent = one ? 'Update' : 'Get Installer';
     var hdr = document.querySelector('header'); if (hdr) bar.style.top = (hdr.getBoundingClientRect().bottom + 8) + 'px';
     bar.style.display = 'flex';
+    wcStrip();
 }
-function hideUpdateBanner() { var bar = ui('updateBanner'); if (bar) bar.style.display = 'none'; }
+function hideUpdateBanner() { var bar = ui('updateBanner'); if (bar) bar.style.display = 'none'; wcStrip(); }
 // A core update that was started and did not finish (the shell kept a mark of it, and its core is still the older one):
 // said once per run in the notice bar, with both ways on from here and a way to put the notice away.
 function showFailNote(i) {
@@ -981,6 +983,7 @@ function showFailNote(i) {
     if (go) go.textContent = 'Update'; if (notes) notes.textContent = 'Get Installer'; if (later) later.textContent = 'Dismiss';
     var hdr = document.querySelector('header'); if (hdr) bar.style.top = (hdr.getBoundingClientRect().bottom + 8) + 'px';
     bar.style.display = 'flex';
+    wcStrip();
 }
 // The notice is answered (either way on, or put away): the bar's buttons are their usual selves again and the shell forgets the mark.
 function endFailNote() {
@@ -1016,6 +1019,41 @@ if (_bLater) _bLater.addEventListener('click', function() {
     hideUpdateBanner();
     toast('The Update button stays in the top bar until you update.');
 });
+/* ---------- the same notice on the welcome screen (1.5.5; the owner, 2026-10-24, by prompt: "A strip above the cards") ----------
+   The welcome screen covers the app at launch, so the notice bar is said again in a strip above its cards (#wcUpdate). The bar stays the one
+   source: each of its shows and hides ends in wcStrip, which shows the strip exactly while the bar shows, with the bar's words set as text, and
+   each button of the strip presses the bar's own, so every way on is the bar's code. Update and Notes first put the welcome aside as Enter
+   Waypoint does (its own button), so that all the update says next is in sight: its question, its progress on the top row's button and in
+   Settings, its notices, the release notes and the installer's steps. Later keeps the welcome, and the one notice the bar's Later says is
+   lifted over it (style.css #toast.show.wc-over); the focus then goes to the welcome's main view, so Tab goes on through its cards and a held
+   Enter presses none. A button of the strip is off while the bar's is (runHotUpdate turns the bar's Update off as it downloads and calls
+   wcStrip each time), and a press of it then does nothing; the strip is no live region of its own, since the bar's says the same words. */
+function wcStrip() {
+    var bar = ui('updateBanner'), s = ui('wcUpdate'); if (!bar || !s) return;
+    var d = bar.style.display;
+    s.style.display = d && d !== 'none' ? 'flex' : 'none';
+    [['updateBannerText', 'wcUpdateText'], ['updateBannerGo', 'wcUpdateGo'], ['updateBannerNotes', 'wcUpdateNotes'], ['updateBannerLater', 'wcUpdateLater']].forEach(function(p, k) {
+        var a = ui(p[0]), b = ui(p[1]); if (!a || !b) return;
+        b.textContent = a.textContent;
+        if (k) b.disabled = a.disabled === true;
+    });
+}
+function wcStripPress(id) {
+    var w = ui('welcomeScreen'), enter = ui('wcEnterBtn'), b = ui(id);
+    if (!b || b.disabled === true) return;
+    if (w && w.style.display && w.style.display !== 'none' && enter) enter.click();
+    b.click();
+}
+function wcStripLater() {
+    var says = !_upd.failNote;   // the bar's Later says where the Update button stays; as Dismiss it says nothing
+    var b = ui('updateBannerLater'); if (b) b.click();
+    var t = ui('toast'); if (says && t && t.classList && typeof t.classList.add === 'function') t.classList.add('wc-over');   // io.js's toast sets its classes anew at the next notice and takes them off after 3 s
+    var w = ui('welcomeScreen'), m = ui('wcMain');
+    if (w && w.style.display && w.style.display !== 'none' && m && typeof m.focus === 'function') { if (typeof m.setAttribute === 'function') m.setAttribute('tabindex', '-1'); m.focus(); }
+}
+var _wcGo = ui('wcUpdateGo'); if (_wcGo) _wcGo.addEventListener('click', function() { wcStripPress('updateBannerGo'); });
+var _wcNotes = ui('wcUpdateNotes'); if (_wcNotes) _wcNotes.addEventListener('click', function() { wcStripPress('updateBannerNotes'); });
+var _wcLater = ui('wcUpdateLater'); if (_wcLater) _wcLater.addEventListener('click', wcStripLater);
 // An update that changes the app's core and cannot install itself here. Before anything downloads, say so
 // and spell out the steps; the download starts only when the person presses Continue.
 function showInstallerSteps(i) {

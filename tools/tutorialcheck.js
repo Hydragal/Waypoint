@@ -32,18 +32,18 @@ for (const t of targets) {
     const cut = (a, b) => { const i = lf.indexOf(a), k = lf.indexOf(b, i); if (i < 0 || k < 0) throw new Error('tutorialcheck: ' + a + ' not found'); return lf.slice(i, k); };
     const freshSrc = cut('function saveIsFresh() {', nl + '}' + nl) + nl + '}' + nl, autoSrc = cut('// [tutorialcheck:autostart-start]', '// [tutorialcheck:autostart-end]');
     const scenario = (o) => {
-        const timers = [], store = {}, started = [], els = { welcomeScreen: { style: { display: o.welcome ? 'flex' : '' } }, customPrompt: { style: { display: o.prompt ? 'flex' : 'none' } }, customConfirm: { style: { display: 'none' } }, importChoiceModal: { style: { display: 'none' } } };
+        const timers = [], store = {}, started = [], later = [], els = { welcomeScreen: { style: { display: o.welcome ? 'flex' : '' } }, customPrompt: { style: { display: o.prompt ? 'flex' : 'none' } }, customConfirm: { style: { display: 'none' } }, importChoiceModal: { style: { display: 'none' } } };
         const env = {
             state: { appState: { campaigns: o.campaigns === undefined ? { c1: { items: { m1: { type: 'map', rooms: [], whiteboard: [] } } } } : o.campaigns } },
             document: { getElementById: id => els[id] || null }, localStorage: { getItem: k => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); } },
             window: { wpNet: { active: !!o.net }, __wpCleanupBusy: false }, location: { search: o.stream ? '?stream=1' : '' },
             setInterval: (fn, ms) => { const h = { fn, ms, on: true }; timers.push(h); return h; }, clearInterval: h => { if (h) h.on = false; },
-            setTimeout: (fn, ms) => { started.push(ms); fn(); }, startTour: () => { started.push('tour'); },
+            setTimeout: (fn, ms) => { started.push(ms); if (o.defer) later.push(fn); else fn(); }, startTour: () => { started.push('tour'); },
         };
         if (o.seen) store.wp_tourSeen = '1';
         const api = new Function('state', 'document', 'localStorage', 'window', 'location', 'setInterval', 'clearInterval', 'setTimeout', 'startTour', '"use strict";' + nl + freshSrc + autoSrc + nl + 'return { pending: tourPending };')(env.state, env.document, env.localStorage, env.window, env.location, env.setInterval, env.clearInterval, env.setTimeout, env.startTour);
         const tick = n => { for (let i = 0; i < n; i++) timers.forEach(h => { if (h.on) h.fn(); }); };
-        return { tick, els, env, started, store, timers, api };
+        return { tick, els, env, started, store, timers, api, run: () => later.splice(0).forEach(f => f()) };
     };
     const tourStarted = s => s.started.indexOf('tour') >= 0;
     // in Waypoint proper from the start (the welcome off): the tour starts once, the mark set, no campaign of the user's needed first
@@ -72,6 +72,32 @@ for (const t of targets) {
         && seen.api.pending() === false && !tourStarted(seen) && seen.timers.length === 0 && !tourStarted(strm) && strm.timers.length === 0 && never.api.pending() === false && !tourStarted(never) && never.timers.every(h => !h.on) && !('wp_tourSeen' in never.store);
     if (ok) console.log('ok        first launch (run for real): the tour starts in Waypoint proper — the tick after the welcome screen closes, before any campaign is made, waiting for a prompt, the import choice or an import picked from the welcome; never over the welcome, never at a table joined from it (not marked seen then), never for an existing or imported table (marked seen), never when seen, in the stream window or when nothing loads; wpTutorial.pending true only for a fresh, unseen save off a table');
     else { bad++; console.log('FAIL      first launch (run for real): the tour starts in Waypoint proper, the tick after the welcome closes, before any campaign is made; waits for a dialog; never over the welcome, at a table, or for an existing table', JSON.stringify({ plainPending, plain: plain.started, wcWaited, wcThen, wc: wc.started, prWaited, prWaited2, prWaited3, prThen, joinedPending, joined: joined.started, joinedStore: joined.store, oldPending, old: old.store, imp: imp.store, seen: seen.timers.length, strm: strm.timers.length, never: never.store })); }
+    // 1.5.5 (the welcome's update strip; the owner, 2026-10-24, by prompt: "A strip above the cards"): its Update and Notes go on into Waypoint first, as
+    // Enter Waypoint does (settings.js wcStripPress), so on a fresh save the tour waits while what the update shows is up, the installer's steps and the
+    // release notes, as it waits for a question, and starts the tick after they close, once
+    const upWait = id => { const s = scenario({ welcome: true }); s.tick(2); s.els[id] = { style: { display: 'flex' } }; s.els.welcomeScreen.style.display = 'none'; s.tick(10); const waited = !tourStarted(s) && !('wp_tourSeen' in s.store);
+        s.els[id].style.display = 'none'; s.tick(1); const then = tourStarted(s); s.tick(5); return [waited, then, s.started.filter(x => x === 'tour').length]; };
+    const upsW = ['installerModal', 'legalModal'].map(upWait);
+    if (JSON.stringify(upsW) === JSON.stringify([[true, true, 1], [true, true, 1]])) console.log('ok        first launch (run for real): the tour waits while an update\'s installer steps or the release notes are up, as it waits for a question (the welcome\'s update strip goes on into Waypoint for Update and Notes, 1.5.5), and starts the tick after they close, once');
+    else { bad++; console.log('FAIL      first launch: the tour waits while an update\'s installer steps or the release notes are up', JSON.stringify(upsW)); }
+    // 1.5.5, the review of the strip: its Update asks its question a moment after the welcome steps aside (the update imports dialogs.js first), and an update
+    // that runs keeps the top row's Update button off (settings.js runHotUpdate, selfButtons), whose reload or close would cut a tour off with it marked
+    // seen. A tick that lands before the question: the tour looks again as it would start, 600 ms on, goes back to waiting while a question is up or an
+    // update runs, is never marked seen meanwhile, and starts once when the question was answered No or the update failed. Here the tour's setTimeout runs
+    // only when the case says (o.defer)
+    const gap = () => { const s = scenario({ welcome: true, defer: true }); s.els.updateBtn = { style: {}, disabled: false }; s.tick(2); s.els.welcomeScreen.style.display = 'none'; s.tick(1);
+        s.els.customConfirm.style.display = 'flex'; s.run(); s.tick(5); s.run(); return s; };
+    const gy = gap(), gyAsked = !tourStarted(gy) && !('wp_tourSeen' in gy.store);
+    gy.els.customConfirm.style.display = 'none'; gy.els.updateBtn.disabled = true; gy.tick(10); gy.run(); const gyRan = !tourStarted(gy) && !('wp_tourSeen' in gy.store);
+    gy.els.updateBtn.disabled = false; gy.tick(1); gy.run(); gy.tick(5); gy.run(); const gyThen = gy.started.filter(x => x === 'tour').length === 1 && gy.store.wp_tourSeen === '1';
+    const gn = gap(), gnAsked = !tourStarted(gn) && !('wp_tourSeen' in gn.store); gn.els.customConfirm.style.display = 'none'; gn.tick(1); gn.run(); gn.tick(5); gn.run();
+    const gnThen = gn.started.filter(x => x === 'tour').length === 1 && gn.store.wp_tourSeen === '1';
+    // an update already running as the welcome steps aside: the tour waits from the first tick, with nothing set going
+    const gr = scenario({ welcome: true, defer: true }); gr.els.updateBtn = { style: {}, disabled: true }; gr.tick(2); gr.els.welcomeScreen.style.display = 'none'; gr.tick(10); gr.run();
+    const grWait = !tourStarted(gr) && !('wp_tourSeen' in gr.store) && gr.started.length === 0;
+    const gaps = [gyAsked, gyRan, gyThen, gnAsked, gnThen, grWait];
+    if (gaps.every(Boolean)) console.log('ok        first launch (run for real): the tour looks again as it would start, so an update\'s question that comes a moment after the welcome steps aside holds it, and it waits while an update runs (the top row\'s Update button off), never marked seen meanwhile; it starts once after a No or an update that failed');
+    else { bad++; console.log('FAIL      first launch: the tour waits for an update\'s question that comes a moment after the welcome steps aside, and while an update runs', JSON.stringify([gaps, gy.started, gn.started, gr.started])); }
     // the welcome's Start a campaign: on a save the tour is owed to it enters and notes that the naming prompt is owed (wpCampaignAfterTour), the prompt
     // not opened; else the prompt as ever. Import from the welcome holds the tour (wpWelcomeImporting) until the file is chosen or dropped. endTour opens
     // the owed prompt once, after the tour or its Skip
@@ -182,7 +208,8 @@ for (const t of targets) {
     const named = (rule.match(/#[A-Za-z][\w-]*/g) || []).map(s => s.slice(1)).filter((v, i, a) => a.indexOf(v) === i);
     const webLines = css.replace(/\/\*[\s\S]*?\*\//g, '').split(nl).filter(l => /web-join|web-gate/.test(l));
     const relayIn = (() => { const at = page.indexOf('id="setTurnUrls"'), g = page.lastIndexOf('<div class="gm-only">', at); if (at < 0 || g < 0) return false; let depth = 0; const re = /<(\/?)div\b[^>]*>/g; re.lastIndex = g; let m; while ((m = re.exec(page))) { if (m.index > at) return depth > 0; depth += m[1] ? -1 : 1; if (depth === 0) return false; } return false; })();
-    const cssOk = !!rule && rule.split(',').every(s => /^\s*body\.web-join /.test(s)) && ['wcStartBtn', 'wcLoadBtn', 'wcContinue', 'wcEnterBtn', 'welcomeScreen', 'moreMenu', 'moreFiles', 'campMenuWrap', 'mapTabs', 'rowPills', 'handoutsBtn', 'imgLibBtn', 'importCharBtn', 'updateBtn', 'updateBanner', 'installerModal', 'netPaneHostBtn', 'netPaneHost', 'netPlayersBtn', 'netEndBtn', 'setSnapNowBtn', 'settingsModal'].every(id => named.indexOf(id) >= 0)
+    // 1.5.5, the welcome's update strip (#wcUpdate) is put away there beside the bar and the top row's Update button: the list names it, moved on purpose
+    const cssOk = !!rule && rule.split(',').every(s => /^\s*body\.web-join /.test(s)) && ['wcStartBtn', 'wcLoadBtn', 'wcContinue', 'wcEnterBtn', 'welcomeScreen', 'moreMenu', 'moreFiles', 'campMenuWrap', 'mapTabs', 'rowPills', 'handoutsBtn', 'imgLibBtn', 'importCharBtn', 'updateBtn', 'updateBanner', 'installerModal', 'wcUpdate', 'netPaneHostBtn', 'netPaneHost', 'netPlayersBtn', 'netEndBtn', 'setSnapNowBtn', 'settingsModal'].every(id => named.indexOf(id) >= 0)
         && /body\.web-join #welcomeScreen \.wc-launch/.test(rule) && /body\.web-join \.gm-only/.test(rule) && /body\.web-join #settingsModal \.set-group\[data-group="updates"\]/.test(rule) && /body\.web-join #moreMenu \[data-press="headerBrand"\]/.test(rule) && /body\.web-join #settingsModal \.set-saves/.test(rule)
         && ['set-welcome', 'set-devmode', 'set-snaps'].every(c => rule.indexOf('body.web-join #settingsModal .' + c + ',') >= 0 && page.split('class="' + c + '"').length === 2)
         && /<div class="set-welcome"[^>]*>\s*<div class="set-field-label">Welcome screen on launch<\/div>\s*<select id="setWelcomePref"/.test(page) && /<div class="set-devmode"[^>]*>\s*<div class="set-field-label"[^>]*>Developer mode <span id="setDevConsoleState"[^\n]*\n\s*<button class="tool ghost" id="setDevConsoleBtn"/.test(page)

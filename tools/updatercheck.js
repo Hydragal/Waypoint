@@ -905,7 +905,7 @@ process.on('exit', code => { if (!summed && !code) { console.log(NL + 'FAIL     
                 const timer = o.timers === 'async' ? (fn, ms) => { log.timers.push(ms); if (ms > 5000) log.late.push(fn); else setImmediate(fn); } : fn => { fn(); };
                 const api = new Function('ui', '_upd', 'window', 'toast', 'fetch', 'dialogs', 'BroadcastChannel', 'setTimeout', 'location', 'coreNudge', 'coreInfo', 'document', 'RELEASES_PAGE',
                     '"use strict";' + NL + src.split("import('./dialogs.js')").join('dialogs()') + NL + 'return { updateUI: updateUI, checkUpdates: checkUpdates, runHotUpdate: runHotUpdate, runRestore: runRestore, cleanVer: cleanVer, runSelfUpdate: typeof runSelfUpdate === "function" ? runSelfUpdate : null, selfCan: typeof selfCan === "function" ? selfCan : null, plainLine: typeof plainLine === "function" ? plainLine : null, mbOf: typeof mbOf === "function" ? mbOf : null, showUpdateButton: showUpdateButton, showUpdateBanner: showUpdateBanner };')(
-                    ui, upd, win, m => log.toasts.push(m), fetch, dialogs, BC, timer, { reload() { log.reloads++; } }, () => { log.nudged++; }, () => ({ latest: '', installer: 'https://example.invalid/core', core: true }), { querySelector() { return null; } }, 'https://example.invalid/releases/latest');
+                    ui, upd, win, m => { log.toasts.push(m); if (o.onToast) o.onToast(m); }, fetch, dialogs, BC, timer, { reload() { log.reloads++; } }, () => { log.nudged++; }, () => ({ latest: '', installer: 'https://example.invalid/core', core: true }), { querySelector() { return null; } }, 'https://example.invalid/releases/latest');
                 return { els, log, st, upd, api, ui, win };
             }
             const flush = async () => { for (let i = 0; i < 8; i++) await new Promise(r => setImmediate(r)); };
@@ -1063,6 +1063,158 @@ process.on('exit', code => { if (!summed && !code) { console.log(NL + 'FAIL     
             check('a core update that was started and did not finish (the shell says installFailed) is said once in the notice bar — "The update to B did not finish. Try Update again, or use Get Installer." — with both ways on and Dismiss; each answer tells the shell to forget it and gives the bar its usual buttons back; a version that is no plain version raises no notice; a minute after Run, with Waypoint still open, the page checks again and says so', okD, e[3]);
             check('nothing unsaved is lost: a save already under way ends first, the campaign is then saved at once and its own answer waited for; a save that ends in an error, or never ends, starts no installer and falls back; a campaign that is not this machine\'s to save (the GM\'s table) holds nothing up — and io.js still speaks the save note\'s words the page reads', okE, e[4]);
             check('any failure is said in one plain line (the shell\'s words cleaned and cut to 200 characters) and the walk-through takes over, with Get Installer back on every control: the start refused, a shell that has no such route, the network, a download that failed or stopped, a shell that stops answering (three tries; one that answers again goes on), Run refused or unanswered; pressing the button again then opens the steps, never the download', okF, e[5]);
+
+            /* ---- 1.5.5, the same notice on the welcome screen (the owner, 2026-10-24, by prompt: "A strip above the cards": "The same words and
+               buttons as the app's update banner, at the top of the welcome screen: Update, Notes, Later. Update starts the same update as the top
+               row's button."). The strip (#wcUpdate) shows exactly while the notice bar shows, with the bar's words, and each of its buttons presses
+               the bar's own; Update and Notes first put the welcome aside as Enter Waypoint does, and Later keeps it, its one notice lifted over it.
+               Run for real on the page of plain objects with the strip's elements beside the bar's; and the bar on a page with no strip at all is
+               what it is on a page with the strip, scenario for scenario ---- */
+            const STRIP = ['wcUpdate', 'wcUpdateText', 'wcUpdateGo', 'wcUpdateNotes', 'wcUpdateLater'], WC = STRIP.concat(['welcomeScreen', 'wcEnterBtn', 'toast', 'wcMain']);
+            // a page with the welcome up (o.welcome false: put away), the bar's and the strip's words as the page writes them, Enter Waypoint putting the
+            // welcome away as main.js does (noted with how many questions had been asked by then), Settings' Notes noted, a toast element whose classes
+            // each notice sets anew as io.js's toast does (className = 'show'), and the welcome's main view, where the focus is put noted with its
+            // tabindex; o.bare: the same page with none of the strip, the welcome, the main view or the toast element on it
+            const wcPage = (info, o) => {
+                o = o || {}; const cls = new Set(), r = pageOf(info, Object.assign({}, o, { onToast: () => { cls.clear(); cls.add('show'); } }));
+                r.els.updateBannerNotes.textContent = 'Notes'; r.els.updateBannerLater.textContent = 'Later';
+                r.ui('setUpdateNotesBtn').addEventListener('click', () => { r.log.order.push('notes'); });
+                if (o.bare) return r;
+                STRIP.forEach(r.ui); r.els.wcUpdateText.textContent = 'A new version of Waypoint is available.'; r.els.wcUpdateGo.textContent = 'Update'; r.els.wcUpdateNotes.textContent = 'Notes'; r.els.wcUpdateLater.textContent = 'Later';
+                r.ui('welcomeScreen').style.display = o.welcome === false ? 'none' : 'flex';
+                r.ui('wcEnterBtn').addEventListener('click', () => { r.log.order.push('enter@' + r.log.confirms.length); r.els.welcomeScreen.style.display = 'none'; });
+                r.els.toast = { id: 'toast', cls, classList: { add(c) { cls.add(c); } } };
+                const main = r.ui('wcMain'); main.attrs = {}; main.setAttribute = (k, v) => { main.attrs[k] = String(v); }; r.focus = []; main.focus = () => { r.focus.push('wcMain:' + main.attrs.tabindex); };
+                return r;
+            };
+            const stripOf = r => [r.els.wcUpdate.style.display, r.els.wcUpdateText.textContent, r.els.wcUpdateGo.textContent, r.els.wcUpdateNotes.textContent, r.els.wcUpdateLater.textContent];
+            const barOf = r => [r.els.updateBanner.style.display, r.els.updateBannerText.textContent, r.els.updateBannerGo.textContent, r.els.updateBannerNotes.textContent, r.els.updateBannerLater.textContent];
+            const routesOf = (info, more) => Object.assign({ '/api/update-check': info, '/api/update-installer-dismiss': { ok: true }, '/api/update-apply': { ok: true, version: '1.5.1' } }, more || {});
+            const UPTO = { current: '1.5.0', latest: '1.5.0', newer: false }, INST = Object.assign({}, SELF, { canSelfInstall: false }), FAIL = Object.assign({}, SELF, { installFailed: '1.5.1' });
+            const ONE = 'Waypoint 1.5.1 is available — one click to update.', STEPS = 'Waypoint 1.5.1 is available — this one comes as an installer; Update shows the steps first.', NOTE = 'The update to 1.5.1 did not finish. Try Update again, or use Get Installer.';
+            const LATER = 'The Update button stays in the top bar until you update.';
+            let okS1 = false, okS2 = false, okS3 = false, okS4 = false, okS5 = false, okS6 = false, okS7 = false, okSD = false, sx = [];
+            if (src) {
+                try {
+                    // shown and hidden with the bar, with its words: no update, a one-click update of the app files and of the core, the installer's case
+                    const shownBy = async info => { const r = wcPage(null, { routes: routesOf(info) }); await r.api.checkUpdates(false, true); return [stripOf(r), barOf(r)]; };
+                    const none = await shownBy(UPTO), hot = await shownBy(HOT), self = await shownBy(SELF), inst = await shownBy(INST);
+                    okS1 = none[0][0] === 'none' && none[1][0] === 'none'
+                        && j(hot[0]) === j(['flex', ONE, 'Update', 'Notes', 'Later']) && j(hot[1]) === j(hot[0]) && j(self[0]) === j(['flex', ONE, 'Update', 'Notes', 'Later']) && j(self[1]) === j(self[0])
+                        && j(inst[0]) === j(['flex', STEPS, 'Get Installer', 'Notes', 'Later']) && j(inst[1]) === j(inst[0]);
+                    sx.push([none, hot, self, inst]);
+                    // Update: the welcome put aside first, as Enter Waypoint does, then the bar's own button: the same question and the same update as the
+                    // bar's own button and the top row's; with the welcome already put away nothing is pressed for it
+                    const via = async (info, press, o) => { const r = wcPage(info, Object.assign({ routes: routesOf(info) }, o)); r.api.showUpdateBanner(info); r.els[press].click(); await flush(); return r; };
+                    const hS = await via(HOT, 'wcUpdateGo'), hB = await via(HOT, 'updateBannerGo'), hT = await via(HOT, 'updateBtn');
+                    const asked = [hS, hB, hT].map(r => r.log.confirms.slice()), welcomeAt = hS.els.welcomeScreen.style.display;
+                    const shownAt = [hS, hB, hT].map(r => [barOf(r)[0], stripOf(r)[0]]);   // the bar's own Update leaves the bar up for an update of the app files; the top row's puts it away first
+                    [hS, hB, hT].forEach(r => r.st.cb(true)); await flush();
+                    const went = r => j([r.log.order.filter(x => !/^enter@/.test(x)), r.log.reloads, r.log.toasts, r.log.posted]);
+                    const sS = await via(SELF, 'wcUpdateGo'), sB = await via(SELF, 'updateBannerGo'), away = await via(HOT, 'wcUpdateGo', { welcome: false });
+                    okS3 = hS.log.order[0] === 'enter@0' && welcomeAt === 'none' && asked.every(a => a.length === 1 && a[0] === asked[0][0]) && /^Update Waypoint from 1\.5\.0 to 1\.5\.1\? The new version downloads/.test(asked[0][0])
+                        && went(hS) === went(hB) && went(hS) === went(hT) && hS.log.order.indexOf('POST /api/update-apply') > 0 && hS.log.reloads === 1
+                        && sS.log.order[0] === 'enter@0' && j(sS.log.confirms) === j([ASK]) && j(sB.log.confirms) === j([ASK])
+                        && hB.log.order.every(x => !/^enter@/.test(x)) && hT.log.order.every(x => !/^enter@/.test(x)) && away.log.order.every(x => !/^enter@/.test(x)) && away.log.confirms.length === 1
+                        && j(shownAt) === j([['flex', 'flex'], ['flex', 'flex'], ['none', 'none']]);
+                    sx.push([hS.log.order, asked, went(hS), went(hB), sS.log.order, sS.log.confirms, away.log.order, shownAt]);
+                    // Notes: the welcome put aside first, then the bar's own Notes, which opens Settings' release notes
+                    const nS = await via(HOT, 'wcUpdateNotes'), nB = await via(HOT, 'updateBannerNotes');
+                    okS4 = j(nS.log.order) === j(['enter@0', 'notes']) && j(nB.log.order) === j(['notes']) && nS.els.welcomeScreen.style.display === 'none' && nS.log.confirms.length === 0 && stripOf(nS)[0] === 'flex';
+                    sx.push([nS.log.order, nB.log.order]);
+                    // Later: the bar and the strip both put away for this run and said as the bar's Later says it, the notice lifted over the welcome, which
+                    // stays; a later check brings neither back
+                    const lS = wcPage(HOT, { routes: routesOf(HOT) }); lS.api.showUpdateBanner(HOT); const lUp = stripOf(lS)[0]; lS.els.wcUpdateLater.click(); await flush();
+                    const lB = wcPage(HOT, { routes: routesOf(HOT) }); lB.api.showUpdateBanner(HOT); lB.els.updateBannerLater.click(); await flush();
+                    const lSay = lS.log.toasts.slice(), lLift = j([...lS.els.toast.cls].sort()) === j(['show', 'wc-over']), lBare = j([...lB.els.toast.cls]) === j(['show']), lFocus = lS.focus.slice(); await lS.api.checkUpdates(true, true);
+                    okS5 = lUp === 'flex' && j(lSay) === j([LATER]) && j(lB.log.toasts) === j([LATER]) && lLift && !lB.els.toast.cls.has('wc-over') && lBare && j(lFocus) === j(['wcMain:-1']) && lB.focus.length === 0 && lS.els.welcomeScreen.style.display === 'flex'
+                        && lS.log.order.every(x => !/^enter@/.test(x)) && stripOf(lS)[0] === 'none' && barOf(lS)[0] === 'none' && stripOf(lB)[0] === 'none' && barOf(lB)[0] === 'none';
+                    sx.push([lUp, lSay, lLift, [...lS.els.toast.cls], [...lB.els.toast.cls], lFocus, lB.focus, stripOf(lS), barOf(lS)]);
+                    // the notice of an update that did not finish: the bar's words and buttons, Dismiss keeping the welcome and saying nothing, Get Installer and
+                    // Update each putting the welcome aside first, then the bar's own way on
+                    const failed = async () => { const r = wcPage(null, { routes: routesOf(FAIL) }); await r.api.checkUpdates(false, true); return r; };
+                    const f1 = await failed(), fUp = stripOf(f1), fBar = barOf(f1); f1.els.wcUpdateLater.click(); await flush();
+                    const f2 = await failed(); f2.els.wcUpdateNotes.click(); await flush();
+                    const f3 = await failed(); f3.els.wcUpdateGo.click(); await flush();
+                    const at = (r, x) => r.log.order.indexOf(x);
+                    okS6 = j(fUp) === j(['flex', NOTE, 'Update', 'Get Installer', 'Dismiss']) && j(fBar) === j(fUp)
+                        && j(stripOf(f1)) === j(['none', NOTE, 'Update', 'Notes', 'Later']) && j(barOf(f1)) === j(['none', NOTE, 'Update', 'Notes', 'Later']) && at(f1, 'POST /api/update-installer-dismiss') > 0 && f1.log.toasts.length === 0 && !f1.els.toast.cls.has('wc-over')
+                        && f1.els.welcomeScreen.style.display === 'flex' && f1.log.order.every(x => !/^enter@/.test(x)) && f1.upd.failNote === '' && j(f1.focus) === j(['wcMain:-1']) && f2.focus.length === 0 && f3.focus.length === 0
+                        && at(f2, 'enter@0') > 0 && at(f2, 'enter@0') < at(f2, 'POST /api/update-installer-dismiss') && f2.els.installerModal.style.display === 'flex' && f2.els.installerVersion.textContent === 'Waypoint 1.5.1' && stripOf(f2)[0] === 'none' && f2.log.confirms.length === 0
+                        && at(f3, 'enter@0') > 0 && at(f3, 'enter@0') < at(f3, 'POST /api/update-installer-dismiss') && j(f3.log.confirms) === j([ASK]) && stripOf(f3)[0] === 'none';
+                    sx.push([fUp, fBar, stripOf(f1), f1.log.order, f2.log.order, f3.log.order, f3.log.confirms]);
+                    // hidden again whenever the bar is: here the core update said Yes to, which puts the bar away, and then fails to the installer's steps
+                    const y = wcPage(SELF, { routes: routesOf(SELF, { '/api/update-installer': { ok: false, error: 'not here' } }) }); y.api.showUpdateBanner(SELF); const yUp = stripOf(y)[0];
+                    y.els.wcUpdateGo.click(); await flush(); y.st.cb(true); await flush();
+                    okS7 = yUp === 'flex' && stripOf(y)[0] === 'none' && barOf(y)[0] === 'none' && y.els.installerModal.style.display === 'flex' && y.upd.selfFailed === true;
+                    sx.push([yUp, stripOf(y), barOf(y), y.log.toasts]);
+                    // the strip's Update is off while the bar's is: an update of the app files said Yes to downloads with the bar's Update off and the strip's
+                    // with it; the welcome brought back from the top row's mark meanwhile, a press of the strip's Update does nothing (in a browser a button
+                    // that is off is not pressed; this page presses it all the same, so the strip's own guard is what holds); the download failing turns
+                    // both on again
+                    let release = null; const pend = new Promise(res => { release = res; });
+                    const dz = wcPage(HOT, { routes: routesOf(HOT, { '/api/update-apply': pend }) }); dz.api.showUpdateBanner(HOT); const dzOn = [dz.els.updateBannerGo.disabled, dz.els.wcUpdateGo.disabled];
+                    dz.els.wcUpdateGo.click(); await flush(); dz.st.cb(true); await flush();
+                    const dzOff = [dz.els.updateBannerGo.disabled, dz.els.wcUpdateGo.disabled, dz.els.wcUpdateNotes.disabled, dz.els.wcUpdateLater.disabled, stripOf(dz)[0]];
+                    dz.els.welcomeScreen.style.display = 'flex'; const dzAt = dz.log.order.length; dz.els.wcUpdateGo.click(); await flush();
+                    const dzPressed = dz.log.order.slice(dzAt), dzAsked = dz.log.confirms.length, dzWc = dz.els.welcomeScreen.style.display;
+                    release({ ok: false, error: 'not now' }); await flush();
+                    const dzBack = [dz.els.updateBannerGo.disabled, dz.els.wcUpdateGo.disabled, stripOf(dz)[0]];
+                    okSD = j(dzOn) === j([false, false]) && j(dzOff) === j([true, true, false, false, 'flex']) && dzPressed.length === 0 && dzAsked === 1 && dzWc === 'flex' && dz.log.reloads === 0
+                        && j(dzBack) === j([false, false, 'flex']) && dz.log.toasts.some(t => t === 'Update failed: not now');
+                    sx.push([dzOn, dzOff, dzPressed, dzAsked, dzWc, dzBack, dz.log.toasts]);
+                } catch (err) { sx.push('threw: ' + (err && err.stack || err)); }
+            }
+            check('1.5.5 the welcome screen\'s update strip shows exactly while the notice bar shows, with the bar\'s words and its buttons\' words, set as text (run for real): put away with no update; shown for a one-click update of the app files or of the core with Update, and for the installer\'s case with Get Installer', !!src && okS1, sx[0]);
+            check('1.5.5 the strip\'s Update puts the welcome aside first, as Enter Waypoint does, and then presses the bar\'s own button, never the top row\'s, so the bar stays up as after the bar\'s own Update: the same question and the same update as the bar\'s button and the top row\'s, for the app files and for the core; with the welcome already put away nothing is pressed for it', okS3, sx[1]);
+            check('1.5.5 the strip\'s Notes puts the welcome aside first, then presses the bar\'s own Notes, which opens the release notes', okS4, sx[2]);
+            check('1.5.5 the strip\'s Later presses the bar\'s own: both are put away for this run and it is said as the bar\'s Later says it, that notice lifted over the welcome screen once it is said (io.js\'s toast sets its classes anew), which stays, its main view taking the focus as the strip goes; a later check brings neither back', okS5, sx[3]);
+            check('1.5.5 the notice of an update that did not finish shows on the strip with the bar\'s words, Update, Get Installer and Dismiss: Dismiss keeps the welcome, its main view taking the focus, says nothing and gives both their usual buttons back; Get Installer and Update put the welcome aside first, then go on as the bar\'s do', okS6, sx[4]);
+            check('1.5.5 the strip is hidden again whenever the bar is, here by the core update said Yes to, which then falls back to the installer\'s steps', okS7, sx[5]);
+            check('1.5.5 the strip\'s Update is off while the bar\'s is: as an update of the app files downloads, and on again when it fails; a press of it meanwhile, the welcome brought back from the top row\'s mark, does nothing, as the bar\'s does nothing', okSD, sx[6]);
+            // the bar itself is what it was: each scenario run on a page with the strip and on one with none of it, pressing the bar's own buttons, ends the same
+            let okS8 = false, s8 = [];
+            if (src) {
+                try {
+                    const both = async (info, act) => { const out = []; for (const bare of [true, false]) { const r = wcPage(null, bare ? { bare: true, missing: WC, routes: routesOf(info) } : { routes: routesOf(info) }); await act(r); out.push(j([barOf(r), r.log.order, r.log.confirms, r.log.toasts, r.log.reloads, r.log.posted, r.els.installerModal.style.display, r.els.installerModal.dataset, r.els.updateBtn.textContent, r.els.updateBtn.style.display, r.upd])); } return out; };
+                    const check1 = r => r.api.checkUpdates(false, true);
+                    const runs = [
+                        await both(UPTO, check1),
+                        await both(HOT, async r => { await check1(r); r.els.updateBannerGo.click(); await flush(); r.st.cb(true); await flush(); }),
+                        await both(SELF, async r => { await check1(r); r.els.updateBannerGo.click(); await flush(); r.st.cb(false); await flush(); }),
+                        await both(INST, async r => { await check1(r); r.els.updateBannerGo.click(); await flush(); }),
+                        await both(HOT, async r => { await check1(r); r.els.updateBannerLater.click(); await flush(); await r.api.checkUpdates(true, true); }),
+                        await both(HOT, async r => { await check1(r); r.els.updateBannerNotes.click(); await flush(); }),
+                        await both(FAIL, async r => { await check1(r); r.els.updateBannerLater.click(); await flush(); }),
+                        await both(FAIL, async r => { await check1(r); r.els.updateBannerNotes.click(); await flush(); }),
+                        await both(SELF, async r => { await check1(r); r.els.updateBtn.click(); await flush(); })];
+                    okS8 = runs.every(p => p[0] === p[1]); s8 = runs.filter(p => p[0] !== p[1]);
+                } catch (err) { s8 = 'threw: ' + (err && err.stack || err); }
+            }
+            check('1.5.5 the notice bar, the top row\'s Update button and what they do are as before: each of nine scenarios (no update, an update of the app files said Yes to, of the core said No to, the installer\'s case, Later and a check after, Notes, and the unfinished update\'s Dismiss and Get Installer, and the top row\'s button) ends the same on a page with the strip as on a page with none of it', okS8, s8);
+            const ixS = read('system/app/index.html'), cssS = read('system/app/style.css'), stS = read('system/app/scripts/settings.js');
+            const mA = ixS.indexOf('<div id="wcMain">'), mB = ixS.indexOf('<div class="wc-actions">', mA), headS = mA > 0 && mB > mA ? ixS.slice(mA, mB) : '';
+            const tagOf = id => (ixS.match(new RegExp('<button class="([^"]*)" id="' + id + '" title="([^"]*)">([^<]*)</button>')) || []).slice(1);
+            const zTagS = id => +((ixS.match(new RegExp(' id="' + id + '"[^>]*? style="[^"]*?z-index: ?(\\d+)')) || [])[1]);
+            const lift = +((cssS.match(/\n  #toast\.show\.wc-over \{ z-index: (\d+); transition: opacity \.2s, transform \.2s; \}\n/) || [])[1]);
+            const ruleS = (cssS.match(/\n  #wcUpdate \{([^}]*)\}/) || [])[1] || '', barRule = (cssS.match(/\n  #updateBanner \{([^}]*)\}/) || [])[1] || '';
+            const partS = (r, p) => (r.match(new RegExp('(?:^|[;{\\s])' + p + ': ?([^;]+);')) || [])[1];
+            const LOOK = ['background', 'border', 'border-radius', 'box-shadow', 'font-size', 'color', 'padding', 'gap', 'align-items'];
+            check('1.5.5 the strip as the page has it: the first thing of the welcome\'s main view, above its cards, put away in the page, with the bar\'s first words and its three buttons as the bar\'s, the tooltips the same; it wears the bar\'s ground, edge, radius, shadow, words and buttons, in the welcome\'s flow (never fixed) and wrapping on a narrow screen; a website whose plan joins tables alone puts it away beside the bar; and the notice its Later says stands over the welcome screen and under the installer\'s steps and every question, going back under the welcome only once it has faded; the strip is no live region of its own beside the bar\'s, which says the same words; and the main view takes the focus with no ring of its own',
+                /^<div id="wcMain">\s*<!--[^\n]*-->\s*<div id="wcUpdate" style="display:none;">\s*<span id="wcUpdateText">A new version of Waypoint is available\.<\/span>\s*<button class="tool" id="wcUpdateGo" title="Update now">Update<\/button>\s*<button class="tool ghost" id="wcUpdateNotes" title="Release notes">Notes<\/button>\s*<button class="tool ghost" id="wcUpdateLater" title="Hide this until the next version">Later<\/button>\s*<\/div>\s*$/.test(headS)
+                && j(tagOf('wcUpdateGo')) === j(tagOf('updateBannerGo')) && j(tagOf('wcUpdateNotes')) === j(tagOf('updateBannerNotes')) && j(tagOf('wcUpdateLater')) === j(tagOf('updateBannerLater')) && tagOf('updateBannerGo').length === 3
+                && /<span id="updateBannerText">A new version of Waypoint is available\.<\/span>/.test(ixS) && STRIP.every(id => ixS.split('id="' + id + '"').length === 2)
+                && LOOK.every(p => partS(ruleS, p) !== undefined && partS(ruleS, p) === partS(barRule, p)) && partS(ruleS, 'flex-wrap') === 'wrap' && !/position|top|left|transform|z-index|max-width/.test(ruleS)
+                && /\n  #wcUpdate \.tool \{ padding: 4px 12px; font-size: 12px; \}\n/.test(cssS) && /\n  #updateBanner \.tool \{ padding: 4px 12px; font-size: 12px; \}\n/.test(cssS) && /\n  #wcUpdateText \{ flex: 1 1 220px; min-width: 0; overflow-wrap: anywhere; \}\n  @media \(max-width: 560px\) \{ #wcUpdateText \{ flex-basis: 100%; \} \}[^\n]*\n/.test(cssS)
+                && /\n  body\.web-join #updateBtn, body\.web-join #updateBanner, body\.web-join #installerModal, body\.web-join #wcUpdate,\n/.test(cssS)
+                && zTagS('welcomeScreen') === 100000 && lift > zTagS('welcomeScreen') && lift < zTagS('installerModal') && lift < zTagS('customConfirm')
+                && /<div id="updateBanner" role="status" style="display:none;">/.test(ixS) && !/<div id="wcUpdate"[^>]*role=/.test(ixS)
+                && /\n  #toast\{\n[^}]*;transition:opacity \.2s,transform \.2s,z-index 0s \.2s;z-index:99995;/.test(cssS) && /\n  #wcMain:focus \{ outline: none; \}/.test(cssS),
+                j([headS.slice(0, 200), lift, zTagS('welcomeScreen'), zTagS('installerModal'), LOOK.map(p => [partS(ruleS, p), partS(barRule, p)])]));
+            check('1.5.5 the bar\'s own show and hide each end in the strip, the core\'s notice too: wcStrip is called six times, by showUpdateBanner, hideUpdateBanner (which endFailNote ends in, after it gives the bar its usual words back), showFailNote and coreNudge right after it shows the bar, and by runHotUpdate right after it turns the bar\'s Update off and on again, and nowhere else',
+                (stS.match(/wcStrip\(\);/g) || []).length === 6 && /\n            btns\.forEach\(function\(b\) \{ if \(b\) b\.disabled = true; \}\); wcStrip\(\);\n/.test(stS) && /\}\)\.catch\(function\(e\) \{ btns\.forEach\(function\(b\) \{ if \(b\) b\.disabled = false; \}\); wcStrip\(\); toast\('Update failed: '/.test(stS) && /\n        bar\.style\.display = 'flex';\n        wcStrip\(\);[^\n]*\n    \}\n    updateUI\(\);\n    if \(firstTime\) \{/.test(stS)
+                && /function hideUpdateBanner\(\) \{ var bar = ui\('updateBanner'\); if \(bar\) bar\.style\.display = 'none'; wcStrip\(\); \}/.test(stS)
+                && /\n    if \(notes\) notes\.textContent = 'Notes'; if \(later\) later\.textContent = 'Later';\n    hideUpdateBanner\(\);\n/.test(stS), (stS.match(/wcStrip\(\);/g) || []).length);
         }
 
         /* ================= C. the words ================= */
@@ -1087,6 +1239,15 @@ process.on('exit', code => { if (!summed && !code) { console.log(NL + 'FAIL     
                 /An update that changes Waypoint&rsquo;s core is one click too/.test(ups) && /closes Waypoint/.test(ups) && /opens Waypoint again/.test(ups) && /signature/.test(ups) && /<b>Get Installer<\/b>/.test(ups) && /multiplayer session/.test(ups) && (ups.match(/<li>/g) || []).length === 4 && /Where that cannot be done, <b>Get Installer<\/b> shows the steps before anything downloads\./.test(ups) && /a copy older than 1\.5\.0, a copy the installer did not put there, and a download that fails/.test(ups)
                 && /From Waypoint 1\.5\.0 on, updates like this one install themselves\./.test(introCore) && /cannot take that update by itself/.test(introNormal) && /Nothing has downloaded yet/.test(introNormal)
                 && /id="setUpdateInstallerBtn"[^>]*>Get Installer<\/button>/.test(group) && /installs itself/.test(rd), j([ups.length, step.length, introCore.length, introNormal.length]));
+            // 1.5.5, the welcome screen's update strip said: Help's Updates part in one plain sentence, both release notes alike under 1.5.5, and
+            // this file in the web mode rule's list where it is there (the maintainer's own copy, git-ignored: a missing one passes)
+            const NOTE_WC = "\nUpdates\n- When a newer Waypoint is out, the welcome screen now says so too,\n  above its cards, with the same Update, Notes and Later buttons as the\n  notice in the app. Update and Notes take you into Waypoint first, as\n  Enter Waypoint does, so you see each step of the update.\n\n";
+            const notesWc = ['WHATSNEW.txt', 'system/app/assets/whatsnew.txt'].map(read);
+            const mdWc = (() => { try { return read('CLAUDE.md'); } catch (e2) { if (e2 && e2.code === 'ENOENT') return null; throw e2; } })();
+            check('1.5.5 the welcome screen\'s update strip is said: Help\'s Updates part says in one plain sentence that when Waypoint finds a newer version the welcome screen says so too, with the same Update, Notes and Later buttons; both release notes carry the same lines in a part of their own under 1.5.5, once; and this file names the strip in the web mode rule\'s list, where the file is there',
+                /Waypoint also looks quietly at launch\. When it finds one, the welcome screen says so too, above its cards, with the same <b>Update<\/b>, <b>Notes<\/b> and <b>Later<\/b> buttons as the notice in the app\. <b>Update Now<\/b>/.test(ups)
+                && notesWc.every(t => t.split(NOTE_WC).length === 2 && t.indexOf(NOTE_WC) > t.indexOf('WAYPOINT 1.5.5') && t.indexOf(NOTE_WC) < t.indexOf('WAYPOINT 1.5.4') && t.indexOf('WAYPOINT 1.5.5') >= 0)
+                && (mdWc === null || mdWc.split("banner and installer window and the welcome screen's update strip (settings.js ").length === 2), j([notesWc.map(t => t.indexOf(NOTE_WC)), mdWc === null]));
         }
         /* ---- 1.5.5, a plan-aware mode: on a website the deploy is the update (webmode.js). The launch's quiet check and the snapshots list are never
            asked on a website whose plan joins tables alone, and the Updates part of Settings is put away there; a desktop asks them as before.

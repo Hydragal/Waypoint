@@ -1249,9 +1249,14 @@ function saveIsFresh() {
 })();
 // [tutorialcheck:autostart-start]
 // the welcome screen is up (shown with display flex; the stylesheet hides it otherwise), one of the app's dialogs is open (a prompt, a
-// question, the import's choice) or an import picked from the welcome is still being chosen: the tour waits
+// question, the import's choice, an update's installer steps or the release notes) or an import picked from the welcome is still being chosen:
+// the tour waits. 1.5.5: the welcome's update strip goes on into Waypoint for Update and Notes (settings.js wcStripPress), and on a fresh save the
+// tour waits for what the update shows, as it waits for a question
 function welcomeUp() { var w = document.getElementById('welcomeScreen'); return !!(w && w.style.display && w.style.display !== 'none'); }
-function dialogUp() { return window.wpWelcomeImporting === true || ['customPrompt', 'customConfirm', 'importChoiceModal'].some(function(id) { var d = document.getElementById(id); return !!(d && d.style.display === 'flex'); }); }
+function dialogUp() { return window.wpWelcomeImporting === true || ['customPrompt', 'customConfirm', 'importChoiceModal', 'installerModal', 'legalModal'].some(function(id) { var d = document.getElementById(id); return !!(d && d.style.display === 'flex'); }); }
+// an update runs (the top row's Update button is off while one does: settings.js runHotUpdate and selfButtons): the tour waits too, or the update's
+// reload or close would cut it off with the tour marked seen
+function updateRuns() { var b = document.getElementById('updateBtn'); return !!(b && b.disabled === true); }
 // the tour is still owed to this save: not seen, nothing in the save yet, not at a table (the welcome's Start a campaign asks before it names one)
 function tourPending() { var seen = false; try { seen = localStorage.getItem('wp_tourSeen') === '1'; } catch (e) {} return !seen && !(window.wpNet && window.wpNet.active) && Object.keys(state.appState.campaigns || {}).length > 0 && saveIsFresh(); }
 (function autoStart() {
@@ -1265,11 +1270,16 @@ function tourPending() { var seen = false; try { seen = localStorage.getItem('wp
         var loaded = Object.keys(state.appState.campaigns || {}).length > 0;
         if (!loaded) { if (tries >= 40) clearInterval(t); return; }   // wait for load() (up to ~12 s), then give up quietly
         if (window.wpNet && window.wpNet.active) { clearInterval(t); return; }   // at a table (a join from the welcome): never
-        if (welcomeUp() || dialogUp()) return;   // in Waypoint proper: once the welcome is closed and nothing is asked — keep waiting
+        if (welcomeUp() || dialogUp() || updateRuns()) return;   // in Waypoint proper: once the welcome is closed, nothing is asked and no update runs — keep waiting
         clearInterval(t);
         if (!saveIsFresh()) { try { localStorage.setItem('wp_tourSeen', '1'); } catch (e) {} return; }   // an existing table (or one just imported): never pop up, Help → Tutorial has it
-        try { localStorage.setItem('wp_tourSeen', '1'); } catch (e) {}
-        setTimeout(startTour, 600);
+        // looked at once more as it would start: the strip's Update asks its question a moment after the welcome steps aside (the update imports
+        // dialogs.js first), so the tour goes back to waiting if a question, an update or a table came up meanwhile, and is marked seen only as it starts
+        setTimeout(function() {
+            if (welcomeUp() || dialogUp() || updateRuns() || (window.wpNet && window.wpNet.active)) { autoStart(); return; }
+            try { localStorage.setItem('wp_tourSeen', '1'); } catch (e) {}
+            startTour();
+        }, 600);
     }, 300);
 })();
 // [tutorialcheck:autostart-end]

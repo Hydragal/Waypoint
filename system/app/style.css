@@ -1063,7 +1063,7 @@
   #toast{
     position:fixed;left:50%;bottom:80px;transform:translateX(-50%) translateY(30px);
     background:var(--panel2);border:1px solid var(--edge);border-radius:9px;padding:10px 14px;
-    box-shadow:var(--shadow);opacity:0;pointer-events:none;transition:.2s;z-index:99995;display:flex;gap:12px;align-items:center;   /* over the fog of war (#fogScreen 3950), the screen effects and every panel: a notice a player could not read was no notice; under the dialogs */
+    box-shadow:var(--shadow);opacity:0;pointer-events:none;transition:opacity .2s,transform .2s,z-index 0s .2s;z-index:99995;display:flex;gap:12px;align-items:center;   /* over the fog of war (#fogScreen 3950), the screen effects and every panel: a notice a player could not read was no notice; under the dialogs */
     font-size:13px;
   }
   .el-del{font-size:10px;padding:2px 5px}
@@ -1843,6 +1843,16 @@
     box-shadow: 0 6px 18px rgba(0,0,0,0.45); font-size: 13px; color: var(--ink); max-width: min(92vw, 640px);
   }
   #updateBanner .tool { padding: 4px 12px; font-size: 12px; }
+  /* 1.5.5: the same notice on the welcome screen, above its cards (settings.js wcStrip shows it exactly while the bar shows, with the bar's words; the
+     owner, 2026-10-24: "A strip above the cards"): the bar's ground, edge, radius and buttons, in the welcome's flow, wrapping on a narrow screen */
+  #wcUpdate { align-items: center; flex-wrap: wrap; gap: 10px; padding: 8px 12px 8px 14px; background: var(--panel2); border: 1px solid var(--gold); border-radius: 8px; box-shadow: 0 6px 18px rgba(0,0,0,0.45); font-size: 13px; color: var(--ink); }
+  #wcUpdate .tool { padding: 4px 12px; font-size: 12px; }
+  #wcUpdateText { flex: 1 1 220px; min-width: 0; overflow-wrap: anywhere; }
+  @media (max-width: 560px) { #wcUpdateText { flex-basis: 100%; } }   /* a phone: the words on a line of their own, the three buttons together under them */
+  /* the notice the strip's Later says stands over the welcome screen (100000) and under every question and dialog; io.js's toast takes the class off
+     with its own at the next notice. It is lifted at once, and goes back under the welcome only once it has faded (#toast: z-index 0s .2s) */
+  #toast.show.wc-over { z-index: 100001; transition: opacity .2s, transform .2s; }
+  #wcMain:focus { outline: none; }   /* the strip's Later puts the focus on the main view as the strip goes (settings.js wcStripLater): Tab goes on to its cards */
   #updateBtn { background: var(--gold); color: #1a1408; border-color: var(--gold); font-weight: 600; white-space: nowrap; animation: updGlow 2.4s ease-in-out infinite; }
   #updateBtn:hover { filter: brightness(1.1); }
   #reviewChip { background: var(--gold); color: #1a1408; border-color: var(--gold); font-weight: 600; white-space: nowrap; }
@@ -2221,7 +2231,7 @@
   body.web-join #wcStartBtn, body.web-join #wcLoadBtn, body.web-join #wcContinue, body.web-join #wcEnterBtn, body.web-join #welcomeScreen .wc-launch,
   body.web-join #moreMenu [data-press="headerBrand"], body.web-join #moreFiles, body.web-join #campMenuWrap, body.web-join #mapTabs, body.web-join #rowPills,
   body.web-join #handoutsBtn, body.web-join #imgLibBtn, body.web-join #importCharBtn, body.web-join .gm-only,
-  body.web-join #updateBtn, body.web-join #updateBanner, body.web-join #installerModal,
+  body.web-join #updateBtn, body.web-join #updateBanner, body.web-join #installerModal, body.web-join #wcUpdate,
   body.web-join #netPaneHostBtn, body.web-join #netPaneHost, body.web-join #netPlayersBtn, body.web-join #netEndBtn,
   body.web-join #settingsModal .set-welcome, body.web-join #settingsModal .set-devmode,
   body.web-join #setSnapNowBtn, body.web-join #setSnapNowBtn + .set-line, body.web-join #settingsModal .set-snaps,
