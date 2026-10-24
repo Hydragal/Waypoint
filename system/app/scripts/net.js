@@ -5729,6 +5729,28 @@ function unboundNotice(prof) {
 }
 // [netcheck:unbound-end]
 // [netcheck:approval-start]
+// 1.5.6, backlog 185 (the owner, 2026-10-24, by prompt in the website session: "The GM says who they are (Recommended)"; the case: a player who
+// joined from the app makes an account on the website and joins the same table from there, under the account's own player id, so the table
+// sees a stranger). The GM's question offers Same person as…, then each player this campaign knows who is not at the table now, most recently
+// seen first: a yes gives the newcomer that player's record (their character, their last map, their history) and every character and token
+// they own, and retires the old id (the record keeps it as was). admitPlayer then issues a fresh table key, as for any player let in
+function sameCandidates(camp, newId, roster) {
+    if (!camp || !camp.players || typeof camp.players !== 'object') return [];
+    var on = Object.create(null); Object.keys(roster || {}).forEach(function(k) { var p = roster[k]; if (p && typeof p.id === 'string') on[p.id] = 1; });
+    return Object.keys(camp.players).filter(function(pid) {
+        var r = camp.players[pid];
+        return pid !== newId && !on[pid] && !!r && typeof r === 'object' && validProfileId(pid) && pid.indexOf('tk:') !== 0 && !(camp.bannedPlayers && own(camp.bannedPlayers, pid));
+    }).sort(function(a, b) { return (Number(camp.players[b].lastSeen) || 0) - (Number(camp.players[a].lastSeen) || 0); }).slice(0, 12);
+}
+function takeOver(camp, oldId, newId) {
+    if (!camp || !camp.players || typeof camp.players !== 'object' || !own(camp.players, oldId) || oldId === newId || !validProfileId(newId)) return false;
+    var rec = camp.players[oldId], nr = Object.assign({}, rec && typeof rec === 'object' ? rec : {});
+    delete nr.key; nr.was = oldId;   // the old table key goes with the old id: admitPlayer issues the newcomer a fresh one
+    camp.players[newId] = nr; delete camp.players[oldId];
+    Object.keys(camp.chars || {}).forEach(function(cid) { var c = camp.chars[cid]; if (c && typeof c === 'object' && c.ownerId === oldId) c.ownerId = newId; });
+    Object.keys(camp.items || {}).forEach(function(iid) { var it = camp.items[iid]; if (it && it.type === 'map' && Array.isArray(it.whiteboard)) it.whiteboard.forEach(function(w) { if (w && typeof w === 'object' && w.ownerId === oldId) w.ownerId = newId; }); });
+    return true;
+}
 function processNextApproval() {
     if (approvalOpen) return;
     var next = pendingJoins.shift();
@@ -5739,7 +5761,25 @@ function processNextApproval() {
     if (next.prof && campQ && campQ.bannedPlayers && own(campQ.bannedPlayers, next.prof.id)) { denyJoin(next.conn, 'You are banned from this campaign.'); processNextApproval(); return; }
     approvalOpen = true;
     var hint = next.why ? ' — a name this table already knows, but without its table key (a fresh install, or someone else using that name)' : '';
-    showConfirm('"' + (next.prof.name || 'A player') + '" wants to join your table' + hint + '. Let them in?', function(yes) {
+    var who = next.prof.name || 'A player', sameOf = campQ && typeof sameCandidates === 'function' ? sameCandidates(campQ, next.prof.id, net.roster) : [];
+    var askSame = function(k) {   // 1.5.6: one known player at a time; Cancel goes back to the first question
+        if (k >= sameOf.length) { askMain(); return; }
+        var pid = sameOf[k], recS = campQ.players[pid] || {}, Sp = typeof SC === 'function' ? SC() : null, plays = Sp && Sp.playsAs ? Sp.playsAs(campQ, pid) : '';
+        showConfirm('Is "' + who + '" the same person as "' + String(recS.name || 'a player') + '"' + (plays ? ', who plays ' + plays : '') + '? Yes gives them that player\'s character, tokens and place, and retires the old name.', function(ans) {
+            if (ans === 'alt') { askSame(k + 1); return; }
+            if (ans !== true) { askMain(); return; }
+            approvalOpen = false;
+            if (!net.active || net.role !== 'host') return;
+            if (!next.conn.open) { toast(who + ' had already dropped — you will be asked again when they come back.'); processNextApproval(); return; }
+            var campT = getActiveCampaign();
+            if (campT && takeOver(campT, pid, next.prof.id)) { toast(who + ' takes over from ' + String(recS.name || 'a player') + (plays ? ', playing ' + plays : '') + '.'); if (typeof logEvent === 'function') logEvent('player', who + ' took over from ' + String(recS.name || 'a player')); }
+            admitPlayer(next.conn, next.prof);
+            processNextApproval();
+        }, { noEnter: true, noEscape: true, yes: 'Yes, the same', alt: 'Not them' });
+    };
+    var askMain = function() {
+    showConfirm('"' + who + '" wants to join your table' + hint + '. Let them in?' + (sameOf.length ? ' If they played here before from another app or browser, Same person as… gives them that player\'s character.' : ''), function(yes) {
+        if (yes === 'alt' && sameOf.length) { askSame(0); return; }
         approvalOpen = false;
         if (!net.active || net.role !== 'host') return;
         if (yes) {
@@ -5751,7 +5791,9 @@ function processNextApproval() {
             toast((next.prof.name || 'Player') + ' was turned away.');
         }
         processNextApproval();
-    }, { noEnter: true, noEscape: true });   // its buttons alone (the owed review, 2026-10-09): a key typed for something else let a stranger in, or turned a player away for the session
+    }, sameOf.length ? { noEnter: true, noEscape: true, alt: 'Same person as…' } : { noEnter: true, noEscape: true });   // its buttons alone (the owed review, 2026-10-09): a key typed for something else let a stranger in, or turned a player away for the session
+    };
+    askMain();
 }
 // [netcheck:approval-end]
 

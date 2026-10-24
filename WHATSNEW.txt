@@ -8,6 +8,21 @@ Multiplayer
   saw "You are not on this map" until you summoned them. While you
   are on a planner, Follow me now names the map you last had open,
   and that is where a new player lands.
+- Same person as... When a player you know joins from another app or
+  browser, such as a website account, the question that asks you to
+  let them in offers Same person as... You are asked about each player
+  not at the table, most recent first. Yes gives them that player's
+  character, tokens and place, and a fresh table key.
+- A player's token turns now step to the grid by your Snap, as their
+  drops do. Before, a player whose own magnet was off left their token
+  a little off the grid's angle.
+- A token's facing arrow turns it only while that token is selected,
+  for players as for the GM. Before, a click meant for the token beside
+  it could turn a player's own token instead.
+
+The app
+- Waypoint now names itself an alpha: the version reads Waypoint Alpha
+  1.5.6 in About, the update notices and the release's name.
 
 Handbook
 - A page set GM only now keeps every page nested under it from your

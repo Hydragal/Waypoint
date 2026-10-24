@@ -1142,10 +1142,9 @@ import { cssColor, picRef } from './safecore.js';   // a map from a file: colour
               // Grids are square or flat-top hex, so the chosen side is always a face:
               // the arrow points straight across it at the neighbouring cell.
               fw.style.transform = item.front ? 'rotate(' + item.front + 'deg)' : '';
-              // The arrow itself turns the token (click / drag) when you may move it:
-              // the GM's selected token, or a player's own token.
-              var clientV = window.wpNet && window.wpNet.active && window.wpNet.role === 'client';
-              fw.classList.toggle('turnable', clientV ? (item.ownerId === window.wpNet.myId && !item.locked && !(window.wpNet.paused || window.wpNet.selfPaused)) : (state.selWbId === item.id));
+              // The arrow itself turns the token (click / drag) when you may move it: the GM's selected token, or a player's own token
+              // while it is selected (arrowTurnable)
+              fw.classList.toggle('turnable', arrowTurnable(item, window.wpNet, state));
           } else if (fw) fw.remove();
           // Target marks: everyone targeting this token, shown as small copies of their own
           // tokens, centred in a row that wraps into rows and never leaves the token's edges.
@@ -1824,10 +1823,16 @@ window.wpFitToGrid = fitToGrid;
       if (gridType === 'hex') return 60;
       return 0;
   }
+  // [systemcheck:facingstep-start]
+  // 1.5.6 (found 2026-10-24: a player's token rested a little off the grid's angle with the GM's magnet on): a turn steps to the grid's sides
+  // by the snap rule a drop follows (datamap.js wpSnapOn: on a player's app at a table the GM's Snap, else this screen's Snap to the grid or
+  // to both), never by a player's own magnet alone
   function facingStep(item) {
-      if (!state.snap || state.snapMode === 'items') return 0;
+      var on = typeof window.wpSnapOn === 'function' ? window.wpSnapOn() === true : (!!state.snap && state.snapMode !== 'items');
+      if (!on) return 0;
       return facingStepFor(state.gridType, item);
   }
+  // [systemcheck:facingstep-end]
   function snapFacing(rot, step, front) {
       // `front` = which side of the art is the token's front (0 top, 90 right…);
       // that side is what turns to face a cell side.
@@ -1948,6 +1953,18 @@ window.wpFitToGrid = fitToGrid;
       if (window.wpSheets && window.wpSheets.tokenTurned) window.wpSheets.tokenTurned(tokId, true);
       return true;
   };
+  // [systemcheck:turnable-start]
+  // A token's facing arrow turns it only while that token is selected, on the GM's screen and on a player's (1.5.6; found at the owner's table
+  // on 2026-10-24: "characters right next to each other become very difficult to control in their facing. i may mean to click one, and
+  // accidentally change the face of another right next to it"). The arrow stands past the token's edge, so a live arrow on every token of a
+  // player's took the press meant for the token beside it; an arrow that is not turnable takes no press at all (style.css), and the press goes
+  // to what lies under it. A player's own token, not locked, the table not paused for them
+  function arrowTurnable(item, net, st) {
+      if (!item || !st || st.selWbId !== item.id) return false;
+      if (net && net.active && net.role === 'client') return item.ownerId === net.myId && !item.locked && !(net.paused || net.selfPaused);
+      return true;
+  }
+  // [systemcheck:turnable-end]
   function attachArrowTurn() {
       var turning = null;
       function boardPt(e) {
@@ -6212,12 +6229,12 @@ if(_el_aboutBtn) _el_aboutBtn.addEventListener('click', function() {
       var vEl = document.getElementById('aboutVersion');
       if (vEl && !vEl.dataset.click) {   // the version number itself opens the release notes
           vEl.dataset.click = '1'; vEl.style.cursor = 'pointer'; vEl.title = "Click to read what's new";
-          vEl.addEventListener('click', function() { window.wpShowWhatsNew(vEl.textContent.replace('Version ', '').trim()); });
+          vEl.addEventListener('click', function() { window.wpShowWhatsNew(vEl.dataset.version || ''); });
       }
       if (vEl && !vEl.dataset.loaded) {
           // The app folder's version wins over the shell's: a one-click update replaces only the app folder
           (window.wpVersionReady || fetch('/api/version').then(function(r) { return r.json(); }).then(function(v) { return v.version; })).then(function(ver) {
-              vEl.textContent = 'Version ' + ver;
+              vEl.textContent = 'Waypoint Alpha ' + ver; vEl.dataset.version = String(ver || '');   // 1.5.6: the release's name (backlog 177)
               vEl.dataset.loaded = '1';
           }).catch(function() { vEl.textContent = ''; });
       }
@@ -6268,7 +6285,7 @@ if(_el_aboutCloseBtn) _el_aboutCloseBtn.addEventListener('click', function() {
       var body = document.getElementById('legalBody');
       var title = document.getElementById('legalTitle');
       if (!body || !title) return;
-      title.textContent = "What's New" + (versionLabel ? ' — Waypoint ' + versionLabel : '');
+      title.textContent = "What's New" + (versionLabel ? ' — Waypoint Alpha ' + versionLabel : '');
       body.style.textAlign = 'center';   // release notes read centred; Terms/Privacy switch back to left in openLegal
       body.textContent = 'Loading…';
       document.getElementById('legalModal').style.display = 'flex';
@@ -6280,7 +6297,7 @@ if(_el_aboutCloseBtn) _el_aboutCloseBtn.addEventListener('click', function() {
   var _el_aboutNotesBtn = document.getElementById('aboutNotesBtn');
   if (_el_aboutNotesBtn) _el_aboutNotesBtn.addEventListener('click', function() {
       var vEl = document.getElementById('aboutVersion');
-      window.wpShowWhatsNew(vEl && vEl.textContent.replace('Version ', '').trim());
+      window.wpShowWhatsNew(vEl && vEl.dataset.version || '');
   });
 
   var _el_aboutTermsBtn = document.getElementById('aboutTermsBtn');

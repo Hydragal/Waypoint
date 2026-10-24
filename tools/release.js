@@ -210,7 +210,7 @@ if (!NOTES_ONLY) {
 {
     const readmePath = path.join(ROOT, 'README.md');
     const readme = fs.readFileSync(readmePath, 'utf8');
-    const updated = readme.replace(/Current release: \*\*[^*]+\*\*/, 'Current release: **' + VERSION + '**');
+    const updated = readme.replace(/Current release: \*\*[^*]+\*\*/, 'Current release: **Waypoint Alpha ' + VERSION + '**');   // 1.5.6: the release's name (backlog 177); the tag stays the plain number
     if (updated !== readme) fs.writeFileSync(readmePath, updated);
 }
 
@@ -275,7 +275,7 @@ function mdText(s) { return String(s).replace(/[\\`*_~\[\]<>#|&!]/g, '\\$&'); }
 function buildNotes() {
     const all = fs.readFileSync(path.join(ROOT, 'WHATSNEW.txt'), 'utf8').replace(/\r\n/g, '\n');
     const top = (all.split(/\n(?=WAYPOINT \d)/)[0] || '').trim().split('\n');
-    const out = ['# Waypoint ' + VERSION];
+    const out = ['# Waypoint Alpha ' + VERSION];
     let bullet = null;
     const flush = () => { if (bullet) { out.push('- ' + mdText(bullet)); bullet = null; } };
     for (const raw of top.slice(2)) {                       // skip the title and its ==== underline
@@ -319,7 +319,7 @@ function api(method, url, body, contentType) {
     const missing = ASSETS.filter(f => !fs.existsSync(path.join(dist, f)));
     if (missing.length) throw new Error('Not published: ' + missing.join(', ') + ' missing from ' + dist + ' (build first, without --notes-only)');   // never a release without its signature: no install would take it
     console.log('\nCreating release', VERSION, 'on', REPO);
-    const rel = await api('POST', 'https://api.github.com/repos/' + REPO + '/releases', { tag_name: VERSION, name: 'Waypoint ' + VERSION, body: notes, draft: false, prerelease: false });
+    const rel = await api('POST', 'https://api.github.com/repos/' + REPO + '/releases', { tag_name: VERSION, name: 'Waypoint Alpha ' + VERSION, body: notes, draft: false, prerelease: false });
     const uploadBase = String(rel.upload_url).replace(/\{.*$/, '');
     for (const f of ASSETS) {
         const p = path.join(dist, f);

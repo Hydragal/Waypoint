@@ -652,7 +652,7 @@ process.on('exit', code => { if (!summed && !code) { console.log(NL + 'FAIL     
                 const bare = s => s.replace(/\\./g, '');   // what is left once every escaped character is taken out
                 check('release.js writes the release notes as text: every character Markdown or its HTML would read as markup (* _ ~ ` [ ] < > # | & ! and the backslash) is escaped in a heading and a bullet, wrapped lines joined first, so the page shows **, ~~, <u>, a [link](…) exactly as the notes write them; --notes-only builds them without the key and writes nothing else',
                     nr.status === 0 && un(bul.slice(2)) === weird + ' and a wrapped ~~line~~' && un(head.slice(4)) === 'Text **style**' && !/[\\`*_~\[\]<>#|&!]/.test(bare(bul.slice(2))) && !/[\\`*_~\[\]<>#|&!]/.test(bare(head.slice(4)))
-                    && md.startsWith('# Waypoint ' + vOf) && !/^- olds*$/m.test(md) && !fs.existsSync(path.join(nRepo, 'Waypoint_Setup.exe')) && fs.readdirSync(path.join(nRepo, 'dist', vOf)).join() === 'RELEASE_NOTES.md', j([nr.status, String(nr.stderr).slice(0, 200), bul.slice(0, 200), head]));
+                    && md.startsWith('# Waypoint Alpha ' + vOf) && !/^- olds*$/m.test(md) && !fs.existsSync(path.join(nRepo, 'Waypoint_Setup.exe')) && fs.readdirSync(path.join(nRepo, 'dist', vOf)).join() === 'RELEASE_NOTES.md', j([nr.status, String(nr.stderr).slice(0, 200), bul.slice(0, 200), head]));
             }
 
             /* ---- the release build refuses to build without the key ---- */
@@ -741,7 +741,7 @@ process.on('exit', code => { if (!summed && !code) { console.log(NL + 'FAIL     
                 const distList = fs.existsSync(dist) ? fs.readdirSync(dist).sort() : [], zipN = 'waypoint-app-' + vNow + '.zip';
                 check('release.js run to its end (a scratch copy, the right key, stand-ins for Inno Setup and the archiver): Inno Setup is handed the staged installer.iss in dist/<version>/stage and nothing else, and beside it lie exactly the five files of the top and system/ but for its five folders, each byte for byte as the build left it (the README naming the release and the app\'s version.json written before the copy), while a notes file, a folder of working copies, IMPROVEMENTS.md, private/, saves/, docs/, .github/, .gitattributes, an old installer, a file nobody knows and the five folders lie beside the real script and are not copied; a private folder beside the build no longer stops it',
                     ran.status === 0 && !!got && Array.isArray(got.args) && got.args.length === 1 && same(got.args[0], path.join(fs.realpathSync(sr), 'dist', vNow, 'stage', 'installer.iss'))
-                    && j(sortKeys(got.files)) === j(sortKeys(want)) && /Current release: \*\*\d+\.\d+\.\d+\*\*/.test(fs.readFileSync(path.join(sr, 'README.md'), 'utf8')) && JSON.parse(fs.readFileSync(path.join(sr, 'system', 'app', 'version.json'), 'utf8')).version === vNow,
+                    && j(sortKeys(got.files)) === j(sortKeys(want)) && /Current release: \*\*Waypoint Alpha \d+\.\d+\.\d+\*\*/.test(fs.readFileSync(path.join(sr, 'README.md'), 'utf8')) && JSON.parse(fs.readFileSync(path.join(sr, 'system', 'app', 'version.json'), 'utf8')).version === vNow,
                     j([ran.status, said.slice(-400), got && got.args, got && Object.keys(got.files).filter(k => !(k in want)), Object.keys(want).filter(k => !got || !(k in got.files))]));
                 check('the installer is taken out of the stage: the copy in dist/<version>/ is the one Inno Setup made there, its signature (Waypoint_Setup.exe.sig) checks against the key as an install will check it, the stage is removed once it is out, nothing is written at the top of the tree (an old installer there stays as it was), and dist/<version>/ holds what a release carries and its notes, nothing else',
                     ran.status === 0 && setupBytes.toString('utf8') === 'an installer the stand-in made' && updater.verifyUpdate(pub2, 'Waypoint_Setup.exe', sha256(setupBytes), vNow, setupSig) === true && !fs.existsSync(path.join(dist, 'stage'))
@@ -924,8 +924,8 @@ process.on('exit', code => { if (!summed && !code) { console.log(NL + 'FAIL     
                     const wired = typeof r.els.setUpdateRestoreBtn.handlers.click === 'function'; if (wired) r.els.setUpdateRestoreBtn.handlers.click(); await flush();
                     const asked = r.log.confirms.slice(), before = r.log.fetches.length; r.st.cb(false); await flush(); const afterNo = r.log.fetches.length, noReload = r.log.reloads;
                     r.els.setUpdateRestoreBtn.handlers.click(); await flush(); r.st.cb(true); await flush();
-                    ok2 = wired && asked.length === 1 && asked[0] === 'Go back from Waypoint 1.5.1 to Waypoint 1.5.0? Your campaigns are not touched. You can update again afterwards.' && before === 0 && afterNo === 0 && noReload === 0
-                        && j(r.log.fetches) === j([['/api/update-rollback', 'POST']]) && r.log.reloads === 1 && r.log.toasts.some(t => /Restored Waypoint 1\.5\.0/.test(t)) && j(r.log.posted) === j([{ type: 'reload' }]);
+                    ok2 = wired && asked.length === 1 && asked[0] === 'Go back from Waypoint Alpha 1.5.1 to Waypoint Alpha 1.5.0? Your campaigns are not touched. You can update again afterwards.' && before === 0 && afterNo === 0 && noReload === 0
+                        && j(r.log.fetches) === j([['/api/update-rollback', 'POST']]) && r.log.reloads === 1 && r.log.toasts.some(t => /Restored Waypoint Alpha 1\.5\.0/.test(t)) && j(r.log.posted) === j([{ type: 'reload' }]);
                     d.push([wired, asked, before, afterNo, r.log.fetches, r.log.reloads, r.log.toasts]);
                     // refused by the shell: said, the button back, no reload; at a table: not even asked; nothing to restore: nothing
                     const f = rig({ appVersion: '1.5.1', answer: { ok: false, error: 'no previous version to restore' } }); f.ui('setUpdateRestoreBtn'); f.upd.info = { current: '1.5.1', hasPrev: true, prevVersion: '1.5.0' }; f.api.runRestore(); await flush(); f.st.cb(true); await flush();
@@ -934,7 +934,7 @@ process.on('exit', code => { if (!summed && !code) { console.log(NL + 'FAIL     
                     const h = rig({ appVersion: '1.5.1-dev', answer: { ok: true, version: '<b>x</b>' } }); h.ui('setUpdateRestoreBtn'); h.upd.info = { current: '1.5.1', hasPrev: true, prevVersion: '<b>1.5.0</b>' }; h.api.runRestore(); await flush(); const hAsked = h.log.confirms[0]; h.st.cb(true); await flush();
                     ok3 = f.log.reloads === 0 && f.els.setUpdateRestoreBtn.disabled === false && f.log.toasts.some(t => /Could not restore/.test(t) && /no previous version to restore/.test(t))
                         && n.log.confirms.length === 0 && n.log.fetches.length === 0 && n.log.toasts.length === 1 && z.log.confirms.length === 0 && z.log.fetches.length === 0
-                        && hAsked === 'Go back from Waypoint 1.5.1 to the previous version of Waypoint? Your campaigns are not touched. You can update again afterwards.' && h.log.toasts.every(t => !/[<>]/.test(t)) && h.log.reloads === 1
+                        && hAsked === 'Go back from Waypoint Alpha 1.5.1 to the previous version of Waypoint? Your campaigns are not touched. You can update again afterwards.' && h.log.toasts.every(t => !/[<>]/.test(t)) && h.log.reloads === 1
                         && j(['1.5.0', '1.5.1-dev', '', null, 7, '<b>', '1.5.0\n', 'x'.repeat(41)].map(v => f.api.cleanVer(v))) === j(['1.5.0', '1.5.1-dev', '', '', '', '', '', '']);
                     d.push([f.log, n.log, z.log.confirms, hAsked, h.log.toasts]);
                     // Update Now: No means no
@@ -942,7 +942,7 @@ process.on('exit', code => { if (!summed && !code) { console.log(NL + 'FAIL     
                     const uWired = typeof u.els.setUpdateNowBtn.handlers.click === 'function'; u.api.runHotUpdate(); await flush(); const uAsked = u.log.confirms.length; u.st.cb(false); await flush(); const uNo = u.log.fetches.length, uNoToasts = u.log.toasts.length;
                     u.api.runHotUpdate(); await flush(); u.st.cb(true); await flush();
                     ok4 = uWired && uAsked === 1 && uNo === 0 && uNoToasts === 0 && j(u.log.fetches) === j([['/api/update-apply', 'POST']]) && u.log.reloads === 1
-                        && u.log.confirms[0] === 'Update Waypoint from 1.5.0 to 1.5.1? The new version downloads, replaces the app files, and Waypoint reloads. Your campaigns and settings are untouched.' && !/\d\s*(MB|KB|GB)|couple/i.test(u.log.confirms[0]);
+                        && u.log.confirms[0] === 'Update Waypoint from Alpha 1.5.0 to Alpha 1.5.1? The new version downloads, replaces the app files, and Waypoint reloads. Your campaigns and settings are untouched.' && !/\d\s*(MB|KB|GB)|couple/i.test(u.log.confirms[0]);
                     d.push([uWired, uAsked, uNo, u.log.fetches, u.log.reloads, u.log.confirms[0]]);
                     // a check: the shell's answer drawn, the Restore button with it
                     const c = rig({ appVersion: '1.5.1', answer: { current: '1.5.1', latest: '1.5.1', newer: false, hasPrev: true, prevVersion: '1.5.0' } }); c.ui('setUpdateRestoreBtn'); c.ui('setUpdateState'); c.ui('setUpdateRow');
@@ -960,7 +960,7 @@ process.on('exit', code => { if (!summed && !code) { console.log(NL + 'FAIL     
             /* ---- an update that changes the core, in one click (Part D4) ---- */
             const SELF = { current: '1.5.0', latest: '1.5.1', newer: true, canHotUpdate: false, needsInstaller: true, canSelfInstall: true, installerSize: 115343360, installer: 'https://example.invalid/Waypoint_Setup.exe', page: 'https://example.invalid/releases/1.5.1' };
             const HOT = { current: '1.5.0', latest: '1.5.1', newer: true, canHotUpdate: true, needsInstaller: false, canSelfInstall: false };
-            const ASK = "Update Waypoint from 1.5.0 to 1.5.1? This one updates Waypoint's core too: the new version downloads (about 110 MB), Waypoint closes, updates itself and opens again. Your campaigns and settings are untouched.";
+            const ASK = "Update Waypoint from Alpha 1.5.0 to Alpha 1.5.1? This one updates Waypoint's core too: the new version downloads (about 110 MB), Waypoint closes, updates itself and opens again. Your campaigns and settings are untouched.";
             const ALL = ['setUpdateState', 'setUpdateRow', 'setUpdateNowBtn', 'setUpdateInstallerBtn', 'setUpdateRestoreBtn', 'setUpdateCheckBtn', 'updateBtn', 'updateBanner', 'updateBannerText', 'updateBannerGo', 'updateBannerNotes', 'updateBannerLater', 'installerModal', 'installerVersion', 'installerIntroNormal', 'installerIntroCore', 'installerTitle', 'saveNote'];
             const pageOf = (info, o) => { const r = rig(Object.assign({ appVersion: '1.5.0', timers: 'async' }, o)); ALL.forEach(r.ui); r.upd.info = info; return r; };
             const settle = async r => { for (let n = 0; n < 400; n++) { await flush(); if (r.done && r.done()) return true; } return false; };
@@ -971,9 +971,9 @@ process.on('exit', code => { if (!summed && !code) { console.log(NL + 'FAIL     
                     // the three controls, in each state
                     const draw = info => { const r = pageOf(info); r.api.updateUI(); r.api.showUpdateButton(info); r.api.showUpdateBanner(info); const x = r.els; return [x.setUpdateInstallerBtn.textContent, x.setUpdateInstallerBtn.style.display, x.setUpdateNowBtn.style.display, x.updateBannerGo.textContent, x.updateBannerText.textContent, x.updateBtn.textContent, x.updateBtn.title, x.setUpdateInstallerBtn.title]; };
                     const a = draw(SELF), b = draw(Object.assign({}, SELF, { canSelfInstall: false })), c = draw(Object.assign({}, SELF, { canSelfInstall: 'true' })), h = draw(HOT), u = draw(Object.assign({}, SELF, { canSelfInstall: undefined }));
-                    okA = j(a.slice(0, 6)) === j(['Update', 'block', 'none', 'Update', 'Waypoint 1.5.1 is available — one click to update.', '⬆️ Update to 1.5.1']) && /updates Waypoint's core too/.test(a[6]) && !/installer/i.test(a[6]) && /one click/.test(a[7])
-                        && j(b.slice(0, 6)) === j(['Get Installer', 'block', 'none', 'Get Installer', 'Waypoint 1.5.1 is available — this one comes as an installer; Update shows the steps first.', '⬆️ Update to 1.5.1']) && /comes as an installer/.test(b[6]) && /download the installer/.test(b[7])
-                        && j(c) === j(b) && j(u) === j(b) && j(h.slice(0, 5)) === j(['Get Installer', 'none', 'block', 'Update', 'Waypoint 1.5.1 is available — one click to update.']) && /update in place/.test(h[6]);
+                    okA = j(a.slice(0, 6)) === j(['Update', 'block', 'none', 'Update', 'Waypoint Alpha 1.5.1 is available — one click to update.', '⬆️ Update to 1.5.1']) && /updates Waypoint's core too/.test(a[6]) && !/installer/i.test(a[6]) && /one click/.test(a[7])
+                        && j(b.slice(0, 6)) === j(['Get Installer', 'block', 'none', 'Get Installer', 'Waypoint Alpha 1.5.1 is available — this one comes as an installer; Update shows the steps first.', '⬆️ Update to 1.5.1']) && /comes as an installer/.test(b[6]) && /download the installer/.test(b[7])
+                        && j(c) === j(b) && j(u) === j(b) && j(h.slice(0, 5)) === j(['Get Installer', 'none', 'block', 'Update', 'Waypoint Alpha 1.5.1 is available — one click to update.']) && /update in place/.test(h[6]);
                     e.push([a, b, h]);
                     // the question: in the app's own words, from cleaned values only; No means no; at a table not even asked
                     const q = pageOf(SELF, { routes: {} }); q.els.setUpdateInstallerBtn.click(); await flush();
@@ -985,7 +985,7 @@ process.on('exit', code => { if (!summed && !code) { console.log(NL + 'FAIL     
                     const tiny = ask(Object.assign({}, SELF, { installerSize: 3 })), badTo = ask(Object.assign({}, SELF, { latest: '<img src=x onerror=alert(1)>' })), table = ask(SELF, { net: true }), hot = ask(HOT), cant = ask(Object.assign({}, SELF, { canSelfInstall: false }));
                     await flush();
                     okB = asked.length === 1 && asked[0] === ASK && afterNo === 0 && q.log.toasts.length === 0 && q.upd.selfBusy === false && viaBar.log.confirms[0] === ASK && viaHdr.log.confirms[0] === ASK
-                        && noFrom.log.confirms[0] === ASK.replace(' from 1.5.0', '') && fromApp.log.confirms[0] === ASK && sizes.every(r => r.log.confirms[0] === ASK.replace(' (about 110 MB)', '')) && tiny.log.confirms[0] === ASK.replace('110 MB', '1 MB')
+                        && noFrom.log.confirms[0] === ASK.replace(' from Alpha 1.5.0', '') && fromApp.log.confirms[0] === ASK && sizes.every(r => r.log.confirms[0] === ASK.replace(' (about 110 MB)', '')) && tiny.log.confirms[0] === ASK.replace('110 MB', '1 MB')
                         && badTo.log.confirms.length === 0 && badTo.log.fetches.length === 0 && badTo.log.toasts.every(t => !/[<>]/.test(t)) && badTo.els.installerModal.style.display === 'flex'
                         && table.log.confirms.length === 0 && table.log.fetches.length === 0 && j(table.log.toasts) === j(['Leave or end the multiplayer session first.']) && hot.log.confirms.length === 0 && cant.log.confirms.length === 0 && cant.log.toasts.length === 0;
                     e.push([asked, afterNo, noFrom.log.confirms, sizes.map(r => r.log.confirms[0] === ASK.replace(' (about 110 MB)', '')), tiny.log.confirms, badTo.log, table.log.toasts]);
@@ -996,7 +996,7 @@ process.on('exit', code => { if (!summed && !code) { console.log(NL + 'FAIL     
                     f.els.setUpdateInstallerBtn.click(); await flush(); f.st.cb(true); const off = [f.els.setUpdateInstallerBtn.disabled, f.els.updateBtn.disabled, f.els.updateBannerGo.disabled, f.els.setUpdateRestoreBtn.disabled], came = await settle(f);
                     const polls = f.log.said.filter(x => x[0] === '/api/update-installer-status').map(x => x[1]), atRun = f.log.said.filter(x => x[0] === '/api/update-installer-run').map(x => [x[1], x[2]]);
                     okC = came && j(f.log.order) === j(['POST /api/update-installer', 'GET /api/update-installer-status', 'GET /api/update-installer-status', 'GET /api/update-installer-status', 'GET /api/update-installer-status', 'GET /api/update-installer-status', 'save', 'POST /api/update-installer-run'])
-                        && j(polls) === j(['Downloading Waypoint 1.5.1…', 'Downloading Waypoint 1.5.1… 0%', 'Downloading Waypoint 1.5.1… 50%', 'Downloading Waypoint 1.5.1… 5 MB', 'Checking the download…']) && j(atRun) === j([['Waypoint is closing to update…', 'Waypoint is closing to update…']])
+                        && j(polls) === j(['Downloading Waypoint Alpha 1.5.1…', 'Downloading Waypoint Alpha 1.5.1… 0%', 'Downloading Waypoint Alpha 1.5.1… 50%', 'Downloading Waypoint Alpha 1.5.1… 5 MB', 'Checking the download…']) && j(atRun) === j([['Waypoint is closing to update…', 'Waypoint is closing to update…']])
                         && j(f.log.saves) === j([true]) && f.log.timers.filter(t => t === 1000).length === 5 && f.log.timers.every(t => t === 1000 || t === 150 || t === 60000) && j(off) === j([true, true, true, true]) && f.log.toasts.some(t => t === 'Waypoint is closing to update…') && f.log.reloads === 0
                         && f.els.updateBanner.style.display === 'none' && f.els.installerModal.style.display !== 'flex' && f.upd.selfFailed === false;
                     e.push([came, f.log.order, polls, atRun, f.log.timers, f.log.toasts]);
@@ -1015,9 +1015,9 @@ process.on('exit', code => { if (!summed && !code) { console.log(NL + 'FAIL     
                     const n5 = note(); await n5.api.checkUpdates(false, true); n5.els.updateBannerLater.click(); await flush(); await n5.api.checkUpdates(true, true); await flush();
                     const n6 = note({ installFailed: null }); await n6.api.checkUpdates(false, true);
                     okD = okD && j(n1bar) === j(['flex', 'The update to 1.5.1 did not finish. Try Update again, or use Get Installer.']) && n1.log.confirms[0] === ASK && n1.log.order.indexOf('POST /api/update-installer-dismiss') > 0 && n1.els.updateBanner.style.display === 'none'
-                        && n2.els.installerModal.style.display === 'flex' && n2.els.installerModal.dataset.url === SELF.installer && n2.els.installerVersion.textContent === 'Waypoint 1.5.1' && n2.log.confirms.length === 0 && n2.log.order.indexOf('POST /api/update-installer-dismiss') > 0
+                        && n2.els.installerModal.style.display === 'flex' && n2.els.installerModal.dataset.url === SELF.installer && n2.els.installerVersion.textContent === 'Waypoint Alpha 1.5.1' && n2.log.confirms.length === 0 && n2.log.order.indexOf('POST /api/update-installer-dismiss') > 0
                         && n3.els.installerModal.style.display === 'flex' && n3.log.confirms.length === 0
-                        && n4.els.updateBannerText.textContent === 'Waypoint 1.5.1 is available — one click to update.' && n4.els.updateBannerLater.textContent !== 'Dismiss' && n4.log.order.indexOf('POST /api/update-installer-dismiss') < 0
+                        && n4.els.updateBannerText.textContent === 'Waypoint Alpha 1.5.1 is available — one click to update.' && n4.els.updateBannerLater.textContent !== 'Dismiss' && n4.log.order.indexOf('POST /api/update-installer-dismiss') < 0
                         && n5.log.order.filter(x => x === 'POST /api/update-installer-dismiss').length === 1 && n5.els.updateBanner.style.display === 'none' && n5.upd.failNote === '' && n5.log.toasts.length === 0
                         && n6.els.updateBannerLater.textContent !== 'Dismiss' && n6.upd.failNote === '';
                     e.push([bar, f.log.order.slice(-2), n1bar, n1.log.confirms, n2.els.installerModal, n4.els.updateBannerText.textContent, n5.log.order]);
@@ -1091,7 +1091,7 @@ process.on('exit', code => { if (!summed && !code) { console.log(NL + 'FAIL     
             const barOf = r => [r.els.updateBanner.style.display, r.els.updateBannerText.textContent, r.els.updateBannerGo.textContent, r.els.updateBannerNotes.textContent, r.els.updateBannerLater.textContent];
             const routesOf = (info, more) => Object.assign({ '/api/update-check': info, '/api/update-installer-dismiss': { ok: true }, '/api/update-apply': { ok: true, version: '1.5.1' } }, more || {});
             const UPTO = { current: '1.5.0', latest: '1.5.0', newer: false }, INST = Object.assign({}, SELF, { canSelfInstall: false }), FAIL = Object.assign({}, SELF, { installFailed: '1.5.1' });
-            const ONE = 'Waypoint 1.5.1 is available — one click to update.', STEPS = 'Waypoint 1.5.1 is available — this one comes as an installer; Update shows the steps first.', NOTE = 'The update to 1.5.1 did not finish. Try Update again, or use Get Installer.';
+            const ONE = 'Waypoint Alpha 1.5.1 is available — one click to update.', STEPS = 'Waypoint Alpha 1.5.1 is available — this one comes as an installer; Update shows the steps first.', NOTE = 'The update to 1.5.1 did not finish. Try Update again, or use Get Installer.';
             const LATER = 'The Update button stays in the top bar until you update.';
             let okS1 = false, okS2 = false, okS3 = false, okS4 = false, okS5 = false, okS6 = false, okS7 = false, okSD = false, sx = [];
             if (src) {
@@ -1112,7 +1112,7 @@ process.on('exit', code => { if (!summed && !code) { console.log(NL + 'FAIL     
                     [hS, hB, hT].forEach(r => r.st.cb(true)); await flush();
                     const went = r => j([r.log.order.filter(x => !/^enter@/.test(x)), r.log.reloads, r.log.toasts, r.log.posted]);
                     const sS = await via(SELF, 'wcUpdateGo'), sB = await via(SELF, 'updateBannerGo'), away = await via(HOT, 'wcUpdateGo', { welcome: false });
-                    okS3 = hS.log.order[0] === 'enter@0' && welcomeAt === 'none' && asked.every(a => a.length === 1 && a[0] === asked[0][0]) && /^Update Waypoint from 1\.5\.0 to 1\.5\.1\? The new version downloads/.test(asked[0][0])
+                    okS3 = hS.log.order[0] === 'enter@0' && welcomeAt === 'none' && asked.every(a => a.length === 1 && a[0] === asked[0][0]) && /^Update Waypoint from Alpha 1\.5\.0 to Alpha 1\.5\.1\? The new version downloads/.test(asked[0][0])
                         && went(hS) === went(hB) && went(hS) === went(hT) && hS.log.order.indexOf('POST /api/update-apply') > 0 && hS.log.reloads === 1
                         && sS.log.order[0] === 'enter@0' && j(sS.log.confirms) === j([ASK]) && j(sB.log.confirms) === j([ASK])
                         && hB.log.order.every(x => !/^enter@/.test(x)) && hT.log.order.every(x => !/^enter@/.test(x)) && away.log.order.every(x => !/^enter@/.test(x)) && away.log.confirms.length === 1
@@ -1140,7 +1140,7 @@ process.on('exit', code => { if (!summed && !code) { console.log(NL + 'FAIL     
                     okS6 = j(fUp) === j(['flex', NOTE, 'Update', 'Get Installer', 'Dismiss']) && j(fBar) === j(fUp)
                         && j(stripOf(f1)) === j(['none', NOTE, 'Update', 'Notes', 'Later']) && j(barOf(f1)) === j(['none', NOTE, 'Update', 'Notes', 'Later']) && at(f1, 'POST /api/update-installer-dismiss') > 0 && f1.log.toasts.length === 0 && !f1.els.toast.cls.has('wc-over')
                         && f1.els.welcomeScreen.style.display === 'flex' && f1.log.order.every(x => !/^enter@/.test(x)) && f1.upd.failNote === '' && j(f1.focus) === j(['wcMain:-1']) && f2.focus.length === 0 && f3.focus.length === 0
-                        && at(f2, 'enter@0') > 0 && at(f2, 'enter@0') < at(f2, 'POST /api/update-installer-dismiss') && f2.els.installerModal.style.display === 'flex' && f2.els.installerVersion.textContent === 'Waypoint 1.5.1' && stripOf(f2)[0] === 'none' && f2.log.confirms.length === 0
+                        && at(f2, 'enter@0') > 0 && at(f2, 'enter@0') < at(f2, 'POST /api/update-installer-dismiss') && f2.els.installerModal.style.display === 'flex' && f2.els.installerVersion.textContent === 'Waypoint Alpha 1.5.1' && stripOf(f2)[0] === 'none' && f2.log.confirms.length === 0
                         && at(f3, 'enter@0') > 0 && at(f3, 'enter@0') < at(f3, 'POST /api/update-installer-dismiss') && j(f3.log.confirms) === j([ASK]) && stripOf(f3)[0] === 'none';
                     sx.push([fUp, fBar, stripOf(f1), f1.log.order, f2.log.order, f3.log.order, f3.log.confirms]);
                     // hidden again whenever the bar is: here the core update said Yes to, which puts the bar away, and then fails to the installer's steps

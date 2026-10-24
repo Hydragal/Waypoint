@@ -15653,6 +15653,42 @@ pendingChecks.push((async () => {
         && src.includes("fightStep(fidT, 1, 'player');") && src.includes("fightHold(fidH, 'player');") && src.includes('net.fightOn = null; net.second = null;')
         && (calJs.match(/livedSpans\(/g) || []).length === 2 && !/function rounds\(|fightEnded|roundPend/.test(calJs) && errs.length === 0, J(errs.slice(0, 3)));
 })());
+    /* ---- 1.5.6, backlog 185: "Same person as…" at the GM's Let them in? (the approval slice, run for real) ---- */
+    {
+        const apS = src.slice(src.indexOf('// [netcheck:approval-start]'), src.indexOf('// [netcheck:approval-end]'));
+        const mkCamp = () => ({ id: 'k', players: { u_a: { name: 'Ana', lastSeen: 1, key: 'K_A', charId: 'c_1', lastMap: 'm1' }, u_b: { name: 'Bo', lastSeen: 5 }, u_c: { name: 'Cy', lastSeen: 9 }, u_ban: { name: 'Ban', lastSeen: 7 }, 'tk:x': { name: 'X' } }, bannedPlayers: { u_ban: true },
+            chars: { c_1: { id: 'c_1', name: 'Kael', ownerId: 'u_a' }, c_2: { id: 'c_2', name: 'Bo2', ownerId: 'u_b' } },
+            items: { m1: { id: 'm1', type: 'map', whiteboard: [{ id: 't1', ownerId: 'u_a' }, { id: 't2', ownerId: 'u_b' }] }, m2: { id: 'm2', type: 'map', whiteboard: [{ id: 't3', ownerId: 'u_a', waiting: true }] }, d1: { id: 'd1', type: 'doc' } } });
+        const run = (answers, opts) => {
+            const camp = mkCamp(), asks = [], admitted = [], toasts = [], conn = { open: true }, ans = answers.slice();
+            const env = { approvalOpen: false, pendingJoins: [{ conn, prof: { id: 'u_new', name: 'Web' } }], bannedIds: {}, net: { active: true, role: 'host', roster: { pC: { id: 'u_c' } } },
+                getActiveCampaign: () => camp, denyJoin: () => {}, own: H.own, validProfileId: H.validProfileId, admitPlayer: (c, p) => admitted.push(p.id), toast: s => toasts.push(s), logEvent: () => {},
+                SC: () => ({ playsAs: (cp, pid) => (pid === 'u_a' ? 'Kael' : '') }),
+                showConfirm: (text, cb, o) => { asks.push({ text, o: o || {} }); if (opts && opts.dropAt === asks.length) conn.open = false; const a = ans.shift(); cb(a === undefined ? false : a); } };
+            if (opts && opts.noOthers) camp.players = { u_c: { name: 'Cy' } };
+            const names = Object.keys(env);
+            let threw = ''; try { new Function(...names, apS + '\nprocessNextApproval();\nreturn { sameCandidates, takeOver };')(...names.map(n => env[n])); } catch (e) { threw = String(e && e.message); }
+            return { camp, asks, admitted, toasts, threw };
+        };
+        const A = run(['alt', 'alt', true]);   // Same person as…, not Bo, yes Ana
+        const B = run(['alt', false, true]);   // Same person as…, Cancel at Bo: the first question again, then plain Let them in
+        const C = run(['alt', true], { dropAt: 2 });   // the connection drops while the second question is up
+        const D = run([true], { noOthers: true });   // nobody to be: no third button
+        const E = run(['alt', 'alt', 'alt', true]);   // past the last known player: back to the first question, then let in as new
+        const fns = new Function(...['net', 'own', 'validProfileId', 'showConfirm', 'admitPlayer', 'toast', 'getActiveCampaign', 'pendingJoins', 'approvalOpen', 'bannedIds', 'denyJoin'], apS + '\nreturn { sameCandidates, takeOver };')({}, H.own, H.validProfileId, () => {}, () => {}, () => {}, () => null, [], false, {}, () => {});
+        const cs = mkCamp(), cand = fns.sameCandidates(cs, 'u_new', { pC: { id: 'u_c' } }), tc = mkCamp(), took = fns.takeOver(tc, 'u_a', 'u_new'), bad = [fns.takeOver(mkCamp(), 'u_zz', 'u_new'), fns.takeOver(mkCamp(), 'u_a', 'u_a'), fns.takeOver(mkCamp(), 'u_a', 'bad id!')];
+        const J2 = JSON.stringify;
+        check('1.5.6 "Same person as…" (backlog 185; processNextApproval, sameCandidates and takeOver run for real): the GM\'s Let them in? offers a third answer only where the campaign knows a player who is not at the table, listed one at a time, most recently seen first, never one at the table, a banned one, the newcomer or a GM character\'s key; Not them goes on, past the last back to the first question, Cancel back to it; a yes gives the newcomer the old player\'s record (no table key, the old id kept as was) and every character and token they own on every map, then lets them in; a connection gone by then is let in as nobody and nothing moves; with nobody to be, the question is as before',
+            [A, B, C, D, E].every(r => r.threw === '') && J2(cand) === J2(['u_b', 'u_a'])
+            && took && !tc.players.u_a && tc.players.u_new.was === 'u_a' && tc.players.u_new.key === undefined && tc.players.u_new.charId === 'c_1' && tc.players.u_new.lastMap === 'm1' && tc.chars.c_1.ownerId === 'u_new' && tc.chars.c_2.ownerId === 'u_b'
+            && tc.items.m1.whiteboard[0].ownerId === 'u_new' && tc.items.m1.whiteboard[1].ownerId === 'u_b' && tc.items.m2.whiteboard[0].ownerId === 'u_new' && bad.every(b => b === false)
+            && A.asks.length === 3 && A.asks[0].o.alt === 'Same person as…' && /Bo/.test(A.asks[1].text) && A.asks[1].o.yes === 'Yes, the same' && A.asks[1].o.alt === 'Not them' && /Ana", who plays Kael/.test(A.asks[2].text) && A.asks.every(a => a.o.noEnter === true && a.o.noEscape === true)
+            && J2(A.admitted) === J2(['u_new']) && A.camp.players.u_new.was === 'u_a' && A.camp.chars.c_1.ownerId === 'u_new' && /takes over from Ana, playing Kael/.test(A.toasts.join())
+            && B.asks.length === 3 && /wants to join/.test(B.asks[2].text) && J2(B.admitted) === J2(['u_new']) && !B.camp.players.u_new && B.camp.players.u_a.key === 'K_A'
+            && C.admitted.length === 0 && C.camp.players.u_a && !C.camp.players.u_new && /already dropped/.test(C.toasts.join())
+            && D.asks.length === 1 && D.asks[0].o.alt === undefined && J2(D.admitted) === J2(['u_new'])
+            && E.asks.length === 4 && /wants to join/.test(E.asks[3].text) && J2(E.admitted) === J2(['u_new']) && !E.camp.players.u_new, J2([cand, A.asks.map(a => a.text.slice(0, 60)), A.admitted, A.toasts, B.asks.length, C.toasts, D.asks.length, E.asks.length, [A, B, C, D, E].map(r => r.threw)]));
+    }
     /* ---- 1.5.6: a GM-only page keeps every page nested under it from players (found at a test join on 2026-10-24: 55 old pages under a GM-only folder reached a player) ---- */
     pendingChecks.push((async () => { try {
         const urlW = f => 'file:///' + path.resolve(path.join(__dirname, '..', 'system', 'app', 'scripts', f)).split(String.fromCharCode(92)).join('/');
