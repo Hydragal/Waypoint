@@ -65,7 +65,7 @@ const W = new Function(waySrc + '\nreturn { way: pageWay, pageOf: pageOf };')();
     check('at someone else\'s table a handbook page is read in the reader whatever way is asked, never opened to edit and never in a window, and a planner is not opened at all',
         fDoc.every(r => r.how === 'reader' && J(r.read) === J(['d1']) && kept(r) && r.opened.length === 0 && r.popped.length === 0) && fPlan.every(r => r.how === '' && kept(r) && r.read.length === 0 && r.opened.length === 0 && r.popped.length === 0), J([fDoc.map(r => r.how), fPlan.map(r => r.how)]));
     check('the module publishes the rule, the rule for the view on screen, the opener and the shelf\'s few calls, and wires the shelf once; the view is asked of the one place that knows it (floats.js), and nothing in the module draws markup or opens a window by itself',
-        /\nwindow\.wpPageShelf = \{ way: pageWay, wayNow: function\(ev\) \{ return pageWay\(viewNow\(\), ev\); \}, open: openPage, isPinned: isPinned, pinLabel: pinLabel, pin: pinPage, opened: pageOpened, noteActive: noteActive, close: shelfClose, mapPin: mapPin, mapPinField: mapPinField, mapPinSet: mapPinSet \};\nshelfWire\(\);\n$/.test(ps)
+        /\nwindow\.wpPageShelf = \{ way: pageWay, wayNow: function\(ev\) \{ return pageWay\(viewNow\(\), ev\); \}, open: openPage, isPinned: isPinned, pinLabel: pinLabel, pin: pinPage, opened: pageOpened, noteActive: noteActive, close: shelfClose, mapPin: mapPin, mapPinField: mapPinField, mapPinSet: mapPinSet,\n    linkGo: linkGo, linkChoices: function\(\) \{ return linkChoices\(getActiveCampaign\(\)\); \}, linkWords: function\(id, at\) \{ return linkWords\(getActiveCampaign\(\), id, at\); \} \};\nshelfWire\(\);\n$/.test(ps)
         && /\nfunction viewNow\(\) \{ var fl = window\.wpFloats; return fl && fl\.view \? fl\.view\(\) : ''; \}\n/.test(ps)
         && /\nfunction pageOpened\(id\) \{ recentNote\(id\); panelSync\(\); \}\n/.test(ps) && /\n    var camp = getActiveCampaign\(\); if \(camp && pageOf\(camp, camp\.activeItemId\)\) recentNote\(camp\.activeItemId\);\n    if \(shelfIsOpen\(\) && viewNow\(\) !== 'play'\) shelfClose\(\);/.test(ps)
         && /\nfunction shelfClose\(\) \{ var m = shelfMenu\(\); if \(m && m\.classList\.contains\('show'\)\) \{ m\.classList\.remove\('show'\); m\.textContent = ''; \} \}/.test(ps)
@@ -986,6 +986,36 @@ const tabsSrc = dpSlice('tabs'), tabdoSrc = dpSlice('tabdo');
     const gi = fs.readFileSync(path.join(root, '.gitignore'), 'utf8').replace(/\r\n/g, '\n').split('\n').map(l => l.trim());
     check('git keeps the owner\'s own material out on every clone: .gitignore ignores every folder under docs/ and the private/ folder, each anchored to the repository\'s root, beside docs\' own Markdown, and no rule ignores every folder named private',
         gi.includes('/docs/*/') && gi.includes('/private/') && gi.includes('docs/*.md') && !gi.includes('private/') && !gi.includes('private') && !gi.includes('docs/') && !gi.includes('/docs/'), J(gi.filter(l => /docs|private/.test(l))));
+}
+
+
+/* ---------- 1.5.6: a link from one page to another, or to a section of it (the pagelink slice, run for real) ---------- */
+{
+    const toasts = [], opened = [], st = { camp: null, foreign: false, opens: 'go' };
+    const PL = new Function('getActiveCampaign', 'openPage', 'toast', 'window', waySrc + sliceOf(ps, 'shelf') + sliceOf(ps, 'pagelink') + '\nreturn { linkChoices: linkChoices, linkWords: linkWords, linkGo: linkGo };')(
+        () => st.camp, (id, way, land) => { opened.push([id, way, land]); return st.opens; }, m => toasts.push(m), { get wpNet() { return st.foreign ? { foreign: true } : null; } });
+    const items = {
+        p_z: { type: 'planner', meta: { title: 'Zed plan' }, blocks: [{ id: 'b_t', type: 'h1', title: 'Zed plan' }, { id: 'b_d', type: 'h2', title: 'Docks' }, { id: 'b_n', type: 'node', title: 'The <b>Inn</b>' }, { id: 'b_x', type: 'text', content: 'words' }, { type: 'h2', title: 'No id' }, { id: 'bad id', type: 'h3', title: 'Bad id' }, { id: 'b_e', type: 'h2', title: '   ' }, { id: 'b_c', type: 'table', title: 'Prices' }] },
+        d_a: { type: 'doc', meta: { title: 'Alpha' }, blocks: [{ id: 'b_1', type: 'h2', title: 'Rules' }] },
+        m_1: { type: 'map', meta: { title: 'A map' } },
+        'x y': { type: 'doc', meta: { title: 'Aardvark' }, blocks: [] }
+    };
+    st.camp = { items: items };
+    const ch = PL.linkChoices(st.camp);
+    check('1.5.6 page links: the list holds every page of the campaign by name, and after each page its sections in their order (a heading, a scene node and a titled table, by the block id they carry, a node\'s typed markup left out), never the page\'s own title again, a block with no id or no words, a map, nor an item whose id a link cannot name',
+        J(ch) === J([{ addr: '#wp:page:d_a', label: 'Alpha' }, { addr: '#wp:page:d_a:b_1', label: 'Alpha \u203a Rules', sec: 'Rules' }, { addr: '#wp:page:p_z', label: 'Zed plan' }, { addr: '#wp:page:p_z:b_d', label: 'Zed plan \u203a Docks', sec: 'Docks' }, { addr: '#wp:page:p_z:b_n', label: 'Zed plan \u203a The Inn', sec: 'The Inn' }, { addr: '#wp:page:p_z:b_c', label: 'Zed plan \u203a Prices', sec: 'Prices' }])
+        && J(PL.linkChoices(null)) === '[]' && J(PL.linkChoices({ items: null })) === '[]', J(ch));
+    check('1.5.6 page links: a link is said by its page and its section, by the page alone where the section is gone, and as nothing where the page is not here',
+        PL.linkWords(st.camp, 'p_z', 'b_d') === 'Zed plan \u203a Docks' && PL.linkWords(st.camp, 'p_z', '') === 'Zed plan' && PL.linkWords(st.camp, 'p_z', 'b_gone') === 'Zed plan' && PL.linkWords(st.camp, 'nope', 'b_d') === '' && PL.linkWords(st.camp, 'm_1', '') === '' && PL.linkWords(st.camp, 'toString', '') === '');
+    const r1 = PL.linkGo('p_z', 'b_d', 'panel'), r2 = PL.linkGo('d_a', '', 'window'), r3 = PL.linkGo('p_z', 'bad id', 'go'), t0 = toasts.length, r4 = PL.linkGo('nope', 'b_d', 'go');
+    st.foreign = true; const r5 = PL.linkGo('p_z', 'b_d', 'go'); st.foreign = false; st.opens = ''; const r6 = PL.linkGo('d_a', '', 'go');
+    check('1.5.6 page links: a press opens the page by the way asked, at its section where the link names one, through the shelf\'s own opener; a page that is not here opens nothing and is said, at someone else\'s table as not shared with you, and one the opener could not open is said too',
+        r1 === 'go' && r2 === 'go' && r3 === 'go' && J(opened.slice(0, 3)) === J([['p_z', 'panel', { at: 'b_d' }], ['d_a', 'window', null], ['p_z', 'go', null]]) && t0 === 0
+        && r4 === '' && toasts[0] === 'That page is not in this campaign.' && r5 === 'go' && opened[3][0] === 'p_z' && r6 === '' && toasts[1] === 'That page is not in this campaign.' && toasts.length === 2, J([opened, toasts]));
+    st.foreign = true; st.camp = { items: { d_a: items.d_a } }; PL.linkGo('p_z', 'b_d', 'go');
+    check('1.5.6 page links: at someone else\'s table a planner the player does not hold is said as not shared with you', toasts[2] === 'That page has not been shared with you.', J(toasts));
+    check('1.5.6 page links: the module publishes the press, the list and the words for the campaign on screen',
+        ps.includes("    linkGo: linkGo, linkChoices: function() { return linkChoices(getActiveCampaign()); }, linkWords: function(id, at) { return linkWords(getActiveCampaign(), id, at); } };"));
 }
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed.');

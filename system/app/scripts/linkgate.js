@@ -50,6 +50,7 @@ import { cleanLink, linkParts } from './textfmt.js';
 import { showConfirm } from './dialogs.js';
 import { runsOf, SIZE_EM, fontCss } from './textfmt.js';
 import { cleanRec, ruleLinks } from './lookcore.js';
+import { pageLink } from './textfmt.js';   // 1.5.6: a link to a page of the campaign
 
 // [sinkcheck:linkgate-start]
 var LINK_TARGET = '_blank', LINK_REL = 'noopener noreferrer';   // what the page sanitiser writes on every link (docrender.js aAttrs)
@@ -118,6 +119,30 @@ function askBody(doc, url, c) {
     return box;
 }
 function openLink(win, link) { try { win.open(link, '_blank', 'noopener,noreferrer'); } catch (e) {} }
+// 1.5.6: a link from one page to another (textfmt.js pageLink). It leads nowhere outside the app, so it is never asked about: the press opens
+// the page by pageshelf.js's own ways (on the play map over the map, elsewhere the page itself, Ctrl a window of its own), from a window of its
+// own a window of its own, and the right button a window of its own too. The main window holds the campaign, so a pop-out asks the window that
+// opened it. Nothing opens in the stream window.
+function pageHost(win) {
+    try { var w = win && win.wpPopout ? win.opener : win; return w && !w.closed && w.wpPageShelf && typeof w.wpPageShelf.linkGo === 'function' ? w : null; }
+    catch (e) { return null; }
+}
+function pageGo(win, pg, way, e) {
+    var d = win && win.document, b = d && d.body;
+    if (b && b.classList && b.classList.contains('stream-mode')) return false;
+    var w = pageHost(win); if (!w || !pg) return false;
+    try { var sh = w.wpPageShelf; sh.linkGo(pg.id, pg.at || '', way || (win.wpPopout ? 'window' : sh.wayNow(e))); } catch (err) { return false; }
+    return true;
+}
+function pageMenu(win) {
+    return function(e) {
+        var a = linkAt(e.target); if (!a) return;
+        var pg = typeof pageLink === 'function' ? pageLink(cleanLink(linkOf(a))) : null; if (!pg) return;
+        var c = linkWhere(a, win); if (c.editing !== false || c.held === true) return;
+        e.preventDefault(); e.stopPropagation();
+        pageGo(win, pg, 'window', e);
+    };
+}
 // The address an <a> carries — null where it carries none. A diagram draws its links as SVG <a> elements whose address is in
 // xlink:href, not href: the engine follows either, so either makes a link here.
 var XLINK = 'http://www.w3.org/1999/xlink';
@@ -144,6 +169,8 @@ function linkGate(win, doc, ask) {
         if (a.hasAttribute('download') && /^(blob|data):/i.test(raw)) return;   // a file the app itself hands over to be saved
         e.preventDefault();   // the engine follows nothing: whatever opens is opened below
         var c = linkWhere(a, win); c.link = cleanLink(raw);
+        var pg = typeof pageLink === 'function' ? pageLink(c.link) : null;   // 1.5.6: a link to a page of the campaign opens it, with no question; the middle button, a window of its own
+        if (pg) { if (c.editing === false && c.held !== true) pageGo(win, pg, e.type === 'auxclick' ? 'window' : '', e); return; }
         var v = linkVerdict(c), url = v === 'none' ? null : readUrl(c.link);
         if (!url) return;   // no link, a link in a box that is being edited, or an address the parser cannot read: nothing opens
         var link = c.link;
@@ -188,6 +215,7 @@ function wireLinks(win, doc, ask) {
     doc.addEventListener('click', h, true);
     doc.addEventListener('auxclick', h, true);
     doc.addEventListener('dragstart', dragGate(win), true);
+    doc.addEventListener('contextmenu', pageMenu(win), true);   // 1.5.6: the right button on a page link, a window of its own
     if (typeof peekWire === 'function') peekWire(win, doc);   // the address in sight before a press (its own slice, below)
     return h;
 }
@@ -234,6 +262,13 @@ function peekOf(win, a) {   // the address to show for a link, '' for none
     var raw = linkOf(a); if (raw === null) return '';
     if (a.hasAttribute('download') && /^(blob|data):/i.test(raw)) return '';
     var c = linkWhere(a, win); c.link = cleanLink(raw);
+    var pg = typeof pageLink === 'function' ? pageLink(c.link) : null;   // 1.5.6: a page link says which page, and which part of it
+    if (pg) {
+        if (c.editing !== false || c.held === true) return '';
+        var w = typeof pageHost === 'function' ? pageHost(win) : null, words = '';
+        try { words = w ? String(w.wpPageShelf.linkWords(pg.id, pg.at) || '') : ''; } catch (e) { words = ''; }
+        return words ? peekText('Page: ' + words) : 'A page that is not here';
+    }
     if (linkVerdict(c) === 'none') return '';
     var url = readUrl(c.link); return url ? peekText(url.href) : '';
 }

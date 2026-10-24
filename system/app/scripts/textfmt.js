@@ -138,9 +138,15 @@ function cleanLink(v) {
     if (typeof v !== 'string') return '';
     v = v.trim();
     if (/[\u0000-\u001f\u007f\s]/.test(v) || v.length > MAX_LINK) return '';
-    return /^https?:\/\/.+/i.test(v) ? v : '';
+    return /^https?:\/\/.+/i.test(v) || /^#wp:page:[A-Za-z0-9_-]{1,80}(?::[A-Za-z0-9_-]{1,64})?$/.test(v) ? v : '';
 }
 // [textcheck:linkrule-end]
+// 1.5.6: a link to a page of the campaign, or to a section of it, is the one address that is no web address: #wp:page:<page's id>, or
+// #wp:page:<page's id>:<the section's block id>. It leads nowhere outside the app, so it is never asked about (linkgate.js). { id, at } or null.
+function pageLink(v) {
+    var m = typeof v === 'string' ? /^#wp:page:([A-Za-z0-9_-]{1,80})(?::([A-Za-z0-9_-]{1,64}))?$/.exec(v.trim()) : null;
+    return m ? { id: m[1], at: m[2] || '' } : null;
+}
 // What a typed address becomes — the ONE reading, for every box an address is typed into (the Link box of the bar on a planner field's
 // box, and of a text block's own bar). Trimmed. An address typed without its scheme ("example.com/page") is taken as the secure web
 // scheme — one with a port too ("example.com:8080/page", "localhost:3000": a first word followed by one to five digits and then the end,
@@ -148,6 +154,7 @@ function cleanLink(v) {
 // link by cleanLink (so whatever begins with another scheme): the caller says so and changes nothing.
 function typedLink(v) {
     v = txt(v).trim();
+    if (pageLink(v)) return v;   // 1.5.6: a page link, as picked from the box's list
     if (v && !/^[a-z][a-z0-9+.-]*:(?!\d{1,5}(?:[\/?#]|$))/i.test(v)) v = 'https://' + v;
     return v && !cleanLink(v) ? null : v;
 }
@@ -437,6 +444,6 @@ function stateAt(fmt, text, s, e) {
     return { b: all('b'), i: all('i'), u: all('u'), st: all('st'), color: one('color'), size: one('size'), link: one('link'), any: !!f };
 }
 
-var API = { VERSION: VERSION, MAX_SPANS: MAX_SPANS, MAX_RAW: MAX_RAW, MAX_LINK: MAX_LINK, SIZES: SIZES.slice(), SIZE_EM: SIZE_EM, SIZE_NAMES: SIZE_NAMES, PALETTE: PALETTE, FONTS: FONTS, MAX_FONT: MAX_FONT, fontKnown: fontKnown, cleanFont: cleanFont, fontCss: fontCss, cleanFmt: cleanFmt, cleanLink: cleanLink, typedLink: typedLink, linkParts: linkParts, MAX_TEXT_LINKS: MAX_TEXT_LINKS, runsOf: runsOf, respan: respan, apply: apply, clear: clear, stateAt: stateAt };
+var API = { VERSION: VERSION, MAX_SPANS: MAX_SPANS, MAX_RAW: MAX_RAW, MAX_LINK: MAX_LINK, SIZES: SIZES.slice(), SIZE_EM: SIZE_EM, SIZE_NAMES: SIZE_NAMES, PALETTE: PALETTE, FONTS: FONTS, MAX_FONT: MAX_FONT, fontKnown: fontKnown, cleanFont: cleanFont, fontCss: fontCss, cleanFmt: cleanFmt, cleanLink: cleanLink, pageLink: pageLink, typedLink: typedLink, linkParts: linkParts, MAX_TEXT_LINKS: MAX_TEXT_LINKS, runsOf: runsOf, respan: respan, apply: apply, clear: clear, stateAt: stateAt };
 if (typeof window !== 'undefined') window.wpTextFmt = API;
-export { VERSION, MAX_SPANS, MAX_RAW, MAX_LINK, MAX_TEXT_LINKS, SIZES, SIZE_EM, SIZE_NAMES, PALETTE, FONTS, MAX_FONT, fontKnown, cleanFont, fontCss, cleanFmt, cleanLink, typedLink, linkParts, runsOf, respan, apply, clear, stateAt };
+export { VERSION, MAX_SPANS, MAX_RAW, MAX_LINK, MAX_TEXT_LINKS, SIZES, SIZE_EM, SIZE_NAMES, PALETTE, FONTS, MAX_FONT, fontKnown, cleanFont, fontCss, cleanFmt, cleanLink, pageLink, typedLink, linkParts, runsOf, respan, apply, clear, stateAt };

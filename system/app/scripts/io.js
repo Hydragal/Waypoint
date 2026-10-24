@@ -105,6 +105,7 @@ import { webReady } from './webmode.js';   // 1.5.5: what a website's plan allow
             if (m.type === 'planner') {
                 if (!Array.isArray(m.blocks)) { m.blocks = []; fix('planner blocks created'); }
                 if (!m.blocks.every(isPlain)) { m.blocks = m.blocks.filter(isPlain); fix('corrupt planner block dropped'); }
+                m.blocks.forEach(function(b) { if (b && typeof b === 'object' && !b.id) { b.id = 'b_' + Math.random().toString(36).slice(2, 8); fix('block id added'); } });   // 1.5.6: as a page's, so a link may name a section of a planner (pageshelf.js)
                 if (window.wpDocRender && window.wpDocRender.cleanBlockFmts) m.blocks.forEach(window.wpDocRender.cleanBlockFmts);   // text style (1.5.0): the look of a block's plain fields, cleaned against their texts on load (with the cleaner not loaded left as it is: every draw cleans again)
                 return;
             }

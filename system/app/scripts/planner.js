@@ -357,6 +357,56 @@ import { getRoomInspectorHtml, attachRoomInspectorEvents, renderInspector,  rend
   }
   function tsMulti(d) { return !!d && (d.k === 'node' || (d.k === 'x' && d.m === 1)); }   // a flowchart node's label takes line breaks, and so does a host's box that its host made so
   // A run's look as one string: what its element is drawn with
+  // 1.5.6: what a link says in a tooltip: a web address as it is, a page link by its page and section (pageshelf.js)
+  function tsLinkWords(l) {
+      var pg = TF.pageLink ? TF.pageLink(l) : null, sh = window.wpPageShelf;
+      if (!pg) return l;
+      var w = sh && typeof sh.linkWords === 'function' ? sh.linkWords(pg.id, pg.at) : '';
+      return w ? 'page ' + w : 'a page that is not here';
+  }
+  // 1.5.6: a Link box offers the campaign's pages and their sections. As a name is typed, a list under the box shows the pages and sections
+  // whose names hold every word typed (the first one marked): Enter or a press on a row sets that link at once, the arrow keys move the mark,
+  // Escape puts the list away. What looks like a web address shows no list. Rows are elements made by name and text nodes.
+  var TS_PAGES_MAX = 12, TS_PAGES_ALL = 400, TS_PAGE_BTN = 'Link to a page or a section of one: pick it from the list, or type part of its name to narrow the list.';
+  function tsPageMatch(list, q, all) {
+      q = String(q || '').trim().toLowerCase();
+      if (/:\/\/|^www\.|^https?:|^#wp:/.test(q)) q = '';
+      if (!q) return all ? list.slice(0, TS_PAGES_ALL) : [];
+      var words = q.split(/\s+/);
+      return list.filter(function(c) { var l = String(c.label).toLowerCase(); return words.every(function(w) { return l.indexOf(w) >= 0; }); }).slice(0, TS_PAGES_MAX);
+  }
+  function tsPageMenu(input, commit) {
+      if (!input || input._wpPages) return; input._wpPages = true;
+      var st = { rows: [], at: -1 }, box = null;
+      var hide = function() { st.rows = []; st.at = -1; if (box) { box.hidden = true; while (box.firstChild) box.removeChild(box.firstChild); } };
+      var mark = function() { if (box) Array.prototype.forEach.call(box.children, function(el, i) { el.classList.toggle('on', i === st.at); }); };
+      var pick = function(i) { var c = st.rows[i]; hide(); if (!c) return; input.value = c.addr; commit(c); };
+      var show = function(whole) {
+          var sh = window.wpPageShelf, all = sh && typeof sh.linkChoices === 'function' ? sh.linkChoices() : [];
+          st.rows = tsPageMatch(all, input.value, whole === true || st.whole); st.at = st.rows.length ? 0 : -1; st.whole = whole === true || st.whole;
+          if (!st.rows.length) { hide(); return; }
+          if (!box) {
+              box = document.createElement('div'); box.className = 'pagelinks'; box.setAttribute('role', 'listbox'); document.body.appendChild(box);
+              box.addEventListener('mousedown', function(e) { e.preventDefault(); var r = e.target && e.target.closest ? e.target.closest('.pagelinks-row') : null; if (r) pick(Number(r.dataset.i)); });
+          }
+          while (box.firstChild) box.removeChild(box.firstChild);
+          st.rows.forEach(function(c, i) { var r = document.createElement('div'); r.className = 'pagelinks-row' + (/\u203a/.test(c.label) ? ' sub' : ''); r.dataset.i = String(i); r.setAttribute('role', 'option'); r.title = c.label; r.appendChild(document.createTextNode(st.whole && !String(input.value || '').trim() && c.sec ? c.sec : c.label)); box.appendChild(r); });   // the whole list: a section by its own name, under its page
+          mark();
+          var rc = input.getBoundingClientRect(), w = Math.max(rc.width, 320);
+          box.style.left = Math.max(4, Math.min(rc.left, window.innerWidth - w - 4)) + 'px'; box.style.top = (rc.bottom + 2) + 'px'; box.style.width = w + 'px';
+          box.hidden = false;
+          if (box.children[st.at] && box.children[st.at].scrollIntoView) box.children[st.at].scrollIntoView({ block: 'nearest' });
+      };
+      input._wpPagesOpen = function() { try { input.focus(); } catch (e) {} if (st.rows.length && st.whole) { hide(); st.whole = false; return; } show(true); };   // the Page… button: the whole list, or put away again
+      input.addEventListener('input', function() { show(); });
+      input.addEventListener('blur', function() { st.whole = false; hide(); });
+      input.addEventListener('keydown', function(e) {
+          if (!st.rows.length) return;
+          if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); e.stopImmediatePropagation(); st.at = (st.at + (e.key === 'ArrowDown' ? 1 : -1) + st.rows.length) % st.rows.length; mark(); if (box && box.children[st.at] && box.children[st.at].scrollIntoView) box.children[st.at].scrollIntoView({ block: 'nearest' }); return; }
+          if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); hide(); return; }
+          if (e.key === 'Enter' && st.at >= 0) { e.preventDefault(); e.stopImmediatePropagation(); pick(st.at); }
+      }, true);
+  }
   function tsSig(r) { return [r.color, r.b === true ? 1 : 0, r.i === true ? 1 : 0, r.u === true ? 1 : 0, r.st === true ? 1 : 0, r.size, r.link].join('|'); }
   // One run as an element: its text in a text node, its look through the element's style from the cleaned values only — a strict colour, fixed
   // words for weight, slant, underline and strike, one of the four size steps. A linked run looks like a link and is none: a span is not
@@ -369,7 +419,7 @@ import { getRoomInspectorHtml, attachRoomInspectorEvents, renderInspector,  rend
       if (r.i === true) el.style.fontStyle = 'italic';
       if (r.u === true || r.st === true || link) el.style.textDecoration = (r.u === true || link ? 'underline' : '') + ((r.u === true || link) && r.st === true ? ' ' : '') + (r.st === true ? 'line-through' : '');
       if (typeof r.size === 'string' && tsOwn(TF.SIZE_EM, r.size)) el.style.fontSize = TF.SIZE_EM[r.size];
-      if (link) el.title = 'Link: ' + TF.cleanLink(r.link);
+      if (link) el.title = 'Link: ' + (typeof tsLinkWords === 'function' ? tsLinkWords(TF.cleanLink(r.link)) : TF.cleanLink(r.link));
       el.appendChild(document.createTextNode(String(r.t)));
       el._tsSig = tsSig(r);
       return el;
@@ -467,7 +517,7 @@ import { getRoomInspectorHtml, attachRoomInspectorEvents, renderInspector,  rend
   // [textcheck:bar-start]
   var tsState = { box: null, sel: null, els: null, key: false, run: null, linkDone: null, comp: false, pre: null, last: null, tab: false, away: false };   // away: Esc put the bar away while its box keeps the focus; tab: the last key pressed was Tab (a one-line box it lands in has its text selected, as an input has); box: the box the bar is on; sel: its selection { map, d, s, e, back }; key: the bar was last touched by the keyboard; run: the field and selection a run of Size list steps is on; linkDone: the address Enter has just set, or Escape has just dropped (the Link box's own change event then has nothing left to do); comp: a composition is under way; pre: the selection an edit of the engine's is about to act on; last: the last edit { box, kind, s, e }
   var TS_SCOPE = ' — the selected characters, or the whole field with nothing selected';
-  var TS_LINK_TITLE = 'Link — a web address (https://…) for the selected characters, or the whole field with nothing selected. Enter sets it, Esc backs out; an empty box takes the link off.';
+  var TS_LINK_TITLE = 'Link — a web address (https://…) for the selected characters, or the whole field with nothing selected. Enter sets it, Esc backs out; an empty box takes the link off. Type a page\'s name to link to a page or one of its sections.';
   var TS_LINK_NODE = 'Links the whole node: a click on the node opens it. Type a web address (https://…) and press Enter; Esc backs out; an empty box takes the link off.';
   var TS_LINK_ARROW = 'An arrow cannot hold a link: in a flowchart a link belongs to a node (the Link box on a node’s label links the whole node).';
   var TS_LINK_NODE_BAD = 'A node’s link is a plain web address: it cannot hold a quote, < or >, %%, &# or a ; after a #.';   // said for an address the link rule keeps but a diagram cannot carry (docrender.js diagramLink)
@@ -952,7 +1002,7 @@ import { getRoomInspectorHtml, attachRoomInspectorEvents, renderInspector,  rend
       var lab = E.size.parentNode, words = noSize ? TS_SIZE_NOT : 'Size' + TS_SCOPE;
       if (lab && lab.title !== words) lab.title = words;
       if (noSize) { E.size.disabled = true; E.size.value = ''; }
-      if (noLink) { E.link.disabled = true; E.linkLab.classList.add('off'); E.linkLab.title = TS_LINK_NOT; if (document.activeElement !== E.link) { E.link.value = ''; E.link.placeholder = 'https://…'; } }
+      if (noLink) { E.link.disabled = true; if (E.pageBtn) E.pageBtn.disabled = true; E.linkLab.classList.add('off'); E.linkLab.title = TS_LINK_NOT; if (document.activeElement !== E.link) { E.link.value = ''; E.link.placeholder = 'https://…'; } }
       var fonts = !!hx && typeof fld.setFont === 'function' && hx.fonts(sel.d.key);
       if (E.fontLab.hidden === fonts) E.fontLab.hidden = !fonts;
       if (fonts) { var fv = fld.font(); if (E.font.value !== fv) E.font.value = fv; }
@@ -1149,6 +1199,7 @@ import { getRoomInspectorHtml, attachRoomInspectorEvents, renderInspector,  rend
       E.size.value = mixed ? 'mixed' : st && st.size ? st.size : '';
       var label = !!fld && tsIsLabel(sel.d), node = label && !!fld.setLink, nodeAt = node ? fld.link() : '', here = fld && !n && !label ? tsLinkAt(fld, sel.s) : '';
       E.link.disabled = off || (label && !node);   // on a node's label the box links the whole node; on an arrow's it is off
+      if (E.pageBtn) E.pageBtn.disabled = E.link.disabled;
       E.linkLab.classList.toggle('off', E.link.disabled);
       E.linkLab.title = node ? TS_LINK_NODE + (nodeAt ? ' This node leads to ' + nodeAt : '') : label ? TS_LINK_ARROW : here ? TS_LINK_TITLE + ' The part at the caret links to ' + here : TS_LINK_TITLE;
       if (document.activeElement !== E.link) {   // never over what is being typed
@@ -1194,7 +1245,9 @@ import { getRoomInspectorHtml, attachRoomInspectorEvents, renderInspector,  rend
       E.fontLab.appendChild(E.font); root.appendChild(E.fontLab); root.appendChild(mk('span', 'rte-sep'));
       E.linkLab = mk('label', 'ts-linklab', 'Link ', TS_LINK_TITLE);
       E.link = mk('input', 'ts-link'); E.link.type = 'text'; E.link.tabIndex = -1; E.link.placeholder = 'https://…'; E.link.setAttribute('spellcheck', 'false'); E.link.setAttribute('autocomplete', 'off'); E.link.setAttribute('aria-label', 'Link address');
-      E.linkLab.appendChild(E.link); root.appendChild(E.linkLab); root.appendChild(mk('span', 'rte-sep'));
+      E.linkLab.appendChild(E.link); root.appendChild(E.linkLab);
+      E.pageBtn = mk('button', 'rte-btn ts-pagebtn', 'Page\u2026', TS_PAGE_BTN); E.pageBtn.type = 'button'; E.pageBtn.tabIndex = -1; root.appendChild(E.pageBtn);   // 1.5.6: a link to a page
+      root.appendChild(mk('span', 'rte-sep'));
       E.clear = mk('button', 'rte-btn', 'Tₓ', 'Clear — take the styling off: the selected characters, or the whole field with nothing selected'); E.clear.type = 'button'; E.clear.tabIndex = -1; E.clear.dataset.ts = 'clear';
       root.appendChild(E.clear); root.appendChild(mk('span', 'rte-sep'));
       E.symWrap = mk('span', 'rte-symwrap');
@@ -1221,6 +1274,7 @@ import { getRoomInspectorHtml, attachRoomInspectorEvents, renderInspector,  rend
           var t = e.target, btn = t && t.closest ? t.closest('button') : null; if (!btn || btn.disabled) return;
           if (btn.dataset.sym) tsSymbol(btn.dataset.sym, btn);
           else if (btn === E.symBtn) { if (E.symWrap.classList.toggle('open')) tsTray(); }
+          else if (btn === E.pageBtn) { if (!E.link.disabled && E.link._wpPagesOpen) E.link._wpPagesOpen(); }
           else if (btn.dataset.color) tsPress({ color: btn.dataset.color }, btn);
           else if (btn.dataset.ts === 'b') tsPress({ b: true }, btn);
           else if (btn.dataset.ts === 'i') tsPress({ i: true }, btn);
@@ -1232,6 +1286,7 @@ import { getRoomInspectorHtml, attachRoomInspectorEvents, renderInspector,  rend
       E.size.addEventListener('change', function() { tsPress({ size: E.size.value || null }, E.size); });   // "Mixed" is no size: the core changes nothing for it
       E.link.addEventListener('change', function() { var done = tsState.linkDone; tsState.linkDone = null; if (done === E.link.value) return; tsLink(); });   // the box was left with a new address in it (Enter has its own way, above)
       E.link.addEventListener('blur', function() { tsState.linkDone = null; tsRefresh(); });   // left: it shows the field's own link again
+      if (typeof tsPageMenu === 'function') tsPageMenu(E.link, function() { tsState.linkDone = E.link.value; if (tsLink() !== 'bad') tsBack(); });   // 1.5.6: the campaign's pages to pick from, set at once
       E.size.addEventListener('blur', function() { tsState.run = null; });   // the list was left: the next size is a step of its own
       E.font.addEventListener('change', function() { tsxFont(E.font.value, E.font); });   // a heading is no font: the list changes nothing for it
       E.font.addEventListener('blur', function() { tsState.run = null; });   // the list was left: the next font is a step of its own
@@ -1745,7 +1800,7 @@ import { getRoomInspectorHtml, attachRoomInspectorEvents, renderInspector,  rend
       ['\u201C', 'open quote'], ['\u201D', 'close quote'], ['\u2018', 'open single'], ['\u2019', 'apostrophe'], ['\u00AB', 'guillemet open'], ['\u00BB', 'guillemet close'],
       ['\u2122', 'trademark'], ['\u00A9', 'copyright'], ['\u00AE', 'registered'], ['\u2699', 'gear'], ['\u2694', 'crossed swords'], ['\u2620', 'skull'], ['\u2691', 'flag'], ['\u2690', 'empty flag']
   ];
-  var RTE_LINK_TITLE = 'Link \u2014 a web address (https://\u2026) for the selected text, or for the link the caret is in. Enter sets it, Esc backs out; an empty box takes the link off. With nothing selected and the caret outside a link there is nothing to link: a text block styles a selection, not the whole block.';
+  var RTE_LINK_TITLE = 'Link \u2014 a web address (https://\u2026) for the selected text, or for the link the caret is in. Enter sets it, Esc backs out; an empty box takes the link off. Type a page\'s name to link to a page or one of its sections. With nothing selected and the caret outside a link there is nothing to link: a text block styles a selection, not the whole block.';
   // [sinkcheck:rte-start]
   // The box holds what the preview renders — the page sanitiser's HTML — so a planner from a file runs and loads nothing here either
   function rteInitial(b) {
@@ -1767,7 +1822,7 @@ import { getRoomInspectorHtml, attachRoomInspectorEvents, renderInspector,  rend
       // a text block's bar: the shared commands (the list above), the colour and size controls before the symbol tray…
       var look = rteLookHtml()
               // …and a Link box (the planner's own): its address is read by textfmt.js typedLink and set by rteLinkDo
-              + '<label class="ts-linklab rte-linklab" title="' + esc(RTE_LINK_TITLE) + '">Link <input type="text" class="ts-link rte-link" placeholder="https://\u2026" spellcheck="false" autocomplete="off" aria-label="Link address" tabindex="-1"></label><span class="rte-sep"></span>';
+              + '<label class="ts-linklab rte-linklab" title="' + esc(RTE_LINK_TITLE) + '">Link <input type="text" class="ts-link rte-link" placeholder="https://\u2026" spellcheck="false" autocomplete="off" aria-label="Link address" tabindex="-1"></label><button type="button" class="rte-btn rte-pagebtn" tabindex="-1" title="Link to a page or a section of one: pick it from the list, or type part of its name to narrow the list.">Page\u2026</button><span class="rte-sep"></span>';
       var bar = RTE_CMDS.map(function(k) {
           if (k.sep) return '<span class="rte-sep"></span>';
           if (k.sym) return look + '<span class="rte-symwrap"><button type="button" class="rte-btn rte-symbtn" title="' + k.t + '" tabindex="-1">' + k.l + '</button><div class="rte-syms">' + RTE_SYMS.map(function(s) { return '<button type="button" class="rte-sym" data-sym="' + s[0] + '" title="' + s[1] + '" tabindex="-1">' + s[0] + '</button>'; }).join('') + '</div></span>';
@@ -2011,7 +2066,7 @@ import { getRoomInspectorHtml, attachRoomInspectorEvents, renderInspector,  rend
       if (document.activeElement === body) { var sel = rteSel(body); if (sel) body._wpSel = sel; }   // only while the block has the focus: what it held selected when the Link box took it stays remembered
       var cur = body._wpSel, at = cur ? rteLinkAt(body, cur[0], cur[1]) : null;
       if (document.activeElement !== box) { box.value = at && at.link ? at.link : ''; box.placeholder = at && at.link === null ? 'several links' : 'https://…'; }
-      if (box.parentNode) box.parentNode.title = at && at.link ? RTE_LINK_TITLE + ' This link leads to ' + at.link : RTE_LINK_TITLE;
+      if (box.parentNode) box.parentNode.title = at && at.link ? RTE_LINK_TITLE + ' This link leads to ' + (typeof tsLinkWords === 'function' ? tsLinkWords(at.link) : at.link) : RTE_LINK_TITLE;
   }
   // The Link box's address onto the block. 'bad': refused, said in words, nothing changed; false: nothing to act on, or nothing to change; true: done — one undo step.
   function rteLinkDo(body, box) {
@@ -2102,6 +2157,16 @@ import { getRoomInspectorHtml, attachRoomInspectorEvents, renderInspector,  rend
               });
               linkBox.addEventListener('change', function() { var done = this._wpDone; this._wpDone = null; if (done === this.value) return; rteLinkDo(blockOf(), this); });
               linkBox.addEventListener('blur', function() { this._wpDone = null; rteLinkSync(blockOf()); });   // left: it shows the block's own link again
+              if (typeof tsPageMenu === 'function') tsPageMenu(linkBox, function(c) {
+                  var body = blockOf(), sel = body._wpSel, at = sel && typeof rteLinkAt === 'function' ? rteLinkAt(body, sel[0], sel[1]) : null;
+                  if (c && sel && at && !(at.s < at.e) && typeof rteSelect === 'function') {   // nothing selected: the page's or the section's name goes in at the caret, and is the link
+                      var name = String(c.sec || c.label), addr = linkBox.value, before = sel[0] > 0 ? String(body.textContent || '').charAt(sel[0] - 1) : '', gap = before && !/\s/.test(before) ? ' ' : '';
+                      try { body.focus(); rteSelect(body, [sel[0], sel[0]]); document.execCommand('insertText', false, gap + name); } catch (err) {}
+                      body._wpSel = [sel[0] + gap.length, sel[0] + gap.length + name.length];
+                      linkBox.value = addr;   // the block's own focus showed its link in the box: the page's address is put back
+                  }
+                  linkBox._wpDone = linkBox.value; if (rteLinkDo(body, linkBox) !== 'bad') rteLinkBack(body);
+              });   // 1.5.6: the campaign's pages to pick from, set at once
           }
           bar.addEventListener('click', function(e) {
               var body = bar.parentNode.querySelector('.rte-body');
@@ -2119,6 +2184,7 @@ import { getRoomInspectorHtml, attachRoomInspectorEvents, renderInspector,  rend
               if (e.target.closest && e.target.closest('.rte-custom, .rte-size')) return;   // their own change events
               var symBtn = e.target.closest && e.target.closest('.rte-symbtn');
               if (symBtn) { symBtn.parentNode.classList.toggle('open'); return; }
+              if (e.target.closest && e.target.closest('.rte-pagebtn')) { var lb = bar.querySelector('.rte-link'); if (lb && lb._wpPagesOpen) lb._wpPagesOpen(); return; }   // 1.5.6: a link to a page
               var btn = e.target.closest && e.target.closest('.rte-btn'); if (!btn) return;
               body.focus();
               try { document.execCommand(btn.dataset.cmd, false, null); } catch (err) {}

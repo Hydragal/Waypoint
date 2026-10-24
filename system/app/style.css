@@ -3505,6 +3505,11 @@
   .ts-box .tsr-link { color: var(--blue); }   /* a linked part looks like a link; in the editor it is not followed */
   .ts-bar { position: fixed; z-index: 46; left: 0; top: 0; box-sizing: border-box; display: flex; flex-wrap: wrap; align-items: center; gap: 2px; padding: 3px 5px; background: var(--panel2); border: 1px solid var(--gold); border-radius: 6px; box-shadow: var(--shadow); }
   .ts-bar[hidden] { display: none; }
+  .pagelinks { position: fixed; z-index: 99000; box-sizing: border-box; max-height: 300px; overflow-y: auto; padding: 3px; background: var(--panel2); border: 1px solid var(--gold); border-radius: 6px; box-shadow: var(--shadow); }
+  .pagelinks[hidden] { display: none; }
+  .pagelinks-row { padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pagelinks-row.sub { padding-left: 20px; color: var(--muted, #aab); }
+  .pagelinks-row.on, .pagelinks-row:hover { background: rgba(212, 175, 55, 0.18); }
   .ts-bar .rte-btn:disabled, .ts-bar .rte-sw:disabled, .ts-bar .rte-size:disabled, .ts-bar .ts-custom.off, .ts-bar .ts-linklab.off { opacity: 0.4; cursor: default; }
   .ts-bar .rte-btn:disabled:hover { border-color: transparent; }
   .ts-bar .rte-sw:disabled:hover { transform: none; }

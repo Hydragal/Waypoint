@@ -228,6 +228,47 @@ function openPage(id, way, land) {
 }
 // [shelfcheck:open-end]
 
+// [shelfcheck:pagelink-start]
+// 1.5.6: a link from one page to another, or to a section of it (textfmt.js pageLink: #wp:page:<id>, #wp:page:<id>:<block id>). linkgate.js
+// decides the press and hands it here. The parts a link may land at are a page's title, its headings, its scene nodes and its titled tables.
+var LINK_SECS = { h1: 1, h2: 1, h3: 1, node: 1, table: 1 }, LINK_ID = /^[A-Za-z0-9_-]{1,80}$/, LINK_MAX = 2000;
+var LINK_GONE = 'That page is not in this campaign.', LINK_HID = 'That page has not been shared with you.';
+function linkSecs(it) {
+    var out = []; if (!it || !Array.isArray(it.blocks)) return out;
+    for (var i = 0; i < it.blocks.length && i < SHELF.read * 10 && out.length < 300; i++) {
+        var b = it.blocks[i]; if (!b || typeof b !== 'object' || !LINK_SECS[b.type] || typeof b.id !== 'string' || !LAND_AT.test(b.id)) continue;
+        var t = shelfText(b.title, 80); if (t) out.push({ at: b.id, title: t });
+    }
+    return out;
+}
+// Every page of the campaign and each of its sections, as { addr, label }: the pages by name, each page's sections after it in their order
+function linkChoices(camp) {
+    var out = []; if (!camp || !camp.items || typeof camp.items !== 'object') return out;
+    var ids = Object.keys(camp.items).filter(function(id) { return LINK_ID.test(id) && !!pageOf(camp, id); });
+    ids.sort(function(a, b) { return natCmp(pageTitle(camp.items[a]), pageTitle(camp.items[b])); });
+    ids.forEach(function(id) {
+        var it = camp.items[id], t = pageTitle(it);
+        out.push({ addr: '#wp:page:' + id, label: t });
+        linkSecs(it).forEach(function(s) { if (s.title === t) return; out.push({ addr: '#wp:page:' + id + ':' + s.at, label: t + ' \u203a ' + s.title, sec: s.title }); });
+    });
+    return out.slice(0, LINK_MAX);
+}
+// What a page link names, in words: the page, and the section where it names one this page still has; '' where the page is not here
+function linkWords(camp, id, at) {
+    var it = pageOf(camp, id); if (!it) return '';
+    var t = pageTitle(it), s = at ? linkSecs(it).filter(function(x) { return x.at === at; })[0] : null;
+    return s ? t + ' \u203a ' + s.title : t;
+}
+// A press on a page link: opened by openPage's own ways, at its section where it names one; a page that is not here is said
+function linkGo(id, at, way) {
+    var camp = getActiveCampaign(), n = window.wpNet, gone = n && n.foreign ? LINK_HID : LINK_GONE;
+    if (typeof id !== 'string' || !pageOf(camp, id)) { toast(gone); return ''; }
+    var r = openPage(id, way, typeof at === 'string' && LAND_AT.test(at) ? { at: at } : null);
+    if (!r) toast(gone);
+    return r;
+}
+// [shelfcheck:pagelink-end]
+
 /* ---------- pins ---------- */
 // [shelfcheck:pins-start]
 function isPinned(id) { var camp = getActiveCampaign(); return !!camp && pinnedOf(camp).indexOf(id) >= 0; }
@@ -313,5 +354,6 @@ function shelfWire() {
 }
 // [shelfcheck:wire-end]
 
-window.wpPageShelf = { way: pageWay, wayNow: function(ev) { return pageWay(viewNow(), ev); }, open: openPage, isPinned: isPinned, pinLabel: pinLabel, pin: pinPage, opened: pageOpened, noteActive: noteActive, close: shelfClose, mapPin: mapPin, mapPinField: mapPinField, mapPinSet: mapPinSet };
+window.wpPageShelf = { way: pageWay, wayNow: function(ev) { return pageWay(viewNow(), ev); }, open: openPage, isPinned: isPinned, pinLabel: pinLabel, pin: pinPage, opened: pageOpened, noteActive: noteActive, close: shelfClose, mapPin: mapPin, mapPinField: mapPinField, mapPinSet: mapPinSet,
+    linkGo: linkGo, linkChoices: function() { return linkChoices(getActiveCampaign()); }, linkWords: function(id, at) { return linkWords(getActiveCampaign(), id, at); } };
 shelfWire();

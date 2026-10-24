@@ -515,8 +515,8 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         // a scan of the boxes' whole code path: no markup is ever written from a string, every element is made by name
         const made = (boxesSrc.match(/document\.createElement\(([^)]*)\)/g) || []).map(s => s.replace(/^document\.createElement\(/, '').replace(/\)$/, '')), mks = (boxesSrc.match(/\bmk\('([a-z]+)'/g) || []).map(s => s.slice(4, -1)), btns = (boxesSrc.match(/\bbtn\('[a-z]+', '([a-z]+)'/g) || []).map(s => s.replace(/^.*, '/, '').replace(/'$/, ''));
         check('planner editor boxes (a scan of the fields, the box and the bar): no innerHTML, outerHTML, insertAdjacentHTML or document.write anywhere in that code; no handler attribute, no eval, no Function; every element is made by createElement with a fixed name (a run\'s span, the line-break element, the bar\'s own controls) and every text by createTextNode or textContent',
-            !/innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\(|new Function|Function\(|setAttribute\('on|\.on[a-z]+ = /.test(boxesSrc) && made.slice().sort().join() === ["'br'", "'div'", "'span'", 'tag'].join() && mks.length >= 15 && mks.every(t => ['div', 'button', 'span', 'label', 'input', 'select', 'option'].indexOf(t) >= 0) && btns.join() === 'b,i,u,s'
-            && /el\.appendChild\(document\.createTextNode\(String\(r\.t\)\)\);/.test(boxesSrc) && /if \(typeof r\.color === 'string' && \/\^#\[0-9a-f\]\{6\}\$\/\.test\(r\.color\)\) el\.style\.color = r\.color;/.test(boxesSrc) && /if \(link\) el\.title = 'Link: ' \+ TF\.cleanLink\(r\.link\);/.test(boxesSrc), [made, mks, btns]);
+            !/innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\(|new Function|Function\(|setAttribute\('on|\.on[a-z]+ = /.test(boxesSrc) && made.slice().sort().join() === ["'br'", "'div'", "'div'", "'div'", "'span'", 'tag'].join() && mks.length >= 15 && mks.every(t => ['div', 'button', 'span', 'label', 'input', 'select', 'option'].indexOf(t) >= 0) && btns.join() === 'b,i,u,s'
+            && /el\.appendChild\(document\.createTextNode\(String\(r\.t\)\)\);/.test(boxesSrc) && /if \(typeof r\.color === 'string' && \/\^#\[0-9a-f\]\{6\}\$\/\.test\(r\.color\)\) el\.style\.color = r\.color;/.test(boxesSrc) && boxesSrc.includes("if (link) el.title = 'Link: ' + (typeof tsLinkWords === 'function' ? tsLinkWords(TF.cleanLink(r.link)) : TF.cleanLink(r.link));"), [made, mks, btns]);
     }
 
     /* ---- the planner editor's rich-text boxes (planner.js rteInitial): a contenteditable is markup too ---- */
@@ -2889,7 +2889,7 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
                 && J(runsSrc.match(/setAttribute\('([a-z]+)'/g)) === J(["setAttribute('href'", "setAttribute('target'", "setAttribute('rel'"]) && /el\.style\.fontFamily = r && r\.font \? fontCss\(r\.font\) : '';/.test(runsSrc) && /if \(o\.ask === true\) el\.dataset\.ask = '1'; else delete el\.dataset\.ask;/.test(runsSrc)
                 && /\nif \(typeof window !== 'undefined'\) window\.wpTextRead = \{ fill: fillRuns \};\n/.test(read('linkgate.js').replace(/\r\n/g, '\n')) && /\n    var ask = !!a\.closest\('\[data-ask\]'\);[^\n]*\n    var v = a\.closest\(ZONE_VIEWER\);\n/.test(gateSrc) && /c\.own = !ask && d\.linksOwn === '1';/.test(gateSrc) && /\n    if \(ask\) return c;\n    if \(a\.closest\(ZONE_APP\)\)/.test(gateSrc) && gateSrc.split("closest('[data-ask]')").length === 2
                 && /typed = o\.typed === true && ruleLinks\(o\.rule\);/.test(runsSrc) && runsSrc.split('linkParts(t)').length === 2 && !/fillLinked\(span/.test(runsSrc)
-                && J((read('linkgate.js').match(/^import [^\n]*$/gm) || []).map(s => s.trim())) === J(["import { cleanLink, linkParts } from './textfmt.js';", "import { showConfirm } from './dialogs.js';", "import { runsOf, SIZE_EM, fontCss } from './textfmt.js';", "import { cleanRec, ruleLinks } from './lookcore.js';"])
+                && J((read('linkgate.js').match(/^import [^\n]*$/gm) || []).map(s => s.trim())) === J(["import { cleanLink, linkParts } from './textfmt.js';", "import { showConfirm } from './dialogs.js';", "import { runsOf, SIZE_EM, fontCss } from './textfmt.js';", "import { cleanRec, ruleLinks } from './lookcore.js';", "import { pageLink } from './textfmt.js';   // 1.5.6: a link to a page of the campaign"])
                 && /\n  \.wp-run-read \{ white-space: pre-wrap; overflow-wrap: anywhere; \}\n/.test(read('../style.css').replace(/\r\n/g, '\n')));
             // item 35, fold 3a: a player's table notepad drawn from a hostile host's message (net.js sliced by its padbox markers and run for real
             // with the REAL reader beside it, on the page of plain objects, which refuses markup)
@@ -3070,7 +3070,7 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
                 s0 === 0 && J(shape) === J([1, 'DIV', 1, 3, true, '', true]) && inPop === 'popoutWrap' && hides.length === 19 && hides.every(Boolean) && keys.length === 12 && keys.every(Boolean) && keys2.length === 15 && keys2.every(Boolean) && keys3.length === 8 && keys3.every(Boolean) && smOver === null && smNone === 0 && J(sides) === J([true, false, false, false, false]) && J(tallSides) === J([true, false])
                 && J(C.asked) === J([ASK]) && bareOver === null && bare.strips().length === 0 && bare.api.peekText === null, [s0, shape, inPop, hides, keys, smOver, smNone, sides, C.asked, bareOver]);
             check('the strip, wired and in the style sheet (pinned): the gate\'s own wiring asks for it where it is there, through typeof, so the gate run alone is as it was; the slice makes one element by name and writes text nodes only; the strip takes no press, stands over the handout viewer and under the app\'s own question, and is put away by its hidden attribute; its rule wraps the address and never cuts it, with no ellipsis, no single line and nothing hidden past its box, so the end of a site is in sight at any width, and holds it to half the window\'s width, so one side is always clear of the link, and the stream window\'s rule puts it away; Help says it to players and under planners, and both release notes say it',
-                /doc\.addEventListener\('dragstart', dragGate\(win\), true\);\n\s*if \(typeof peekWire === 'function'\) peekWire\(win, doc\);[^\n]*\n\s*return h;/.test(gateSrc)
+                /doc\.addEventListener\('dragstart', dragGate\(win\), true\);\n\s*doc\.addEventListener\('contextmenu', pageMenu\(win\), true\);[^\n]*\n\s*if \(typeof peekWire === 'function'\) peekWire\(win, doc\);[^\n]*\n\s*return h;/.test(gateSrc)
                 && !/innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\(|new Function|Function\(|setAttribute\('on|\.on[a-z]+ = |javascript:|\.open\(/.test(peekSrc) && J((peekSrc.match(/createElement\('[a-z]+'\)/g) || [])) === J(["createElement('div')"]) && !/\.title = |setAttribute\('(?!aria-hidden')/.test(peekSrc)
                 && /\n  #linkPeek \{ position: fixed; left: 0; bottom: 0; z-index: 100005; [^\n]*pointer-events: none; user-select: none; \}\n  #linkPeek\.peek-right \{ left: auto; right: 0;[^\n]*\}\n  #linkPeek\[hidden\] \{ display: none; \}\n/.test(read('../style.css').replace(/\r\n/g, '\n'))
                 && (() => { const cssP = read('../style.css').replace(/\r\n/g, '\n'), ruleP = (/\n  #linkPeek \{[^\n]*\}\n/.exec(cssP) || [''])[0]; return /; white-space: normal; overflow-wrap: anywhere; /.test(ruleP) && /; max-width: 50vw; /.test(ruleP) && !/text-overflow|nowrap|overflow: hidden|max-height|line-clamp/.test(ruleP) && cssP.includes('\n  #linkPeek[hidden] { display: none; }\n  body.stream-mode #linkPeek { display: none; }\n'); })()
@@ -5071,6 +5071,40 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
 
     }
 
+
+    {   // 1.5.6: a link from one page to another (textfmt.js pageLink), through the real gate: never a question, never window.open
+        const J = JSON.stringify, TFg = await import(modUrl('textfmt.js')), gSrc = slice('linkgate.js', 'linkgate'), pSrc = slice('linkgate.js', 'linkpeek');
+        const G = new Function('cleanLink', 'linkParts', 'URL', 'pageLink', gSrc + '\n' + pSrc + '\nreturn { linkGate: linkGate, pageMenu: pageMenu, peekOf: peekOf };')(TFg.cleanLink, TFg.linkParts, URL, TFg.pageLink);
+        const el = (tag, attrs, parent, ce) => ({ nodeType: 1, tagName: tag.toUpperCase(), nodeName: tag.toUpperCase(), parentNode: parent || null, attrs: attrs || {}, isContentEditable: !!ce,
+            hasAttribute(k) { return Object.prototype.hasOwnProperty.call(this.attrs, k); }, getAttribute(k) { return this.hasAttribute(k) ? this.attrs[k] : null; },
+            matches(sel) { return sel.split(',').map(s => s.trim()).some(s => s === this.tagName.toLowerCase() || (s[0] === '#' && this.attrs.id === s.slice(1)) || (s === '[data-ask]' && this.hasAttribute('data-ask'))); },
+            closest(sel) { for (let n = this; n; n = n.parentNode) if (n.matches && n.matches(sel)) return n; return null; } });
+        const page = el('div', { id: 'plannerPreview' }), editBox = el('div', {}, el('div', {}), true), other = el('div', { 'data-ask': '' });
+        const link = (href, parent, extra) => el('a', Object.assign({ href: href }, extra || {}), parent);
+        const mkWin = (o) => { const calls = [], opened = []; const w = { calls: calls, opened: opened, wpPopout: !!o.pop, document: { body: { classList: { contains: c => !!o.stream && c === 'stream-mode' } } }, open() { opened.push([].slice.call(arguments)); },
+            wpPageShelf: { linkGo(id, at, way) { calls.push([id, at, way]); return way; }, wayNow(e) { return e && e.ctrlKey ? 'window' : 'panel'; }, linkWords(id, at) { return id === 'p1' ? 'Plan \u203a ' + (at || 'top') : ''; } } };
+            if (o.pop) { w.opener = o.opener; w.wpPageShelf = null; } return w; };
+        let asked = 0; const ask = () => { asked++; };
+        const fire = (win, a, o) => { const e = Object.assign({ type: 'click', button: 0, target: a, dp: false, preventDefault() { this.dp = true; }, stopPropagation() { this.sp = true; } }, o || {}); G.linkGate(win, win.document, ask)(e); return e; };
+        const w1 = mkWin({}), e1 = fire(w1, link('#wp:page:p1:b_d', page)), e2 = fire(w1, link('#wp:page:p1:b_d', page), { ctrlKey: true }), e3 = fire(w1, link('#wp:page:p1', page), { type: 'auxclick', button: 1 });
+        const e4 = fire(w1, link('#wp:page:p1', other)), e5 = fire(w1, link('#wp:page:p1', editBox)), e6 = fire(w1, link('#wp:page:p1', page, { 'data-held': '' })), e7 = fire(w1, link('#wp:page:bad id', page)), e8 = fire(w1, link('#wp:page:p1', page), { button: 2 });
+        check('1.5.6 page links (the gate, run for real): a click opens the page at its section by the shelf\'s own way, Ctrl or the middle button a window of its own, a page link from someone else\'s text the same with no question; in a box being edited, after a drag, for an address that is no link and for the right button\'s click nothing opens; the engine follows none of them; never window.open, never the question',
+            J(w1.calls) === J([['p1', 'b_d', 'panel'], ['p1', 'b_d', 'window'], ['p1', '', 'window'], ['p1', '', 'panel']]) && [e1, e2, e3, e4, e5, e6, e7].every(e => e.dp === true) && e8.dp === false && w1.opened.length === 0 && asked === 0, J([w1.calls, w1.opened, asked]));
+        const host = mkWin({}), pop = mkWin({ pop: true, opener: host }), st = mkWin({ stream: true }), lone = mkWin({ pop: true, opener: null });
+        fire(pop, link('#wp:page:p1:b_d', page)); fire(st, link('#wp:page:p1', page)); const eL = fire(lone, link('#wp:page:p1', page));
+        check('1.5.6 page links (the gate): from a window of its own a page link opens a window of its own through the main window, which holds the campaign; in the stream window and in a window whose main window is gone nothing opens',
+            J(host.calls) === J([['p1', 'b_d', 'window']]) && st.calls.length === 0 && eL.dp === true && host.opened.length === 0, J([host.calls, st.calls]));
+        const cm = (win, a) => { const e = { type: 'contextmenu', target: a, dp: false, sp: false, preventDefault() { this.dp = true; }, stopPropagation() { this.sp = true; } }; G.pageMenu(win)(e); return e; };
+        const w2 = mkWin({}), c1 = cm(w2, link('#wp:page:p1:b_d', page)), c2 = cm(w2, link('https://ok.example/', page)), c3 = cm(w2, link('#wp:page:p1', editBox));
+        check('1.5.6 page links (the right button): on a page link it opens a window of its own and no menu; on a web link and in a box being edited the menu is the browser\'s own',
+            J(w2.calls) === J([['p1', 'b_d', 'window']]) && c1.dp && c1.sp && !c2.dp && !c3.dp, J(w2.calls));
+        const w3 = mkWin({});
+        check('1.5.6 page links (before a press): the strip says which page and which part, a page that is not here as such, and nothing in a box being edited',
+            G.peekOf(w3, link('#wp:page:p1:b_d', page)) === 'Page: Plan \u203a b_d' && G.peekOf(w3, link('#wp:page:p9', page)) === 'A page that is not here' && G.peekOf(w3, link('#wp:page:p1', editBox)) === '');
+        const lgAll = read('linkgate.js').replace(/\r\n/g, '\n');
+        check('1.5.6 page links (wired): the right button is heard once on the document in the capture phase beside the gate, and the module imports the reading from textfmt.js',
+            lgAll.includes("    doc.addEventListener('contextmenu', pageMenu(win), true);") && lgAll.includes("import { pageLink } from './textfmt.js';"));
+    }
 
     summed = true;
     console.log('\n' + pass + ' passed, ' + fail + ' failed.');

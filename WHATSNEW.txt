@@ -50,6 +50,18 @@ The app
 - Waypoint now names itself an alpha: the version reads Waypoint Alpha
   1.5.6 in About, the update notices and the release's name.
 
+Planners and pages
+- Link to another page, or to one part of it. Press Page... beside the
+  Link box and pick a planner, a handbook page, or one of its
+  headings, scene nodes or titled tables. You can also type part of
+  its name in the Link box. In a text block with nothing selected,
+  the name goes in at the caret as the link.
+- A click on such a link opens that page at that part: over the map
+  on the play map, as the page itself elsewhere. Ctrl and click, the
+  middle button or a right-click open it in a window of its own. Rest
+  the pointer on it to see which page it leads to.
+- A player follows a page link only to a page you share with them.
+
 Handbook
 - A page set GM only now keeps every page nested under it from your
   players too, whatever each of those pages says. Before, a page
