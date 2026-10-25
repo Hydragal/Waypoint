@@ -47,6 +47,15 @@ function twDraw(doc, root, v, off, act) {
             list.appendChild(row);
         });
         col.appendChild(list);
+        if (me && v.status === 'open') (s.gets || []).forEach(function(g) {   // the receiver picks the chip an amount lands on
+            var gr = twEl(doc, 'label', 'trade-into'); gr.appendChild(twEl(doc, 'span', null, g.label + ' you get goes onto'));
+            var gs = doc.createElement('select'); gs.className = 'trade-into-sel'; gs.title = 'Which of your rows of ' + g.list + ' gets it'; gs.setAttribute('aria-label', gs.title);
+            var g0 = twEl(doc, 'option', null, 'The first that fits'); g0.value = ''; gs.appendChild(g0);
+            (g.opts || []).forEach(function(o) { var e = twEl(doc, 'option', null, o.name + (typeof o.cur === 'number' ? ' (' + twNum(o.cur) + ')' : '')); e.value = o.rowId; gs.appendChild(e); });
+            var gn = twEl(doc, 'option', null, 'A new one'); gn.value = '+'; gs.appendChild(gn);
+            gs.value = g.pick || ''; gs.addEventListener('change', function() { act('into', sd, { fid: g.fid, row: gs.value }); });
+            gr.appendChild(gs); col.appendChild(gr);
+        });
         var tot = twTotal(s.lines); if (tot !== null) col.appendChild(twEl(doc, 'div', 'trade-total', 'Worth at list price: ' + twNum(tot)));
         if (me && v.status === 'open') {
             var ch = twChoices(off[sd], s.lines), sel = doc.createElement('select'); sel.className = 'trade-add'; sel.title = 'Put a row of your sheet on the table'; sel.setAttribute('aria-label', 'Add from ' + s.name + '’s sheet');
@@ -80,6 +89,7 @@ function twAct(kind, sd, arg) {
     } else if (kind === 'num') { var l = lines[arg.i]; if (!l) return; if (!(arg.n > 0)) lines.splice(arg.i, 1); else if (l.key !== undefined) l.amt = arg.n; else l.qty = Math.floor(arg.n); say(n.tradePut(v.tid, lines, side)); }
     else if (kind === 'drop') { lines.splice(arg, 1); say(n.tradePut(v.tid, lines, side)); }
     else if (kind === 'ok') say(n.tradeConfirm(v.tid, arg === true, side));
+    else if (kind === 'into' && n.tradeInto) say(n.tradeInto(v.tid, arg.fid, arg.row, side));
 }
 function twRender() {
     var v = _tw.view, body = document.getElementById('tradeBody'); if (!body) return;

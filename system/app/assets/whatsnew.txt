@@ -81,6 +81,8 @@ Trading
 - A list's level or number stat can be ticked Split in trades in the
   System editor's Lists tab. A trade can then give part of that figure,
   such as money from a chip. Bars and coins move whole.
+- Money you get goes onto the first chip that fits. Under your side of
+  the window you can pick another chip, or a new one.
 
 Combat
 - Taking damage. A character token's right-click menu has Take damage,

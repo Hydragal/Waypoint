@@ -3236,6 +3236,18 @@ function tradeView(tr, you, status, msg) {
     var S = SC(), camp = getActiveCampaign(), ca = tradeChar(camp, tr.a.charId), cb = tradeChar(camp, tr.b.charId), sys = camp && camp.system;
     var side = function(sd, ch, off, ok) { return { charId: sd.charId, name: String((ch && ch.name) || 'A character').slice(0, 60), ok: !!ok, lines: S && sys && ch ? tradeLines(S, sys, ch, off, sd.by ? 'player' : 'gm') : [] }; };
     var v = { tid: tr.tid, status: status || tr.status, you: you, a: side(tr.a, ca, tr.offA, tr.okA), b: side(tr.b, cb, tr.offB, tr.okB) };
+    // where an amount this side receives lands (the receiver picks a chip): only on the view of one who acts for that side, since it names their own rows
+    if (S && S.tradeInto && sys) [['a', ca, cb, tr.offB, tr.intoA], ['b', cb, ca, tr.offA, tr.intoB]].forEach(function(q) {
+        if (!(you === 'both' || you === q[0]) || !q[1] || !q[2]) return; var seen = Object.create(null), gets = [];
+        (q[3] || []).forEach(function(l) {
+            if (l.key === undefined || seen[l.fid]) return; seen[l.fid] = 1;
+            var f = (sys.fields || []).filter(function(x) { return x && x.id === l.fid; })[0], gv = q[2].values && Array.isArray(q[2].values[l.fid]) ? q[2].values[l.fid] : [], like = gv.filter(function(r) { return r && (r.id || r.rowId) === l.rowId; })[0];
+            var ln = v[q[0] === 'a' ? 'b' : 'a'].lines.filter(function(x) { return x.fid === l.fid && x.key !== undefined; })[0];
+            var into = q[4] && typeof q[4][l.fid] === 'string' ? q[4][l.fid] : '';
+            gets.push({ fid: l.fid, list: String((f && f.label) || 'List').slice(0, 60), label: ln ? ln.label : l.key, pick: into, opts: S.tradeInto(sys, q[1], l.fid, l.key, like || {}) });
+        });
+        if (gets.length) v[q[0]].gets = gets;
+    });
     if (msg) v.msg = String(msg).slice(0, 200);
     return v;
 }
@@ -3270,7 +3282,7 @@ function tradeDo(actor, msg) {
         if (tradeOfChar(msg.from) || tradeOfChar(msg.to)) return { error: (tradeOfChar(msg.to) ? fb.name : fa.name) + ' is trading with someone else. Ask again in a moment.' };
         var byB = tradeBy(fb); if (pid && !byB && !fb.npc && fb.ownerId) return { error: (fb.name || 'That character') + '\u2019s player is not at the table.' };
         var tid; do { tid = 't_' + Math.random().toString(36).slice(2, 10).padEnd(8, '0'); } while (_trades[tid]);
-        var tr = { tid: tid, a: { charId: msg.from, by: byA }, b: { charId: msg.to, by: byB }, status: byA === byB ? 'open' : 'asking', offA: [], offB: [], okA: false, okB: false };
+        var tr = { tid: tid, a: { charId: msg.from, by: byA }, b: { charId: msg.to, by: byB }, status: byA === byB ? 'open' : 'asking', offA: [], offB: [], okA: false, okB: false, intoA: Object.create(null), intoB: Object.create(null) };
         _trades[tid] = tr; tradeTell(tr);
         if (!byB && pid && typeof window.wpNotices === 'object' && window.wpNotices && typeof window.wpNotices.wait === 'function') { try { window.wpNotices.wait('trade:' + tid, (fa.name || 'A character') + ' asks to trade with ' + (fb.name || 'your character') + '.', 'trade', tid); } catch (e) {} }
         logEvent('char', (fa.name || 'A character') + ' asked to trade with ' + (fb.name || 'a character'));
@@ -3293,10 +3305,16 @@ function tradeDo(actor, msg) {
         if (mine === 'a') tr2.offA = off; else tr2.offB = off; var had = tr2.okA || tr2.okB; tr2.okA = false; tr2.okB = false;
         tradeTell(tr2, null, had ? 'The offer changed: confirm again.' : ''); return { ok: true };
     }
+    if (msg.op === 'into') {   // the receiver picks the row of its own list an amount lands on: '' the first that fits, '+' a row of its own
+        var fT = typeof msg.fid === 'string' ? (camp.system.fields || []).filter(function(x) { return x && x.id === msg.fid && x.kind === 'item-list' && x.list && x.list.trade === true; })[0] : null;
+        var rowT = typeof msg.row === 'string' && (msg.row === '' || msg.row === '+' || /^[A-Za-z0-9_-]{1,40}$/.test(msg.row)) ? msg.row : null; if (!fT || rowT === null) return { error: 'That is not a row of yours.' };
+        var inM = mine === 'a' ? tr2.intoA : tr2.intoB; if (rowT) inM[fT.id] = rowT; else delete inM[fT.id];
+        var hadI = tr2.okA || tr2.okB; tr2.okA = false; tr2.okB = false; tradeTell(tr2, null, hadI ? 'The offer changed: confirm again.' : ''); return { ok: true };
+    }
     if (msg.op === 'confirm') {
         if (mine === 'a') tr2.okA = msg.on === true; else tr2.okB = msg.on === true;
         if (!(tr2.okA && tr2.okB)) { tradeTell(tr2); return { ok: true }; }
-        var res = S.tradeApply(camp.system, ca, cb, tr2.offA, tr2.offB, who(tr2.a), who(tr2.b));
+        var res = S.tradeApply(camp.system, ca, cb, tr2.offA, tr2.offB, who(tr2.a), who(tr2.b), { a: tr2.intoA, b: tr2.intoB });
         if (!res.ok) { tr2.okA = false; tr2.okB = false; tradeTell(tr2, null, res.msg); return { error: res.msg }; }
         var now = Date.now(); ca.values = ca.values || {}; cb.values = cb.values || {};
         Object.keys(res.valuesA).forEach(function(k) { ca.values[k] = res.valuesA[k]; }); Object.keys(res.valuesB).forEach(function(k) { cb.values[k] = res.valuesB[k]; }); ca.updated = now; cb.updated = now;
@@ -3331,6 +3349,7 @@ net.tradeAsk = function(from, to) { return tradeSendUp({ op: 'ask', from: String
 net.tradeAnswer = function(tid, yes) { if (window.wpNotices && window.wpNotices.done) { try { window.wpNotices.done('trade:' + tid); } catch (e) {} } return tradeSendUp({ op: 'answer', tid: String(tid || ''), yes: yes === true }); };
 net.tradePut = function(tid, offer, side) { var o = { op: 'put', tid: String(tid || ''), offer: Array.isArray(offer) ? offer.slice(0, 80) : [] }; if (side === 'a' || side === 'b') o.side = side; return tradeSendUp(o); };
 net.tradeConfirm = function(tid, on, side) { var o = { op: 'confirm', tid: String(tid || ''), on: on === true }; if (side === 'a' || side === 'b') o.side = side; return tradeSendUp(o); };
+net.tradeInto = function(tid, fid, row, side) { var o = { op: 'into', tid: String(tid || ''), fid: String(fid || ''), row: typeof row === 'string' ? row : '' }; if (side === 'a' || side === 'b') o.side = side; return tradeSendUp(o); };
 net.tradeCancel = function(tid) { return tradeSendUp({ op: 'cancel', tid: String(tid || '') }); };
 net.tradeNow = function() { var ks = Object.keys(_tradeViews); return ks.length ? JSON.parse(JSON.stringify(_tradeViews[ks[ks.length - 1]])) : null; };
 net.tradeViews = function() { return Object.keys(_tradeViews).map(function(k) { return JSON.parse(JSON.stringify(_tradeViews[k])); }); };
@@ -3353,7 +3372,15 @@ function cleanTradeView(v) {
             else { var q = num(l.qty); if (q === null || q < 1) return null; o.qty = Math.floor(q); var p = num(l.price); if (p !== null) o.price = p; }
             return o;
         }).filter(Boolean);
-        return { charId: s.charId, name: txt(s.name, 60) || 'A character', ok: s.ok === true, lines: lines };
+        var out = { charId: s.charId, name: txt(s.name, 60) || 'A character', ok: s.ok === true, lines: lines };
+        var gets = (Array.isArray(s.gets) ? s.gets.slice(0, N) : []).map(function(g) {
+            if (!g || typeof g !== 'object' || typeof g.fid !== 'string' || g.fid.length > 40) return null;
+            var pick = typeof g.pick === 'string' && (g.pick === '' || g.pick === '+' || /^[A-Za-z0-9_-]{1,40}$/.test(g.pick)) ? g.pick : '';
+            var opts = (Array.isArray(g.opts) ? g.opts.slice(0, N) : []).map(function(o) { return o && typeof o === 'object' && typeof o.rowId === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(o.rowId) ? { rowId: o.rowId, name: txt(o.name, 80) || 'Item', cur: num(o.cur) } : null; }).filter(Boolean);
+            return { fid: g.fid, list: txt(g.list, 60) || 'List', label: txt(g.label, 60) || 'It', pick: pick, opts: opts };
+        }).filter(Boolean);
+        if (gets.length) out.gets = gets;
+        return out;
     };
     var a = side(v.a), b = side(v.b); if (!a || !b) return null;
     var o = { tid: v.tid, status: st, you: you, a: a, b: b }; var m = txt(v.msg, 200); if (m) o.msg = m; return o;
@@ -6875,7 +6902,7 @@ function handleMessage(msg, conn) {
         var prTr = net.roster[conn.peer]; if (!prTr || !prTr.id || typeof msg.op !== 'string') return;
         if (!allow('trade', { perMs: 100, burst: 20, windowMs: 4000, table: 400 }, conn.peer)) return;
         if (peerPaused(conn.peer)) { try { conn.send({ type: 'tradeState', refused: 'The table is paused.' }); } catch (e) { sendFailed(e); } return; }
-        var qTr = { op: msg.op }; ['from', 'to', 'tid', 'side'].forEach(function(k) { if (typeof msg[k] === 'string' && msg[k].length <= 40) qTr[k] = msg[k]; });
+        var qTr = { op: msg.op }; ['from', 'to', 'tid', 'side', 'fid', 'row'].forEach(function(k) { if (typeof msg[k] === 'string' && msg[k].length <= 40) qTr[k] = msg[k]; });
         if (msg.yes === true) qTr.yes = true; if (msg.on === true) qTr.on = true; if (Array.isArray(msg.offer)) qTr.offer = msg.offer.slice(0, 80);
         var rTr = tradeDo({ pid: prTr.id }, qTr);
         if (rTr && rTr.error) { try { conn.send({ type: 'tradeState', refused: String(rTr.error).slice(0, 200) }); } catch (e) { sendFailed(e); } }

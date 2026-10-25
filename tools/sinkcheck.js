@@ -5156,6 +5156,16 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             && JSON.stringify(acts) === JSON.stringify([['num', 'a', { i: 0, n: 3 }], ['add', 'a', 'q|f_c|w_4'], ['ok', 'a', true]])
             && JSON.stringify(tw.twOffer(v.a.lines)) === JSON.stringify([{ fid: 'f_g', rowId: 'w_1', qty: 2 }, { fid: 'f_c', rowId: 'w_2', key: '@lvl', amt: 40 }])
             && !/innerHTML|insertAdjacentHTML|outerHTML|document\.write/.test(twS), JSON.stringify([texts.slice(0, 12), opts.map(o => o.textContent), acts]));
+        {   // the receiver picks a chip: the row under your side, from a hostile view
+            made.length = 0; const acts2 = [], root2 = node('div');
+            const v2 = Object.assign({}, v, { a: Object.assign({}, v.a, { gets: [{ fid: 'f_c', list: H + 'Chips', label: H + 'Stored', pick: 'w_7', opts: [{ rowId: 'w_7', name: H + 'Purse', cur: 12.5 }, { rowId: 'w_8', name: 'Spare', cur: null }] }] }), b: Object.assign({}, v.b, { gets: [{ fid: 'f_c', list: 'X', label: 'Theirs', pick: '', opts: [{ rowId: 'w_9', name: 'Not yours' }] }] }) });
+            tw.twDraw(doc, root2, v2, off, (k, s, a) => acts2.push([k, s, a]));
+            const isel = made.filter(n => n.tag === 'select' && n.className === 'trade-into-sel'), iopt = made.filter(n => n.tag === 'option').map(n => [n.value, n.textContent]), t2 = made.map(n => n.textContent).filter(x => typeof x === 'string');
+            isel[0].value = '+'; isel[0].listeners.change();
+            check('1.5.6 trading, the receiver picks a chip (trade.js twDraw, run for real on a hostile view): under your own side a list of the rows the amount you get may land on, each name as a text node with what it holds, The first that fits and A new one beside them, the pick shown; none for the other side\'s rows; a change hands the list and the row to the window\'s own handler',
+                isel.length === 1 && isel[0].value === '+' && t2.includes(H + 'Stored you get goes onto') && JSON.stringify(iopt.filter(o => /^(|\+|w_7|w_8)$/.test(o[0]) && o[1] !== '' && (o[1] === 'The first that fits' || o[1] === 'A new one' || /Purse|Spare/.test(o[1])))) === JSON.stringify([['', 'The first that fits'], ['w_7', H + 'Purse (12.5)'], ['w_8', 'Spare'], ['+', 'A new one']])
+                && !t2.some(x => /Not yours|Theirs/.test(x)) && JSON.stringify(acts2) === JSON.stringify([['into', 'a', { fid: 'f_c', row: '+' }]]), JSON.stringify([iopt, acts2]));
+        }
     }
     summed = true;
     console.log('\n' + pass + ' passed, ' + fail + ' failed.');

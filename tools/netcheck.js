@@ -15782,6 +15782,24 @@ pendingChecks.push((async () => {
             && j(W.out.deltas) === j([['c_1', ['f_chips', 'f_gear']], ['c_3', ['f_chips', 'f_gear']]]) && j(W.out.changed) === j(['c_1', 'c_3']) && W.out.chat.length === 1 && /Kael gave 40 Stored value from Glimmer chip\. Grunt gave Lamp x2\./.test(W.out.chat[0].text)
             && W.out.a.some(m => m.type === 'chat') && W.out.b.length === 0 && Object.keys(A.trades()).length === 0 && W.out.a.filter(m => m.view).slice(-1)[0].view.status === 'done' && W.out.gm.slice(-1)[0].status === 'done' && W.out.dones.indexOf('trade:' + tid) >= 0,
             j([afterAsk, W.out.a.map(m => m.view ? m.view.status : m.type), W.out.chat, kael.values, grunt.values]));
+        // the receiver picks a chip: the GM, receiving for the NPC, picks A new one; the player's view never names the NPC's rows
+        const P = mkW(), PA = P.api;
+        PA.branch({ type: 'trade', op: 'ask', from: 'c_1', to: 'c_3' }, P.conns[0]); const tP = Object.keys(PA.trades())[0]; PA.tradeDo({}, { op: 'answer', tid: tP, yes: true });
+        PA.branch({ type: 'trade', op: 'put', tid: tP, offer: [{ fid: 'f_chips', rowId: 'w_k1', key: '@lvl', amt: 40 }] }, P.conns[0]);
+        const gmGets = P.out.gm.slice(-1)[0].b.gets, plView = P.out.a.filter(m => m.view).slice(-1)[0].view;
+        PA.branch({ type: 'trade', op: 'confirm', tid: tP, on: true }, P.conns[0]);
+        const pickR = PA.tradeDo({}, { op: 'into', tid: tP, fid: 'f_chips', row: '+' }), afterPick = P.out.a.filter(m => m.view).slice(-1)[0].view, gmPick = P.out.gm.slice(-1)[0].b.gets[0].pick;
+        const badFid = PA.tradeDo({}, { op: 'into', tid: tP, fid: 'f_skill', row: '+' }), badRow = PA.tradeDo({}, { op: 'into', tid: tP, fid: 'f_chips', row: '<x>' });
+        PA.branch({ type: 'trade', op: 'confirm', tid: tP, on: true }, P.conns[0]); PA.tradeDo({}, { op: 'confirm', tid: tP, on: true });
+        const gChips = P.camp.chars.c_3.values.f_chips;
+        check('1.5.6 trading, the receiver picks a chip (the host, run for real): the view of the one who receives an amount lists their own rows it may land on with what each holds, the first that fits picked; the other side\'s view names none of them; a pick clears both confirms and says so; a list that is not Tradable or a row that is no id is refused; once both confirm the 40 lands where it was picked, a chip of its own, and the NPC\'s other chip keeps its 10',
+            Array.isArray(gmGets) && gmGets.length === 1 && gmGets[0].fid === 'f_chips' && gmGets[0].pick === '' && j(gmGets[0].opts.map(o => [o.rowId, o.cur])) === j([['w_g9', 10]]) && gmGets[0].label === 'Stored value'
+            && plView.a.gets === undefined && plView.b.gets === undefined && pickR.ok === true && afterPick.a.ok === false && /confirm again/.test(afterPick.msg || '') && gmPick === '+'
+            && typeof badFid.error === 'string' && typeof badRow.error === 'string' && gChips.length === 2 && gChips[0].lvl === 10 && gChips[1].lvl === 40 && P.camp.chars.c_1.values.f_chips[0].lvl === 460,
+            j([gmGets, plView, gChips]));
+        const cg = PA.cleanTradeView({ tid: 't_abcdefgh', status: 'open', you: 'b', a: { charId: 'c_1', name: 'K', lines: [] }, b: { charId: 'c_3', name: 'G', lines: [], gets: [{ fid: 'f_chips', list: '<i>Chips</i>', label: 'Stored\u202e', pick: '<x>', opts: [{ rowId: 'w_g9', name: 'Chip', cur: 10 }, { rowId: '__x y', name: 'Bad' }, { rowId: 'w_g8', name: 9, cur: 'many' }, null] }, 'junk', { fid: 7 }] } });
+        check('1.5.6 trading, a player\'s app cleans the rows it is offered to receive on: ids by their pattern, names and labels as text, a figure only as a number, a pick that is no id read as the first that fits, junk dropped',
+            cg && cg.b.gets.length === 1 && cg.b.gets[0].pick === '' && cg.b.gets[0].label === 'Stored' && j(cg.b.gets[0].opts) === j([{ rowId: 'w_g9', name: 'Chip', cur: 10 }, { rowId: 'w_g8', name: 'Item', cur: null }]) && cg.a.gets === undefined, j(cg));
         // refusals
         const R = mkW(), RA = R.api;
         RA.branch({ type: 'trade', op: 'ask', from: 'c_2', to: 'c_3' }, R.conns[0]);   // not theirs

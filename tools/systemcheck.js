@@ -13180,6 +13180,19 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         const W6 = mk(); W6.kael.values.f_chips[0].lvl = 999; const rMax = S.tradeApply(sG, W6.grunt, W6.kael, [{ fid: 'f_chips', rowId: 'w_g8', key: '@lvl', amt: 2 }], [], 'gm', 'player');
         check('1.5.6 trading, tradeApply refuses whole: a whole stack moving merges into the receiver\'s own loose row of the same entry; an offer that no longer holds (a chip spent below it since), an empty table, a one-of-each list that already holds it, and a figure past its most each refuse with nothing changed',
             r3.ok && r3.valuesA.f_gear.every(x => x.id !== 'w_g1') && r3.valuesB.f_gear.filter(x => x.id === 'w_kl')[0].qty === 6 && rCh.ok === false && rCh.reason === 'changed' && rEmpty.reason === 'empty' && rOne.reason === 'one' && rMax.reason === 'max', j([r3, rCh, rOne, rMax]));
+        {   // the receiver picks a chip (tradeInto, tradeApply's into)
+            const W7 = mk(), give = [{ fid: 'f_chips', rowId: 'w_k1', key: '@lvl', amt: 40 }], k1 = j(W7.kael), g1 = j(W7.grunt);
+            const opts = S.tradeInto(sG, W7.grunt, 'f_chips', '@lvl', W7.kael.values.f_chips[0]), none = S.tradeInto(sG, W7.kael, 'f_gear', 'pts', W7.grunt.values.f_gear[2]);
+            W7.kael.values.f_gear.push({ id: 'w_ks2', def: { name: 'Map scrap', stats: { pts: 1 } }, qty: 1 }); const some = S.tradeInto(sG, W7.kael, 'f_gear', 'pts', W7.grunt.values.f_gear[2]); W7.kael.values.f_gear.pop();
+            const rPick = S.tradeApply(sG, W7.kael, W7.grunt, give, [], 'player', 'gm', { b: { f_chips: 'w_g9' } }), rNew = S.tradeApply(sG, W7.kael, W7.grunt, give, [], 'player', 'gm', { b: { f_chips: '+' } });
+            const rGone = S.tradeApply(sG, W7.kael, W7.grunt, give, [], 'player', 'gm', { b: { f_chips: 'w_nope' } }), rDef = S.tradeApply(sG, W7.kael, W7.grunt, give, [], 'player', 'gm', { b: {} }), rJunk = S.tradeApply(sG, W7.kael, W7.grunt, give, [], 'player', 'gm', { b: { f_chips: 7 }, a: 'x' });
+            const newRow = rNew.ok && rNew.valuesB.f_chips.filter(x => x.id !== 'w_g9' && x.id !== 'w_g8')[0];
+            check('1.5.6 trading, the receiver picks a chip: tradeInto lists the receiver\'s rows of quantity 1 an amount may land on (a level any chip of the list, stowed or not; a stat only a row of the same entry, none where there is none); a pick lands it there (40 onto the stowed chip, 10 + 40), A new one makes a row of its own holding 40, a pick that is gone refuses whole, no pick and a pick that is no word land as before, and the characters handed in stay untouched',
+                j(opts.map(o => [o.rowId, o.cur])) === j([['w_g9', 10], ['w_g8', 2]]) && none.length === 0 && some.length === 1 && some[0].rowId === 'w_ks2' && some[0].cur === 1
+                && rPick.ok && rPick.valuesB.f_chips.filter(x => x.id === 'w_g9')[0].lvl === 50 && rPick.valuesB.f_chips.filter(x => x.id === 'w_g8')[0].lvl === 2
+                && newRow && newRow.lvl === 40 && newRow.on === false && rGone.ok === false && rGone.reason === 'changed'
+                && rDef.ok && rDef.valuesB.f_chips.filter(x => x.id === 'w_g8')[0].lvl === 42 && rJunk.ok && rJunk.valuesB.f_chips.filter(x => x.id === 'w_g8')[0].lvl === 42 && k1 === j(W7.kael) && g1 === j(W7.grunt), j([opts, rPick, rNew, rGone]));
+        }
     }
     summed = true;
     console.log(NL + pass + ' passed, ' + fail + ' failed.');
