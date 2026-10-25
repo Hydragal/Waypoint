@@ -4220,7 +4220,7 @@ function commitItem(c, f, q) {   // Stage 6 F4a: a row op q = { op: add|remove|s
     if (mvG && mvG.values) Object.keys(mvG.values).forEach(function(k) { c.values[k] = mvG.values[k]; d[k] = mvG.values[k]; });
     if (ownerSeesSame(camp, sys, prev, res.value, f.id)) d = {};   // Stage 6: a change only to a row its owner never holds (a kept curse) is saved and never sent — even an unchanged copy would tell them
     afterCharChange(c, false, d);
-    if (goneB && !(mvG && mvG.values)) goneNote(c, f, goneB);   // 1.5.8: never after a sale
+    if (goneB) goneNote(c, f, goneB);   // 1.5.8: never after a sale (goneOf passes over a removal that is paid)
 }
 // 1.5.8 (the owner, 2026-10-25): a row your own hand takes wholly off its list gets a notice with Undo for LIMITS.undoMs that puts the very row back
 // at its place: on the GM's machine at once while the list is as the removal left it; on a player's app through the host, which keeps its own copy of
