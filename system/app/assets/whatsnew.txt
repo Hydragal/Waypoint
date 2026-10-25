@@ -1,3 +1,16 @@
+WAYPOINT 1.5.9 — What's New
+============================
+
+Updates
+- An update keeps an outside sheet reader you added to the app folder.
+  Before, every update left it behind and Import Character went away
+  until the reader was copied in again. Restore the previous version
+  keeps it too. If the reader cannot be carried over, the update still
+  goes on and says so.
+- This release changes Waypoint's core, the local program behind the
+  app, so it updates through the installer once. Press Update and
+  Waypoint runs the installer for you.
+
 WAYPOINT 1.5.8 — What's New
 ============================
 

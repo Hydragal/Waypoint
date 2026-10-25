@@ -295,6 +295,65 @@ process.on('exit', code => { if (!summed && !code) { console.log(NL + 'FAIL     
             try { rb({ systemDir: g.sys, shellVersion: '1.5.0' }); } catch (er) { gErr = String(er.message); } finally { fs.renameSync = real; }
             check('a restore whose second rename fails puts the current app back where it was: the install as before, app.prev still there to try again', /EPERM/.test(String(gErr)) && n >= 3 && tree(g.root) === gT, j([gErr, n, fs.readdirSync(g.sys)]));
         }
+        /* ================= B2. the outside sheet reader's folder (system/app/private) across an update and a restore =================
+           The owner, 1.5.9, by prompt: "The update keeps it". The folder is no part of a release: the maintainer copies it in by hand,
+           and an update or a restore replaces the whole app folder, so the shell carries it across, a real folder only and bounded. */
+        {
+            const upd = async (inst, tag, zipBuf) => { const info = await look(zipBuf ? { tag, zip: zipBuf } : { tag }); try { return { res: await within(updater.applyAppUpdate({ systemDir: inst.sys, appZip: info.appZip, appZipName: info.appZipName, sha256: info.sha256, sig: info.sig, version: info.latest, pubKey: PUB }), 120000, 'apply') }; } catch (e) { return { err: String(e && e.message || e) }; } };
+            const fill = dir => { fs.mkdirSync(path.join(dir, 'lib', 'deep'), { recursive: true }); fs.writeFileSync(path.join(dir, 'index.js'), 'export const reader = 1;' + NL); fs.writeFileSync(path.join(dir, 'lib', 'deep', 'data.bin'), crypto.randomBytes(70000)); fs.writeFileSync(path.join(dir, 'lib', 'style.css'), '.x{}'); fs.mkdirSync(path.join(dir, 'empty')); };
+            // an install with a reader: kept byte for byte by the update, and by the restore after it
+            const a = install('1.5.0'), aPriv = path.join(a.app, 'private'); fill(aPriv); const aTree = tree(aPriv);
+            const aU = await upd(a, '1.5.1');
+            check('an update keeps the outside sheet reader the maintainer added: the new app holds system/app/private byte for byte, every folder too (an empty one among them), the old app keeps its own in app.prev, nothing else is left beside the app, and the answer says private: kept with no note',
+                !!aU.res && aU.res.ok === true && aU.res.private === 'kept' && !('privateNote' in aU.res) && verOf(a.app) === '1.5.1' && tree(path.join(a.app, 'private')) === aTree && tree(path.join(a.sys, 'app.prev', 'private')) === aTree && j(fs.readdirSync(a.sys).sort()) === j(['app', 'app.prev']), j([aU, fs.readdirSync(a.sys)]));
+            fs.writeFileSync(path.join(a.app, 'private', 'newer.js'), '// copied in again after the update' + NL); const aTree2 = tree(path.join(a.app, 'private'));
+            const aR = tryRb({ systemDir: a.sys, shellVersion: '1.5.0' });
+            check('a restore keeps the reader of the app it goes back from: the app that comes back holds the private folder as it stood in the app in use (a file added after the update included), byte for byte, with no carry folder left behind, and the answer says private: kept',
+                !!aR.res && aR.res.ok === true && aR.res.private === 'kept' && verOf(a.app) === '1.5.0' && tree(path.join(a.app, 'private')) === aTree2 && j(fs.readdirSync(a.sys).sort()) === j(['app']) && !fs.existsSync(path.join(a.app, 'private.carry')), j([aR, fs.readdirSync(a.sys), fs.readdirSync(a.app)]));
+            // an install with none: as before
+            const b = install('1.5.0'), bU = await upd(b, '1.5.1');
+            check('an install with no private folder updates as before: the new app holds none, the answer says private: none with no note',
+                !!bU.res && bU.res.ok === true && bU.res.private === 'none' && !('privateNote' in bU.res) && !fs.existsSync(path.join(b.app, 'private')), j(bU));
+            const bR = tryRb({ systemDir: b.sys, shellVersion: '1.5.0' });
+            check('a restore with no private folder in use leaves the app that comes back as it was, and says private: none', !!bR.res && bR.res.private === 'none' && !fs.existsSync(path.join(b.app, 'private')), j(bR));
+            // a link or a junction named private, or one inside it, is never followed
+            const out = path.join(tmp, 'outside-' + (++seq)); fill(out); const outTree = tree(out);
+            const c = install('1.5.0'); let linked = true; try { fs.symlinkSync(out, path.join(c.app, 'private'), 'junction'); } catch (e) { linked = false; }
+            if (linked) {
+                const cU = await upd(c, '1.5.1');
+                check('a link or a junction named private is never followed: the update applies, the new app holds no private folder, the answer says private: left with its note in plain words, and what the link pointed at is untouched',
+                    !!cU.res && cU.res.ok === true && verOf(c.app) === '1.5.1' && cU.res.private === 'left' && /not carried over/.test(String(cU.res.privateNote)) && !fs.existsSync(path.join(c.app, 'private')) && tree(out) === outTree, j(cU));
+            } else check('a junction could be made on this machine for the link case', false, 'symlinkSync refused');
+            const d = install('1.5.0'), dPriv = path.join(d.app, 'private'); fill(dPriv); let inner = true; try { fs.symlinkSync(out, path.join(dPriv, 'lib', 'away'), 'junction'); } catch (e) { inner = false; }
+            if (inner) {
+                const dU = await upd(d, '1.5.1');
+                check('a private folder that holds a link anywhere inside it is not carried at all: the update applies, the new app holds no private folder, the answer says private: left, and what the link pointed at is untouched',
+                    !!dU.res && dU.res.ok === true && dU.res.private === 'left' && !fs.existsSync(path.join(d.app, 'private')) && tree(out) === outTree, j(dU));
+            } else check('a junction could be made on this machine for the inner link case', false, 'symlinkSync refused');
+            // past the bounds the update still applies, without it
+            const e = install('1.5.0'), ePriv = path.join(e.app, 'private'); fs.mkdirSync(ePriv); for (let i = 0; i <= updater.PRIVATE_FILES; i++) fs.writeFileSync(path.join(ePriv, 'f' + i + '.txt'), 'x');
+            const eU = await upd(e, '1.5.1');
+            const f = install('1.5.0'), fPriv = path.join(f.app, 'private'); fs.mkdirSync(fPriv); const fd = fs.openSync(path.join(fPriv, 'big.bin'), 'w'); fs.ftruncateSync(fd, updater.PRIVATE_BYTES + 1); fs.closeSync(fd);
+            const fU = await upd(f, '1.5.1');
+            check('past the bounds (2,000 files, 64 MB) the update still applies and the answer says the private folder was not carried: private: left with its note, the new app holds none, app.new gone',
+                updater.PRIVATE_FILES === 2000 && updater.PRIVATE_BYTES === 64 * 1024 * 1024 && [[e, eU], [f, fU]].every(([i, r]) => !!r.res && r.res.ok === true && verOf(i.app) === '1.5.1' && r.res.private === 'left' && /copy it into the app again/.test(String(r.res.privateNote)) && !fs.existsSync(path.join(i.app, 'private')) && !fs.existsSync(path.join(i.sys, 'app.new'))), j([eU, fU]));
+            // an archive that brings a private folder of its own is malformed
+            const g = install('1.5.0'), gPriv = path.join(g.app, 'private'); fill(gPriv); const gT = tree(g.root);
+            const gU = await upd(g, '1.5.1', appZip('1.5.1', [{ name: 'private/index.js', data: 'export const bad = 1;' }]));
+            const h = install('1.5.0'), hT = tree(h.root), hU = await upd(h, '1.5.1', appZip('1.5.1', [{ name: 'Private./x.js', data: 'x' }]));
+            check('an update archive that holds a private folder of its own, in any letter case or with a trailing dot, is refused as malformed: nothing unpacked, nothing swapped, the install and its own reader untouched',
+                [[gU, g, gT], [hU, h, hT]].every(([r, i, t]) => !r.res && /holds a private folder/.test(String(r.err)) && tree(i.root) === t), j([gU, hU]));
+        }
+        {   // the installer leaves the folder alone when it updates in place: it removes nothing under system\app, and only a clean install wipes the program files
+            const iss = read('installer.iss');
+            check('the installer\'s update in place deletes nothing under system\\app (no InstallDelete section, no Excludes naming private), so an installer run keeps the reader too; only a clean install wipes the program files',
+                !/^\[InstallDelete\]/m.test(iss) && !/private/i.test((/Excludes: "([^"]*)"/.exec(iss) || [])[1] || 'private') && /InstallMode\(\) = 1\) then\s*\n\s*WipeProgramFiles/.test(iss));
+            const help = read('system/app/index.html'), notesA = read('WHATSNEW.txt'), notesB = read('system/app/assets/whatsnew.txt');
+            const top = t => t.slice(0, t.indexOf('WAYPOINT 1.5.8'));
+            check('Help\'s Updates part and both release notes of 1.5.9 say that an update keeps an outside sheet reader, that a restore keeps it too, and the notes that this release changes the core and so installs through the installer once',
+                /<li><b>An outside sheet reader<\/b> you added to the app folder stays through an update\. Restore the previous version keeps it too\./.test(help)
+                && [notesA, notesB].every(t => /^WAYPOINT 1\.5\.9/.test(t) && /An update keeps an outside sheet reader you added to the app folder\./.test(top(t)) && /Restore the previous version\s+keeps it too\./.test(top(t)) && /This release changes Waypoint's core[\s\S]{0,120}installer once\./.test(top(t))));
+        }
         {   // the three routes, through the handler both servers mount, with the shell's own appVersion (sliced from main.js) as the version reported
             const mainSrc = read('system/resources/app/main.js'), avA = mainSrc.indexOf('function appVersion() {'), avB = mainSrc.indexOf('const updateCfg = {');
             const inst = install('1.5.0'), appBefore = tree(inst.app), savesBefore = tree(path.join(inst.root, 'saves'));
@@ -1236,7 +1295,7 @@ process.on('exit', code => { if (!summed && !code) { console.log(NL + 'FAIL     
             const upA = help.indexOf('<h4>Updates</h4>'), upB = help.indexOf('</ul>', upA), ups = upA > 0 ? help.slice(upA, upB) : '';
             const introCore = (modal.match(/<p id="installerIntroCore"[^>]*>([^\n]*)<\/p>/) || [])[1] || '', introNormal = (modal.match(/<p id="installerIntroNormal"[^>]*>([^\n]*)<\/p>/) || [])[1] || '';
             check('Help says that an update which changes Waypoint\'s core is one click too — it downloads, is checked as Waypoint\'s own, Waypoint closes, it installs and Waypoint opens again — and that Get Installer remains where that cannot be done; the walk-through an older core sees says that from 1.5.0 on such updates install themselves; the Settings button\'s first words are still Get Installer (the page renames it only when the shell says it can)',
-                /An update that changes Waypoint&rsquo;s core is one click too/.test(ups) && /closes Waypoint/.test(ups) && /opens Waypoint again/.test(ups) && /signature/.test(ups) && /<b>Get Installer<\/b>/.test(ups) && /multiplayer session/.test(ups) && (ups.match(/<li>/g) || []).length === 4 && /Where that cannot be done, <b>Get Installer<\/b> shows the steps before anything downloads\./.test(ups) && /a copy older than 1\.5\.0, a copy the installer did not put there, and a download that fails/.test(ups)
+                /An update that changes Waypoint&rsquo;s core is one click too/.test(ups) && /closes Waypoint/.test(ups) && /opens Waypoint again/.test(ups) && /signature/.test(ups) && /<b>Get Installer<\/b>/.test(ups) && /multiplayer session/.test(ups) && (ups.match(/<li>/g) || []).length === 5 /* moved on purpose in 1.5.9: a fifth point says an update keeps an outside sheet reader */&& /Where that cannot be done, <b>Get Installer<\/b> shows the steps before anything downloads\./.test(ups) && /a copy older than 1\.5\.0, a copy the installer did not put there, and a download that fails/.test(ups)
                 && /From Waypoint 1\.5\.0 on, updates like this one install themselves\./.test(introCore) && /cannot take that update by itself/.test(introNormal) && /Nothing has downloaded yet/.test(introNormal)
                 && /id="setUpdateInstallerBtn"[^>]*>Get Installer<\/button>/.test(group) && /installs itself/.test(rd), j([ups.length, step.length, introCore.length, introNormal.length]));
             // 1.5.5, the welcome screen's update strip said: Help's Updates part in one plain sentence, both release notes alike under 1.5.5, and
