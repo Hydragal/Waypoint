@@ -3276,6 +3276,21 @@ pendingChecks.push((async () => {
         J(bOk.answer) === J([{ type: 'char-ack', rid: 'i1' }]) && bOk.rows === 'w_x:false w_m:true w_b:true' && bOk.ownRows === 'w_x:false w_m:true w_b:true' && bOk.saves === 1 && bOk.owner.length === 1
         && J(bBound.answer) === J([{ type: 'char-deny', rid: 'i1', reason: 'stays', msg: 'Plate is bound and stays on, so Mail stays off. It is fused' }]) && bBound.rows === 'w_p:true w_m:false' && bBound.owner.length === 0 && bBound.saves === 0 && bBound.notes.length === 1
         && J(bCurse.answer) === J([{ type: 'char-ack', rid: 'i1', msg: 'It clings' }]) && bCurse.rows === 'w_h:truek w_m:true' && bCurse.ownRows === 'w_h:false w_m:true' && bCurse.notes.length === 1, J([bOk, bBound, bCurse]));
+    // 1.5.8: a list's switch with needs, through the host's real char-item branch (the players' view, the real core)
+    const sysW = Sx.cleanSystem({ v: 1, name: 'W', rolls: [], fields: [{ id: 'f_wd', key: 'Wands', label: 'Wands', kind: 'item-list', edit: 'owner', vis: 'all', list: { on: { label: 'Ready', needs: 'Row.Charge > 0', needsText: 'It has no charge left.' }, stats: [{ key: 'Charge' }] } }],
+        items: [{ id: 'i_fu', name: 'Full', stats: { Charge: 2 } }, { id: 'i_em', name: 'Empty', stats: { Charge: 0 } }] }, { F: Fx, gmView: true });
+    const runW = rid => { const camp = { id: 'k', system: sysW, chars: { c_1: { id: 'c_1', name: 'Ana', ownerId: 'u_a', npc: false, values: { f_wd: [{ id: 'w_f', defId: 'i_fu', qty: 1 }, { id: 'w_e', defId: 'i_em', qty: 1 }] } } } }, out = { answer: [], owner: [], notes: [], saves: 0 }, box = b => m => { packCheck(m); b.push(JSON.parse(J(m))); };
+        const net = { active: true, role: 'host', paused: false, conns: [{ peer: 'pA', open: true, send: box(out.owner) }], roster: { pA: { id: 'u_a' } } };
+        const win = { wpFormula: Fx, wpVtt: { on: () => true }, wpSheets: { playerSystem: c => Sx.cleanSystem(c.system, { F: Fx, gmView: false }), charChanged() {} }, wpDiceCore: null };
+        const Hh = new Function('net', 'SC', 'window', 'peerPaused', 'getActiveCampaign', 'saveRemoteSoon', 'sendFailed', 'peerProfileId', 'lim', 'toast', 'logEvent',
+            'var charLimit = lim, _charSlowSaid = {}, _charPending = {}, _charHost = {}, _rowGrace = {};\n' + dlSrc + '\n' + ntSrc + '\nreturn { handle: function(msg, conn) {\n' + ciSrc + '\n} };')(
+            net, () => Sx, win, () => false, () => camp, () => { out.saves++; }, e => { throw e; }, c => (net.roster[c.peer] ? net.roster[c.peer].id : null), { allow: () => true }, t => out.notes.push(t), () => {});
+        Hh.handle({ type: 'char-item', rid: 'i1', charId: 'c_1', fieldId: 'f_wd', op: 'set', rowId: rid, facts: { on: true } }, { peer: 'pA', send: box(out.answer) });
+        out.rows = camp.chars.c_1.values.f_wd.map(r => r.id + ':' + (r.on === true)).join(' '); return out; };
+    const wEm = runW('w_e'), wFu = runW('w_f');
+    check('1.5.8 a player\'s switch-on of a row its list switch\'s needs refuse (char-item, run for real): answered char-deny with the reason needs and the switch\'s own words, nothing stored, sent or saved; a row whose needs hold is switched on, stored, sent and saved',
+        J(wEm.answer) === J([{ type: 'char-deny', rid: 'i1', reason: 'needs', msg: 'It has no charge left.' }]) && wEm.rows === 'w_f:false w_e:false' && wEm.owner.length === 0 && wEm.saves === 0
+        && J(wFu.answer) === J([{ type: 'char-ack', rid: 'i1' }]) && wFu.rows === 'w_f:true w_e:false' && wFu.owner.length === 1 && wFu.saves === 1, J([wEm, wFu]));
 })());
 
 // [m410] SITE_EQUIVALENT_PLAN fold 2 on the wire, each behaviour by a case of its own (the tests that go with the mutations of m410): (B) a player's own

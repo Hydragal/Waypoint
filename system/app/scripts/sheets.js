@@ -2459,11 +2459,12 @@ function lvlCtl(entry, def, c, f, spec, editable) {
 }
 function lvlText(L, lv) { var i = lv - (L.min || 0); return Array.isArray(L.labels) && i >= 0 && i === Math.floor(i) && i < L.labels.length && L.labels[i] ? L.labels[i] : fmtNum(lv); }
 // F4b: a row's switch — a checkbox with the list's label (in a table the header carries it); read-only, a chip while it is on
-function onCtl(entry, c, f, spec, editable, labelled) {
+function onCtl(entry, c, f, spec, editable, labelled, okOn) {   // okOn (1.5.8): false where the switch's needs do not hold for this row (resolveAll's onOk)
     var S = spec.on; if (!S || typeof S !== 'object') return null;
     var on = rowOn(spec, entry);
     if (!editable) return on ? el('span', 'sheet-chip sheet-item-onc', labelled ? S.label : '\u2713') : null;
     var cb = el('input', 'sheet-item-on'); cb.type = 'checkbox'; cb.checked = on; cb.title = S.label; cb.dataset.fid = f.id; cb.dataset.part = 'on-' + rowIdOf(entry);
+    if (!on && okOn === false) { var swW = typeof rollNeedsSays === 'function' ? rollNeedsSays(S) : 'Not now'; cb.classList.add('sheet-item-onno'); if (typeof isClient === 'function' && isClient()) { cb.disabled = true; cb.title = swW; } else cb.title = swW + ' You may still switch it on.'; }   // 1.5.8: a player's switch greyed out with the words; the GM's says them
     cb.addEventListener('change', function() { commitItem(c, f, { op: 'set', rowId: rowIdOf(entry), facts: { on: cb.checked } }); });
     if (!labelled) return cb;
     var l = el('label', 'sheet-item-onl'); l.appendChild(cb); l.appendChild(el('span', 'sheet-item-onn', S.label)); return l;
@@ -2639,7 +2640,7 @@ function itemListInto(wrap, f, c, carried, sysI, canThrow, editable, gm, empty, 
         if (chips && def.category) line.appendChild(el('span', 'sheet-chip', def.category));
         lostBits(line, rd, entry, c, f, gm, chg); needBits(line, sysI, c, entry, rd, gm); gmItemBits(line, def, entry, gm, !!(spec && spec.on)); keyShareChip(line, entry, rd, unseenL); modsBits(line, def, entry, spec, sysI);
         var noteLn = null;
-        if (spec) { statChips(line, def, spec, ovc); colChips(line, spec, res && res.cells ? res.cells[rid] : null); ctCtl(line, entry, c, f, spec, editable, res && res.cts ? res.cts[rid] : null); if (typeof loadCtl === 'function') loadCtl(line, entry, c, f, spec, editable, sysI); var lc = lvlCtl(entry, def, c, f, spec, chg && !opnR); if (lc) line.appendChild(lc); var oc = onCtl(entry, c, f, spec, editable, true); if (oc) line.appendChild(oc); var pcL = paidCtl(entry, def, c, f, spec, chg, gm, true); if (pcL) line.appendChild(pcL); noteLn = hudRow ? null : noteBits(entry, def, c, f, chg, ovc); }   // F4c1: the stats shown On the row, what one cost
+        if (spec) { statChips(line, def, spec, ovc); colChips(line, spec, res && res.cells ? res.cells[rid] : null); ctCtl(line, entry, c, f, spec, editable, res && res.cts ? res.cts[rid] : null); if (typeof loadCtl === 'function') loadCtl(line, entry, c, f, spec, editable, sysI); var lc = lvlCtl(entry, def, c, f, spec, chg && !opnR); if (lc) line.appendChild(lc); var oc = onCtl(entry, c, f, spec, editable, true, res && res.onOk ? res.onOk[rid] : undefined); if (oc) line.appendChild(oc); var pcL = paidCtl(entry, def, c, f, spec, chg, gm, true); if (pcL) line.appendChild(pcL); noteLn = hudRow ? null : noteBits(entry, def, c, f, chg, ovc); }   // F4c1: the stats shown On the row, what one cost
         if (def.area && canThrow && (gm || def.vis !== 'gm') && entry.hid !== 1) line.appendChild(itemThrowBtn(def, c, f, rid));   // a GM-only item: the GM's throw only (a player's copy never carries its area)
         rowRollBtns(line, spec, entry, def, c, f, res);   // F5b: the list's rolls on this row
         if (noteLn) line.appendChild(noteToggle(noteLn, entry, c, f));
@@ -2809,7 +2810,7 @@ function itemTableInto(wrap, f, c, carried, sysI, canThrow, editable, gm, empty,
         shownSt.forEach(function(s) { var sTd = el('td', 'sheet-itcol-stat', statShown(s, rowStat(spec, def, s.key))), sDt = statDot(s, spec, ovT); if (sDt) sTd.appendChild(sDt); tr.appendChild(sTd); });
         var cellsT = res && res.cells ? res.cells[rid] : null; shownCl.forEach(function(x) { var v = cellsT ? cellsT[x.i] : null, cTd = el('td', 'sheet-itcol-col' + (v && v.error ? ' sheet-item-colerr' : ''), v ? (typeof colShown === 'function' ? colShown(x.c, v) : v.text + (x.c.unit && !v.error ? ' ' + x.c.unit : '')) + (typeof plusText === 'function' ? plusText(v) : '') : ''); if (v && v.error) cTd.title = v.error; tr.appendChild(cTd); });   // F5a1: its columns (1.5.4: and what a column's With stats add, in brackets)
         if (hasL) { var lTd = el('td', 'sheet-itcol-lvl'), lcT = lvlCtl(entry, def, c, f, spec, chg); if (lcT) lTd.appendChild(lcT); tr.appendChild(lTd); }
-        if (hasO) { var oTd = el('td', 'sheet-itcol-on'), ocT = onCtl(entry, c, f, spec, editable, false); if (ocT) oTd.appendChild(ocT); tr.appendChild(oTd); }
+        if (hasO) { var oTd = el('td', 'sheet-itcol-on'), ocT = onCtl(entry, c, f, spec, editable, false, res && res.onOk ? res.onOk[rid] : undefined); if (ocT) oTd.appendChild(ocT); tr.appendChild(oTd); }
         if (hasQ) {
             var qtyTd = el('td', 'sheet-itcol-qty');
             qtyTd.appendChild(editable ? itemQtyCell(entry, c, f) : el('span', 'sheet-item-qtyn', '×' + entry.qty));
@@ -4207,6 +4208,7 @@ function commitItem(c, f, q) {   // Stage 6 F4a: a row op q = { op: add|remove|s
     var mvG = typeof rowOpMoney === 'function' ? rowOpMoney(sys, c, f.id, q, res) : null;   // 1.5.6: what a purchase paid, or a sale was paid, moves the money with the row
     if (mvG && !mvG.ok) { toast(mvG.msg || 'Not enough money for that.'); return; }
     undoFollow(res);
+    if (typeof res.onNeeds === 'string' && res.onNeeds) toast('Switched on all the same. A player would be told: ' + res.onNeeds);   // 1.5.8: the GM's own hand passes a switch's needs, and is told
     var prev = c.values && Object.prototype.hasOwnProperty.call(c.values, f.id) ? clone(c.values[f.id]) : undefined;
     var extraI = null; if (mvG && mvG.values) Object.keys(mvG.values).forEach(function(k) { if (k === f.id) return; extraI = extraI || {}; extraI[k] = c.values && Object.prototype.hasOwnProperty.call(c.values, k) ? clone(c.values[k]) : undefined; });   // 1.5.8: Revert takes back every list the change moved (a load's other list, a purchase's money)
     lastChange = extraI ? { charId: c.id, fieldId: f.id, prev: prev, extra: extraI } : { charId: c.id, fieldId: f.id, prev: prev };
@@ -5098,6 +5100,7 @@ function refreshErrors() {
         if (typeof sp.price === 'string' && sp.price && !mine[sp.price.toLowerCase()]) errs.push({ message: 'The price names no stat of this list: Save drops it.' });
         var onD = sp.on && typeof sp.on === 'object' && !Array.isArray(sp.on) ? sp.on : null, onPer = onD && typeof onD.per === 'string' ? onD.per.trim() : '';   // 1.5.4 One at a time: a Per stat as Save reads it
         if (onPer && !keptW[onPer.toLowerCase()]) errs.push({ message: 'One at a time goes by "' + onD.per + '", which is no stat of this list. ' + (onD.one === true ? 'Save keeps one row on for the whole list.' : 'Save drops it.') });
+        if (onD && typeof onD.needsText === 'string' && onD.needsText.trim() && !(typeof onD.needs === 'string' && onD.needs.trim())) errs.push({ message: 'The switch has words but no Needs to switch on, so Save drops its words.' });   // 1.5.8: as the cleaner reads them (rollNeedsInto keeps the words only beside a formula)
         (Array.isArray(sp.cols) ? sp.cols : []).forEach(function(cc) {   // 1.5.4: a column's Metric list and its decimals, as the cleaner reads them
             if (!cc || typeof cc !== 'object') return;
             var cnU = (typeof cc.label === 'string' && cc.label) || (typeof cc.key === 'string' && cc.key) || 'A column', cmU = typeof cleanFieldUnit === 'function' && !!cleanFieldUnit(typeof unitOf === 'function' ? unitOf(cc.unit, true) : typeof cc.unit === 'string' ? cc.unit.trim() : '', 'number');
@@ -5829,6 +5832,8 @@ function listCard(f, allCats, targets, acts) {   // acts (turn-based combat T1):
             perOptions(opS, sp);
             orow.appendChild(opS);
         }
+        orow.appendChild(input('sys-list-swneeds field', typeof sw.needs === 'string' ? sw.needs : '', 'A formula that must be true before a row is switched on, such as Row.Charge > 0. Row names are read. No dice. A player is refused while it does not hold. You may still switch it on, and are told', 'Needs to switch on'));   // 1.5.8
+        orow.appendChild(input('sys-list-swwords field', typeof sw.needsText === 'string' ? sw.needsText : '', 'What a refused switch says (blank: Not now: it needs and the formula)', 'Its words'));
     }
     card.appendChild(orow);
     // Stage 6 F4c1: the list's stats — a number every item of it carries (Acc, Wt, Cost), ten at most — and the one that is its price
@@ -7218,6 +7223,8 @@ function onInput(e) {
         else if (lcc.indexOf('sys-list-lvldef') >= 0 && lvD) numOr(lvD, 'def');
         else if (lcc.indexOf('sys-list-lvlnames') >= 0 && lvD) { var lvn = t.value.split(',').map(function(s) { return s.trim(); }).slice(0, LIMITS.labels); while (lvn.length && !lvn[lvn.length - 1]) lvn.pop(); if (lvn.some(Boolean)) lvD.labels = lvn; else delete lvD.labels; }
         else if (lcc.indexOf('sys-list-onlabel') >= 0 && lsp.on && typeof lsp.on === 'object') lsp.on.label = t.value.slice(0, LIMITS.label);
+        else if (lcc.indexOf('sys-list-swneeds') >= 0 && lsp.on && typeof lsp.on === 'object') { if (t.value.trim()) lsp.on.needs = t.value.slice(0, LIMITS.formula); else delete lsp.on.needs; }   // 1.5.8: a switch's needs (Save cleans them)
+        else if (lcc.indexOf('sys-list-swwords') >= 0 && lsp.on && typeof lsp.on === 'object') { if (t.value.trim()) lsp.on.needsText = t.value.slice(0, LIMITS.label); else delete lsp.on.needsText; }
         else if (lcc.indexOf('sys-list-malf') >= 0) {   // Stage 6 HUD R3: a list roll's Malf (Save cleans it)
             var mrw = t.closest('.sys-list-needsrow'), mL = Array.isArray(lsp.rolls) ? lsp.rolls : null, mR = mrw && mL ? mL[+mrw.dataset.ri] : null; if (!mR || typeof mR !== 'object') return;
             if (t.value.trim()) mR.malf = t.value.slice(0, LIMITS.formula); else delete mR.malf;

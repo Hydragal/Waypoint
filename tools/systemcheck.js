@@ -5375,6 +5375,41 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         check('1.5.8 the validator: RollMargin is known in a roll\'s consequences and nowhere else; Help names it',
             !eC(vM, 'r_rc').length && eC(vMbad, 'f_dm').some(m => /Unknown name "RollMargin"/.test(m)) && eC(vMbad, 'r_nm').some(m => /Unknown name "RollMargin"/.test(m)) && /<code>RollMargin<\/code>/.test(hC), j([eC(vM, 'r_rc'), eC(vMbad, 'f_dm'), eC(vMbad, 'r_nm')]));
     }
+    /* ---- 1.5.8 (the owner, 2026-10-25): a list's switch with needs, judged in one place beside One at a time (applyRowOp's set of facts.on true) ---- */
+    {
+        const rawW = { v: 1, name: 'W', rolls: [], sheet: { sections: [] }, fields: [
+            { id: 'f_sc', key: 'Secret', kind: 'number', def: 1, vis: 'gm' },
+            { id: 'f_wd', key: 'Wands', kind: 'item-list', edit: 'owner', list: { on: { label: 'Ready', needs: 'Row.Charge > 0', needsText: 'It has no charge left.' }, stats: [{ key: 'Charge' }] } },
+            { id: 'f_gs', key: 'Gems', kind: 'item-list', edit: 'owner', list: { on: { label: 'Lit', needs: 'Secret > 0 and Row.Charge > 0', needsText: 'Hidden reason' }, stats: [{ key: 'Charge' }] } },
+            { id: 'f_bw', key: 'Bare', kind: 'item-list', edit: 'owner', list: { on: { label: 'On', needsText: 'Words alone' } } }],
+            items: [{ id: 'i_fu', name: 'Full', stats: { Charge: 2 } }, { id: 'i_em', name: 'Empty', stats: { Charge: 0 } }, { id: 'i_cu', name: 'Cling', stats: { Charge: 0 }, eq: 'curse', eqMsg: 'It clings' }] };
+        const gmW = cleanSystem(rawW, { F, gmView: true }), plW = cleanSystem(rawW, { F, gmView: false }), fW = (s, id) => s.fields.find(f => f.id === id);
+        check('1.5.8 a switch\'s needs: the cleaner keeps Needs to switch on and its words beside the switch, the words only beside a formula; the players\' view drops needs that name a GM-only value with their words, as a list roll\'s; fixed points',
+            j(fW(gmW, 'f_wd').list.on) === j({ label: 'Ready', needs: 'Row.Charge > 0', needsText: 'It has no charge left.' }) && j(fW(plW, 'f_wd').list.on) === j(fW(gmW, 'f_wd').list.on) && j(fW(gmW, 'f_bw').list.on) === j({ label: 'On' })
+            && fW(gmW, 'f_gs').list.on.needs === 'Secret > 0 and Row.Charge > 0' && j(fW(plW, 'f_gs').list.on) === j({ label: 'Lit' }) && j(cleanSystem(gmW, { F, gmView: true })) === j(gmW) && j(cleanSystem(plW, { F, gmView: false })) === j(plW), j([fW(gmW, 'f_wd').list.on, fW(plW, 'f_gs').list.on, fW(gmW, 'f_bw').list.on]));
+        const rowsW = [{ id: 'w_f', defId: 'i_fu', qty: 1 }, { id: 'w_e', defId: 'i_em', qty: 1 }, { id: 'w_o', defId: 'i_em', qty: 1, on: true }, { id: 'w_k', defId: 'i_cu', qty: 1, on: true, keptOn: 1 }];
+        const chW = more => Object.assign({ id: 'c_w', name: 'Kael', ownerId: 'u_a', npc: false, values: { f_wd: rowsW, f_gs: rowsW } }, more || {}), onW = (rid, on) => ({ op: 'set', rowId: rid, facts: { on: on === undefined ? true : on } });
+        const shW = r => r.ok ? 'ok' + (r.onNeeds ? '|' + r.onNeeds : '') + '|' + r.value.filter(x => x.on === true).map(x => x.id).join(',') : r.reason + '|' + (r.msg || '');
+        const aW = [S.applyRowOp(plW, chW(), 'f_wd', onW('w_f'), F, { player: true, view: plW }), S.applyRowOp(plW, chW(), 'f_wd', onW('w_e'), F, { player: true, view: plW }), S.applyRowOp(plW, chW(), 'f_wd', onW('w_e'), F, { player: true, view: plW, copy: true, lib: () => null }),
+            S.applyRowOp(gmW, chW(), 'f_wd', onW('w_e'), F, {}), S.applyRowOp(plW, chW(), 'f_wd', onW('w_o'), F, { player: true, view: plW }), S.applyRowOp(plW, chW(), 'f_wd', onW('w_o', false), F, { player: true, view: plW }),
+            S.applyRowOp(plW, chW(), 'f_wd', onW('w_k'), F, { player: true, view: plW }), S.applyRowOp(plW, chW({ making: 1 }), 'f_wd', onW('w_e'), F, { player: true, view: plW }), S.applyRowOp(plW, chW({ making: 1 }), 'f_wd', onW('w_e'), F, { player: true, view: plW, fill: true }),
+            S.applyRowOp(plW, chW(), 'f_gs', onW('w_e'), F, { player: true, view: plW }), S.applyRowOp(gmW, chW(), 'f_gs', onW('w_e'), F, {}), S.applyRowOp(plW, chW(), 'f_wd', onW('w_e'), null, { player: true, view: plW })].map(shW);
+        check('1.5.8 a switch\'s needs (applyRowOp): a player\'s own switch-on of a row whose Charge is above 0 goes through, and of an empty one is refused with the reason needs and the switch\'s words, on the host and on their own app alike; the GM\'s hand passes and is told the words (onNeeds); a row already on, a switch-off and a kept curse are not judged; a character being made is judged and a file that fills it is not; needs the players\' view dropped hold nothing back for a player and still tell the GM; no formula engine holds it back',
+            j(aW) === j(['ok|w_f,w_o,w_k', 'needs|It has no charge left.', 'needs|It has no charge left.', 'ok|It has no charge left.|w_e,w_o,w_k', 'ok|w_o,w_k', 'ok|w_k', 'ok|w_o,w_k', 'needs|It has no charge left.', 'ok|w_e,w_o,w_k', 'ok|w_e,w_o,w_k', 'ok|Hidden reason|w_e,w_o,w_k', 'needs|It has no charge left.']), j(aW));
+        const rvW = resolveAll(gmW, chW(), F), okW = rvW && rvW.f_wd ? rvW.f_wd.onOk : null;
+        const rvN = resolveAll(cleanSystem(Object.assign({}, rawW, { fields: rawW.fields.map(f => f.id === 'f_wd' ? Object.assign({}, f, { list: { on: { label: 'Ready' }, stats: [{ key: 'Charge' }] } }) : f) }), { F, gmView: true }), chW(), F);
+        check('1.5.8 a switch\'s needs on the sheet (resolveAll): onOk says for each row whether its switch may go on, and a list with no needs has none',
+            j(okW) === j({ w_f: true, w_e: false, w_o: false, w_k: false }) && rvN && rvN.f_wd && !('onOk' in rvN.f_wd), j([okW]));
+        const vW = validateSystem(cleanSystem(Object.assign({}, rawW, { fields: rawW.fields.concat([{ id: 'f_dx', key: 'Dx', kind: 'item-list', list: { on: { label: 'On', needs: 'd6 > Row.Nope' }, stats: [{ key: 'Charge' }] } }]) }), { F, gmView: true }), F), eW = id => vW.errors.filter(e => e.id === id && e.prop === 'list').map(e => e.message);
+        check('1.5.8 the validator reads a switch\'s needs with the row\'s names known, under the list\'s card, no dice: "Needs to switch on: ..."',
+            !eW('f_wd').length && eW('f_dx').length >= 1 && eW('f_dx').every(m => /^Needs to switch on: /.test(m)) && eW('f_dx').some(m => /Dice/.test(m)) && eW('f_dx').some(m => /Row\.Nope/.test(m)), j([eW('f_wd'), eW('f_dx')]));
+        const shSW = fs.readFileSync(path.join(app, 'scripts', 'sheets.js'), 'utf8').replace(/\r\n/g, NL), hSW = fs.readFileSync(path.join(app, 'index.html'), 'utf8');
+        check('1.5.8 a switch\'s needs (source): the sheet greys a player\'s switch with the words and tells the GM, the GM\'s own hand is told in a notice, the Lists tab has its two boxes and their handlers, Save says it drops words with no formula; Help and the Lists key name it',
+            shSW.includes("if (!on && okOn === false) { var swW = typeof rollNeedsSays === 'function' ? rollNeedsSays(S) : 'Not now'; cb.classList.add('sheet-item-onno'); if (typeof isClient === 'function' && isClient()) { cb.disabled = true; cb.title = swW; }")
+            && (shSW.match(/res && res\.onOk \? res\.onOk\[rid\] : undefined\)/g) || []).length === 2 && shSW.includes("if (typeof res.onNeeds === 'string' && res.onNeeds) toast('Switched on all the same. A player would be told: ' + res.onNeeds);")
+            && shSW.includes("orow.appendChild(input('sys-list-swneeds field',") && shSW.includes("lsp.on.needs = t.value.slice(0, LIMITS.formula); else delete lsp.on.needs;") && shSW.includes("lsp.on.needsText = t.value.slice(0, LIMITS.label); else delete lsp.on.needsText;")
+            && shSW.includes("'The switch has words but no Needs to switch on, so Save drops its words.'") && /<li><b>Needs to switch on<\/b> is a formula a row must meet before its switch goes on/.test(hSW) && /<b>Needs to switch on<\/b><small>/.test(hSW));
+    }
     /* ---- Stage 6 HUD G10: Each round — apply actions the host runs on every character in a combat when its round changes ---- */
     {
         const rawG = { v: 1, name: 'G', fields: [{ id: 'f_t', key: 'Turn', kind: 'number', def: 0 }, { id: 'f_p', key: 'Parries', kind: 'number', def: 0 }, { id: 'f_y', key: 'Tally', kind: 'number', def: 0 }],
@@ -10530,7 +10565,7 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             && lcM2.includes("    var frT = s(f.needsFrom).trim(), frF = Number(frT); if (rlF && frT !== '' && isFinite(frF)) out.needsFrom = frF;") && lcM2.includes("rl = typeof e.needsIf === 'string' && e.needsIf && typeof e.needsFrom !== 'number' ? e.needsIf : '';")
             && wnM2.includes("fr.placeholder = 'From level'; fr.value = typeof n.from === 'number' ? String(n.from) : '';") && wnM2.includes("            fr.addEventListener('input', function() { if (fr.value.trim() === '' || !isFinite(Number(fr.value))) delete n.from; else n.from = Number(fr.value); });")
             && wnM2.includes("    field(form, 'needsFrom', 'Rule from level', e.needsFrom, {") && wnM2.includes("needsIf: g('needsIf'), needsFrom: g('needsFrom'), needsMsg: g('needsMsg') });")
-            && (rdL('scripts/systemcore.js').match(/reason: 'needs'/g) || []).length === 2
+            && (rdL('scripts/systemcore.js').match(/reason: 'needs'/g) || []).length === 3   // 1.5.8: a deliberate change of this pin, the third a switch's needs (switchOk), which judges no entry
             && outY[0].needsIf === 'ST >= 12' && outY[0].needsFrom === 3 && j(outY[0].needs) === j([{ id: 'i_ly', from: 2, name: 'LY' }]) && outY[1].needsIf === 'ST >= 12' && !('needsFrom' in outY[1]) && !('needsIf' in outN[0]) && !('needsFrom' in outN[0])
             && j(kL) === j([['w_a', 'ST >= 12', 3], ['w_b', '', '-'], ['w_c', 'ST >= 12', '-'], ['w_d', 'ST >= 12', '-'], ['w_e', '', '-']]), j([kL, outY[0].needsFrom]));
     }

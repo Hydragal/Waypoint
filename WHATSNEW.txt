@@ -38,6 +38,11 @@ System editor
   saying what opened it, and goes when the row is switched off. A row of
   it bought the usual way takes its place. Formulas read Row.opened as 1
   on an opened row, so its cost can be 0.
+- A list's switch can need something before a row is switched on: in the
+  Lists tab, give Rows have a switch a Needs to switch on formula, such as
+  Row.Charge > 0, and the words it says. A player's switch is greyed out
+  and refused with the words while it does not hold. You may still switch
+  the row on, and a notice tells you what it needs.
 - A roll's + Then... changes can happen On a critical success or On a
   critical failure too, with 3d6 roll-under criticals as the Roll outcomes
   on the Combat card. On success still counts every success, and On
