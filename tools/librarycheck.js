@@ -683,6 +683,39 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             && rw.typed === JSON.stringify([{ f: 'f_sk', op: 'add', v: -2, key: 'Climb', col: 'Half' }]) && rw.back === JSON.stringify([{ f: 'f_st', op: 'add', v: -2 }]) && rw.fresh === JSON.stringify([{ f: 'f_sk', op: 'add', v: -2, key: '', col: 'Target' }])
             && saveS.includes("toast('A change on one entry needs that entry\u2019s key, such as Disguise. Pick it in the key box or remove the change.'); return; }") && saveS.indexOf('A change on one entry') < saveS.indexOf('cleanLibEntry(raw'),
             rwErr || JSON.stringify(rw));
+        // 1.5.8: an entry's blast extras in the form (librarywin.js blastBox, dmgTypePairs, blastDrops and the real renderForm and readForm)
+        let bx = null, bxErr = '';
+        try {
+            const blast = { id: 'i_a', name: 'Mine', vis: 'all', area: { ft: 6, shape: 'circle', name: 'Mine', type: 'cr', use: true, place: true, trig: 2, ad: 2 } };
+            const plain = { id: 'i_a', name: 'Grenade', vis: 'all', area: { ft: 15, shape: 'circle', name: 'Grenade' } };
+            const W3 = formWorld(); W3.entries[0] = blast; W3.api.renderForm();
+            const drawn = ['areaFt', 'areaType', 'areaUse', 'areaPlace', 'areaTrig', 'areaAd'].map(k => W3.byId['libF_' + k] ? W3.byId['libF_' + k].value : null);
+            const read = W3.api.readForm(), cl = cleanLibEntry(read, gm);
+            W3.entries[0] = plain; W3.api.renderForm(); const readP = W3.api.readForm(), clP = cleanLibEntry(readP, gm);
+            W3.byId.libF_areaTrig.value = '3'; W3.byId.libF_areaAd.value = '1'; const noPlace = cleanLibEntry(W3.api.readForm(), gm);
+            W3.byId.libF_areaFt.value = ''; W3.byId.libF_areaUse.value = 'yes'; const noFt = W3.api.readForm();
+            const bA = winS2.indexOf('function dmgTypePairs(cur) {'), bZ2 = winS2.indexOf('function saveEntry() {'), seen = [], ids = {};
+            const sysT = { system: { combat: { damage: { types: [{ key: 'cr', label: 'Crushing' }, { key: 'cut', label: '' }, { key: 'cr', label: 'Again' }] } } } };
+            const fld = (fm, id, label, value, opts) => { const r = { id, label, value: value == null ? '' : String(value), opts }; seen.push(r); ids['libF_' + id] = { value: r.value }; return r; };
+            const bApi = new Function('camp', 'field', 'ui', '"use strict";\n' + winS2.slice(bA, bZ2) + '\nreturn { dmgTypePairs, blastBox, blastDrops };')(() => sysT, fld, id => ids[id] || null);
+            const pairs = bApi.dmgTypePairs('old'), pairsNone = bApi.dmgTypePairs(undefined);
+            bApi.blastBox({}, { type: 'old', use: true, place: false, trig: 'x', ad: 1.5 }); const boxed = seen.map(r => [r.id, r.value]);
+            ids.libF_areaTrig.value = '3'; ids.libF_areaAd.value = '1'; ids.libF_areaType.value = 'cr';
+            const say1 = bApi.blastDrops({ area: { ft: 6, type: 'cr', trig: 3, ad: 1 } }, { area: { ft: 6, type: 'cr' } });
+            const say2 = bApi.blastDrops({ area: { ft: 6, place: true, trig: 'x', ad: 'y' } }, { area: { ft: 6, place: true } });
+            const say3 = bApi.blastDrops({}, {}), say4 = bApi.blastDrops({ area: { ft: 6, type: 'cr', trig: 3 } }, { area: { ft: 6, type: 'cr', trig: 3 } });
+            ids.libF_areaTrig.value = ''; ids.libF_areaAd.value = ''; ids.libF_areaType.value = ''; const say5 = bApi.blastDrops({ area: { ft: 6 } }, { area: { ft: 6 } });
+            bx = { drawn, area: cl && cl.area, readP: readP.area, clP: clP && clP.area, plainSame: j(clP) === j(cleanLibEntry(plain, gm)), noPlace: noPlace && noPlace.area, noFt: noFt.area, pairs, pairsNone, boxed, say: [say1, say2, say3, say4, say5] };
+        } catch (e) { bxErr = String(e && e.stack || e).slice(0, 600); }
+        check('1.5.8 the Library window\'s form holds an entry\'s blast extras (librarywin.js blastBox, dmgTypePairs and blastDrops beside the real renderForm and readForm, run on a page of plain objects, with librarycore entryFromForm and the real cleaner): each is drawn from the entry beside the blast radius, read back and kept by the cleaner as it was; an entry with none reads back and cleans byte for byte as before; a trigger radius without Placed and an armour divisor of 1 are dropped; with no blast radius nothing of them is handed on; the damage type list is None and then the Combat card\'s types by key, each once, a type with no label by its key, and a stored type the card no longer lists kept as it is; a number that is no number is drawn as nothing; what Save drops is said in fixed words, and nothing where nothing is dropped',
+            !!bx && j(bx.drawn) === j(['6', 'cr', 'yes', 'yes', '2', '2']) && j(bx.area) === j({ ft: 6, shape: 'circle', name: 'Mine', type: 'cr', use: true, ad: 2, place: true, trig: 2 })
+            && j(bx.readP) === j({ ft: 15, shape: 'circle', name: 'Grenade' }) && j(bx.clP) === j({ ft: 15, shape: 'circle', name: 'Grenade' }) && bx.plainSame === true
+            && j(bx.noPlace) === j({ ft: 15, shape: 'circle', name: 'Grenade' }) && bx.noFt === undefined
+            && j(bx.pairs) === j([['', 'None'], ['cr', 'Crushing'], ['cut', 'cut'], ['old', 'old']]) && j(bx.pairsNone) === j([['', 'None'], ['cr', 'Crushing'], ['cut', 'cut']])
+            && j(bx.boxed) === j([['areaType', 'old'], ['areaUse', 'yes'], ['areaPlace', ''], ['areaTrig', ''], ['areaAd', '1.5']])
+            && bx.say[0] === 'Not kept: the trigger radius, which needs Placed, not thrown.' && bx.say[1] === 'Not kept: the trigger radius, which must be a number above 0.'
+            && bx.say[2] === 'Not kept: the blast\u2019s other settings, which need a blast radius.' && bx.say[3] === '' && bx.say[4] === '',
+            bxErr || j(bx));
         // ... and what the window says of a rule, and what it exports, while a pack of the campaign is not read
         let fq = null, fqErr = '';
         try {

@@ -5339,6 +5339,28 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             h.kids.length === 1 && h.kids[0].title === 'Counted once with ' + BAD + ': the higher applies, and this row gives nothing of its own.' && h.kids[0].textContent === 'counted once'
             && opts.indexOf(BAD + ' (grp)') >= 0 && made.indexOf('innerHTML') < 0 && !/innerHTML|insertAdjacentHTML|outerHTML/.test(cut('onceBits') + cut('onceBox')), JSON.stringify([h.kids.map(k => k.title), opts]));
     }
+    {   // 1.5.8 the Library window's blast extras: a hostile damage type and number from a campaign file reach the form as values and text alone, and Save keeps neither
+        const SYB = await import(modUrl('systemcore.js')), LCB = await import(modUrl('librarycore.js')), FB = await import(modUrl('formula.js'));
+        const wS = fs.readFileSync(path.join(dir, 'librarywin.js'), 'utf8').replace(/\r\n/g, '\n'), made = [], j = JSON.stringify;
+        const mk = tag => { const e = { tag, kids: [], className: '', id: '', title: '', value: '', type: '', _t: '', appendChild(x) { this.kids.push(x); return x; }, setAttribute(k, v) { made.push('attr:' + k); } };
+            Object.defineProperty(e, 'textContent', { get() { return this._t; }, set(v) { this._t = String(v); } }); Object.defineProperty(e, 'innerHTML', { get() { return ''; }, set(v) { made.push('innerHTML'); } }); return e; };
+        const doc = { createElement: mk }, ids = {};
+        const cutW = (from, to) => { const i = wS.indexOf(from), k = wS.indexOf(to, i); if (i < 0 || k < 0) throw new Error('sinkcheck: librarywin.js ' + from); return wS.slice(i, k); };
+        const src = cutW('function el(tag, cls, text) {', '\n') + '\n' + cutW('function select(pairs, value) {', '\n') + '\n' + cutW('function field(form, id, label, value, opts) {', '\n}\n') + '\n}\n' + cutW('function dmgTypePairs(cur) {', 'function saveEntry() {');
+        const BAD = '"><img src=x onerror=alert(1)>', sysH = { system: { combat: { damage: { types: [{ key: BAD, label: '<b>' + BAD + '</b>' }, { key: 'cr', label: 'Crushing' }] } } } };
+        const B = new Function('document', 'camp', 'ui', '"use strict";\n' + src + '\nreturn { blastBox, blastDrops };')(doc, () => sysH, id => ids[id] || null);
+        const form = mk('div'); B.blastBox(form, { type: BAD, use: BAD, place: 1, trig: '"><b>9</b>', ad: NaN });
+        const rows = form.kids, inp = rows.map(r => r.kids[1]), typeSel = inp[0], opts = typeSel.kids.map(o => [o.value, o.textContent]);
+        const nodesOk = rows.every(r => r.tag === 'label' && r.kids[0].tag === 'span' && typeof r.title === 'string');
+        const sysC = SYB.cleanSystem({ fields: [], items: [], combat: { damage: { types: [{ key: 'cr', label: 'Crushing' }] } } }, { F: FB, gmView: true }), ctx = LCB.libCtx(sysC, FB, true);
+        const hostile = LCB.cleanLibEntry(LCB.entryFromForm({ id: 'i_h', name: 'Mine', vis: 'all', areaFt: '6', areaType: BAD, areaUse: 'yes', areaPlace: 'yes', areaTrig: '9e999', areaAd: '"><b>2</b>' }), ctx);
+        const huge = LCB.cleanLibEntry(LCB.entryFromForm({ id: 'i_h', name: 'Mine', vis: 'all', areaFt: '6', areaPlace: 'yes', areaTrig: '99999', areaAd: '0.04' }), ctx);
+        check('1.5.8 the Library window\'s blast extras from a hostile campaign (librarywin.js blastBox, sliced with its el, select and field and run on a page that records every write): a hostile damage type key and label reach the list only as an option\'s value and its text, a stored type alike, a stored use or place that is not true reads as No and Thrown, a trigger radius and an armour divisor that are no number draw as empty boxes; nothing writes markup; entryFromForm and the real cleaner keep no hostile damage type and no number that is none, and hold a number to its bounds',
+            nodesOk && typeSel.tag === 'select' && j(opts) === j([['', 'None'], [BAD, '<b>' + BAD + '</b>'], ['cr', 'Crushing']]) && typeSel.value === BAD && inp[1].value === '' && inp[2].value === '' && inp[3].value === '' && inp[4].value === ''
+            && made.indexOf('innerHTML') < 0 && !/innerHTML|insertAdjacentHTML|outerHTML/.test(src)
+            && !!hostile && j(hostile.area) === j({ ft: 6, shape: 'circle', name: '', use: true, place: true }) && !!huge && j(huge.area) === j({ ft: 6, shape: 'circle', name: '', ad: 0.1, place: true, trig: 100 }),
+            j([opts, inp.map(x => x.value), made, hostile && hostile.area, huge && huge.area]));
+    }
     summed = true;
     console.log('\n' + pass + ' passed, ' + fail + ' failed.');
     if (fail) process.exit(1);

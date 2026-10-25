@@ -263,6 +263,7 @@ function renderForm() {
     field(form, 'damage', 'Damage', e.damage, { max: 300, ph: 'e.g. 2d6 + 1' });
     field(form, 'cost', 'Cost', e.cost, { max: 300 });
     field(form, 'areaFt', 'Blast (ft)', e.area && e.area.ft ? e.area.ft : '', { max: 5, title: 'A blast radius in feet: the character can throw it from the sheet' });
+    blastBox(form, e.area);   // 1.5.8: the blast's extras, as systemcore areaExtra keeps them
     field(form, 'throwSkill', 'Thrown with', e.throwSkill, { max: 40, ph: 'A skill key', title: 'The skill a throw of it rolls' });
     field(form, 'gmNotes', 'GM notes', e.gmNotes, { area: true, rows: 3, max: LIB.gmNotes, title: 'Yours alone: never on a player’s screen' });
     modsBox(form, e);   // Stage 6 F6
@@ -403,8 +404,35 @@ function modsBox(form, e) {
 function readForm() {
     var g = function(id) { var n = ui('libF_' + id); return n ? n.value : ''; }, e = current(), stats = {};
     Array.prototype.forEach.call(document.querySelectorAll('#libForm [data-stat]'), function(n) { stats[n.dataset.stat] = n.value; });
-    var typed = entryFromForm({ id: e.id, name: g('name'), key: g('key'), category: g('category'), icon: g('icon'), vis: g('vis'), lvl: g('lvl'), stats: stats, notes: g('notes'), desc: g('desc'), lvls: g('lvls'), lvlsWas: e.lvls, tags: g('tags'), ref: g('ref'), damage: g('damage'), cost: g('cost'), throwSkill: g('throwSkill'), areaFt: g('areaFt'), areaShape: e.area && e.area.shape, areaName: e.area && e.area.name, gmNotes: g('gmNotes'), rm: g('rm'), rmMsg: g('rmMsg'), eq: g('eq'), eqMsg: g('eqMsg'), mods: st.fmFor === e.id && st.fm ? st.fm : e.mods, modsOn: ui('libF_modsOn') ? ui('libF_modsOn').checked : e.modsOn === true, opens: st.foFor === e.id && st.fo ? st.fo : e.opens, needs: st.fnFor === e.id && st.fn ? st.fn : e.needs, needsIf: g('needsIf'), needsFrom: g('needsFrom'), needsMsg: g('needsMsg') });
+    var typed = entryFromForm({ id: e.id, name: g('name'), key: g('key'), category: g('category'), icon: g('icon'), vis: g('vis'), lvl: g('lvl'), stats: stats, notes: g('notes'), desc: g('desc'), lvls: g('lvls'), lvlsWas: e.lvls, tags: g('tags'), ref: g('ref'), damage: g('damage'), cost: g('cost'), throwSkill: g('throwSkill'), areaFt: g('areaFt'), areaShape: e.area && e.area.shape, areaName: e.area && e.area.name, areaType: g('areaType'), areaUse: g('areaUse'), areaPlace: g('areaPlace'), areaTrig: g('areaTrig'), areaAd: g('areaAd'), gmNotes: g('gmNotes'), rm: g('rm'), rmMsg: g('rmMsg'), eq: g('eq'), eqMsg: g('eqMsg'), mods: st.fmFor === e.id && st.fm ? st.fm : e.mods, modsOn: ui('libF_modsOn') ? ui('libF_modsOn').checked : e.modsOn === true, opens: st.foFor === e.id && st.fo ? st.fo : e.opens, needs: st.fnFor === e.id && st.fn ? st.fn : e.needs, needsIf: g('needsIf'), needsFrom: g('needsFrom'), needsMsg: g('needsMsg') });
     var out = clone(e), eqShown = !!ui('libF_eq'); FORM_KEYS.forEach(function(k) { if (eqShown || (k !== 'eq' && k !== 'eqMsg')) delete out[k]; }); return Object.assign(out, typed);   // a switch lock the form does not show (no list has a switch) is kept
+}
+// 1.5.8: an entry's blast extras beside its radius: its damage type (a key of the Combat card's types, or none), whether going off uses one
+// up, whether it is placed (a mine) and its trigger radius in yards, and its armour divisor. Fixed words, a file's values only as values
+function dmgTypePairs(cur) {
+    var c = camp(), d = c && c.system && c.system.combat && c.system.combat.damage, out = [['', 'None']], seen = {};
+    ((d && Array.isArray(d.types)) ? d.types : []).forEach(function(y) { if (!y || typeof y.key !== 'string' || seen[y.key]) return; seen[y.key] = 1; out.push([y.key, typeof y.label === 'string' && y.label ? y.label : y.key]); });
+    if (typeof cur === 'string' && cur && !seen[cur]) out.push([cur, cur]);   // a stored type the Combat card no longer lists stays as it is
+    return out;
+}
+function blastBox(form, a) {
+    a = a && typeof a === 'object' ? a : {}; var num = function(v) { return typeof v === 'number' && isFinite(v) ? v : ''; };
+    field(form, 'areaType', 'Blast damage type', typeof a.type === 'string' ? a.type : '', { pairs: dmgTypePairs(a.type), title: 'The type of the damage it does, one of the Combat card\u2019s damage types' });
+    field(form, 'areaUse', 'Uses one up', a.use === true ? 'yes' : '', { pairs: [['', 'No'], ['yes', 'Yes, going off uses one up']], title: 'Going off uses one up, as a grenade is used up' });
+    field(form, 'areaPlace', 'Placed', a.place === true ? 'yes' : '', { pairs: [['', 'Thrown'], ['yes', 'Placed, not thrown']], title: 'Placed, not thrown: a mine. It goes off when a token comes within its trigger radius' });
+    field(form, 'areaTrig', 'Trigger radius (yd)', num(a.trig), { max: 6, title: 'For a placed blast only: it goes off when a token comes this many yards from it' });
+    field(form, 'areaAd', 'Armour divisor', num(a.ad), { max: 6, title: 'Armour is divided by this number against its damage. Blank or 1: none' });
+}
+// what the cleaner left out of the blast's extras, said in fixed words (an empty text: nothing)
+function blastDrops(raw, c) {
+    var f = raw && raw.area, k = c && c.area, out = [], g = function(id) { var n = ui('libF_' + id); return n ? String(n.value).trim() : ''; };
+    if (!f) { if (g('areaType') || g('areaUse') || g('areaPlace') || g('areaTrig') || g('areaAd')) out.push('the blast\u2019s other settings, which need a blast radius'); }
+    else {
+        if (f.type && !(k && k.type)) out.push('the damage type');
+        if (g('areaTrig') && !(k && k.trig)) out.push(f.place === true ? 'the trigger radius, which must be a number above 0' : 'the trigger radius, which needs Placed, not thrown');
+        if (g('areaAd') && !(k && k.ad) && Number(g('areaAd')) !== 1) out.push('the armour divisor, which must be a number above 0');
+    }
+    return out.length ? 'Not kept: ' + out.join(', ') + '.' : '';
 }
 function saveEntry() {
     var e = current(); if (!e || !st.packId || !ready(st.packId)) return;
@@ -413,6 +441,7 @@ function saveEntry() {
     var kyT = typeof raw.key === 'string' ? raw.key.trim() : ''; if (kyT && SCr && SCr.cleanItemKey && !SCr.cleanItemKey(kyT, F())) { toast('\u201c' + kyT + '\u201d is not a usable key. A key is a letter, then letters, digits and _. It is not a word formulas already use, such as on, max, min, count or lvl.'); return; }   // 1.5.4: never dropped in silence (List.max.<name> is the list's highest)
     if (st.fmFor === e.id && (st.fm || []).some(function(m) { return m && typeof m.col === 'string' && !/^[A-Za-z][A-Za-z0-9_]{0,39}$/.test(typeof m.key === 'string' ? m.key : ''); })) { toast('A change on one entry needs that entry’s key, such as Disguise. Pick it in the key box or remove the change.'); return; }   // 1.5.8
     var c = cleanLibEntry(raw, gmCtx()); if (!c) { toast('That entry could not be kept.'); return; }
+    var bd = blastDrops(raw, c); if (bd) toast(bd);   // 1.5.8: what Save drops of the blast's extras
     var list = workOf(st.packId), i = -1; list.forEach(function(x, k) { if (x.id === c.id) i = k; });
     var was = i >= 0 ? list[i] : null;
     if (i < 0) { if (list.length >= LIB.entries) { toast('A pack holds at most ' + LIB.entries + ' entries.'); return; } list.push(c); } else list[i] = c;

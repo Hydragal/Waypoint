@@ -38,6 +38,9 @@ Explosives
 - Placed, not thrown: a mine is placed hidden from players and never
   goes off as it is placed. It goes off when a character steps into its
   trigger radius, or with Set off the mine on the GM's right-click menu.
+- A library entry sets its blast's damage type, Uses one up, Placed, not
+  thrown, its trigger radius and its armour divisor in the Library
+  window's form, beside its blast radius. Save says what it could not keep.
 - With none of these set, blasts work as before.
 
 System editor

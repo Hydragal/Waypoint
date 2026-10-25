@@ -170,6 +170,14 @@ export function entryFromForm(f) {
     var lv = s(f.lvl).trim(); if (/^-?\d+$/.test(lv)) out.lvl = Number(lv);
     if (isObj(f.stats)) { var st = {}, n = 0; Object.keys(f.stats).forEach(function(k) { var v = s(f.stats[k]).trim(); if (!v) return; st[k] = /^-?\d+(\.\d+)?$/.test(v) ? Number(v) : v; n++; }); if (n) out.stats = st; }
     var ft = s(f.areaFt).trim(); if (/^\d+$/.test(ft) && Number(ft) > 0) out.area = { ft: Number(ft), shape: s(f.areaShape) || 'circle', name: s(f.areaName) };   // the shape as it was (the cleaner keeps a known one)
+    if (out.area) {   // 1.5.8: the blast's extras, each only where set (the cleaner, areaExtra, judges them); a number box that is no number is handed on as text, which the cleaner drops
+        var ar = out.area, nb = function(v) { v = s(v).trim(); return /^\d+(\.\d+)?$/.test(v) ? Number(v) : v; };
+        var ty = s(f.areaType).trim(); if (ty) ar.type = ty;
+        if (f.areaUse === 'yes') ar.use = true;
+        if (f.areaPlace === 'yes') ar.place = true;
+        var tg = nb(f.areaTrig); if (tg !== '') ar.trig = tg;
+        var dv = nb(f.areaAd); if (dv !== '') ar.ad = dv;
+    }
     if (f.rm === 'bound' || f.rm === 'curse') { out.rm = f.rm; if (s(f.rmMsg).trim()) out.rmMsg = s(f.rmMsg); }   // L2b: a player's removal (bound / curse on contact) and its message, as the Items tab has them
     if (f.eq === 'bound' || f.eq === 'curse') { out.eq = f.eq; if (s(f.eqMsg).trim()) out.eqMsg = s(f.eqMsg); }   // and switching it off
     if (Array.isArray(f.mods) && f.mods.length) out.mods = JSON.parse(JSON.stringify(f.mods)); if (f.modsOn === true) out.modsOn = true;   // F6: its changes to the character (cleaned as an entry's are)
