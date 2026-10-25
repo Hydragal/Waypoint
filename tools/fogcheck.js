@@ -5877,6 +5877,33 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             && wn3.every(t => t.includes("- The fog menu is shorter. This map's two ticks and the brushes stay" + NL + '  in view, and three folds hold the rest: light and vision, the' + NL + "  preview, and the campaign's fog settings. No control is gone." + NL)));
     }
 
+    {   // 1.5.6, a door lights up as a token comes near (whiteboard.js, its doornear markers, run for real with the real fogcore)
+        const wbN = require('fs').readFileSync(require('path').join(__dirname, '..', 'system', 'app', 'scripts', 'whiteboard.js'), 'utf8').replace(/\r\n/g, '\n');
+        const nA = wbN.indexOf('// [fogcheck:doornear-start]'), nZ = wbN.indexOf('// [fogcheck:doornear-end]'), nSrc = wbN.slice(nA, nZ);
+        const win = {}, dn = new Function('window', 'document', 'state', nSrc + '\nreturn { doorGap: doorGap, doorNearIds: doorNearIds, doorNearMine: doorNearMine, doorNearSync: doorNearSync, DOOR_NEAR: DOOR_NEAR };');
+        const els = [], mkEl = (id, cls) => { const s = new Set(cls); const e = { dataset: { id }, classList: { contains: c => s.has(c), toggle: (c, on) => { if (on) s.add(c); else s.delete(c); return on; } }, has: c => s.has(c) }; els.push(e); return e; };
+        const st = { selWbIds: ['tok_g'] }, board = { querySelectorAll: () => els };
+        const D = dn(win, { getElementById: id => id === 'whiteboard' ? board : null }, st);
+        const tok = { id: 'tok_g', isChar: true, x: 100, y: 100, w: 50, h: 50 }, own = { id: 'tok_p', isChar: true, ownerId: 'u_a', x: 400, y: 100, w: 50, h: 50 };
+        const dBlock = { id: 'd1', type: 'rect', x: 150, y: 100, w: 50, h: 50, blocksSight: true, sightType: 'door' };
+        const dFar = { id: 'd2', type: 'rect', x: 250, y: 100, w: 50, h: 50, blocksSight: true, sightType: 'door' };
+        const dLine = { id: 'd3', type: 'path', x: 450, y: 100, w: 1, h: 50, baseW: 1, baseH: 50, pts: [[0, 0], [0, 50]], blocksSight: true, sightType: 'door' };
+        const dDiag = { id: 'd4', type: 'path', x: 0, y: 0, w: 1000, h: 1000, baseW: 1000, baseH: 1000, pts: [[1000, 0], [0, 1000]], blocksSight: true, sightType: 'door' };
+        const wall = { id: 'w1', type: 'rect', x: 150, y: 150, w: 50, h: 50, blocksSight: true, sightType: 'wall' }, gate = { id: 'd5', type: 'rect', x: 75, y: 160, w: 25, h: 50, barrier: true, sightType: 'door' };
+        const am = { type: 'map', whiteboard: [tok, own, dBlock, dFar, dLine, dDiag, wall, gate] };
+        const gmIds = D.doorNearIds(am.whiteboard, D.doorNearMine(am, ['tok_g'], { active: false }), X), plIds = D.doorNearIds(am.whiteboard, D.doorNearMine(am, ['tok_g'], { active: true, role: 'client', myId: 'u_a' }), X);
+        const none = D.doorNearIds(am.whiteboard, D.doorNearMine(am, [], { active: false }), X);
+        win.wpStream = true; const stream = D.doorNearMine(am, ['tok_g'], { active: false }); delete win.wpStream;
+        win.wpFogCore = X; win.wpNet = { active: false }; mkEl('d1', ['wb-item', 'wb-door']); mkEl('d2', ['wb-item', 'wb-door', 'wb-door-near']); mkEl('w1', ['wb-item', 'wb-door-near']); D.doorNearSync(am);
+        check('1.5.6, a door lights up as a token comes near (whiteboard.js doorGap, doorNearIds, doorNearMine and doorNearSync, run for real with the real fogcore): a door block beside the GM\'s selected token, and a barrier\'s door touching it, are near, one a cell away is not, a wall never is; a door drawn as a line is measured to its own stroke, so a long diagonal door that passes far from a token is not near it though its box holds the token; on a player\'s app their own character token counts and the GM\'s selection does not; nothing with no token of yours, nothing in the stream window; the board\'s door elements wear wb-door-near exactly while near, and a piece that is no door loses it',
+            JSON.stringify(gmIds) === JSON.stringify(['d1', 'd5']) && JSON.stringify(plIds) === JSON.stringify(['d3']) && none.length === 0 && stream.length === 0 && D.DOOR_NEAR === 40
+            && D.doorGap({ x: 100, y: 100, w: 50, h: 50 }, dDiag, X) > 300 && els[0].has('wb-door-near') && !els[1].has('wb-door-near') && !els[2].has('wb-door-near'),
+            JSON.stringify([gmIds, plIds, els.map(e => [e.dataset.id, e.has('wb-door-near')])]));
+        const cssN = require('fs').readFileSync(require('path').join(__dirname, '..', 'system', 'app', 'style.css'), 'utf8');
+        check('1.5.6, a door near a token wears the look of a door under the pointer (style.css: every hover rule of a door names wb-door-near beside it, a pointer cursor on hover alone)',
+            ['.wb-item.wb-door:hover, .wb-item.wb-door.wb-door-near {', '.wb-item.wb-door.wb-door-open:hover, .wb-item.wb-door.wb-door-open.wb-door-near {', '.wb-item.path.wb-door:hover svg path, .wb-item.path.wb-door.wb-door-near svg path {', '.wb-item.wb-door:hover::after, .wb-item.wb-door.wb-door-near::after {', '.wb-item.wb-door:hover { cursor: pointer; }'].every(s => cssN.includes(s)));
+    }
+
     summed = true;
     console.log(NL + pass + ' passed, ' + fail + ' failed.');
     if (fail) process.exit(1);

@@ -242,12 +242,13 @@
   .wb-item.path.wb-door.wb-door-open svg path:not([fill="none"]) { fill-opacity: 0.25; }
   .wb-item.wb-door.wb-door-open::after { content: '\1F6AA  open'; font-size: 11px; font-weight: 700; color: #4caf7d; white-space: nowrap; }
   /* 1.5.6, a door under the pointer (the owner, 2026-10-24: doors should change on hover and show when you are over them, for GMs and players): a brighter edge, a glow and a larger sign */
-  .wb-item.wb-door:hover { outline-width: 3px; outline-color: #ffd54f; cursor: pointer; filter: brightness(1.2) drop-shadow(0 0 6px rgba(255,213,79,0.85)); }
-  .wb-item.wb-door.wb-door-open:hover { outline-color: #7be0a8; filter: brightness(1.15) drop-shadow(0 0 6px rgba(123,224,168,0.85)); }
-  .wb-item.path.wb-door:hover { outline: none; filter: none; }
-  .wb-item.path.wb-door:hover svg path { filter: brightness(1.9) drop-shadow(0 0 2px #fff) drop-shadow(0 0 6px #ffd54f) drop-shadow(0 0 12px #ffd54f); }
-  .wb-item.path.wb-door.wb-door-open:hover svg path { filter: brightness(1.6) drop-shadow(0 0 2px #fff) drop-shadow(0 0 6px #7be0a8) drop-shadow(0 0 12px #7be0a8); }
-  .wb-item.wb-door:hover::after { font-size: 17px; }
+  .wb-item.wb-door:hover { cursor: pointer; }
+  .wb-item.wb-door:hover, .wb-item.wb-door.wb-door-near { outline-width: 3px; outline-color: #ffd54f; filter: brightness(1.2) drop-shadow(0 0 6px rgba(255,213,79,0.85)); }
+  .wb-item.wb-door.wb-door-open:hover, .wb-item.wb-door.wb-door-open.wb-door-near { outline-color: #7be0a8; filter: brightness(1.15) drop-shadow(0 0 6px rgba(123,224,168,0.85)); }
+  .wb-item.path.wb-door:hover, .wb-item.path.wb-door.wb-door-near { outline: none; filter: none; }
+  .wb-item.path.wb-door:hover svg path, .wb-item.path.wb-door.wb-door-near svg path { filter: brightness(1.9) drop-shadow(0 0 2px #fff) drop-shadow(0 0 6px #ffd54f) drop-shadow(0 0 12px #ffd54f); }
+  .wb-item.path.wb-door.wb-door-open:hover svg path, .wb-item.path.wb-door.wb-door-open.wb-door-near svg path { filter: brightness(1.6) drop-shadow(0 0 2px #fff) drop-shadow(0 0 6px #7be0a8) drop-shadow(0 0 12px #7be0a8); }
+  .wb-item.wb-door:hover::after, .wb-item.wb-door.wb-door-near::after { font-size: 17px; }
   .wb-item.wb-door.wb-door-open.wb-door-locked::after { content: '\1F6AA\1F512  open'; }
   /* a secret door (the map builder), on the GM's screen alone: a dashed edge, a violet glow on a line, and the word secret beside its mark. The players hold a wall there */
   .wb-item.wb-door.wb-secret:not(.path) { outline-style: dashed; }

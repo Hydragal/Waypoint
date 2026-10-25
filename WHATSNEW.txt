@@ -65,6 +65,8 @@ The app
 Doors
 - A door lights up while your pointer is over it, so you can see you
   are on it before you click, on the GM's screen and on players'.
+- A door also lights up while a token stands next to it: a player's own
+  token, or a token the GM has selected.
 
 Trading
 - Two characters can trade in one barter window. A player right-clicks

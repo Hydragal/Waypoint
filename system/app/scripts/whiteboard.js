@@ -1244,6 +1244,51 @@ import { cssColor, picRef } from './safecore.js';   // a map from a file: colour
 
   }
 
+  // [fogcheck:doornear-start]
+  // 1.5.6, a door lights up as a token comes near (backlog 188; the owner, 2026-10-24: "id like doors to change on hover and indicate when youre
+  // actually over them", then "or even detect a token's proximity and auto highlight"): a door within DOOR_NEAR board pixels of a token of yours
+  // wears wb-door-near, the look a door under the pointer has. Yours: on a player's app their own character tokens, on the GM's screen the tokens
+  // selected; nothing in the stream window. A door is fogcore isDoor; a door drawn as a line is measured to its own strokes, any other to its box
+  var DOOR_NEAR = 40;   // a token in the cell beside the door, on squares and on hexagons (a hex cell's edge door stands 34 px off a token seated beside it); a door two cells away is 50 px or more
+  function doorGap(box, door, F) {
+      var x1 = box.x, y1 = box.y, x2 = box.x + (box.w || 0), y2 = box.y + (box.h || 0);
+      var ptGap = function(px, py) { var dx = Math.max(x1 - px, 0, px - x2), dy = Math.max(y1 - py, 0, py - y2); return Math.sqrt(dx * dx + dy * dy); };
+      if (door.type === 'path') {
+          var segs = F && typeof F.pathSegs === 'function' ? F.pathSegs(door) : [], best = Infinity;
+          for (var k = 0; k < segs.length && k < 400 && best > 0; k++) {
+              var s = segs[k], len = Math.sqrt((s[2] - s[0]) * (s[2] - s[0]) + (s[3] - s[1]) * (s[3] - s[1])), n = Math.min(500, Math.max(1, Math.ceil(len / 2)));
+              for (var i = 0; i <= n && best > 0; i++) { var t = i / n; best = Math.min(best, ptGap(s[0] + (s[2] - s[0]) * t, s[1] + (s[3] - s[1]) * t)); }
+          }
+          return best;
+      }
+      var dw = typeof door.w === 'number' && door.w > 0 ? door.w : 0, dh = typeof door.h === 'number' && door.h > 0 ? door.h : 0;
+      var gx = Math.max(door.x - x2, 0, x1 - (door.x + dw)), gy = Math.max(door.y - y2, 0, y1 - (door.y + dh));
+      return Math.sqrt(gx * gx + gy * gy);
+  }
+  function doorNearIds(items, mine, F) {   // the ids of the doors within reach of any of the boxes in mine
+      var out = []; if (!Array.isArray(items) || !Array.isArray(mine) || !mine.length || !F || typeof F.isDoor !== 'function') return out;
+      items.forEach(function(w) {
+          if (!w || typeof w.id !== 'string' || typeof w.x !== 'number' || typeof w.y !== 'number' || !isFinite(w.x) || !isFinite(w.y) || !F.isDoor(w)) return;
+          if (mine.some(function(b) { return doorGap(b, w, F) <= DOOR_NEAR; })) out.push(w.id);
+      });
+      return out;
+  }
+  function doorNearMine(am, sel, n) {   // the boxes of the tokens of yours on this map
+      if (window.wpStream || !am || !Array.isArray(am.whiteboard)) return [];
+      var player = !!(n && n.active && n.role === 'client'), ids = Array.isArray(sel) ? sel : [];
+      return am.whiteboard.filter(function(w) {
+          if (!w || !w.isChar || w.waiting || typeof w.x !== 'number' || typeof w.y !== 'number') return false;
+          return player ? (!w.hidden && w.ownerId === n.myId) : ids.indexOf(w.id) >= 0;
+      }).map(function(w) { return { x: w.x, y: w.y, w: w.w || 0, h: w.h || 0 }; });
+  }
+  function doorNearSync(am) {
+      var board = document.getElementById('whiteboard'); if (!board || !am || am.type !== 'map') return;
+      var sel = state.selWbIds || (state.selWbId ? [state.selWbId] : []), near = doorNearIds(am.whiteboard, doorNearMine(am, sel, window.wpNet), window.wpFogCore), on = Object.create(null);
+      near.forEach(function(id) { on[id] = 1; });
+      board.querySelectorAll('.wb-item.wb-door, .wb-item.wb-door-near').forEach(function(el) { el.classList.toggle('wb-door-near', on[el.dataset.id] === 1 && el.classList.contains('wb-door')); });
+  }
+  // [fogcheck:doornear-end]
+
   /* ---------- floating mini-toolbar over the selection ---------- */
 
   // Lives inside the scaled #whiteboard: native pan/zoom keep it anchored to
@@ -1303,6 +1348,7 @@ import { cssColor, picRef } from './safecore.js';   // a map from a file: colour
   function sightPref() { try { return localStorage.getItem('wp_sightOutline') === 'on'; } catch (e) { return false; } }
   function sightSync(id) { var F = window.wpFog; if (F && F.setOutline) F.setOutline(id); }
   function updateSelToolbar(am) {
+      try { doorNearSync(am); } catch (e) {}   // 1.5.6: the doors beside a token of yours, again as the selection or a token moves
       var bar = document.getElementById('selToolbar');
       if (!bar) return;
       var clientView = window.wpNet && window.wpNet.active && window.wpNet.role === 'client';
@@ -3917,7 +3963,7 @@ window.wpFitToGrid = fitToGrid;
       });
       return turned;
   }
-  window.wpCircleFollow = function() { if (blasts.some(function(b) { return typeof b.tok === 'string'; })) renderMeasures(); };   // a token moved with no redraw (a drag under way, a move from the table): a circle on a token goes with it
+  window.wpCircleFollow = function() { if (blasts.some(function(b) { return typeof b.tok === 'string'; })) renderMeasures(); var amN = getActiveMap(); if (amN && amN.type === 'map') { try { doorNearSync(amN); } catch (e) {} } };   // a token moved with no redraw (a drag under way, a move from the table): a circle on a token goes with it
   function shapeHolds(b, r) {   // is the token of this distance row inside b? A thrown blast and a circle by distance, a ring between its two, a cone within its angle too
       if (b.lost) return false;
       if (typeof b.tok === 'string' && r.tok && r.tok.id === b.tok) return false;   // the token a circle sits on is its centre, not something inside it
