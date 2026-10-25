@@ -6,9 +6,9 @@ Top row
   says whether this map's fog is on, and opens the fog options.
 
 System editor
-- An entry's change can aim at one entry of a list: in the Library's entry
-  form, pick a list's "one entry" choice, the entry's key and the column it
-  adds to. A trait can then give -2 to the Disguise skill's Target alone,
+- A change can aim at one entry of a list: for an item or a status effect,
+  in the System editor or the Library's entry form, pick a list's "one
+  entry" choice, the entry's key and the column it adds to. A trait can then give -2 to the Disguise skill's Target alone,
   for a skill not bought too, at its default. A roll's card names it.
 - An entry can open others: in the Library's What it opens box, pick the
   entries it makes usable and from which of its levels. While a row of it

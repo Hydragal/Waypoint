@@ -7550,7 +7550,7 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             j(rngOf) === j([{ mod: -2, dist: 4, unit: 'yd' }, { mod: -4, dist: 7.211103, unit: 'yd' }, { mod: -4, dist: 60, unit: 'ft' }, null, null, null, null, null, { mod: -2, dist: 4, unit: 'yd' }]), j(rngOf));
 
         // conditions C3b: the Combat card's Postures box, run for real (sliced from sheets.js by its markers) on the same page of plain objects
-        const pbSrc = cutL('// [sinkcheck:posturebox-start]', '// [sinkcheck:posturebox-end]'), fxtSrc = cutL('function fxTargets(sys) {', NL + 'function '), nmiSrc = oneL('function numInput(');
+        const pbSrc = cutL('// [sinkcheck:posturebox-start]', '// [sinkcheck:posturebox-end]'), fxtSrc = cutL('function fxTargets(sys, rows) {', NL + 'function '), nmiSrc = oneL('function numInput(');
         const edP = (drft, errs) => { const out = { dirty: 0, renders: 0, patches: 0, toasts: [], n: 0 }; out.api = new Function('draft', 'LIMITS', 'DEFAULT_POSTURES', 'uid', 'markDirty', 'renderAll', 'patchErrors', 'toast', 'document', 'errorsById', 'warningsById', 'formulaTextFor', 'NL', '\'use strict\';' + NL + domSrc + NL + nmiSrc + NL + fxtSrc + NL + pbSrc + NL + 'return { postureBox: postureBox, onPostureInput: onPostureInput, onPostureChange: onPostureChange, postureClick: postureClick };')(
             drft, S.LIMITS, S.DEFAULT_POSTURES, p => p + 'n' + (++out.n), () => out.dirty++, () => out.renders++, () => out.patches++, t => out.toasts.push(t), docL, errs || {}, {}, () => '', NL); return out; };
         const drawP = (dr, errs) => { const box = feL('div'); edP(dr, errs).api.postureBox(box, dr.combat); return box; };
