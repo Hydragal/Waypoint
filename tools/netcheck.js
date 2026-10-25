@@ -12620,6 +12620,26 @@ pendingChecks.push((async () => {
             && j(n8.answer) === NO('That needs something you do not have.') && quiet(n8, ['i_free', 'i_med', 'i_own', 'i_lib']) && !/DARK|i_dark/.test(j([n1.answer, n8.answer]))
             && ciSrc.indexOf("if (resI.reason === 'needs') {") > ciSrc.indexOf('Si.applyRowOp(') && ciSrc.indexOf("if (resI.reason === 'needs') {") < ciSrc.indexOf('chI.values[qi.fieldId] = resI.value') && Sx.cleanDenyReason('needs') === 'needs',
             j([n1.answer, n2.answer, n3.answer, n4.answer, n7.kit, n8.answer]));
+        {   // 1.5.6 buying and selling on the host (the real row branch with the real core): the money moves with the row, all or nothing
+            const sysB = Sx.cleanSystem({ v: 1, name: 'B', rolls: [], fields: [
+                { id: 'f_chips', key: 'Chips', label: 'Chips', kind: 'item-list', edit: 'owner', vis: 'all', list: { multi: true, lvl: { label: 'Stored', min: 0, max: 100000, step: 0.01, def: 0 }, money: '@lvl' } },
+                { id: 'f_gear', key: 'Gear', label: 'Gear', kind: 'item-list', edit: 'owner', vis: 'all', list: { price: 'cr', stats: [{ key: 'cr', label: 'Cost' }] } }],
+                items: [{ id: 'i_chip', name: 'Chip' }, { id: 'i_lamp', name: 'Lamp', stats: { cr: 25 } }] }, { F: Fx, gmView: true });
+            const campB = { id: 'k', system: sysB, chars: { c_1: { id: 'c_1', name: 'Ana', ownerId: 'u_a', npc: false, values: { f_chips: [{ id: 'w_c1', defId: 'i_chip', qty: 1, lvl: 30 }, { id: 'w_c2', defId: 'i_chip', qty: 1, lvl: 100 }], f_gear: [] } } } };
+            const outB = { answer: [], owner: [], saves: 0, logs: [] }, connB = { peer: 'pA', send: box(outB.answer) }, netB = { active: true, role: 'host', paused: false, conns: [{ peer: 'pA', open: true, send: box(outB.owner) }], roster: { pA: { id: 'u_a' } } };
+            const winB = { wpFormula: Fx, wpVtt: { on: () => true }, wpSheets: { playerSystem: c => Sx.cleanSystem(c.system, { F: Fx, gmView: false }), charChanged() {} }, wpDiceCore: null, wpLibrary: null };
+            const HB = new Function('net', 'SC', 'window', 'peerPaused', 'getActiveCampaign', 'saveRemoteSoon', 'sendFailed', 'peerProfileId', 'lim', 'toast', 'logEvent',
+                'var charLimit = lim, _charSlowSaid = {}, _charPending = {}, _charHost = {}, _rowGrace = {};\n' + dlSrc + '\n' + ntSrc + '\nreturn function(msg, conn) {\n' + ciSrc + '\n};')(
+                netB, () => Sx, winB, () => false, () => campB, () => { outB.saves++; }, e => { throw e; }, c => (netB.roster[c.peer] ? netB.roster[c.peer].id : null), { allow: () => true }, () => {}, (k, t) => outB.logs.push(t));
+            const BUY = (rid, pay, rowId) => { outB.answer.length = 0; outB.owner.length = 0; const s0 = outB.saves; HB({ type: 'char-item', rid, charId: 'c_1', fieldId: 'f_gear', op: 'add', defId: 'i_lamp', rowId, qty: 2, pay }, connB); return { answer: outB.answer.slice(), owner: outB.owner.slice(), saved: outB.saves - s0 }; };
+            const b1 = BUY('b1', 45, 'w_g1'), chips1 = campB.chars.c_1.values.f_chips.map(x => x.lvl), gear1 = campB.chars.c_1.values.f_gear.map(x => [x.qty, x.paid]);
+            const b2 = BUY('b2', 900, 'w_g2'), chips2 = campB.chars.c_1.values.f_chips.map(x => x.lvl), gear2 = campB.chars.c_1.values.f_gear.length;
+            const deltaKeys = b1.owner.filter(m => m.type === 'charDelta' || m.type === 'char-delta' || m.values).map(m => Object.keys(m.values || m.delta || {}).sort());
+            check('1.5.6 buying on the host (the real row branch with the real core): a player\'s two lamps bought for 45 take 45 from the smallest chip first (the 30, then 15 of the 100), stamp each lamp 22.5 as Paid, are stored, saved once, acked, sent to the owner with both lists and logged; one they cannot pay for is answered char-deny with the reason money and the words, and nothing is stored, sent or saved',
+                j(b1.answer) === j([{ type: 'char-ack', rid: 'b1' }]) && b1.saved === 1 && j(chips1) === j([85]) && j(gear1) === j([[2, 22.5]]) && b1.owner.length >= 1 && j(deltaKeys[0] || []) === j(['f_chips', 'f_gear']) && outB.logs.some(t => /Ana bought .* for 45/.test(t))
+                && b2.answer.length === 1 && b2.answer[0].type === 'char-deny' && b2.answer[0].reason === 'money' && /85 held, 900 needed/.test(b2.answer[0].msg) && b2.saved === 0 && b2.owner.length === 0 && j(chips2) === j([85]) && gear2 === 1,
+                j([b1, b2, chips1, gear1]));
+        }
     }
 })());
 pendingChecks.push((async () => {

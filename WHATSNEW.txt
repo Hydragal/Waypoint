@@ -86,6 +86,22 @@ Trading
 - Money you get goes onto the first chip that fits. Under your side of
   the window you can pick another chip, or a new one.
 
+Buying and selling
+- In the System editor's Lists tab, Holds money says which lists hold a
+  character's money: a chip list by each row's level, bars or coins by a
+  stat each piece is worth.
+- When a player adds a row of a priced list, a box asks its price: the
+  list price, a total, or a percent of the list price. It is paid from
+  the smallest chips first, then the largest bars, with change in as few
+  bars as can hold it. What each unit cost is kept as Paid.
+- Taking a priced row off asks what it sells for, its market value
+  first, and the money goes onto the largest chip. Just remove moves no
+  money.
+- The GM's own NPCs are never charged. When the GM adds a row to a
+  player's sheet, the box asks with Charge them unticked.
+- One currency for now: every list that holds money counts in the same
+  unit.
+
 Combat
 - Taking damage. A character token's right-click menu has Take damage,
   and a damage roll's card in chat has Apply to target for the GM. A

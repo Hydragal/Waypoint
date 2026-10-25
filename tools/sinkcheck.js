@@ -5167,6 +5167,32 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
                 && !t2.some(x => /Not yours|Theirs/.test(x)) && JSON.stringify(acts2) === JSON.stringify([['into', 'a', { fid: 'f_c', row: '+' }]]), JSON.stringify([iopt, acts2]));
         }
     }
+    {   // 1.5.6 buying and selling: the price box's body (sheets.js priceDraw and pricePct, sliced by their pricebox markers, run on a page of plain objects that refuses markup)
+        const shP = fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', 'sheets.js'), 'utf8').replace(/\r\n/g, '\n');
+        const pbS = shP.slice(shP.indexOf('// [sinkcheck:pricebox-start]'), shP.indexOf('// [sinkcheck:pricebox-end]'));
+        const fnOf = name => { const i = pbS.indexOf('function ' + name + '('); let d = 0, k = pbS.indexOf('{', i); for (; k < pbS.length; k++) { if (pbS[k] === '{') d++; else if (pbS[k] === '}' && --d === 0) break; } return pbS.slice(i, k + 1); };
+        const made = [], node = (tag) => { const n = { tag, children: [], className: '', listeners: {}, attrs: {}, get firstChild() { return this.children[0] || null; }, appendChild(c) { this.children.push(c); return c; }, removeChild(c) { this.children.splice(this.children.indexOf(c), 1); }, setAttribute(k, v) { this.attrs[k] = String(v); }, addEventListener(k, f) { this.listeners[k] = f; },
+            querySelector(sel) { const m = /^input\[value=(\w+)\]$/.exec(sel); const walk = x => { for (const c of x.children) { if (m && c.tag === 'input' && c.value === m[1]) return c; const r = walk(c); if (r) return r; } return null; }; return walk(this); } };
+            Object.defineProperty(n, 'innerHTML', { set() { throw new Error('markup written'); } }); made.push(n); return n; };
+        const doc = { createElement: node };
+        const PB = new Function('fmtNum', fnOf('pricePct') + '\n' + fnOf('priceDraw') + '\nreturn { priceDraw: priceDraw, pricePct: pricePct };')(n => String(n));
+        const run = (o) => { made.length = 0; const said = [], body = node('div'); PB.priceDraw(doc, body, o, v => said.push(v)); return { body, said, texts: made.map(x => x.textContent).filter(x => typeof x === 'string'), inputs: made.filter(x => x.tag === 'input') }; };
+        const pl = run({ buy: true, n: 2, list: 50, name: '<img src=x onerror=1>', player: true, held: 850 });
+        const tot = pl.inputs.filter(x => x.type === 'number')[0], pct = pl.inputs.filter(x => x.type === 'number')[1];
+        tot.value = '40'; tot.listeners.input(); pct.value = '33'; pct.listeners.input(); pct.value = '-5'; pct.listeners.input();
+        const gm = run({ buy: true, n: 1, list: 25, name: 'Lamp', player: false, held: 0 }), cb = gm.inputs.filter(x => x.type === 'checkbox')[0]; cb.checked = true; cb.listeners.change();
+        const sell = run({ buy: false, n: 1, list: 25, name: 'Lamp', player: true, held: 10 });
+        check('1.5.6 buying and selling, the price box (sheets.js priceDraw and pricePct, run for real): its words fixed and the figures as text nodes, the name never drawn in it; a player\'s box offers the list price, a total and a percent of the list price, the agreed total said at each change (50, then 40 typed, then 33% of 50 rounded up once to 17, a percent below 0 none) and always charged; the GM\'s box for a player\'s sheet holds Charge them unticked until it is ticked; a sale offers the market value and a price, never a percent; pricePct rounds up once and never goes below 0',
+            pl.texts.includes('List price 50 for 2.') && pl.texts.includes('Held now: 850. Paid from the smallest chips first, then the largest pieces, with change.') && !pl.texts.some(x => /img/.test(x))
+            && JSON.stringify(pl.said.map(v => [v.total, v.charge])) === JSON.stringify([[50, true], [40, true], [17, true], [0, true]]) && pl.inputs.filter(x => x.type === 'checkbox').length === 0
+            && JSON.stringify(gm.said.map(v => [v.total, v.charge])) === JSON.stringify([[25, false], [25, true]]) && gm.texts.includes('Charge them') && gm.texts.includes('Given free, at 25.')
+            && sell.texts.includes('Market value 25.') && sell.texts.includes('Sells for 25.') && !sell.texts.includes('Percent of list') && sell.texts.includes('Market value')
+            && PB.pricePct(50, 33) === 17 && PB.pricePct(10, 50) === 5 && PB.pricePct(10, 0) === 0 && PB.pricePct(10, -3) === 0 && !/innerHTML|insertAdjacentHTML|outerHTML/.test(pbS),
+            JSON.stringify([pl.texts, pl.said, gm.said, sell.texts]));
+        const esc = fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', 'esckey.js'), 'utf8'), ixP = fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'index.html'), 'utf8');
+        check('1.5.6 buying and selling, the price box\'s window: in the page once with its buttons, closed by Escape through its close button, and commitItem asking it first for a row not yet priced',
+            ixP.split('id="priceModal"').length === 2 && /id="priceOkBtn"/.test(ixP) && /id="priceAltBtn"/.test(ixP) && esc.includes("['priceModal', 'priceCloseBtn']") && shP.includes("if (!q.priced && typeof priceAsk === 'function' && priceAsk(c, f, q)) return;"));
+    }
     summed = true;
     console.log('\n' + pass + ' passed, ' + fail + ' failed.');
     if (fail) process.exit(1);

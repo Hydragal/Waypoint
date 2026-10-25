@@ -1988,6 +1988,16 @@ Plain paragraphs are text: **bold**, *italic*, ~~strike~~, &lt;u&gt;underline&lt
                                   <li>A merchant is an NPC whose sheet holds what it sells and its money. Bars and coins move whole. A GM-only row, and one that cannot be taken off, are not offered.</li>
                               </ul>
                           </li>
+                          <li><b>Buying and selling</b> pay with the money on a character&rsquo;s sheet. In the System editor&rsquo;s Lists tab, set <b>Holds money</b> on the lists that hold it.
+                              <ul>
+                                  <li>A chip list holds money as each row&rsquo;s level. A list of bars or coins holds it as a stat each piece is worth.</li>
+                                  <li>When a player adds a row of a priced list, a box asks its price: the list price, a total, or a percent of the list price.</li>
+                                  <li>The price is taken from the smallest chips first, then from the largest bars, with change given back in as few bars as it can.</li>
+                                  <li>Taking a priced row off asks what it sells for, its market value first. The money goes onto the largest chip. Just remove moves no money.</li>
+                                  <li>When you add a row to a player&rsquo;s sheet, the box asks too, with Charge them unticked. Your NPCs are never charged.</li>
+                                  <li>What each unit cost is kept on the row as Paid.</li>
+                              </ul>
+                          </li>
                           <li><b>Postures</b>, at the foot of the Combat card, name how your tokens can stand. Without a list they take the seven built-in postures: standing, crouching, sitting, kneeling, crawling, lying prone and lying face up. Each but standing is a smaller target.
                               <ul>
                                   <li><b>Name your own postures</b> starts from those seven, keeping their ids so a website sheet still sets them. Rename, reorder or add, up to 12.</li>
@@ -3983,6 +3993,13 @@ Plain paragraphs are text: **bold**, *italic*, ~~strike~~, &lt;u&gt;underline&lt
     <div id="devConsoleRow">
         <span id="devConsolePrompt">&rsaquo;</span>
         <input type="text" id="devConsoleInput" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-label="Developer console input">
+    </div>
+</div>
+<div id="priceModal" class="trade-modal" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="priceTitle">
+    <div class="trade-box price-box">
+        <h3><span id="priceTitle">Buy</span> <button id="priceCloseBtn" class="tool ghost modal-close" title="Cancel" aria-label="Cancel"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button></h3>
+        <div id="priceBody" class="price-body"></div>
+        <div class="trade-foot price-foot"><button id="priceAltBtn" type="button" class="tool ghost" hidden>Just remove</button><button id="priceCancelBtn" type="button" class="tool ghost">Cancel</button><button id="priceOkBtn" type="button" class="tool">Buy</button></div>
     </div>
 </div>
 <div id="tradeModal" class="trade-modal" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="tradeTitle">

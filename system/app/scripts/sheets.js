@@ -8,7 +8,7 @@ import { getActiveCampaign } from './models.js';
 import { save, toast } from './io.js';
 import { picRef } from './safecore.js';
 import { showConfirm, showPrompt } from './dialogs.js';
-import { cleanDamageRules, catHome, catPlace, cleanPlaceCats, catSplits, cleanFieldUnit, unitTail, heightWords, measureWords, unitWords, unitHead, listWords, unitOf, textWords, measureStore, rollNeedsOk, rollNeedsSays, timeRuleRun, ruleRunCtx, chainsShallow, makeResolver, hasDice, figText, cleanEvery, cleanInFight, droppedCounts, validPageId, LIMITS, KINDS, showsIf, rowRollNames, gmOnlyNames, applyAct, applyScope, applyRound, dueActs, combatChars, roundSecs, fxLeftNow, lastsSecs, APPLY_KINDS, TURN_UNITS, LIGHT_UNITS, RANGE_UNITS, HEIGHT_UNITS, TIME_WORDS, STORED, DEF_PROP, BAND_KINDS, IDENTITY_KINDS, LEDGER_KINDS, headerEntry, captionParts, emptySystem, uid, validKey, cleanSystem, cleanChar, validateSystem, resolveAll, hoverLines, autoLayout, applyEdit, applyStyle, cleanLooks, lookOf, lookFor, lookRule, applyEffectOp, fxText, fmtNum, budgetsOf, budgetWatch, budgetSays, needsMet, needsSays, initRoll, applyProposal, cleanUploads, sideOf, threatArc, facingCtx, facingNow, setAimSource, stanceCtx, tokenCtx, POSTURE_IDS, POSTURE_NAMES, DEFAULT_POSTURES, postureList, postureAt, autoEffectsOn, initTie, charTokenOn, cycleThreat, valueTone, TONES, activeCharOf, playableChars, ownedTokenPlan, applyOwnerOps, migrateBindings, capExpr, cleanValue, fieldById, valueOpts, applyRowOp, rowIdOf, rowDef, orphanRows, stampRows, cleanRowDef, projectRows, STAT_KEY, PALETTE_KEYS, GLYPHS, glyphPath, headerEdits, pinTargets, pinTargetsAll, hudView, hudHasContent, resetTargets, cleanListSpec, statKey, rowStat, plusText, rowPaid, itemReach, gmDerivedNames, labelGmNames, gmEffectNames, labelNames, withRound, rangeCtx, withRange, rowLvl, rowOn, cleanItemKey, charForView, secretFieldIds, gmViewFields } from './systemcore.js';
+import { cleanDamageRules, moneyBoxes, moneyHeld, rowOpMoney, catHome, catPlace, cleanPlaceCats, catSplits, cleanFieldUnit, unitTail, heightWords, measureWords, unitWords, unitHead, listWords, unitOf, textWords, measureStore, rollNeedsOk, rollNeedsSays, timeRuleRun, ruleRunCtx, chainsShallow, makeResolver, hasDice, figText, cleanEvery, cleanInFight, droppedCounts, validPageId, LIMITS, KINDS, showsIf, rowRollNames, gmOnlyNames, applyAct, applyScope, applyRound, dueActs, combatChars, roundSecs, fxLeftNow, lastsSecs, APPLY_KINDS, TURN_UNITS, LIGHT_UNITS, RANGE_UNITS, HEIGHT_UNITS, TIME_WORDS, STORED, DEF_PROP, BAND_KINDS, IDENTITY_KINDS, LEDGER_KINDS, headerEntry, captionParts, emptySystem, uid, validKey, cleanSystem, cleanChar, validateSystem, resolveAll, hoverLines, autoLayout, applyEdit, applyStyle, cleanLooks, lookOf, lookFor, lookRule, applyEffectOp, fxText, fmtNum, budgetsOf, budgetWatch, budgetSays, needsMet, needsSays, initRoll, applyProposal, cleanUploads, sideOf, threatArc, facingCtx, facingNow, setAimSource, stanceCtx, tokenCtx, POSTURE_IDS, POSTURE_NAMES, DEFAULT_POSTURES, postureList, postureAt, autoEffectsOn, initTie, charTokenOn, cycleThreat, valueTone, TONES, activeCharOf, playableChars, ownedTokenPlan, applyOwnerOps, migrateBindings, capExpr, cleanValue, fieldById, valueOpts, applyRowOp, rowIdOf, rowDef, orphanRows, stampRows, cleanRowDef, projectRows, STAT_KEY, PALETTE_KEYS, GLYPHS, glyphPath, headerEdits, pinTargets, pinTargetsAll, hudView, hudHasContent, resetTargets, cleanListSpec, statKey, rowStat, plusText, rowPaid, itemReach, gmDerivedNames, labelGmNames, gmEffectNames, labelNames, withRound, rangeCtx, withRange, rowLvl, rowOn, cleanItemKey, charForView, secretFieldIds, gmViewFields } from './systemcore.js';
 import { fileBase, charToJson, charFromJson, sheetToMarkdown, isCharFile } from './sheetexport.js';
 import { lvlsFromBox, lvlsToText } from './librarycore.js';
 import { cleanCalendar, fmtWhen, fmtDate, timeOf, calPreset, CAL_LIMITS } from './calendarcore.js';
@@ -4009,8 +4009,92 @@ function askStatsOf(c, f, rid, p, ovS, heldL) {
     var r = n.charAsk(c.id, f.id, rid, st, function(a) { if (a && a.error) toast(a.error); else toast(a && a.back ? 'Your ask is taken back. The row stays as it is.' : 'Sent to the GM. It changes once they apply it.'); renderViews(c.id); });
     if (r && r.error) toast(r.error);
 }
+// [sinkcheck:pricebox-start]
+// 1.5.6 buying and selling (docs/TRADE_PLAN.md B1, B2; the owner, 2026-10-18: the site's price box when a priced row is added and a Sell For
+// prompt when one is taken off, and "The price box asks (Recommended)", Charge them ticked off, when the GM adds one to a player's sheet). On a
+// sheet whose system keeps money (a Money box), a row of a priced list that is added asks what it cost: its list price, a total typed, or a
+// percentage of the list price rounded up once to a whole unit; a row taken off, or a quantity lowered, asks what it sells for, offering its
+// market value. The agreed price rides the row op (pay, get) and the host moves the money with it (systemcore rowOpMoney). Never for one of
+// the GM's own NPCs (a merchant's stock), an undo, or a list that holds money itself
+var _price = { q: null, on: null };
+function priceUnit(sys, sp, row) { var rd = row ? rowDef(sys, row) : null; var u = rd && rd.def ? rowStat(sp, rd.def, sp.price) : 0; return typeof u === 'number' && isFinite(u) && u > 0 ? u : 0; }
+function pricePct(list, pct) { var n = Math.ceil(list * pct / 100 - 1e-9); return n > 0 ? n : 0; }   // the site's: a percentage of the list price, rounded up once to a whole unit, never below 0
+function priceAsk(c, f, q) {   // true when it asked, and the row op waits for the answer
+    var camp = getActiveCampaign(), sys = systemOf(camp), sp = f && f.list && typeof f.list === 'object' ? f.list : null;
+    if (!sys || !c || !sp || !sp.price || sp.money || !q || (q.op !== 'add' && q.op !== 'remove' && q.op !== 'setQty') || !moneyBoxes(sys).length) return false;
+    var player = isClient(); if (!player && (c.npc || !c.ownerId)) return false;
+    var cur = Array.isArray(c.values && c.values[f.id]) ? c.values[f.id] : [], n = 0, unit = 0, name = 'it';
+    if (q.op === 'add') {
+        var n0 = window.wpNet, res = applyRowOp(sys, c, f.id, q, F(), player ? { player: true, view: sys, lib: n0 && n0.libEntry, copy: true } : {}); if (!res || !res.ok || !(res.added > 0)) return false;
+        var row = (res.value || []).filter(function(r) { return rowIdOf(r) === res.row; })[0]; n = res.added; unit = priceUnit(sys, sp, row); name = row && rowDef(sys, row) ? rowDef(sys, row).def.name : 'it';
+    } else {
+        var was = cur.filter(function(r) { return rowIdOf(r) === q.rowId; })[0]; if (!was || was.hid === 1) return false;
+        var wq = was.qty | 0 || 1, nq = q.op === 'remove' ? 0 : Math.max(0, q.qty | 0); if (nq >= wq) return false;
+        n = wq - nq; unit = priceUnit(sys, sp, was); name = rowDef(sys, was) ? rowDef(sys, was).def.name : 'it';
+    }
+    if (!(unit > 0) || !(n > 0)) return false;
+    priceOpen(c, f, q, { buy: q.op === 'add', n: n, list: Math.round(unit * n * 100) / 100, name: name || 'it', player: player, held: moneyHeld(sys, c) });
+    return true;
+}
+function priceOpen(c, f, q, o) {
+    var m = document.getElementById('priceModal'), body = document.getElementById('priceBody'), ok = document.getElementById('priceOkBtn'), alt = document.getElementById('priceAltBtn'), tt = document.getElementById('priceTitle');
+    if (!m || !body || !ok) { commitItem(c, f, Object.assign({}, q, { priced: true })); return; }
+    _price.q = { c: c.id, f: f.id, q: q, o: o };
+    priceDraw(document, body, o, function(v) { _price.v = v; });
+    tt.textContent = (o.buy ? 'Buy ' : 'Sell ') + o.name + (o.n > 1 ? ' ×' + o.n : '');
+    ok.textContent = o.buy ? 'Buy' : 'Sell'; if (alt) { alt.hidden = o.buy; alt.textContent = 'Just remove'; }
+    m.style.display = 'flex'; var first = body.querySelector('input'); if (first) try { first.focus(); } catch (e) {}
+}
+// the box's body: o { buy, n, list, name, player, held }, said(v) told { total, charge } at every change. Fixed words and numbers, text nodes only
+function priceDraw(doc, body, o, said) {
+    while (body.firstChild) body.removeChild(body.firstChild);
+    var mk = function(tag, cls, text) { var e = doc.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = String(text); return e; };
+    var fmt = function(x) { return typeof fmtNum === 'function' ? fmtNum(x) : String(x); };
+    body.appendChild(mk('div', 'price-list', (o.buy ? 'List price ' : 'Market value ') + fmt(o.list) + (o.n > 1 ? ' for ' + o.n : '') + '.'));
+    var way = mk('div', 'price-way'), st = { mode: 'list', total: o.list, pct: 100, charge: !!o.player || !o.buy };
+    var radio = function(val, text) { var lb = mk('label'), r = doc.createElement('input'); r.type = 'radio'; r.name = 'priceWay'; r.value = val; r.checked = st.mode === val; r.addEventListener('change', function() { if (r.checked) { st.mode = val; tell(); } }); lb.appendChild(r); lb.appendChild(mk('span', null, text)); return lb; };
+    var tot = doc.createElement('input'); tot.type = 'number'; tot.className = 'price-num'; tot.min = '0'; tot.step = '0.01'; tot.value = String(o.list); tot.setAttribute('aria-label', o.buy ? 'The total paid' : 'What it sells for');
+    var pct = doc.createElement('input'); pct.type = 'number'; pct.className = 'price-num'; pct.min = '0'; pct.step = '1'; pct.value = '100'; pct.setAttribute('aria-label', 'A percentage of the list price');
+    var line = mk('div', 'price-total');
+    var tell = function() {
+        var t = st.mode === 'list' ? o.list : st.mode === 'pct' ? pricePct(o.list, st.pct) : st.total; t = typeof t === 'number' && isFinite(t) && t >= 0 ? Math.round(t * 100) / 100 : 0;
+        line.textContent = (o.buy ? (st.charge ? 'Pays ' : 'Given free, at ') : 'Sells for ') + fmt(t) + '.';
+        said({ total: t, charge: st.charge });
+    };
+    tot.addEventListener('input', function() { var n = Number(tot.value); st.total = isFinite(n) && n >= 0 ? n : 0; st.mode = 'total'; way.querySelector('input[value=total]').checked = true; tell(); });
+    pct.addEventListener('input', function() { var n = Number(pct.value); st.pct = isFinite(n) && n >= 0 ? n : 0; st.mode = 'pct'; way.querySelector('input[value=pct]').checked = true; tell(); });
+    way.appendChild(radio('list', o.buy ? 'List price' : 'Market value')); way.appendChild(mk('span'));
+    way.appendChild(radio('total', o.buy ? 'A total' : 'A price')); way.appendChild(tot);
+    if (o.buy) { way.appendChild(radio('pct', 'Percent of list')); way.appendChild(pct); }
+    body.appendChild(way); body.appendChild(line);
+    if (o.buy && !o.player) {   // the GM adding to a player's sheet: the price box asks, Charge them ticked off
+        var cl = mk('label', 'price-charge'), cb = doc.createElement('input'); cb.type = 'checkbox'; cb.checked = false; cb.addEventListener('change', function() { st.charge = cb.checked; tell(); });
+        cl.appendChild(cb); cl.appendChild(mk('span', null, 'Charge them')); body.appendChild(cl);
+    }
+    body.appendChild(mk('div', 'price-held', 'Held now: ' + fmt(o.held) + '. ' + (o.buy ? 'Paid from the smallest chips first, then the largest pieces, with change.' : 'Paid onto the largest chip.')));
+    tell();
+}
+function priceClose() { var m = document.getElementById('priceModal'); if (m) m.style.display = 'none'; _price.q = null; }
+function priceAnswer(kind) {   // 'ok' the agreed price, 'alt' Just remove, else Cancel
+    var p = _price.q, v = _price.v || { total: 0, charge: false }; priceClose(); if (!p || (kind !== 'ok' && kind !== 'alt')) return;
+    var camp = getActiveCampaign(), c = camp && camp.chars ? camp.chars[p.c] : null, sys = systemOf(camp), f = sys ? fieldById(sys, p.f) : null; if (!c || !f) return;
+    var q = Object.assign({}, p.q, { priced: true });
+    if (kind === 'ok' && (p.o.buy ? v.charge : true)) { if (p.o.buy) q.pay = v.total; else q.get = v.total; }
+    commitItem(c, f, q);
+}
+if (typeof document !== 'undefined' && document.addEventListener) {
+    var priceWire = function() {
+        var b = function(id, k) { var e = document.getElementById(id); if (e) e.addEventListener('click', function() { priceAnswer(k); }); };
+        b('priceOkBtn', 'ok'); b('priceAltBtn', 'alt'); b('priceCancelBtn', 'no'); b('priceCloseBtn', 'no');
+        var m = document.getElementById('priceModal'); if (m) m.addEventListener('keydown', function(e) { if (e.key === 'Enter' && !e.repeat && e.target && e.target.tagName === 'INPUT' && e.target.type !== 'checkbox' && e.target.type !== 'radio') { e.preventDefault(); priceAnswer('ok'); } });
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', priceWire); else priceWire();
+}
+// [sinkcheck:pricebox-end]
 function commitItem(c, f, q) {   // Stage 6 F4a: a row op q = { op: add|remove|setQty|keep|undo, defId?, rowId, qty? }; F4b set (facts: lvl, on, note; F4c1 paid); F4c2 ov (a copy's own values); F4c3 custom (def: a custom row's patch)
     var camp = getActiveCampaign(), sys = systemOf(camp); if (!camp || !sys) return;
+    if (!q.priced && typeof priceAsk === 'function' && priceAsk(c, f, q)) return;   // 1.5.6: a priced row bought or sold asks its price first
+    if (q.priced) { q = Object.assign({}, q); delete q.priced; }
     var before = q.rowId ? rowQty(c, f, q.rowId) : 0;
     var undoFollow = function(r) { if (!r || !r.ok) return; if (r.added > 0) noteUndo(c, f, r); else if (q.rowId && q.op !== 'undo' && before > (r.qty | 0)) takeBack(c, f, q.rowId, before - (r.qty | 0)); };   // Stage 6: a pickup opens the Undo; a drop takes it down
     if (isClient()) {
@@ -4023,12 +4107,15 @@ function commitItem(c, f, q) {   // Stage 6 F4a: a row op q = { op: add|remove|s
     if (!canWrite()) return;
     var res = applyRowOp(sys, c, f.id, q, F(), {});
     if (!res.ok) { toast(res.why === 'formula' ? 'Not a formula this sheet can roll.' : res.why === 'key' ? 'That key is already used in this list.' : res.why === 'badkey' ? 'Not a usable key: a letter, then letters, digits and _ (up to 40).' : res.reason === 'field' ? 'That list cannot be changed that way.' : res.reason === 'long' ? 'This list\u2019s own rows hold all the long text they may.' : res.reason === 'missing' ? 'That item is gone.' : 'That change is not allowed.'); renderViews(c.id); return; }   // why (F4c2, F4c3 key / badkey): the GM's own, never on the wire
+    var mvG = typeof rowOpMoney === 'function' ? rowOpMoney(sys, c, f.id, q, res) : null;   // 1.5.6: what a purchase paid, or a sale was paid, moves the money with the row
+    if (mvG && !mvG.ok) { toast(mvG.msg || 'Not enough money for that.'); return; }
     undoFollow(res);
     var prev = c.values && Object.prototype.hasOwnProperty.call(c.values, f.id) ? clone(c.values[f.id]) : undefined;
     lastChange = { charId: c.id, fieldId: f.id, prev: prev };
     if (typeof budgetNote === 'function') budgetNote(sys, c, f.id, res.value);   // 126: the GM's own change is never refused; a notice says when it takes the character over a budget
     c.values = c.values || {}; c.values[f.id] = res.value;
     var d = {}; d[f.id] = res.value;
+    if (mvG && mvG.values) Object.keys(mvG.values).forEach(function(k) { c.values[k] = mvG.values[k]; d[k] = mvG.values[k]; });
     if (ownerSeesSame(camp, sys, prev, res.value, f.id)) d = {};   // Stage 6: a change only to a row its owner never holds (a kept curse) is saved and never sent — even an unchanged copy would tell them
     afterCharChange(c, false, d);
 }
@@ -4759,7 +4846,7 @@ function ownerFromToken(w) {
     giveCharacter(w.ownerId || '', c.id, { keep: w.id });   // a same-owner pick on a kept character's token makes it the one in play, with its token placed where they stand
 }
 function charGone(id) { var shown = false; if (sheetOpen === id) { closeSheet(); shown = true; } if (typeof id === 'string' && huds[id]) { closeHud(id); shown = true; } if (shown) toast('That character is no longer shared with you.'); if (window.appRender) window.appRender(); }
-function editResult(rid, ok, reason, msg, op) { if (!ok) toast(reason === 'none' ? 'Nothing to apply.' : reason === 'error' ? (msg || 'That amount could not be worked out.') : op === 'apply' && reason === 'field' ? 'That action is not on your sheet now.' : op === 'apply' && reason === 'timeout' ? 'No answer from the GM.' : reason === 'budget' ? (msg || 'That would take the character over a point budget.') : reason === 'needs' ? (msg || 'Your character does not meet what that needs.') : reason === 'stays' ? (msg || (op === 'set' ? 'It stays on.' : 'You can\u2019t get rid of it.')) : reason === 'field' && op === 'custom' ? 'Only the GM changes that row now.' : reason === 'field' && op === 'ov' ? 'Only the GM changes this copy’s stats now.' : reason === 'long' ? 'This list\u2019s own rows hold all the long text they may.' : reason === 'off' ? 'Character sheets are off here.' : reason === 'owner' ? 'That sheet is not yours.' : reason === 'field' ? 'That field cannot be edited.' : reason === 'slow' ? 'Slow down a little.' : reason === 'missing' ? 'That is no longer there.' : reason === 'timeout' ? 'No answer from the GM; the change was undone.' : reason === 'making' ? 'Finish the character first (press Done on its sheet).' : reason === 'paused' ? 'The table is paused.' : 'That value was not accepted.'); renderViews(null); }
+function editResult(rid, ok, reason, msg, op) { if (!ok) toast(reason === 'none' ? 'Nothing to apply.' : reason === 'error' ? (msg || 'That amount could not be worked out.') : op === 'apply' && reason === 'field' ? 'That action is not on your sheet now.' : op === 'apply' && reason === 'timeout' ? 'No answer from the GM.' : reason === 'budget' ? (msg || 'That would take the character over a point budget.') : reason === 'money' || reason === 'change' || reason === 'max' ? (msg || 'Not enough money for that.') : reason === 'needs' ? (msg || 'Your character does not meet what that needs.') : reason === 'stays' ? (msg || (op === 'set' ? 'It stays on.' : 'You can\u2019t get rid of it.')) : reason === 'field' && op === 'custom' ? 'Only the GM changes that row now.' : reason === 'field' && op === 'ov' ? 'Only the GM changes this copy’s stats now.' : reason === 'long' ? 'This list\u2019s own rows hold all the long text they may.' : reason === 'off' ? 'Character sheets are off here.' : reason === 'owner' ? 'That sheet is not yours.' : reason === 'field' ? 'That field cannot be edited.' : reason === 'slow' ? 'Slow down a little.' : reason === 'missing' ? 'That is no longer there.' : reason === 'timeout' ? 'No answer from the GM; the change was undone.' : reason === 'making' ? 'Finish the character first (press Done on its sheet).' : reason === 'paused' ? 'The table is paused.' : 'That value was not accepted.'); renderViews(null); }
 
 /* ---------- the editor: fields, rolls, characters ---------- */
 var draft = null, dirty = false, tab = 'fields', errorsById = {}, warningsById = {}, layoutView = 'sheet';   // layoutView (HUD frame HF1): 'sheet' | 'hud'
@@ -5648,6 +5735,7 @@ function listCard(f, allCats, targets, acts) {   // acts (turn-based combat T1):
     });
     var sadd = el('button', 'tool ghost sys-btn sys-list-statadd', '+ Stat'); sadd.dataset.act = 'statadd'; sadd.disabled = sts.length >= LIMITS.listStats; sadd.title = sadd.disabled ? 'At most ' + LIMITS.listStats + ' stats a list' : 'A number each item of this list carries (Acc, Wt, Cost), set on the item in Items'; sb.appendChild(sadd);
     if (sts.length) { var pr = el('label', 'sys-num sys-price-box'), ps = el('select', 'sys-list-price'); pr.appendChild(el('span', 'sys-num-cap', 'Price')); ps.title = 'A row records it as Paid when added: what one cost (yours to correct on the sheet)'; priceOptions(ps, sp); pr.appendChild(ps); sb.appendChild(pr); }
+    { var mb = el('label', 'sys-num sys-money-box'), msel = el('select', 'sys-list-money'); mb.appendChild(el('span', 'sys-num-cap', 'Holds money')); msel.title = 'Rows of this list are money: each row holds its level, as a chip holds its amount, or each piece is worth a stat, as a bar is worth its denomination. Buying and selling pay from and into these rows'; if (typeof moneyOptions === 'function') moneyOptions(msel, sp); mb.appendChild(msel); sb.appendChild(mb); }   // 1.5.6 the Money box
     card.appendChild(sb);
     // Stage 6 F5a1: the list's columns — a formula worked out for each row (Row.lvl, Row.<stat>, another column), LIMITS.listCols at most — and the names it offers
     var cls = Array.isArray(sp.cols) ? sp.cols : [], cb2 = el('div', 'sys-list-cols');
@@ -5740,6 +5828,12 @@ function perOptions(sel, sp) {
     var sw = sp && sp.on && typeof sp.on === 'object' ? sp.on : {}, opV = typeof sw.per === 'string' ? sw.per : '', opHas = false;
     [['', 'Whole list']].concat((Array.isArray(sp.stats) ? sp.stats : []).filter(function(s) { return s && typeof s === 'object' && typeof s.key === 'string' && s.key; }).map(function(s) { return [s.key, 'Per ' + (s.label || s.key)]; })).forEach(function(o) { var op = el('option', null, o[1]); op.value = o[0]; if (!opHas && o[0].toLowerCase() === opV.toLowerCase()) { op.selected = true; opHas = true; } sel.appendChild(op); });
     if (opV && !opHas) { var opX = el('option', null, 'Per ' + opV + ' (no such stat)'); opX.value = opV; opX.selected = true; sel.appendChild(opX); }
+}
+function moneyOptions(sel, sp) {   // 1.5.6 the Money box: no money, each row's level (with a level), or each piece worth a number stat (by its key, kept up to date as a key is typed)
+    sel.textContent = '';
+    var cur = typeof sp.money === 'string' ? sp.money.toLowerCase() : '', none = el('option', null, 'No money'); none.value = ''; sel.appendChild(none);
+    if (sp.lvl && typeof sp.lvl === 'object') { var ol = el('option', null, 'Each row holds its ' + (typeof sp.lvl.label === 'string' && sp.lvl.label ? sp.lvl.label : 'level')); ol.value = '@lvl'; if (cur === '@lvl') ol.selected = true; sel.appendChild(ol); }
+    (Array.isArray(sp.stats) ? sp.stats : []).forEach(function(s) { if (!s || typeof s !== 'object' || typeof s.key !== 'string' || !s.key || s.kind === 'pick') return; var o = el('option', null, 'Each piece worth its ' + (s.label || s.key)); o.value = s.key; if (cur && s.key.toLowerCase() === cur) o.selected = true; sel.appendChild(o); });
 }
 function priceOptions(sel, sp) {   // F4c1: the Price choices — No price, then each stat by its key (kept up to date as a key is typed)
     sel.textContent = '';
@@ -7034,6 +7128,7 @@ function onInput(e) {
             else if (lcc.indexOf('sys-list-statdec') >= 0) { if (String(t.value).trim() === '' || !isFinite(Number(t.value))) delete stD.decMax; else stD.decMax = Number(t.value); }   // 1.5.4 (Save keeps a whole number 0 to 5)
             else return;
             var pCard = t.closest('.sys-list-card'), pSel = pCard ? pCard.querySelector('.sys-list-price') : null; if (pSel) priceOptions(pSel, lsp);   // the Price choices follow a key or a label as it is typed
+            var mSel = pCard ? pCard.querySelector('.sys-list-money') : null; if (mSel) moneyOptions(mSel, lsp);   // 1.5.6: and the Money box's
             var oSel = pCard ? pCard.querySelector('.sys-list-onper') : null; if (oSel) perOptions(oSel, lsp);   // 1.5.4: and the Per choices
         }
         else return;
@@ -7148,6 +7243,7 @@ function onChange(e) {
         else if (c.indexOf('sys-list-rollkind') >= 0) { var rkr = t.closest('.sys-list-roll'), rkD = rkr && Array.isArray(lsc.rolls) ? lsc.rolls[+rkr.dataset.ri] : null; if (!rkD || typeof rkD !== 'object') return; if (t.value === 'apply') { if (!Array.isArray(rkD.apply)) rkD.apply = [{ f: '', formula: '' }]; } else delete rkD.apply; }   // Stage 6 HUD H7b: Roll | Apply (a formula typed before stays in the draft)
         else if (c.indexOf('sys-list-applytarget') >= 0 || c.indexOf('sys-list-applyop') >= 0 || c.indexOf('sys-list-applywhen') >= 0) { var atr = t.closest('.sys-list-applyrow'), atR = atr && Array.isArray(lsc.rolls) ? lsc.rolls[+atr.dataset.ri] : null, atK = atr && atr.dataset.k === 'then' ? 'then' : 'apply', atC = atR && Array.isArray(atR[atK]) ? atR[atK][+atr.dataset.ai] : null; if (!atC || typeof atC !== 'object') return; if (c.indexOf('sys-list-applytarget') >= 0) { if (t.value.indexOf('c:') === 0) { atC.c = t.value.slice(2); delete atC.f; } else { atC.f = t.value; delete atC.c; } } else if (c.indexOf('sys-list-applywhen') >= 0) { if (t.value === 'hit' || t.value === 'miss' || t.value === 'malf') atC.when = t.value; else delete atC.when; } else { delete atC.add; delete atC.set; if (t.value === 'add') atC.add = true; else if (t.value === 'set') atC.set = true; } }   // R2b: a counter, a consequence's When
         else if (c.indexOf('sys-list-colmetric') >= 0 || c.indexOf('sys-list-statmetric') >= 0) { var mcol = c.indexOf('sys-list-colmetric') >= 0, mrw = t.closest(mcol ? '.sys-list-col' : '.sys-list-stat'), mLs = mcol ? lsc.cols : lsc.stats, mD = mrw && Array.isArray(mLs) ? mLs[+(mcol ? mrw.dataset.ci : mrw.dataset.si)] : null; if (!mD || typeof mD !== 'object') return; if (t.value === 'swap' || t.value === 'bare') mD.unitShow = t.value; else delete mD.unitShow; }   // 1.5.4: how a measure reads under Metric
+        else if (c.indexOf('sys-list-money') >= 0) { if (t.value) lsc.money = t.value; else delete lsc.money; }   // 1.5.6 the Money box (Save keeps a level only with one, a stat only as a number stat)
         else if (c.indexOf('sys-list-price') >= 0) { _priceAt.delete(lsc); if (t.value) lsc.price = t.value; else delete lsc.price; }
         else return;
         markDirty(); renderAll(); return;

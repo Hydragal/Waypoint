@@ -3428,6 +3428,14 @@ net.charItem = function(charId, fieldId, q) {
     if (window.wpVtt && !window.wpVtt.on('sheets')) return { error: 'Character sheets are off here.' };
     var c = (camp && camp.chars && typeof charId === 'string' && Object.prototype.hasOwnProperty.call(camp.chars, charId) ? camp.chars[charId] : null); if (!c || c.partial || c.npc || !c.ownerId || c.ownerId !== net.myId) return { error: 'That character is not yours.' };
     if (!camp.system) return { error: 'No system at this table.' };
+    if ((q.op === 'add' && typeof q.pay === 'number') || ((q.op === 'remove' || q.op === 'setQty') && typeof q.get === 'number')) {   // 1.5.6 a purchase or a sale: the host moves the money with the row, and this copy follows its word
+        var ridM = 'e' + Math.random().toString(36).slice(2, 10);
+        _charPending[ridM] = { charId: charId, fieldId: fieldId, batch: [], kind: 'item', timer: setTimeout(function() { charPendingDone(ridM, false, 'timeout'); }, S.LIMITS.editTimeoutMs) };
+        var mM = { type: 'char-item', rid: ridM, charId: charId, fieldId: fieldId, op: q.op };
+        ['defId', 'rowId', 'qty', 'pay', 'get'].forEach(function(k) { if (q[k] !== undefined) mM[k] = q[k]; });
+        try { net.conns[0].send(mM); } catch (e) { charPendingDone(ridM, false, 'value'); return { error: 'Could not reach the GM.' }; }
+        return { ok: true, pending: true };
+    }
     var res = S.applyRowOp(camp.system, c, fieldId, q, window.wpFormula, { player: true, view: camp.system, lib: net.libEntry, copy: true });   // a player's copy IS the players' view (L3b: a library entry, from what this player fetched)
     if (!res.ok) return { error: res.why === 'key' ? 'That key is already used in this list.' : res.why === 'badkey' ? 'Not a usable key: a letter, then letters, digits and _ (up to 40).' : res.reason === 'field' ? 'That list cannot be changed that way.' : res.reason === 'long' ? 'This list\u2019s own rows hold all the long text they may.' : res.reason === 'missing' ? 'That item is gone.' : res.reason === 'needs' ? (res.msg || 'Your character does not meet what that needs.') : 'That change is not allowed.' };   // why (F4c3): the local answer's own (a key taken in what they can see, or not a key), never sent; needs (126b): what their own copy says the entry needs
     var rid = 'e' + Math.random().toString(36).slice(2, 10);
@@ -7080,9 +7088,11 @@ function handleMessage(msg, conn) {
             if (resI.reason === 'needs') { try { conn.send({ type: 'char-deny', rid: qi.rid, reason: 'needs', msg: resI.msg || '' }); } catch (e) { sendFailed(e); } return; }   // 126b: what the entry needs, in the GM's own words or by the names a player may know
             denyI(resI.reason); return;
         }
-        var bcI = {}; bcI[qi.fieldId] = resI.value; var bwI = Si.budgetWatch(campI.system, chI, bcI, Fi);   // 126: a point budget is judged before anything is stored (a row picked up, a level raised, a quantity, a row of their own)
+        var mvI = Si.rowOpMoney ? Si.rowOpMoney(campI.system, chI, qi.fieldId, qi, resI) : null;   // 1.5.6: what a purchase paid, or a sale was paid, moves the money with the row, all or nothing
+        if (mvI && !mvI.ok) { try { conn.send({ type: 'char-deny', rid: qi.rid, reason: Si.cleanDenyReason(mvI.reason), msg: String(mvI.msg || '').slice(0, 200) }); } catch (e) { sendFailed(e); } return; }
+        var bcI = Object.assign({}, mvI && mvI.values ? mvI.values : {}); if (!bcI[qi.fieldId]) bcI[qi.fieldId] = resI.value; var bwI = Si.budgetWatch(campI.system, chI, bcI, Fi);   // 126: a point budget is judged before anything is stored (a row picked up, a level raised, a quantity, a row of their own)
         if (bwI.refuse) { try { conn.send({ type: 'char-deny', rid: qi.rid, reason: 'budget', msg: Si.budgetSays(bwI.refuse) }); } catch (e) { sendFailed(e); } return; }
-        chI.values = chI.values || {}; chI.values[qi.fieldId] = resI.value; chI.updated = nowI;
+        chI.values = chI.values || {}; chI.values[qi.fieldId] = resI.value; Object.keys(bcI).forEach(function(k) { chI.values[k] = bcI[k]; }); chI.updated = nowI;   // 1.5.6: and every money list a purchase or a sale moved
         Object.keys(_rowGrace).forEach(function(k) { if (_rowGrace[k].until <= nowI) delete _rowGrace[k]; });
         if (resI.added > 0 && typeof resI.row === 'string') {   // a pickup (a new row, a merge, a +) opens the row's Undo window, or folds into it and extends it
             var gkA = qi.charId + '|' + qi.fieldId + '|' + resI.row, gA = _rowGrace[gkA];
@@ -7096,7 +7106,8 @@ function handleMessage(msg, conn) {
         if (bwI.warn.length && !itMI) { try { conn.send({ type: 'char-ack', rid: qi.rid, msg: Si.budgetSays(bwI.warn[0]) }); } catch (e) { sendFailed(e); } }   // 126: a budget that only warns lets the change through, with its words to the player (an item's own message, when one is due, goes first)
         else
         try { conn.send(itMI ? { type: 'char-ack', rid: qi.rid, msg: itMI } : { type: 'char-ack', rid: qi.rid }); } catch (e) { sendFailed(e); }   // a cursed item's message rides the answer (none: the answer any removal gets); F4b: a curse kept on, too
-        var dI = {}; dI[qi.fieldId] = resI.value; net.syncCharDelta(qi.charId, dI);
+        var dI = {}; Object.keys(bcI).forEach(function(k) { dI[k] = bcI[k]; }); net.syncCharDelta(qi.charId, dI);
+        if (mvI && (typeof qi.pay === 'number' || typeof qi.get === 'number') && typeof logEvent === 'function') logEvent('char', (chI.name || 'A character') + (qi.op === 'add' ? ' bought ' : ' sold ') + (resI.name || 'an item') + ' for ' + Si.fmtNum(qi.op === 'add' ? qi.pay : qi.get));
         if (bwI.warn.length && typeof budgetNotice === 'function') budgetNotice(chI, bwI.warn);   // 126: a budget that only warns: the GM is told
         if (resI.note && resI.added > 0) itemNotice(chI, resI.name, resI.note === 'bound' ? 'bound-pick' : 'curse-pick');
         else if (resI.hid) itemNotice(chI, resI.name, 'curse-drop');
