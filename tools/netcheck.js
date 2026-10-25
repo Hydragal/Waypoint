@@ -3500,6 +3500,12 @@ pendingChecks.push((async () => {
     const gC = runKG(sysK, [1, 1, 1]), gS = runKG(sysK, [2, 3, 4]), gF = runKG(sysK, [5, 5, 4]), gU = runKG(sysK, [6, 6, 6]), gN = runKG(sysN, [6, 6, 6]);
     check('1.5.8 the GM\'s own roll (net.diceRoll): On a critical success and On a critical failure happen only on that outcome, RollCrit read in the amounts; a system with no criticals as before',
         gC.ret.ok && j(gC.vals) === j({ f_gd: 5, f_x: 1 }) && j(gS.vals) === j({ f_gd: 4 }) && j(gF.vals) === j({ f_gd: 2 }) && j(gU.vals) === j({ f_gd: 0, f_x: 5 }) && j(gN.vals) === j({ f_gd: 2 }), j([gC.vals, gS.vals, gF.vals, gU.vals, gN.vals]));
+    // 1.5.8: RollMargin, how far the roll beat its target, in the host's roll-req branch and the GM's own net.diceRoll
+    const rawMg = { v: 1, name: 'Mg', fields: [{ id: 'f_fn', key: 'Fine', kind: 'number', def: 0 }], rolls: [{ id: 'r_sg', label: 'Recover', formula: '3d6 <= 12', then: [{ f: 'f_fn', formula: 'RollMargin', set: true }] }] };
+    const sysMg = Sx.cleanSystem(Object.assign({}, rawMg, { combat: { checks: 'under3d6' } }), { F: Fx, gmView: true }), sysMp = Sx.cleanSystem(rawMg, { F: Fx, gmView: true });
+    const mA = runK(sysMg, [2, 3, 4]), mB = runK(sysMg, [5, 5, 5]), mC = runK(sysMp, [2, 3, 4]), mG = runKG(sysMg, [2, 3, 4]), mH = runKG(sysMg, [6, 5, 5]);
+    check('1.5.8 RollMargin on the host: a player\'s roll of 9 against 12 sets Fine to 3, of 15 to -3, a system with no criticals reads the same arithmetic (3); the GM\'s own roll alike (3, and 16 -4)',
+        j(mA.vals) === j({ f_fn: 3 }) && j(mB.vals) === j({ f_fn: -3 }) && j(mC.vals) === j({ f_fn: 3 }) && j(mG.vals) === j({ f_fn: 3 }) && j(mH.vals) === j({ f_fn: -4 }), j([mA.vals, mB.vals, mC.vals, mG.vals, mH.vals]));
 })());
 
 // Chat cards (owner 2026-09-27): a damage roll's mark — the host puts it on the record from the roll entry its formula matched (a system roll by

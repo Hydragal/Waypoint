@@ -5356,6 +5356,24 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             /sel\('sys-list-applywhen', \[\['', 'Always'\], \['hit', 'On success'\], \['crit', 'On a critical success'\], \['miss', 'On failure'\], \['fumble', 'On a critical failure'\], \['malf', 'On malfunction'\]\]/.test(shC)
             && /t\.value === 'malf' \|\| t\.value === 'crit' \|\| t\.value === 'fumble'\) atC\.when = t\.value;/.test(shC) && /t\.value === 'malf' \|\| t\.value === 'crit' \|\| t\.value === 'fumble'\) chW\.when = t\.value;/.test(shC)
             && /a change can also happen <b>On a critical success<\/b> or <b>On a critical failure<\/b>\./.test(hC) && /<code>RollCrit<\/code>/.test(hC));
+        // 1.5.8 (the owner, 2026-10-25): RollMargin, how far the roll beat its target (a miss below 0), beside RollCrit
+        const rawM = { v: 1, name: 'M', fields: [{ id: 'f_fn', key: 'Fine', kind: 'number', def: 0 }],
+            rolls: [{ id: 'r_rc', label: 'Recover', formula: '3d6 <= 12', then: [{ f: 'f_fn', formula: 'if(RollMargin >= 3, 2, 1)', add: true, when: 'hit' }, { f: 'f_fn', formula: 'RollMargin', set: true, when: 'miss' }] }], sheet: { sections: [] } };
+        const gmM = cleanSystem(Object.assign({}, rawM, { combat: { checks: 'under3d6' } }), { F, gmView: true }), chM = { id: 'c_m', name: 'Kael', values: {} }, rsM = makeResolver(gmM, chM, F);
+        const evM = (m, fm) => { const r = F.evaluate(fm || 'RollMargin', { vars: S.withRollCrit(rsM, '', m) }); return r.ok ? r.value : 'err'; };
+        check('1.5.8 thenMargin: a check\'s signed margin from the verdict, a malfunction never above 0; a value, no verdict, a margin that is no finite number 0',
+            S.thenMargin({ kind: 'check', pass: true, margin: 4 }) === 4 && S.thenMargin({ kind: 'check', pass: false, margin: -3 }) === -3 && S.thenMargin({ kind: 'check', pass: true, margin: 4 }, true) === 0 && S.thenMargin({ kind: 'check', pass: false, margin: -3 }, true) === -3
+            && S.thenMargin({ kind: 'value', value: 9, margin: 3 }) === 0 && S.thenMargin(null) === 0 && S.thenMargin({ kind: 'check', margin: '3' }) === 0 && S.thenMargin({ kind: 'check', margin: Infinity }) === 0 && S.thenMargin({ kind: 'check' }) === 0);
+        check('1.5.8 withRollCrit\'s third argument: RollMargin reads the margin, 0 when none or no finite number, held to a million either way; RollCrit beside it as before; no name of the sheet itself',
+            evM(4) === 4 && evM(-2) === -2 && evM(undefined) === 0 && evM('x') === 0 && evM(NaN) === 0 && evM(5e9) === 1e6 && evM(-5e9) === -1e6 && evM(3, 'if(RollMargin >= 3, 2, 1)') === 2 && evM(2, 'if(rollmargin >= 3, 2, 1)') === 1
+            && F.evaluate('RollCrit', { vars: S.withRollCrit(rsM, 'crit', 4) }).value === 1 && F.evaluate('RollMargin', { vars: S.withRollCrit(rsM, 'crit') }).value === 0 && !F.evaluate('RollMargin', { vars: rsM }).ok);
+        const stM = (pass, margin, crit) => ({ verdictOf: (res, rule) => ({ kind: 'check', pass: pass, margin: margin, crit: crit || '' }), naturalOf: () => 10 });
+        const tM3 = S.timeRuleRun(gmM, chM, rC(gmM, 'r_rc'), 1, F, stM(true, 3)), tM1 = S.timeRuleRun(gmM, chM, rC(gmM, 'r_rc'), 1, F, stM(true, 1)), tMm = S.timeRuleRun(gmM, chM, rC(gmM, 'r_rc'), 1, F, stM(false, -4));
+        check('1.5.8 timeRuleRun: a roll by the clock reads RollMargin from the verdict (a success by 3 adds 2, by 1 adds 1; a failure by 4 sets -4)',
+            j(tM3.values) === j({ f_fn: 2 }) && j(tM1.values) === j({ f_fn: 1 }) && j(tMm.values) === j({ f_fn: -4 }), j([tM3.values, tM1.values, tMm.values]));
+        const vM = validateSystem(gmM, F), vMbad = validateSystem(cleanSystem(Object.assign({}, rawM, { fields: rawM.fields.concat([{ id: 'f_dm', key: 'Dm', kind: 'formula', formula: 'RollMargin + 1' }]), rolls: rawM.rolls.concat([{ id: 'r_nm', label: 'Nm', formula: '3d6 <= 12', needs: 'RollMargin > 0' }]) }), { F, gmView: true }), F);
+        check('1.5.8 the validator: RollMargin is known in a roll\'s consequences and nowhere else; Help names it',
+            !eC(vM, 'r_rc').length && eC(vMbad, 'f_dm').some(m => /Unknown name "RollMargin"/.test(m)) && eC(vMbad, 'r_nm').some(m => /Unknown name "RollMargin"/.test(m)) && /<code>RollMargin<\/code>/.test(hC), j([eC(vM, 'r_rc'), eC(vMbad, 'f_dm'), eC(vMbad, 'r_nm')]));
     }
     /* ---- Stage 6 HUD G10: Each round — apply actions the host runs on every character in a combat when its round changes ---- */
     {

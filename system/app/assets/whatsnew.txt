@@ -49,6 +49,9 @@ System editor
   picks another: a coin, d4, d6, 2d6, 3d6, d8, d10, d12, d20, d100 or
   Fate dice. The card in Table Chat, the dice roller's buttons and the
   combat roster wear the drawings too.
+- A change's amount can read RollMargin too: how far the roll beat its
+  target, or missed it as a minus figure, and 0 with no target. So
+  if(RollMargin >= 3, 2, 1) gives 2 on a success by 3 or more.
 
 Chat
 - A roll's card lists what changed the values it rolled against. Each

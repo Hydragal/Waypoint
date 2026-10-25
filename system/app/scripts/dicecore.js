@@ -298,12 +298,13 @@ function under3d6(res) {
 function verdictOf(res, rule) {
     if (!res || !res.ok) return null;
     var u = rule === 'under3d6' ? under3d6(res) : null;
-    if (u) { var by = u.pass ? u.target - u.total : u.total - u.target; return { kind: 'check', pass: u.pass, text: (u.pass ? 'success' : 'failure') + (by > 0 ? ' by ' + fmtNum(by) : ''), crit: u.crit }; }
+    if (u) { var by = u.pass ? u.target - u.total : u.total - u.target; return { kind: 'check', pass: u.pass, text: (u.pass ? 'success' : 'failure') + (by > 0 ? ' by ' + fmtNum(by) : ''), crit: u.crit, margin: u.pass ? Math.max(0, u.target - u.total) : Math.min(0, u.target - u.total) }; }   // 1.5.8: margin, how far it beat its target (a miss below 0)
     var top = null, checks = res.breakdown && res.breakdown.checks ? res.breakdown.checks : [];
     for (var i = 0; i < checks.length; i++) if (checks[i].top) top = checks[i];
     if (top) {
         var margin = typeof top.margin === 'number' ? Math.abs(top.margin) : null, by = margin !== null && top.op !== '=' && top.op !== '!=' ? ' by ' + fmtNum(margin) : '';
-        return { kind: 'check', pass: !!top.pass, text: (top.pass ? 'success' : 'failure') + by };
+        var mg = margin !== null && top.op !== '=' && top.op !== '!=' && isFinite(top.margin) ? (top.pass ? Math.max(0, top.margin) : Math.min(0, top.margin)) : 0;   // 1.5.8: signed, as the comparison reads it (a roll-over total - target, a roll-under target - total)
+        return { kind: 'check', pass: !!top.pass, text: (top.pass ? 'success' : 'failure') + by, margin: mg };
     }
     return { kind: 'value', value: res.value, text: fmtNum(res.value) };
 }

@@ -179,6 +179,11 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         const v17 = verdictOf(roll('3d6 <= 18', [6, 6, 5]), 'under3d6'), vPlain = verdictOf(roll('3d6 <= 18', [6, 6, 5])), v10 = verdictOf(roll('3d6 <= 12', [3, 3, 4]), 'under3d6');
         check('F8 the verdict reads the rule (17 against 18 a failure by nothing, 10 against 12 a success by 2); without it the arithmetic stands (17 <= 18 a success)',
             v17.pass === false && v17.text === 'failure' && vPlain.pass === true && v10.pass === true && v10.text === 'success by 2' && v10.crit === '', JSON.stringify([v17, vPlain, v10]));
+        const mg = (e, d, r) => { const v = verdictOf(roll(e, d), r); return v ? v.margin : 'none'; };
+        check('1.5.8 the verdict\'s margin (RollMargin): a roll-under check target - total (10 against 12 is 2, 15 against 12 is -3), a roll-over total - target (d20 + 5 >= 16 on 14 is 3, on 3 is -8); 17 against 18 a failure by 0, never above; an equality check and a value 0 or none',
+            mg('3d6 <= 12', [3, 3, 4], 'under3d6') === 2 && mg('3d6 <= 12', [5, 5, 5], 'under3d6') === -3 && mg('3d6 <= 12', [3, 3, 4]) === 2 && mg('d20 + 5 >= 16', [14]) === 3 && mg('d20 + 5 >= 16', [3]) === -8
+            && mg('3d6 <= 18', [6, 6, 5], 'under3d6') === 0 && mg('3d6 <= 18', [6, 6, 5]) === 1 && mg('d6 = 3', [3]) === 0 && mg('d20 > 10', [10]) === 0 && mg('2d6 + 3', [4, 5]) === undefined,
+            JSON.stringify([mg('3d6 <= 12', [3, 3, 4], 'under3d6'), mg('3d6 <= 12', [5, 5, 5], 'under3d6'), mg('d20 + 5 >= 16', [14]), mg('d20 + 5 >= 16', [3]), mg('3d6 <= 18', [6, 6, 5], 'under3d6')]));
         const other = ['3d6 + 1 <= 12', '4d6 <= 12', '3d6 >= 10', '2d6 <= 12', '3d6r1 <= 12'].map(e => { const r = F.evaluate(e, { random: scripted([1, 1, 1, 6, 6, 6]) }); return D.under3d6(r); });
         check('F8 the rule reads only a plain 3d6 on the left of "<=": something added, another count, a roll-over, a reroll that fired or another die read as ordinary checks', other.every(x => x === null) && critOf(roll('d20', [20]), 'under3d6') === 'crit', JSON.stringify(other));
         const c18 = cardText(rec({ expr: '3d6 <= 12', draws: [6, 6, 6] }), roll('3d6 <= 12', [6, 6, 6]), F, { rule: 'under3d6' }), c17 = cardText(rec({ expr: '3d6 <= 18', draws: [6, 6, 5] }), roll('3d6 <= 18', [6, 6, 5]), F, { rule: 'under3d6' });
