@@ -72,15 +72,22 @@ function releaseLink(target, repo) {
 
 // What the app's own pages use, and so all a page is ever granted, at the app's own address only: full screen (a video, the
 // stream window), writing to the clipboard (Copy room code), the save-file picker (a large export), and reaching this machine
-// and the local network (the page's own server; players on the same network). Everything else is refused for every address:
-// the camera and the microphone, reading the clipboard, the location, notifications, opening another program.
+// and the local network (the page's own server; players on the same network), and the microphone alone for voice chat (permOk).
+// Everything else is refused for every address: the camera, the screen, reading the clipboard, the location, notifications,
+// opening another program.
 const PERMS_ASK = new Set(['fullscreen', 'clipboard-sanitized-write', 'fileSystem', 'local-network', 'local-network-access', 'loopback-network']);
 // A check asks nothing of the person and hands nothing over. 'media' is answered yes there, for the app's own address alone,
 // because that check is what the engine reads when it gathers a connection's network addresses: the tables connect as they
-// always have. Capturing sound or picture is a request, and a request for 'media' is refused.
+// always have. Capturing sound or picture is a request, and a request for 'media' is refused unless it is for the microphone alone.
 const PERMS_CHECK = new Set(Array.from(PERMS_ASK).concat(['media']));
-function permOk(own, perm, url, check) {
+function permOk(own, perm, url, check, details) {
+    if (check !== true && perm === 'media') return micOnly(details) && isOwn(own, url);   // voice chat: the microphone alone, never the camera or the screen
     return typeof perm === 'string' && (check === true ? PERMS_CHECK : PERMS_ASK).has(perm) && isOwn(own, url);
+}
+// A media request for sound and nothing else (Electron names what is asked for in details.mediaTypes)
+function micOnly(details) {
+    const t = details && Array.isArray(details.mediaTypes) ? details.mediaTypes : null;
+    return !!t && t.length === 1 && t[0] === 'audio';
 }
 
 /* ---------- Developer mode ---------- */
@@ -242,7 +249,7 @@ function install(electron, opts) {
 
     session.defaultSession.setPermissionRequestHandler((wc, perm, cb, details) => {
         let from = ''; try { from = (details && details.requestingUrl) || (wc ? wc.getURL() : ''); } catch (e) { from = ''; }
-        cb(permOk(own, perm, from, false));
+        cb(permOk(own, perm, from, false, details));
     });
     session.defaultSession.setPermissionCheckHandler((wc, perm, origin, details) => {
         let from = ''; try { from = origin || (details && details.requestingUrl) || (wc ? wc.getURL() : ''); } catch (e) { from = ''; }
