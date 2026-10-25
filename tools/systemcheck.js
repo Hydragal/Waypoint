@@ -13263,6 +13263,35 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         check('1.5.7 a roll\'s change and an apply action may switch a tick: the cleaner keeps one aimed at a toggle, Set to 1 turns it on and 0 off, its line counting 1 for on and 0 for off; a failure changes nothing',
             med.then[0].f === 'f_med' && wake.apply[0].f === 'f_med' && on.ok && on.values.f_med === true && on.lines[0].v === 1 && off.ok && off.values.f_med === false && off.lines[0].v === 0 && S.thenChanges(med, false, false).length === 0, j([med, on, off]));
     }
+    {   // 1.5.8 (book handoff 90, after the website: a technique a Form opens "shows by itself" while the Form holds): an entry's What it opens and
+        // the rows other rows open, kept in step (cleanOpens, openSync, Row.opened, applyRowOp), on invented entries, run for real
+        const j = JSON.stringify, mk = gm => S.cleanSystem({ v: 1, name: 'O', fields: [
+            { id: 'f_st', key: 'Stance', label: 'Stances', kind: 'item-list', edit: 'owner', vis: 'all', list: { on: { label: 'Active' }, lvl: { label: 'Level', min: 1, max: 4, def: 1 }, noQty: true } },
+            { id: 'f_mv', key: 'Moves', label: 'Moves', kind: 'item-list', edit: 'owner', vis: 'all', list: { lvl: { label: 'Level', min: 1, max: 4, def: 1, labels: ['Novice', 'Adept', 'Expert', 'Master'] }, noQty: true, stats: [{ key: 'xp', label: 'XP' }], cols: [{ key: 'Cost', label: 'Cost', formula: 'if(Row.opened, 0, Row.xp)' }] } }],
+            rolls: [], items: [{ id: 'i_heron', name: 'Heron', opens: [{ f: 'f_mv', id: 'i_feint2', from: 2 }, { f: 'f_mv', id: 'i_feint2', from: 1 }, { f: 'f_mv', id: 'i_guard', from: 1 }, { f: 'f_mv', id: 'bad id' }, 'x'] },
+                { id: 'i_feint2', name: 'Pebble Feint', stats: { xp: 10 } }, { id: 'i_guard', name: 'Reed Guard', stats: { xp: 10 } }] }, { F, gmView: gm });
+        const sO = mk(true), heron = sO.items.find(x => x.id === 'i_heron');
+        const ch = () => ({ id: 'c_k', name: 'Kael', ownerId: 'u_k', values: { f_st: [{ id: 'w_h', defId: 'i_heron', qty: 1, lvl: 2, on: true }] } });
+        const c1 = ch(), o1 = S.openSync(sO, c1), rows1 = c1.values.f_mv;
+        const c2 = ch(); c2.values.f_st[0].lvl = 1; S.openSync(sO, c2);
+        const c3 = ch(); S.openSync(sO, c3); c3.values.f_st[0].on = false; const o3 = S.openSync(sO, c3);
+        const c4 = ch(); S.openSync(sO, c4); const bought = S.applyRowOp(sO, c4, 'f_mv', { op: 'add', defId: 'i_guard', rowId: 'w_b1' }, F, {});
+        const c5 = ch(); S.openSync(sO, c5); c5.values.f_mv = bought.ok ? bought.value : c5.values.f_mv; const o5 = S.openSync(sO, c5);
+        const c6 = ch(); S.openSync(sO, c6); const rid6 = c6.values.f_mv[0].id;
+        const pSet = S.applyRowOp(sO, c6, 'f_mv', { op: 'set', rowId: rid6, facts: { lvl: 3 } }, F, { player: true, view: mk(false) }), pRm = S.applyRowOp(sO, c6, 'f_mv', { op: 'remove', rowId: rid6 }, F, { player: true, view: mk(false) }), gRm = S.applyRowOp(sO, c6, 'f_mv', { op: 'remove', rowId: rid6 }, F, {});
+        const V = S.makeResolver(sO, c6, F, null), cost = id => V.row('f_mv', id)('Row.Cost'), opd = id => V.row('f_mv', id)('Row.opened');
+        const c7 = ch(); c7.values.f_mv = [{ id: 'w_x', defId: 'i_feint2', qty: 1, lvl: 1 }]; const V7 = S.makeResolver(sO, c7, F, null);
+        const again = S.openSync(sO, c1), clean = S.cleanChar(c1, sO);
+        check('1.5.8 what an entry opens (cleanOpens, openSync, Row.opened, applyRowOp, run for real): an entry keeps up to 8 of a list, an entry and a From level, each entry once, junk dropped; while its row is on and at that level each opened entry shows by itself as a row of that list at its first level, marked with the opening row\'s id, costing what a formula reading Row.opened says; it goes when the row is off or below the level, and a bought row of the entry takes its place; a player may change or remove none of it, the GM may take one off (it comes back while opened); kept in step twice it is the same, and a character cleaned keeps the mark',
+            j(heron.opens) === j([{ f: 'f_mv', id: 'i_feint2', from: 2 }, { f: 'f_mv', id: 'i_guard', from: 1 }]) && j(o1) === j(['f_mv'])
+            && j(rows1.map(r => [r.defId, r.lvl, r.opn, r.qty])) === j([['i_feint2', 1, 'w_h', 1], ['i_guard', 1, 'w_h', 1]]) && rows1.every(r => /^w_o/.test(r.id))
+            && j(c2.values.f_mv.map(r => r.defId)) === j(['i_guard']) && j(o3) === j(['f_mv']) && c3.values.f_mv.length === 0
+            && bought.ok && j(bought.value.map(r => [r.defId, r.opn || ''])) === j([['i_feint2', 'w_h'], ['i_guard', '']]) && o5.length === 0
+            && pSet.ok === false && pSet.reason === 'opened' && pRm.ok === false && pRm.reason === 'opened' && gRm.ok === true
+            && cost(rid6) === 0 && opd(rid6) === 1 && V7.row('f_mv', 'w_x')('Row.Cost') === 10 && V7.row('f_mv', 'w_x')('Row.opened') === 0
+            && again.length === 0 && j(clean.values.f_mv.map(r => r.opn)) === j(['w_h', 'w_h']) && j(S.cleanOpens([{ f: 'f_mv', id: 'i_a', from: 0 }, { f: 'f_mv', id: 'i_b', from: 7.6 }])) === j([{ f: 'f_mv', id: 'i_a', from: 1 }, { f: 'f_mv', id: 'i_b', from: 8 }]) && S.cleanOpens('x') === undefined,
+            j([heron.opens, rows1, c2.values.f_mv, bought, pSet, pRm, gRm.ok, cost(rid6), opd(rid6), again, clean.values.f_mv]));
+    }
     summed = true;
     console.log(NL + pass + ' passed, ' + fail + ' failed.');
     if (fail) process.exit(1);

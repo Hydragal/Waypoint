@@ -1890,12 +1890,21 @@ Plain paragraphs are text: **bold**, *italic*, ~~strike~~, &lt;u&gt;underline&lt
                                   <li>You see that mark for every need. A player sees it on their own sheet, and only for a need they may see.</li>
                                   <li>A sheet file is not held to an entry&rsquo;s needs. You review what a file brings.</li>
                               </ul>
+
                           </li>
                           <li><b>Weapon ranges</b> are built from these, with no setting of their own. Give the weapons list two stats in your range&rsquo;s unit: <b>Half</b>, its half-damage range, and <b>MaxRange</b>, its longest. The word <i>max</i> itself is reserved.
                               <ul>
                                   <li>Its Attack roll <b>needs</b> <code>or(Row.MaxRange = 0, TargetDistance &lt;= Row.MaxRange)</code>, with &ldquo;Out of range&rdquo;. A weapon with no MaxRange, such as a sword, always may.</li>
                                   <li>The roll adds <code>if(Row.MaxRange &gt; 0, RangeMod, 0)</code>, so only a ranged weapon takes the range penalty.</li>
                                   <li>Its Damage is worked out inside <code>floor(&hellip; / if(and(Row.Half &gt; 0, TargetDistance &gt; Row.Half), 2, 1))</code>, so a shot past Half does half damage.</li>
+                              </ul>
+                          </li>
+                          <li><b>What it opens</b> lets one entry make others usable without buying them, such as a stance that opens a move. You set it in the Library, in the entry&rsquo;s <b>What it opens</b> box.
+                              <ul>
+                                  <li>Pick each entry it opens, the list it shows on, and a <b>From level</b> of this entry where it should open later.</li>
+                                  <li>While a row of the entry is on and at that level, each opened entry shows by itself on its list. It is at the list&rsquo;s first level, and its name says what opened it.</li>
+                                  <li>It goes when the row is switched off or drops below that level. A row of it bought the usual way takes its place.</li>
+                                  <li>An opened row cannot be changed or removed by its player. Formulas read <code>Row.opened</code> as 1 on it, so a cost column can read 0 for it.</li>
                               </ul>
                           </li>
                           <li><b>When a player removes it</b>, a setting on an item, decides what a player&rsquo;s removal does.

@@ -1,6 +1,14 @@
 WAYPOINT 1.5.8 — What's New
 ============================
 
+System editor
+- An entry can open others: in the Library's What it opens box, pick the
+  entries it makes usable and from which of its levels. While a row of it
+  is on, each opened entry shows by itself on its list at the first level,
+  saying what opened it, and goes when the row is switched off. A row of
+  it bought the usual way takes its place. Formulas read Row.opened as 1
+  on an opened row, so its cost can be 0.
+
 Chat
 - A roll's card lists what changed the values it rolled against. Each
   value an effect changed shows its figure before and after, then each

@@ -11,7 +11,7 @@ import { showPrompt, showConfirm } from './dialogs.js';
 import { searchEntries, entryFromForm, newEntryId, keyClashes, cleanLibEntry, libCtx, LIB, packFile, readPackImport, packImportPlan, bulkSet, bulkMove, lvlsToText } from './librarycore.js';
 import { itemReach, carriedBy } from './systemcore.js';
 
-var ROW_H = 28, FLUSH_MS = 1000, FORM_KEYS = ['name', 'key', 'category', 'icon', 'vis', 'notes', 'desc', 'lvls', 'ref', 'gmNotes', 'damage', 'cost', 'throwSkill', 'tags', 'lvl', 'stats', 'area', 'rm', 'rmMsg', 'eq', 'eqMsg', 'mods', 'modsOn', 'needs', 'needsIf', 'needsFrom', 'needsMsg'];
+var ROW_H = 28, FLUSH_MS = 1000, FORM_KEYS = ['name', 'key', 'category', 'icon', 'vis', 'notes', 'desc', 'lvls', 'ref', 'gmNotes', 'damage', 'cost', 'throwSkill', 'tags', 'lvl', 'stats', 'area', 'rm', 'rmMsg', 'eq', 'eqMsg', 'opens', 'mods', 'modsOn', 'needs', 'needsIf', 'needsFrom', 'needsMsg'];
 var NEED_MAX = 8, NEED_PICK = 2000;   // 126b: the entries one entry needs, and the longest list its chooser offers
 var VIS = [['all', 'Players can see it'], ['gm', 'GM only']];
 var st = { open: false, campId: null, packId: null, entryId: null, q: '', shown: [], work: map(), dirty: map(), timer: null, draftNew: null, sel: map(), anchor: null, imp: null, fm: null, fmFor: null, fn: null, fnFor: null };   // fm (F6): the open entry's changes being edited
@@ -239,7 +239,7 @@ function field(form, id, label, value, opts) {
 }
 function renderForm() {
     var form = ui('libForm'); if (!form) return; form.textContent = '';
-    st.fm = null; st.fmFor = null; st.fn = null; st.fnFor = null;   // the owed review, 2026-10-09: the form is filled from the entry as it is stored, every box of it. The working copies of its changes and its needs outlived the form (a close, an import, another campaign), and Save entry wrote stale ones back
+    st.fm = null; st.fmFor = null; st.fn = null; st.fnFor = null; st.fo = null; st.foFor = null;   // 1.5.8: and of what it opens   // the owed review, 2026-10-09: the form is filled from the entry as it is stored, every box of it. The working copies of its changes and its needs outlived the form (a close, an import, another campaign), and Save entry wrote stale ones back
     if (st.imp) { renderImport(form); return; }
     var many = st.draftNew ? [] : chosen(); if (many.length > 1) { renderBulk(form, many); return; }
     var e = current(); if (!e) { form.appendChild(el('div', 'lib-empty', st.packId && ready(st.packId) ? 'Choose an entry, or + Entry to add one. Ctrl-click, Shift-click or Ctrl+A choose several.' : '')); return; }
@@ -267,6 +267,7 @@ function renderForm() {
     field(form, 'gmNotes', 'GM notes', e.gmNotes, { area: true, rows: 3, max: LIB.gmNotes, title: 'Yours alone: never on a player’s screen' });
     modsBox(form, e);   // Stage 6 F6
     needsBox(form, e);   // 126b
+    opensBox(form, e);   // 1.5.8
     form.appendChild(el('div', 'lib-fsub', 'Locks (yours alone)'));
     field(form, 'rm', 'When removed', e.rm === 'bound' || e.rm === 'curse' ? e.rm : '', { pairs: [['', 'A player may remove it'], ['bound', 'Bound: only the GM removes it'], ['curse', 'Curse on contact: you keep it']], title: 'When a player removes it from their character. Bound: it stays, with your message. Curse on contact: it leaves their sheet but you keep it on the character, out of their sight' });
     field(form, 'rmMsg', 'Message', e.rmMsg, { max: 200, ph: 'Shown to the player (optional)' });
@@ -318,6 +319,37 @@ function needsBox(form, e) {
     var rsN = LB() && LB().needRuleShown ? LB().needRuleShown : null; if (typeof e.needsIf === 'string' && e.needsIf && rsN && rsN(e.needsIf) !== true) form.appendChild(el('div', 'lib-warn', LB().whole && LB().whole() !== true ? 'A pack of this campaign is not read, so no rule is shown to players for now. Your machine judges it alone.' : 'This rule reads something players may not read. They are not shown it, and your machine judges it alone.'));   // the owed review, 2026-10-09: while a pack is unread no rule is shown, whatever it reads: the reason said is the true one
     field(form, 'needsMsg', 'Message', e.needsMsg, { max: 200, ph: 'Shown to the player in place of what it needs (optional)' });
 }
+// 1.5.8 (book handoff 90, a Form opens techniques, the website's way: "shows by itself ... while the Form holds"): what this entry opens. While a
+// row of it is on (or on a list with no switch) and at the From level or above, each entry listed here shows by itself as a row of the list
+// named beside it, at that list's first level and costing nothing a formula does not say (Row.opened is 1 on it). It goes when the row is
+// off or below that level, and a bought row of the same entry takes its place. A working copy while the form is open (Save entry keeps it)
+function opensBox(form, e) {
+    if (st.foFor !== e.id || !st.fo) { st.fo = clone(Array.isArray(e.opens) ? e.opens : []); st.foFor = e.id; }
+    var lists = itemLists(); if (!lists.length && !st.fo.length) return;
+    form.appendChild(el('div', 'lib-fsub', 'What it opens'));
+    form.appendChild(el('div', 'lib-note', 'While a row of this entry is on and at the From level or above, each entry listed here shows by itself on the list beside it, at that list\u2019s first level. It goes when this row is off, and a bought row of it takes its place. On it, Row.opened is 1, so a cost can read 0.'));
+    var box = el('div', 'lib-mods lib-opens'); form.appendChild(box);
+    var all = allEntries().concat(sysItems()), nameOf = function(id) { for (var i = 0; i < all.length; i++) if (all[i] && all[i].id === id) return all[i]; return null; };
+    var listFor = function(ent) { var cg = ent && typeof ent.category === 'string' ? ent.category.toLowerCase() : ''; var hit = lists.filter(function(f) { return Array.isArray(f.list.cats) && f.list.cats.some(function(c) { return String(c).toLowerCase() === cg; }); })[0]; return (hit || lists[0] || {}).id || ''; };
+    var draw = function() {
+        box.textContent = '';
+        st.fo.forEach(function(o, oi) {
+            var ln = el('div', 'lib-ctl lib-open'), ent = nameOf(o.id);
+            ln.appendChild(el('span', 'lib-need-name', ent ? ent.name : 'An entry that is gone'));
+            var ls = select(lists.map(function(f) { return [f.id, f.label || f.key || 'A list']; }), o.f); ls.title = 'The list it shows on'; ls.addEventListener('change', function() { o.f = ls.value; }); ln.appendChild(ls);
+            var fr = el('input', 'field lib-mod-amt'); fr.type = 'number'; fr.step = '1'; fr.min = '1'; fr.placeholder = 'From level'; fr.value = typeof o.from === 'number' ? String(o.from) : ''; fr.title = 'The level of THIS entry from which it opens. Leave it empty to open it from the start'; ln.appendChild(fr);
+            fr.addEventListener('input', function() { var n = Number(fr.value); if (fr.value.trim() === '' || !isFinite(n)) delete o.from; else o.from = Math.max(1, Math.round(n)); });
+            var x = el('button', 'tool ghost', '\u00d7'); x.type = 'button'; x.title = 'It no longer opens this'; x.addEventListener('click', function() { st.fo.splice(oi, 1); draw(); }); ln.appendChild(x);
+            box.appendChild(ln);
+        });
+        var taken = map(); st.fo.forEach(function(o) { taken[o.id] = 1; }); taken[e.id] = 1;
+        var opts = [['', '+ An entry it opens\u2026']].concat(all.filter(function(x) { return x && typeof x.id === 'string' && !taken[x.id]; }).sort(function(a, b) { return byName(a.name, b.name); }).slice(0, NEED_PICK).map(function(x) { return [x.id, x.name + (x.vis === 'gm' ? ' (GM only)' : '')]; }));
+        var sel = select(opts, ''); sel.title = 'Pick an entry this one opens while its row is on'; sel.disabled = st.fo.length >= 8 || !lists.length;
+        sel.addEventListener('change', function() { if (!sel.value || st.fo.length >= 8) return; st.fo.push({ f: listFor(nameOf(sel.value)), id: sel.value, from: 1 }); draw(); });
+        box.appendChild(sel);
+    };
+    draw();
+}
 function modTargets() {
     var c = camp(), out = [];
     ((c && c.system && c.system.fields) || []).forEach(function(x) { var nm = x.label || x.key || '(field)'; if (x.kind === 'number' || x.kind === 'formula') out.push([x.id + '|add', nm]); else if (x.kind === 'skill') out.push([x.id + '|add', nm + ' (total)']); else if (x.kind === 'resource') out.push([x.id + '|max', nm + ' max']); else if (x.kind === 'toggle') out.push([x.id + '|on', nm + ' — switch on']); });
@@ -354,7 +386,7 @@ function modsBox(form, e) {
 function readForm() {
     var g = function(id) { var n = ui('libF_' + id); return n ? n.value : ''; }, e = current(), stats = {};
     Array.prototype.forEach.call(document.querySelectorAll('#libForm [data-stat]'), function(n) { stats[n.dataset.stat] = n.value; });
-    var typed = entryFromForm({ id: e.id, name: g('name'), key: g('key'), category: g('category'), icon: g('icon'), vis: g('vis'), lvl: g('lvl'), stats: stats, notes: g('notes'), desc: g('desc'), lvls: g('lvls'), lvlsWas: e.lvls, tags: g('tags'), ref: g('ref'), damage: g('damage'), cost: g('cost'), throwSkill: g('throwSkill'), areaFt: g('areaFt'), areaShape: e.area && e.area.shape, areaName: e.area && e.area.name, gmNotes: g('gmNotes'), rm: g('rm'), rmMsg: g('rmMsg'), eq: g('eq'), eqMsg: g('eqMsg'), mods: st.fmFor === e.id && st.fm ? st.fm : e.mods, modsOn: ui('libF_modsOn') ? ui('libF_modsOn').checked : e.modsOn === true, needs: st.fnFor === e.id && st.fn ? st.fn : e.needs, needsIf: g('needsIf'), needsFrom: g('needsFrom'), needsMsg: g('needsMsg') });
+    var typed = entryFromForm({ id: e.id, name: g('name'), key: g('key'), category: g('category'), icon: g('icon'), vis: g('vis'), lvl: g('lvl'), stats: stats, notes: g('notes'), desc: g('desc'), lvls: g('lvls'), lvlsWas: e.lvls, tags: g('tags'), ref: g('ref'), damage: g('damage'), cost: g('cost'), throwSkill: g('throwSkill'), areaFt: g('areaFt'), areaShape: e.area && e.area.shape, areaName: e.area && e.area.name, gmNotes: g('gmNotes'), rm: g('rm'), rmMsg: g('rmMsg'), eq: g('eq'), eqMsg: g('eqMsg'), mods: st.fmFor === e.id && st.fm ? st.fm : e.mods, modsOn: ui('libF_modsOn') ? ui('libF_modsOn').checked : e.modsOn === true, opens: st.foFor === e.id && st.fo ? st.fo : e.opens, needs: st.fnFor === e.id && st.fn ? st.fn : e.needs, needsIf: g('needsIf'), needsFrom: g('needsFrom'), needsMsg: g('needsMsg') });
     var out = clone(e), eqShown = !!ui('libF_eq'); FORM_KEYS.forEach(function(k) { if (eqShown || (k !== 'eq' && k !== 'eqMsg')) delete out[k]; }); return Object.assign(out, typed);   // a switch lock the form does not show (no list has a switch) is kept
 }
 function saveEntry() {

@@ -3577,6 +3577,7 @@
   .dmg-btns { display: flex; justify-content: flex-end; gap: 8px; }
   .chat-dmgapply { margin-top: 6px; font-size: 12px; }
   .chat-dmgdone { margin-top: 6px; font-size: 12px; color: var(--muted); }   /* 1.5.7: a hit already applied */
+  .sheet-item-opened-tag { font-size: 11px; color: var(--muted); font-style: italic; }   /* 1.5.8: a row another row opens */
   .chat-mods { margin-top: 4px; padding-left: 8px; border-left: 2px solid var(--edge); font-size: 12px; color: var(--muted); }   /* 1.5.8: what changed the values a roll read */
   .chat-mod { color: var(--ink); }
   .chat-mod-n { font-weight: 600; }

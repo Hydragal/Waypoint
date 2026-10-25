@@ -173,6 +173,7 @@ export function entryFromForm(f) {
     if (f.rm === 'bound' || f.rm === 'curse') { out.rm = f.rm; if (s(f.rmMsg).trim()) out.rmMsg = s(f.rmMsg); }   // L2b: a player's removal (bound / curse on contact) and its message, as the Items tab has them
     if (f.eq === 'bound' || f.eq === 'curse') { out.eq = f.eq; if (s(f.eqMsg).trim()) out.eqMsg = s(f.eqMsg); }   // and switching it off
     if (Array.isArray(f.mods) && f.mods.length) out.mods = JSON.parse(JSON.stringify(f.mods)); if (f.modsOn === true) out.modsOn = true;   // F6: its changes to the character (cleaned as an entry's are)
+    if (Array.isArray(f.opens) && f.opens.length) out.opens = JSON.parse(JSON.stringify(f.opens));   // 1.5.8: what it opens on another list while its row is on (cleaned as an entry's are)
     var hasN = Array.isArray(f.needs) && f.needs.length > 0, rlF = s(f.needsIf).trim();
     if (hasN) out.needs = JSON.parse(JSON.stringify(f.needs));
     if (rlF) out.needsIf = rlF;   // ... its rule, a formula that must be true

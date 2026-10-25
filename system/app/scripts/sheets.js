@@ -8,7 +8,7 @@ import { getActiveCampaign } from './models.js';
 import { save, toast } from './io.js';
 import { picRef } from './safecore.js';
 import { showConfirm, showPrompt } from './dialogs.js';
-import { cleanDamageRules, moneyBoxes, moneyHeld, rowOpMoney, catHome, catPlace, cleanPlaceCats, catSplits, cleanFieldUnit, unitTail, heightWords, measureWords, unitWords, unitHead, listWords, unitOf, textWords, measureStore, rollNeedsOk, rollNeedsSays, timeRuleRun, ruleRunCtx, chainsShallow, makeResolver, hasDice, figText, cleanEvery, cleanInFight, droppedCounts, validPageId, LIMITS, KINDS, showsIf, rowRollNames, gmOnlyNames, applyAct, applyScope, applyRound, dueActs, combatChars, roundSecs, fxLeftNow, lastsSecs, APPLY_KINDS, TURN_UNITS, LIGHT_UNITS, RANGE_UNITS, HEIGHT_UNITS, TIME_WORDS, STORED, DEF_PROP, BAND_KINDS, IDENTITY_KINDS, LEDGER_KINDS, headerEntry, captionParts, emptySystem, uid, validKey, cleanSystem, cleanChar, validateSystem, resolveAll, hoverLines, autoLayout, applyEdit, applyStyle, cleanLooks, lookOf, lookFor, lookRule, applyEffectOp, fxText, fmtNum, budgetsOf, budgetWatch, budgetSays, needsMet, needsSays, initRoll, applyProposal, cleanUploads, sideOf, threatArc, facingCtx, facingNow, setAimSource, stanceCtx, tokenCtx, POSTURE_IDS, POSTURE_NAMES, DEFAULT_POSTURES, postureList, postureAt, autoEffectsOn, initTie, charTokenOn, cycleThreat, valueTone, TONES, activeCharOf, playableChars, ownedTokenPlan, applyOwnerOps, migrateBindings, capExpr, cleanValue, fieldById, valueOpts, applyRowOp, rowIdOf, rowDef, orphanRows, stampRows, cleanRowDef, projectRows, STAT_KEY, PALETTE_KEYS, GLYPHS, glyphPath, headerEdits, pinTargets, pinTargetsAll, hudView, hudHasContent, resetTargets, cleanListSpec, statKey, rowStat, plusText, rowPaid, itemReach, gmDerivedNames, labelGmNames, gmEffectNames, labelNames, withRound, rangeCtx, withRange, rowLvl, rowOn, cleanItemKey, charForView, secretFieldIds, gmViewFields } from './systemcore.js';
+import { cleanDamageRules, openSync, moneyBoxes, moneyHeld, rowOpMoney, catHome, catPlace, cleanPlaceCats, catSplits, cleanFieldUnit, unitTail, heightWords, measureWords, unitWords, unitHead, listWords, unitOf, textWords, measureStore, rollNeedsOk, rollNeedsSays, timeRuleRun, ruleRunCtx, chainsShallow, makeResolver, hasDice, figText, cleanEvery, cleanInFight, droppedCounts, validPageId, LIMITS, KINDS, showsIf, rowRollNames, gmOnlyNames, applyAct, applyScope, applyRound, dueActs, combatChars, roundSecs, fxLeftNow, lastsSecs, APPLY_KINDS, TURN_UNITS, LIGHT_UNITS, RANGE_UNITS, HEIGHT_UNITS, TIME_WORDS, STORED, DEF_PROP, BAND_KINDS, IDENTITY_KINDS, LEDGER_KINDS, headerEntry, captionParts, emptySystem, uid, validKey, cleanSystem, cleanChar, validateSystem, resolveAll, hoverLines, autoLayout, applyEdit, applyStyle, cleanLooks, lookOf, lookFor, lookRule, applyEffectOp, fxText, fmtNum, budgetsOf, budgetWatch, budgetSays, needsMet, needsSays, initRoll, applyProposal, cleanUploads, sideOf, threatArc, facingCtx, facingNow, setAimSource, stanceCtx, tokenCtx, POSTURE_IDS, POSTURE_NAMES, DEFAULT_POSTURES, postureList, postureAt, autoEffectsOn, initTie, charTokenOn, cycleThreat, valueTone, TONES, activeCharOf, playableChars, ownedTokenPlan, applyOwnerOps, migrateBindings, capExpr, cleanValue, fieldById, valueOpts, applyRowOp, rowIdOf, rowDef, orphanRows, stampRows, cleanRowDef, projectRows, STAT_KEY, PALETTE_KEYS, GLYPHS, glyphPath, headerEdits, pinTargets, pinTargetsAll, hudView, hudHasContent, resetTargets, cleanListSpec, statKey, rowStat, plusText, rowPaid, itemReach, gmDerivedNames, labelGmNames, gmEffectNames, labelNames, withRound, rangeCtx, withRange, rowLvl, rowOn, cleanItemKey, charForView, secretFieldIds, gmViewFields } from './systemcore.js';
 import { fileBase, charToJson, charFromJson, sheetToMarkdown, isCharFile } from './sheetexport.js';
 import { lvlsFromBox, lvlsToText } from './librarycore.js';
 import { cleanCalendar, fmtWhen, fmtDate, timeOf, calPreset, CAL_LIMITS } from './calendarcore.js';
@@ -352,7 +352,7 @@ function newCharacter(o) {
 // answered there; born unassigned, saved and told to the table as any change is
 function addCharacter(name, npc) { if (isClient() || !canWrite()) return null; var c = newCharacter({ name: name, npc: npc === true }); if (c) { afterCharChange(c, true); renderAll(); } return c; }
 function afterCharChange(c, whole, values) {
-    var camp = getActiveCampaign(); if (!camp) return;
+    var camp = getActiveCampaign(); if (!camp) return; if (typeof openSync === 'function' && !isClient() && camp.system) { var opA = openSync(camp.system, c); if (opA.length && values && typeof values === 'object') opA.forEach(function(fid) { values[fid] = c.values[fid]; }); }   // 1.5.8: the rows other rows open, kept in step before the save and the sync
     c.updated = Date.now();
     if (typeof window !== 'undefined' && window.wpFog && window.wpFog.sensesForget) window.wpFog.sensesForget();   // the fog's kept senses are read again from the sheet
     if (typeof lookPrune === 'function') lookPrune(c);   // item 35: a look whose text is no longer its own goes before the save
@@ -774,6 +774,7 @@ function openSheet(charId) {
     if (!canOpen(charId)) { toast(featureOn() ? 'That sheet is not yours to open.' : 'Character sheets are off here.'); return; }
     if (sheetOpen !== charId) { closeDownloadMenu(); _sheetEdit = null; }   // Onboarding F2a: its menu names the character it was opened for; another character's sheet opens locked
     sheetOpen = charId;
+    if (typeof openSyncOne === 'function') openSyncOne(charId);   // 1.5.8: a character saved before its Form opened anything gets its opened rows as its sheet opens
     var p = ui('sheetPanel'); if (!p) return;
     p.style.display = 'flex'; if (window.wpFloats) window.wpFloats.reveal(p);   // 1.5.4 (floats.js): asked for here, so it shows on this view
     placeSheet(); raisePanel(p); renderSheet();
@@ -2624,15 +2625,16 @@ function itemListInto(wrap, f, c, carried, sysI, canThrow, editable, gm, empty, 
         if (def.icon) line.appendChild(iconNode(def.icon, 'sheet-item-icon'));
         var ovc = ovCtx(entry, rd, gm);   // F4c2: what this copy holds of its own (a dot on each)
         var nm = el('span', 'sheet-item-name', def.name); if (def.area) nm.appendChild(el('span', 'sheet-item-area-tag', ' ' + (typeof blastTag === 'function' ? blastTag(def.area.ft) : def.area.ft + ' ft'))); if (def.notes) nm.title = def.notes; ovNameDot(nm, ovc, true); line.appendChild(nm);
+        var opnR = typeof entry.opn === 'string'; if (opnR && typeof openedWords === 'function') { line.className += ' sheet-item-opened'; nm.appendChild(el('span', 'sheet-item-opened-tag', ' (' + openedWords(entry, c, sysI, spec) + ')')); }   // 1.5.8: a row another row opens says so, and holds no control that changes it
         if (chips && def.category) line.appendChild(el('span', 'sheet-chip', def.category));
         lostBits(line, rd, entry, c, f, gm, chg); needBits(line, sysI, c, entry, rd, gm); gmItemBits(line, def, entry, gm, !!(spec && spec.on)); keyShareChip(line, entry, rd, unseenL); modsBits(line, def, entry, spec, sysI);
         var noteLn = null;
-        if (spec) { statChips(line, def, spec, ovc); colChips(line, spec, res && res.cells ? res.cells[rid] : null); ctCtl(line, entry, c, f, spec, editable, res && res.cts ? res.cts[rid] : null); var lc = lvlCtl(entry, def, c, f, spec, chg); if (lc) line.appendChild(lc); var oc = onCtl(entry, c, f, spec, editable, true); if (oc) line.appendChild(oc); var pcL = paidCtl(entry, def, c, f, spec, chg, gm, true); if (pcL) line.appendChild(pcL); noteLn = hudRow ? null : noteBits(entry, def, c, f, chg, ovc); }   // F4c1: the stats shown On the row, what one cost
+        if (spec) { statChips(line, def, spec, ovc); colChips(line, spec, res && res.cells ? res.cells[rid] : null); ctCtl(line, entry, c, f, spec, editable, res && res.cts ? res.cts[rid] : null); var lc = lvlCtl(entry, def, c, f, spec, chg && !opnR); if (lc) line.appendChild(lc); var oc = onCtl(entry, c, f, spec, editable, true); if (oc) line.appendChild(oc); var pcL = paidCtl(entry, def, c, f, spec, chg, gm, true); if (pcL) line.appendChild(pcL); noteLn = hudRow ? null : noteBits(entry, def, c, f, chg, ovc); }   // F4c1: the stats shown On the row, what one cost
         if (def.area && canThrow && (gm || def.vis !== 'gm') && entry.hid !== 1) line.appendChild(itemThrowBtn(def, c, f, rid));   // a GM-only item: the GM's throw only (a player's copy never carries its area)
         rowRollBtns(line, spec, entry, def, c, f, res);   // F5b: the list's rolls on this row
         if (noteLn) line.appendChild(noteToggle(noteLn, entry, c, f));
-        var rr = chg ? rowRights(entry, rd, spec, gm, sysI) : ''; if (rr) line.appendChild(editBtn(entry, c, f, rr, rd.src === 'custom'));   // F4c2: ✎ — on a list shaped in the Lists tab, where the row can be changed (never the Layout preview or a pop-out)
-        if (editable) { var ub = undoBtn(entry, c, f); if (ub) line.appendChild(ub); if (!(spec && spec.noQty)) line.appendChild(itemQtyCell(entry, c, f)); if (chg) line.appendChild(itemRmBtn(entry, def, c, f)); }
+        var rr = chg && !opnR ? rowRights(entry, rd, spec, gm, sysI) : ''; if (rr) line.appendChild(editBtn(entry, c, f, rr, rd.src === 'custom'));   // F4c2: ✎ — on a list shaped in the Lists tab, where the row can be changed (never the Layout preview or a pop-out)
+        if (editable && !opnR) { var ub = undoBtn(entry, c, f); if (ub) line.appendChild(ub); if (!(spec && spec.noQty)) line.appendChild(itemQtyCell(entry, c, f)); if (chg) line.appendChild(itemRmBtn(entry, def, c, f)); }
         else if (!(spec && spec.noQty)) line.appendChild(el('span', 'sheet-item-qtyn', '×' + entry.qty));
         wrap.appendChild(line);
         if (noteLn) wrap.appendChild(noteLn);
@@ -2640,6 +2642,17 @@ function itemListInto(wrap, f, c, carried, sysI, canThrow, editable, gm, empty, 
     });
     if (carried.length && spec && res && res.foot) totalsLine(wrap, spec, res.foot);   // F5a1: the list's totals under its rows
     if (!carried.length) wrap.appendChild(el('div', 'sheet-empty-note', empty || 'No items.'));
+}
+// 1.5.8 (book handoff 90, after the website's "<name> (Apprentice, opened by <Form>)"): what an opened row says after its name, its level by the
+// list's own word for it and the name of the row that opens it, as text for a text node
+function openedWords(entry, c, sysI, spec) {
+    var lv = typeof entry.lvl === 'number' ? entry.lvl : 1, lb = spec && spec.lvl && Array.isArray(spec.lvl.labels) ? spec.lvl.labels[lv - (typeof spec.lvl.min === 'number' ? spec.lvl.min : 1)] : null;
+    var by = '';
+    (sysI && Array.isArray(sysI.fields) ? sysI.fields : []).forEach(function(f2) {
+        if (by || !f2 || f2.kind !== 'item-list' || !c || !c.values || !Array.isArray(c.values[f2.id])) return;
+        c.values[f2.id].forEach(function(r) { if (!by && r && rowIdOf(r) === entry.opn) { var d2 = rowDef(sysI, r); by = d2 && d2.def && d2.def.name ? String(d2.def.name) : ''; } });
+    });
+    return (typeof lb === 'string' && lb ? lb : 'level ' + lv) + ', opened by ' + (by || 'another row');
 }
 // Stage 6 F5b: a list's rolls on a row — a button each, rolled with the row's own names (Row.lvl, Row.<stat>, a column) through the dice path (the
 // host resolves them; a roll on a GM-only item stays private); inert in the Layout preview and a pop-out, and for a viewer who cannot roll for it
@@ -4835,6 +4848,7 @@ function playerFinder(camp, view) {
 function charChanged(id) {
     if (typeof window !== 'undefined' && window.wpFog && window.wpFog.sensesForget) window.wpFog.sensesForget();   // the fog's kept senses are read again from the sheet
     if (typeof lookPrune === 'function') lookPrune(id);   // item 35: a change from the table (a player's edit, a time rule) that left a look without its text
+    if (typeof openSyncOne === 'function') openSyncOne(id);   // 1.5.8: a change from the table (a Form a player switched on) that opens or closes rows
     var lost = {};   // HUD frame (HF2a): one notice per character, however many of its views close
     if (sheetOpen && isClient() && (id === null || sheetOpen === id)) { var gone = charById(sheetOpen); if (gone && (gone.partial || gone.ownerId !== myId())) { var nmG = gone.name; lost[gone.id] = 1; closeSheet(); toast(nmG + ' is no longer your character.'); var nG = net(); if (nG && nG.dropPending) nG.dropPending(gone.id); } }
     if (isClient()) Object.keys(huds).forEach(function(hid) { if (id !== null && id !== undefined && hid !== id) return; var gh = charById(hid); if (gh && !gh.partial && gh.ownerId === myId()) return; closeHud(hid); if (!lost[hid]) { lost[hid] = 1; toast((gh ? gh.name : 'That character') + ' is no longer your character.'); var nH = net(); if (nH && nH.dropPending) nH.dropPending(hid); } });
@@ -4874,6 +4888,17 @@ function close(force) {
 function markDirty() { dirty = true; var s = ui('sysSaveBtn'); if (s) s.classList.add('on'); }
 // Stage 6: each stored value of a field the saved system still has, checked against it again (a value past new value names, a lowered max,
 // a removed library entry) — what a reload does, at once, so the GM's sheet, their formulas and every player agree. Other ids stay as they are.
+// 1.5.8 (book handoff 90): the rows other rows open, kept in step for one character after a change from the table, on the machine that owns the
+// campaign: changed, it is saved and its owner told the lists that moved. Answers whether anything changed
+function openSyncOne(id) {
+    if (typeof openSync !== 'function' || isClient() || typeof id !== 'string') return false;
+    var camp = getActiveCampaign(), c = camp ? charById(id, camp) : null; if (!c || !camp.system) return false;
+    var oc = openSync(camp.system, c); if (!oc.length) return false;
+    c.updated = Date.now(); save(true);
+    var n = net(), vals = {}; oc.forEach(function(fid) { vals[fid] = c.values[fid]; });
+    if (n && n.active && n.role === 'host' && n.syncCharDelta) n.syncCharDelta(c.id, vals);
+    return true;
+}
 function reCleanChars(camp, sys) {
     var vo = valueOpts(sys);
     Object.keys(camp.chars || {}).forEach(function(id) {
@@ -4885,6 +4910,7 @@ function reCleanChars(camp, sys) {
             if (v === undefined) delete c.values[fid]; else c.values[fid] = v;
             c.updated = Date.now();
         });
+        if (typeof openSync === 'function' && openSync(sys, c).length) c.updated = Date.now();   // 1.5.8: the rows other rows open, as the system now has them
         if (c.looks !== undefined) { var lkR = cleanLooks(c.looks, c.values, sys); if (JSON.stringify(lkR) !== JSON.stringify(c.looks)) { if (lkR) c.looks = lkR; else delete c.looks; c.updated = Date.now(); } }   // item 35: a look whose field went, is no text now, or whose text changed
     });
 }
