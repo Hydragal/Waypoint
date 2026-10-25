@@ -21,6 +21,13 @@ Pages
   page link, a small button beside it opens the page in a new window.
 
 System editor
+- A row can load a row of another list, as a blaster loads a power pack:
+  in the Lists tab, set Loads from to that list, pick the counter that
+  holds what is loaded, and the categories it takes. The row's Load
+  button takes one unit off its stack and puts what it holds into the
+  counter. Swap and Unload put it back with what it has left, onto a
+  stack only where it is the same thing in the same state. Formulas read
+  Row.loaded and Row.loadmax.
 - A change can aim at one entry of a list: for an item or a status effect,
   in the System editor or the Library's entry form, pick a list's "one
   entry" choice, the entry's key and the column it adds to. A trait can then give -2 to the Disguise skill's Target alone,

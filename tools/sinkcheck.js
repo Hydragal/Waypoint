@@ -5291,6 +5291,41 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             DId.dieSvg('"><img src=x onerror=1>') === DId.dieSvg('d6') && DId.dieSvg('d6', '"><b>') === DId.dieSvg('d6') && /^<svg class="ico ico-die" viewBox="0 0 24 24" aria-hidden="true">(<path( class="ico-pip")? d="[MmLlHhVvAaZz0-9 .,-]+"\/>)+<\/svg>$/.test(DId.dieSvg('3d6'))
             && wbD.includes("window.wpDieIcons.dieSvg('d6')") && (wbD.match(/wpDieIcons\.dieSvg\(/g) || []).length === 1 && !/innerHTML|insertAdjacentHTML|outerHTML/.test(dsD));
     }
+    {   // 1.5.8 Loads from: a row's load chip and its Load menu (sheets.js loadCtl, loadChoices and openLoadMenu, sliced by their loadctl markers, run on a page of plain objects that refuses markup, with the real core)
+        const SYd = await import(modUrl('systemcore.js')), shD = fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', 'sheets.js'), 'utf8').replace(/\r\n/g, '\n');
+        const ldS = shD.slice(shD.indexOf('// [sinkcheck:loadctl-start]'), shD.indexOf('// [sinkcheck:loadctl-end]'));
+        const made = [], node = tag => { const n = { tag, children: [], className: '', title: '', style: {}, listeners: {}, attrs: {}, parent: null, appendChild(c) { this.children.push(c); c.parent = this; return c; }, setAttribute(k, v) { this.attrs[k] = String(v); }, addEventListener(k, f) { this.listeners[k] = f; }, remove() { if (this.parent) this.parent.children.splice(this.parent.children.indexOf(this), 1); }, contains(x) { for (let y = x; y; y = y.parent) if (y === this) return true; return false; }, getBoundingClientRect() { return { left: 40, right: 90, top: 10, bottom: 30 }; }, focus() { docD.activeElement = this; },
+            querySelector(sel) { const want = sel.replace(/^\./, ''); const walk = x => { for (const c of x.children) { if ((' ' + c.className + ' ').includes(' ' + want + ' ')) return c; const r = walk(c); if (r) return r; } return null; }; return walk(this); }, querySelectorAll(sel) { const want = sel.replace(/^\./, ''), out = []; const walk = x => { x.children.forEach(c => { if ((' ' + c.className + ' ').includes(' ' + want + ' ')) out.push(c); walk(c); }); }; walk(this); return out; } };
+            Object.defineProperty(n, 'innerHTML', { set() { throw new Error('markup written'); } }); made.push(n); return n; };
+        const docD = { body: node('body'), activeElement: null, listen: {}, addEventListener(k, f) { this.listen[k] = f; }, removeEventListener(k) { delete this.listen[k]; } };
+        const el = (tag, cls, text) => { const e = node(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
+        const hostile = '<img src=x onerror=alert(1)>';
+        const sys = SYd.cleanSystem({ fields: [
+            { id: 'f_tools', key: 'Tools', label: 'Tools', kind: 'item-list', vis: 'all', edit: 'owner', list: { counters: [{ key: 'ch', label: 'Charge' }], load: { from: 'f_cells', ct: 'ch' } } },
+            { id: 'f_cells', key: 'Cells', label: hostile, kind: 'item-list', vis: 'all', edit: 'owner', list: { lvl: { label: '<b>Juice</b>', min: 0, max: 500, def: 0 } } }
+        ], items: [{ id: 'i_glow', name: 'Glowstick', category: 'Tool', vis: 'all' }, { id: 'i_cell', name: hostile, category: 'Cell', vis: 'all', lvl: 50 }] }, { F: await import(modUrl('formula.js')), gmView: true });
+        const c = SYd.cleanChar({ id: 'c_kael', name: 'Kael', values: { f_tools: [{ id: 'w_t1', defId: 'i_glow', qty: 1, ct: { ch: 9 }, ld: { defId: 'i_cell' } }, { id: 'w_t2', defId: 'i_glow', qty: 1 }], f_cells: [{ id: 'w_c1', defId: 'i_cell', qty: 3, lvl: 50 }] } }, sys);
+        const sent = [];
+        const LD = new Function('el', 'document', 'window', 'systemOf', 'getActiveCampaign', 'fieldById', 'rowDef', 'rowIdOf', 'rowLvl', 'fmtNum', 'uid', 'commitItem', ldS + '\nreturn { loadCtl: loadCtl, openLoadMenu: openLoadMenu, closeLoadMenu: closeLoadMenu, loadChoices: loadChoices };')(
+            el, docD, { innerWidth: 1200, innerHeight: 800 }, () => sys, () => ({}), SYd.fieldById, SYd.rowDef, SYd.rowIdOf, SYd.rowLvl, n => String(n), p => p + 'new', (cc, ff, q) => sent.push(q));
+        const f = sys.fields[0], host1 = node('div'), host2 = node('div'), host3 = node('div');
+        LD.loadCtl(host1, c.values.f_tools[0], c, f, f.list, true, sys); LD.loadCtl(host2, c.values.f_tools[1], c, f, f.list, false, sys); LD.loadCtl(host3, c.values.f_tools[1], c, f, null, true, sys);
+        const chip1 = host1.children[0], btn = chip1 && chip1.children[1];
+        if (btn) btn.listeners.click({ preventDefault() {}, stopPropagation() {} });
+        const pop = docD.body.children[0], rows = pop ? pop.querySelectorAll('.sheet-dl-item') : [];
+        const texts = made.map(x => x.textContent).filter(x => typeof x === 'string'), titles = made.map(x => x.title).filter(Boolean);
+        if (rows[0]) rows[0].listeners.click({ preventDefault() {} });
+        const afterLoad = sent.slice(), popGone = docD.body.children.length === 0;
+        btn.listeners.click({ preventDefault() {}, stopPropagation() {} }); const pop2 = docD.body.children[0], rows2 = pop2.querySelectorAll('.sheet-dl-item'); rows2[rows2.length - 1].listeners.click({ preventDefault() {} });
+        check('1.5.8 Loads from, the sheet (sheets.js loadCtl and openLoadMenu, run for real on a page that refuses markup): the chip names what the row holds and has a Swap button where the row may be used, a row with nothing loaded says Empty and has no button where it may not be used, a list with no load draws nothing; the menu lists each row the load takes by its name and what it holds and then Unload, every name from the campaign a text node; a row sends one load op with a fresh back id, and Unload sends from null',
+            chip1 && chip1.children[0].textContent === hostile && btn.textContent === 'Swap' && host2.children[0].children[0].textContent === 'Empty' && host2.children[0].children.length === 1 && host3.children.length === 0
+            && rows.length === 2 && rows[0].children[0].textContent === hostile + ' ×3' && rows[0].children[1].textContent === '<b>Juice</b> 50' && rows[1].children[0].textContent === 'Unload' && rows[1].children[1].textContent === 'Back to ' + hostile + ' with what it has left'
+            && texts.includes(hostile) && JSON.stringify(afterLoad) === JSON.stringify([{ op: 'load', rowId: 'w_t1', from: 'w_c1', back: 'w_new' }]) && popGone
+            && JSON.stringify(sent[1]) === JSON.stringify({ op: 'load', rowId: 'w_t1', from: null, back: 'w_new' }) && !/innerHTML|insertAdjacentHTML|outerHTML/.test(ldS) && titles.some(t => t.indexOf('Loaded: ') === 0),
+            JSON.stringify([texts, sent, rows.length]));
+        const escD = fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', 'esckey.js'), 'utf8');
+        check('1.5.8 Loads from, the menu\'s Escape: the Load menu wears the Download menu\'s class, which Escape\'s router leaves to the menu\'s own listener', escD.includes('.sheet-dl-pop') && ldS.includes("'sheet-dl-pop sheet-load-pop'"));
+    }
     summed = true;
     console.log('\n' + pass + ' passed, ' + fail + ' failed.');
     if (fail) process.exit(1);

@@ -2639,7 +2639,7 @@ function itemListInto(wrap, f, c, carried, sysI, canThrow, editable, gm, empty, 
         if (chips && def.category) line.appendChild(el('span', 'sheet-chip', def.category));
         lostBits(line, rd, entry, c, f, gm, chg); needBits(line, sysI, c, entry, rd, gm); gmItemBits(line, def, entry, gm, !!(spec && spec.on)); keyShareChip(line, entry, rd, unseenL); modsBits(line, def, entry, spec, sysI);
         var noteLn = null;
-        if (spec) { statChips(line, def, spec, ovc); colChips(line, spec, res && res.cells ? res.cells[rid] : null); ctCtl(line, entry, c, f, spec, editable, res && res.cts ? res.cts[rid] : null); var lc = lvlCtl(entry, def, c, f, spec, chg && !opnR); if (lc) line.appendChild(lc); var oc = onCtl(entry, c, f, spec, editable, true); if (oc) line.appendChild(oc); var pcL = paidCtl(entry, def, c, f, spec, chg, gm, true); if (pcL) line.appendChild(pcL); noteLn = hudRow ? null : noteBits(entry, def, c, f, chg, ovc); }   // F4c1: the stats shown On the row, what one cost
+        if (spec) { statChips(line, def, spec, ovc); colChips(line, spec, res && res.cells ? res.cells[rid] : null); ctCtl(line, entry, c, f, spec, editable, res && res.cts ? res.cts[rid] : null); if (typeof loadCtl === 'function') loadCtl(line, entry, c, f, spec, editable, sysI); var lc = lvlCtl(entry, def, c, f, spec, chg && !opnR); if (lc) line.appendChild(lc); var oc = onCtl(entry, c, f, spec, editable, true); if (oc) line.appendChild(oc); var pcL = paidCtl(entry, def, c, f, spec, chg, gm, true); if (pcL) line.appendChild(pcL); noteLn = hudRow ? null : noteBits(entry, def, c, f, chg, ovc); }   // F4c1: the stats shown On the row, what one cost
         if (def.area && canThrow && (gm || def.vis !== 'gm') && entry.hid !== 1) line.appendChild(itemThrowBtn(def, c, f, rid));   // a GM-only item: the GM's throw only (a player's copy never carries its area)
         rowRollBtns(line, spec, entry, def, c, f, res);   // F5b: the list's rolls on this row
         if (noteLn) line.appendChild(noteToggle(noteLn, entry, c, f));
@@ -2704,6 +2704,58 @@ function ctCtl(host, entry, c, f, spec, editable, cells) {
         host.appendChild(w);
     });
 }
+// [sinkcheck:loadctl-start]
+// 1.5.8 Loads from (the owner, 2026-10-25, by prompt: "Full pack swap now"): what a row of a list with a load holds, and its Load menu. A play
+// control, as a counter is (a locked sheet and the HUD load too). Every name from a campaign as text
+function loadCtl(host, entry, c, f, spec, editable, sysI) {
+    if (!spec || !spec.load || typeof spec.load !== 'object' || !entry || entry.hid === 1) return;
+    var sys = sysI || systemOf(getActiveCampaign()), sf = sys ? fieldById(sys, spec.load.from) : null; if (!sf || sf.kind !== 'item-list' || !sf.list) return;
+    var ld = entry.ld && typeof entry.ld === 'object' ? entry.ld : null, rd = ld ? rowDef(sys, ld) : null, nm = ld ? ((rd && rd.def && rd.def.name) || 'Loaded') : 'Empty';
+    var w = el('span', 'sheet-chip sheet-item-load' + (ld ? '' : ' sheet-item-load-none')); w.title = ld ? 'Loaded: ' + nm : 'Nothing loaded from ' + (sf.label || sf.key || 'its list');
+    w.appendChild(el('span', 'sheet-item-ctl', nm));
+    if (editable && (entry.qty | 0) === 1) {
+        var b = el('button', 'tool ghost sheet-item-ctb sheet-item-loadb', ld ? 'Swap' : 'Load'); b.type = 'button';
+        b.title = (ld ? 'Swap or unload' : 'Load one') + ' from ' + (sf.label || sf.key || 'its list') + '. What comes out goes back with what it has left';
+        b.addEventListener('click', function(e) { e.preventDefault(); e.stopPropagation(); openLoadMenu(b, c, f, entry, sf, spec, sys); });
+        w.appendChild(b);
+    }
+    host.appendChild(w);
+}
+// the rows the load takes, by name and what each holds, then Unload. On the page, as the Download menu is (its class, its Escape)
+var _ldPop = null;
+function closeLoadMenu() { if (_ldPop) { _ldPop.remove(); _ldPop = null; document.removeEventListener('mousedown', ldOutside, true); document.removeEventListener('keydown', ldKey, true); } }
+function ldOutside(e) { if (_ldPop && !_ldPop.contains(e.target) && !(_ldPop._anchor && _ldPop._anchor.contains(e.target))) closeLoadMenu(); }
+function ldKey(e) { if (_ldPop && e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); var a = _ldPop._anchor; closeLoadMenu(); try { if (a) a.focus(); } catch (er) {} } }
+function loadChoices(sys, c, sf, spec) {   // the source rows a load may take: live, not loaded, of a category it takes
+    var sl = sf.list, ld = spec.load, out = [];
+    (c && c.values && Array.isArray(c.values[sf.id]) ? c.values[sf.id] : []).forEach(function(s) {
+        if (!s || typeof s !== 'object' || s.hid === 1 || typeof s.opn === 'string' || s.keptOn === 1 || (s.ld && typeof s.ld === 'object')) return;
+        var sd = rowDef(sys, s), d = sd ? sd.def : null; if (!d) return;
+        if (Array.isArray(ld.cats) && !ld.cats.some(function(x) { return String(x).toLowerCase() === String(d.category || '').trim().toLowerCase(); })) return;
+        out.push({ id: rowIdOf(s), name: d.name || 'Item', qty: s.qty | 0 || 1, lvl: rowLvl(sl, s, d) });
+    });
+    return out;
+}
+function openLoadMenu(anchor, c, f, entry, sf, spec, sys) {
+    if (_ldPop) { closeLoadMenu(); return; }
+    var rid = rowIdOf(entry), lvL = (sf.list.lvl && sf.list.lvl.label) || 'Level', pop = el('div', 'sheet-dl-pop sheet-load-pop'); pop.setAttribute('role', 'menu'); pop._anchor = anchor;
+    var go = function(from) { closeLoadMenu(); commitItem(c, f, { op: 'load', rowId: rid, from: from, back: uid('w_') }); };
+    var item = function(label, sub, from) { var b = el('button', 'sheet-dl-item'); b.type = 'button'; b.setAttribute('role', 'menuitem'); b.appendChild(el('span', 'sheet-dl-t', label)); b.appendChild(el('span', 'sheet-dl-s', sub)); b.addEventListener('click', function(e) { e.preventDefault(); go(from); }); pop.appendChild(b); };
+    var ch = loadChoices(sys, c, sf, spec);
+    ch.forEach(function(x) { item(x.name + (x.qty > 1 ? ' \u00d7' + x.qty : ''), lvL + ' ' + fmtNum(x.lvl), x.id); });
+    if (entry.ld && typeof entry.ld === 'object') item('Unload', 'Back to ' + (sf.label || sf.key || 'its list') + ' with what it has left', null);
+    if (!pop.children.length) pop.appendChild(el('div', 'sheet-dl-note', 'Nothing in ' + (sf.label || sf.key || 'that list') + ' to load.'));
+    pop.addEventListener('mousedown', function(e) { e.stopPropagation(); });
+    pop.addEventListener('keydown', function(e) {
+        e.stopPropagation(); if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+        e.preventDefault(); var its = Array.prototype.slice.call(pop.querySelectorAll('.sheet-dl-item')), at = its.indexOf(document.activeElement), nx = its[(at + (e.key === 'ArrowDown' ? 1 : its.length - 1) + its.length) % its.length]; try { if (nx) nx.focus(); } catch (er) {}
+    });
+    document.body.appendChild(pop); _ldPop = pop;
+    var r = anchor.getBoundingClientRect(), n = pop.children.length; pop.style.left = Math.max(8, Math.min(window.innerWidth - 288, r.left)) + 'px'; pop.style.top = Math.max(8, Math.min(window.innerHeight - (24 + 52 * n), r.bottom + 6)) + 'px';
+    document.addEventListener('mousedown', ldOutside, true); document.addEventListener('keydown', ldKey, true);
+    var first = pop.querySelector('.sheet-dl-item'); try { if (first) first.focus(); } catch (er) {}
+}
+// [sinkcheck:loadctl-end]
 // Stage 6 F5a1: the columns shown on a row — a chip each, its label small ("Cost 11 pts"); an error reads "\u2014" with the message on hover
 function colChips(host, spec, cells) {
     if (!cells || !Array.isArray(spec.cols)) return;
@@ -2778,6 +2830,7 @@ function itemTableInto(wrap, f, c, carried, sysI, canThrow, editable, gm, empty,
                 actTd.appendChild(nt);
             }
             ctCtl(actTd, entry, c, f, spec, editable, res && res.cts ? res.cts[rowIdOf(entry)] : null);   // Stage 6 HUD R2: its counters
+            if (typeof loadCtl === 'function') loadCtl(actTd, entry, c, f, spec, editable, sysI);   // 1.5.8 Loads from
             rowRollBtns(actTd, spec, entry, def, c, f, res);   // F5b: the list's rolls
             if (rrT) actTd.appendChild(editBtn(entry, c, f, rrT, rd.src === 'custom'));   // F4c2: ✎
             if (editable) { var ubT = undoBtn(entry, c, f); if (ubT) actTd.appendChild(ubT); if (chg) actTd.appendChild(itemRmBtn(entry, def, c, f)); }
@@ -4155,7 +4208,8 @@ function commitItem(c, f, q) {   // Stage 6 F4a: a row op q = { op: add|remove|s
     if (mvG && !mvG.ok) { toast(mvG.msg || 'Not enough money for that.'); return; }
     undoFollow(res);
     var prev = c.values && Object.prototype.hasOwnProperty.call(c.values, f.id) ? clone(c.values[f.id]) : undefined;
-    lastChange = { charId: c.id, fieldId: f.id, prev: prev };
+    var extraI = null; if (mvG && mvG.values) Object.keys(mvG.values).forEach(function(k) { if (k === f.id) return; extraI = extraI || {}; extraI[k] = c.values && Object.prototype.hasOwnProperty.call(c.values, k) ? clone(c.values[k]) : undefined; });   // 1.5.8: Revert takes back every list the change moved (a load's other list, a purchase's money)
+    lastChange = extraI ? { charId: c.id, fieldId: f.id, prev: prev, extra: extraI } : { charId: c.id, fieldId: f.id, prev: prev };
     if (typeof budgetNote === 'function') budgetNote(sys, c, f.id, res.value);   // 126: the GM's own change is never refused; a notice says when it takes the character over a budget
     c.values = c.values || {}; c.values[f.id] = res.value;
     var d = {}; d[f.id] = res.value;
@@ -5063,6 +5117,15 @@ function refreshErrors() {
                 else { seenP[pl] = 1; if (++keptP === LIMITS.colPlus + 1) errs.push({ message: 'Column "' + cn + '": at most ' + LIMITS.colPlus + ' With stats a column. Save keeps the first ' + LIMITS.colPlus + '.' }); }
             });
         });
+        if (sp.load && typeof sp.load === 'object') {   // 1.5.8 Loads from, as the cleaner reads it
+            var ldr = sp.load, ldSrc = null, ctsE = Array.isArray(sp.counters) ? sp.counters : [], ldK = typeof ldr.ct === 'string' ? ldr.ct.trim().toLowerCase() : '';
+            draft.fields.forEach(function(x) { if (!ldSrc && x && x.id === ldr.from) ldSrc = x; });
+            if (!ldSrc || ldSrc.kind !== 'item-list' || ldSrc.id === f.id) errs.push({ message: 'Loads from names no other item list. Save drops it.' });
+            else if (!(ldSrc.list && typeof ldSrc.list === 'object' && ldSrc.list.lvl && typeof ldSrc.list.lvl === 'object')) errs.push({ message: 'Loads from ' + (ldSrc.label || ldSrc.key || 'that list') + ', whose rows have no level to hold what they carry. Tick Rows have a level there, or Save drops it.' });
+            else if (!ldK || !ctsE.some(function(x) { return x && typeof x.key === 'string' && x.key.toLowerCase() === ldK; })) errs.push({ message: 'Loads from needs one of this list\u2019s counters to hold what is loaded. Save drops it.' });
+            else if (ldSrc.vis === 'gm' && f.vis !== 'gm') (warningsById['list:' + f.id] = warningsById['list:' + f.id] || []).push({ message: 'Loads from a GM-only list: players see no Load on their sheet.' });
+            if (Array.isArray(ldr.cats) && ldr.cats.length > LIMITS.listCats) errs.push({ message: 'Loads from takes at most ' + LIMITS.listCats + ' categories. Save keeps the first ' + LIMITS.listCats + '.' });
+        }
         keptBy[f.id] = mine;
         if (errs.length) errorsById['list:' + f.id] = errs;
     });
@@ -5829,6 +5892,22 @@ function listCard(f, allCats, targets, acts) {   // acts (turn-based combat T1):
         cb2.appendChild(rw);
     });
     var tadd = el('button', 'tool ghost sys-btn sys-list-ctadd', '+ Counter'); tadd.dataset.act = 'ctadd'; tadd.disabled = ctsL.length >= LIMITS.rowCounters; tadd.title = tadd.disabled ? 'At most ' + LIMITS.rowCounters + ' counters a list' : 'A number each row keeps and shows with \u2212 and + (a weapon\u2019s Charges, its Hits)'; cb2.appendChild(tadd);
+    {   // 1.5.8 Loads from: a row of this list loads one unit of a row of another list (a blaster a power pack), and a counter holds what it has left
+        var ldS = sp.load && typeof sp.load === 'object' ? sp.load : null, lrw = el('div', 'sys-flags sys-list-load'), lsel = el('select', 'sys-list-loadfrom');
+        lrw.appendChild(el('span', 'sys-num-cap', 'Loads from'));
+        lsel.title = 'A row of this list loads one unit of a row of another list, as a blaster loads a power pack. What the unit holds, its level, goes into a counter of this list. A swap or an unload puts it back with what is left';
+        var lo0 = el('option', null, 'Nothing'); lo0.value = ''; lsel.appendChild(lo0);
+        (typeof draft !== 'undefined' && draft && Array.isArray(draft.fields) ? draft.fields : []).forEach(function(x) { if (!x || x.kind !== 'item-list' || x.id === f.id) return; var o = el('option', null, x.label || x.key || x.id); o.value = x.id; if (ldS && ldS.from === x.id) o.selected = true; lsel.appendChild(o); });
+        lrw.appendChild(lsel);
+        if (ldS) {
+            var csel = el('select', 'sys-list-loadct'); csel.title = 'The counter that holds what the loaded row has left. Its most may read Row.loadmax, the loaded row\u2019s full level';
+            var co0 = el('option', null, 'Pick a counter'); co0.value = ''; csel.appendChild(co0);
+            ctsL.forEach(function(x) { if (!x || typeof x.key !== 'string' || !x.key) return; var o = el('option', null, (x.label || x.key) + ' (' + x.key + ')'); o.value = x.key; if (ldS.ct === x.key) o.selected = true; csel.appendChild(o); });
+            lrw.appendChild(csel);
+            lrw.appendChild(input('sys-list-loadcats field', Array.isArray(ldS.cats) ? ldS.cats.join(', ') : '', 'The categories of that list a row may load, separated by commas. Blank: any of its rows', 'Categories it takes (blank: any)'));
+        }
+        cb2.appendChild(lrw);
+    }
     // Stage 6 F5b: the list's rolls — a button on each row, the formula rolled with the row's names (dice allowed), LIMITS.rowRolls at most
     var rls = Array.isArray(sp.rolls) ? sp.rolls : [];
     cb2.appendChild(el('span', 'sys-num-cap', 'Rolls'));
@@ -7148,6 +7227,7 @@ function onInput(e) {
             if (lcc.indexOf('sys-list-needstext') >= 0) { if (t.value.trim()) nR.needsText = t.value.slice(0, LIMITS.label); else delete nR.needsText; }
             else { if (t.value.trim()) nR.needs = t.value.slice(0, LIMITS.formula); else delete nR.needs; }
         }
+        else if (lcc.indexOf('sys-list-loadcats') >= 0) { if (!lsp.load || typeof lsp.load !== 'object') return; var lcv = t.value.split(',').map(function(s) { return s.trim(); }).filter(Boolean); if (lcv.length) lsp.load.cats = lcv; else delete lsp.load.cats; }   // 1.5.8 Loads from (Save cleans them)
         else if (lcc.indexOf('sys-list-ct') >= 0) {   // Stage 6 HUD R2: a counter's boxes (Save cleans them)
             var ctrw = t.closest('.sys-list-ct'), ctix = ctrw ? +ctrw.dataset.ti : -1, ctL = Array.isArray(lsp.counters) ? lsp.counters : null; if (!ctL || !(ctix >= 0 && ctix < ctL.length)) return;
             var ctD = ctL[ctix] && typeof ctL[ctix] === 'object' && !Array.isArray(ctL[ctix]) ? ctL[ctix] : (ctL[ctix] = {});
@@ -7313,6 +7393,8 @@ function onChange(e) {
         else if (c.indexOf('sys-list-rollkind') >= 0) { var rkr = t.closest('.sys-list-roll'), rkD = rkr && Array.isArray(lsc.rolls) ? lsc.rolls[+rkr.dataset.ri] : null; if (!rkD || typeof rkD !== 'object') return; if (t.value === 'apply') { if (!Array.isArray(rkD.apply)) rkD.apply = [{ f: '', formula: '' }]; } else delete rkD.apply; }   // Stage 6 HUD H7b: Roll | Apply (a formula typed before stays in the draft)
         else if (c.indexOf('sys-list-applytarget') >= 0 || c.indexOf('sys-list-applyop') >= 0 || c.indexOf('sys-list-applywhen') >= 0) { var atr = t.closest('.sys-list-applyrow'), atR = atr && Array.isArray(lsc.rolls) ? lsc.rolls[+atr.dataset.ri] : null, atK = atr && atr.dataset.k === 'then' ? 'then' : 'apply', atC = atR && Array.isArray(atR[atK]) ? atR[atK][+atr.dataset.ai] : null; if (!atC || typeof atC !== 'object') return; if (c.indexOf('sys-list-applytarget') >= 0) { if (t.value.indexOf('c:') === 0) { atC.c = t.value.slice(2); delete atC.f; } else { atC.f = t.value; delete atC.c; } } else if (c.indexOf('sys-list-applywhen') >= 0) { if (t.value === 'hit' || t.value === 'miss' || t.value === 'malf' || t.value === 'crit' || t.value === 'fumble') atC.when = t.value; else delete atC.when; } else { delete atC.add; delete atC.set; if (t.value === 'add') atC.add = true; else if (t.value === 'set') atC.set = true; } }   // R2b: a counter, a consequence's When
         else if (c.indexOf('sys-list-colmetric') >= 0 || c.indexOf('sys-list-statmetric') >= 0) { var mcol = c.indexOf('sys-list-colmetric') >= 0, mrw = t.closest(mcol ? '.sys-list-col' : '.sys-list-stat'), mLs = mcol ? lsc.cols : lsc.stats, mD = mrw && Array.isArray(mLs) ? mLs[+(mcol ? mrw.dataset.ci : mrw.dataset.si)] : null; if (!mD || typeof mD !== 'object') return; if (t.value === 'swap' || t.value === 'bare') mD.unitShow = t.value; else delete mD.unitShow; }   // 1.5.4: how a measure reads under Metric
+        else if (c.indexOf('sys-list-loadfrom') >= 0) { if (t.value) { var ld0 = lsc.load && typeof lsc.load === 'object' ? lsc.load : {}, ct0 = Array.isArray(lsc.counters) && lsc.counters[0] && typeof lsc.counters[0].key === 'string' ? lsc.counters[0].key : ''; lsc.load = { from: t.value, ct: typeof ld0.ct === 'string' && ld0.ct ? ld0.ct : ct0 }; if (Array.isArray(ld0.cats)) lsc.load.cats = ld0.cats; } else delete lsc.load; }   // 1.5.8 Loads from
+        else if (c.indexOf('sys-list-loadct') >= 0) { if (lsc.load && typeof lsc.load === 'object') { if (t.value) lsc.load.ct = t.value; else delete lsc.load.ct; } }
         else if (c.indexOf('sys-list-money') >= 0) { if (t.value) lsc.money = t.value; else delete lsc.money; }   // 1.5.6 the Money box (Save keeps a level only with one, a stat only as a number stat)
         else if (c.indexOf('sys-list-price') >= 0) { _priceAt.delete(lsc); if (t.value) lsc.price = t.value; else delete lsc.price; }
         else return;

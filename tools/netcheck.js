@@ -12716,6 +12716,50 @@ pendingChecks.push((async () => {
     }
 })());
 pendingChecks.push((async () => {
+    /* ---- 1.5.8 Loads from: the host stores both lists a load moves, and a player's own app sends a load and waits for the host's word ---- */
+    {
+        const url = f => 'file:///' + path.resolve(path.join(__dirname, '..', 'system', 'app', 'scripts', f)).split(String.fromCharCode(92)).join('/');
+        const Sx = await import(url('systemcore.js')), Fx = await import(url('formula.js'));
+        const ciSrc = between('// [netcheck:charitem-start]', '// [netcheck:charitem-end]', 'charitem'), dlSrc = between('// [netcheck:chardelta-start]', '// [netcheck:chardelta-end]', 'chardelta');
+        const ntSrc = (() => { const i = src.indexOf('function itemNotice('), k = src.indexOf('net.syncChars = function', i); return src.slice(i, k); })();
+        const raw = { v: 1, name: 'L', rolls: [], fields: [
+            { id: 'f_tools', key: 'Tools', label: 'Tools', kind: 'item-list', edit: 'owner', vis: 'all', list: { counters: [{ key: 'ch', label: 'Charge', max: 'Row.loadmax' }], load: { from: 'f_cells', ct: 'ch' } } },
+            { id: 'f_cells', key: 'Cells', label: 'Cells', kind: 'item-list', edit: 'owner', vis: 'all', list: { lvl: { label: 'Charge', min: 0, max: 500, def: 0 } } }],
+            items: [{ id: 'i_glow', name: 'Glowstick' }, { id: 'i_cell', name: 'Cell', lvl: 50 }] };
+        const sysL = Sx.cleanSystem(raw, { F: Fx, gmView: true });
+        const camp = { id: 'k', system: sysL, chars: { c_1: { id: 'c_1', name: 'Kael', ownerId: 'u_k', npc: false, values: { f_tools: [{ id: 'w_t1', defId: 'i_glow', qty: 1 }], f_cells: [{ id: 'w_c1', defId: 'i_cell', qty: 2, lvl: 50 }] } } } };
+        const out = { answer: [], owner: [], saves: 0 }, conn = { peer: 'pK', send: m => { packCheck(m); out.answer.push(JSON.parse(JSON.stringify(m))); } };
+        const netH = { active: true, role: 'host', paused: false, conns: [{ peer: 'pK', open: true, send: m => { packCheck(m); out.owner.push(JSON.parse(JSON.stringify(m))); } }], roster: { pK: { id: 'u_k' } } };
+        const win = { wpFormula: Fx, wpVtt: { on: () => true }, wpSheets: { playerSystem: c => Sx.cleanSystem(c.system, { F: Fx, gmView: false }), charChanged() {} }, wpDiceCore: null, wpLibrary: null };
+        const H = new Function('net', 'SC', 'window', 'peerPaused', 'getActiveCampaign', 'saveRemoteSoon', 'sendFailed', 'peerProfileId', 'lim', 'toast', 'logEvent',
+            'var charLimit = lim, _charSlowSaid = {}, _charPending = {}, _charHost = {}, _rowGrace = {};\n' + dlSrc + '\n' + ntSrc + '\nreturn function(msg, conn) {\n' + ciSrc + '\n};')(
+            netH, () => Sx, win, () => false, () => camp, () => { out.saves++; }, e => { throw e; }, c => (netH.roster[c.peer] ? netH.roster[c.peer].id : null), { allow: () => true }, () => {}, () => {});
+        const SEND = msg => { out.answer.length = 0; out.owner.length = 0; const s0 = out.saves; H(Object.assign({ type: 'char-item', charId: 'c_1', fieldId: 'f_tools', rowId: 'w_t1' }, msg), conn); return { answer: out.answer.slice(), owner: out.owner.slice(), saved: out.saves - s0 }; };
+        const a1 = SEND({ rid: 'l1', op: 'load', from: 'w_c1', back: 'w_b1' }), t1 = j(camp.chars.c_1.values.f_tools), c1 = j(camp.chars.c_1.values.f_cells.map(r => [r.id, r.qty, r.lvl]));
+        const keys1 = a1.owner.filter(m => m.values).map(m => Object.keys(m.values).sort());
+        const a2 = SEND({ rid: 'l2', op: 'load', from: 'w_zz', back: 'w_b2' }), t2 = j(camp.chars.c_1.values.f_tools);
+        const a3 = SEND({ rid: 'l3', op: 'load', from: null, back: 'w_b3' }), c3 = j(camp.chars.c_1.values.f_cells.map(r => [r.id, r.qty, r.lvl]));
+        check('1.5.8 Loads from on the host (the real row branch with the real core): a player\'s load takes one unit off the stack and keeps its copy and its charge on the row, stored, saved once, acked and sent to the owner with both lists; a source row that is not there is answered char-deny and nothing moves; an unload puts the full unit back onto its stack; every message packs',
+            j(a1.answer) === j([{ type: 'char-ack', rid: 'l1' }]) && a1.saved === 1 && t1 === j([{ id: 'w_t1', defId: 'i_glow', qty: 1, ct: { ch: 50 }, ld: { defId: 'i_cell' } }]) && c1 === j([['w_c1', 1, 50]]) && j(keys1[0] || []) === j(['f_cells', 'f_tools'])
+            && a2.answer.length === 1 && a2.answer[0].type === 'char-deny' && a2.answer[0].reason === 'missing' && a2.saved === 0 && a2.owner.length === 0 && t2 === t1
+            && j(a3.answer) === j([{ type: 'char-ack', rid: 'l3' }]) && c3 === j([['w_c1', 2, 50]]),
+            j([a1, t1, c1, keys1, a2.answer, a3.answer, c3]));
+        // a player's own app: a load is sent with its from and back and waits for the host's word (nothing laid over their copy first)
+        const cA = src.indexOf('net.charItem = function('), cZ = src.indexOf('\n};\n', cA) + 3, sent = [], pend = {};
+        const view = Sx.cleanSystem(raw, { F: Fx, gmView: false });
+        const campP = { id: 'k', system: view, chars: { c_1: { id: 'c_1', name: 'Kael', ownerId: 'u_k', npc: false, values: { f_tools: [{ id: 'w_t1', defId: 'i_glow', qty: 1 }], f_cells: [{ id: 'w_c1', defId: 'i_cell', qty: 2, lvl: 50 }] } } } };
+        const before = j(campP.chars.c_1.values);
+        const netP = { active: true, role: 'client', stream: false, foreign: true, syncedPeer: 'h', myId: 'u_k', libEntry: () => null, conns: [{ peer: 'h', open: true, send: m => { packCheck(m); sent.push(JSON.parse(JSON.stringify(m))); } }] };
+        new Function('net', 'SC', 'getActiveCampaign', 'window', '_charPending', 'charPendingDone', 'setTimeout', src.slice(cA, cZ))(netP, () => Sx, () => campP, { wpFormula: Fx, wpVtt: { on: () => true } }, pend, () => {}, () => 0);
+        const p1 = netP.charItem('c_1', 'f_tools', { op: 'load', rowId: 'w_t1', from: 'w_c1', back: 'w_b1' }), p2 = netP.charItem('c_1', 'f_tools', { op: 'load', rowId: 'w_t1', from: null, back: 'w_b2' });
+        const pk = Object.keys(pend);
+        check('1.5.8 Loads from on a player\'s own app (the real net.charItem): a load and an unload are each sent with their from and back and wait for the host\'s word, their copy left as it was until it comes, as a purchase is',
+            p1.ok && p1.pending && p2.ok && p2.pending && j(campP.chars.c_1.values) === before && sent.length === 2
+            && j(sent.map(m => [m.type, m.op, m.rowId, m.from, m.back])) === j([['char-item', 'load', 'w_t1', 'w_c1', 'w_b1'], ['char-item', 'load', 'w_t1', null, 'w_b2']]) && pk.length === 2 && pk.every(k => pend[k].kind === 'item' && Array.isArray(pend[k].batch)),
+            j([p1, p2, sent, pk.length]));
+    }
+})());
+pendingChecks.push((async () => {
     /* ---- 126b: only a player's own app believes a src; the host judges by its own rows ---- */
     {
         const url = f => 'file:///' + path.resolve(path.join(__dirname, '..', 'system', 'app', 'scripts', f)).split(String.fromCharCode(92)).join('/');
