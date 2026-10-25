@@ -15882,7 +15882,7 @@ pendingChecks.push((async () => {
             ok && !c.players.u_app && k.name === 'Kael (web)' && k.key === 'K_WEB' && k.charId === 'c_1' && k.charName === 'Kael' && k.lastMap === 'm2' && k.firstSeen === 100 && k.lastSeen === 950 && k.joinCount === 8 && k.was === 'u_app'
             && c.chars.c_1.ownerId === 'u_web' && c.chars.c_2.ownerId === 'u_o' && c.items.m1.whiteboard[0].ownerId === 'u_web' && c.items.m2.whiteboard[0].ownerId === 'u_web' && c.items.m1.whiteboard[1].ownerId === 'u_web' && bad.every(b => b === false)
             && flat.includes("(!online[pid] && ids.some(function(o) { return o !== pid && !online[o]; }) ? '<button class=\"tool ghost player-act\" data-merge=\"' + escTextRoster(pid) + '\"")
-            && flat.includes("}, { noEnter: true, noEscape: true, yes: 'Merge', alt: 'Not them' });") && flat.includes("    } else if (btn.dataset.merge) {\n        mergeAsk(camp, btn.dataset.merge);"), JSON.stringify([ok, c.players, bad]));
+            && flat.includes("}, { noEnter: true, noEscape: true, yes: 'Merge', body: pk ? pk.el : undefined });") && flat.includes("var pk = typeof playerPick === 'function' ? playerPick(camp, cands, 'Merge into') : null;") && flat.includes("    } else if (btn.dataset.merge) {\n        mergeAsk(camp, btn.dataset.merge);"), JSON.stringify([ok, c.players, bad]));
     }
     /* ---- 1.5.6, backlog 185: "Same person as…" at the GM's Let them in? (the approval slice, run for real) ---- */
     {
@@ -15895,17 +15895,18 @@ pendingChecks.push((async () => {
             const env = { approvalOpen: false, pendingJoins: [{ conn, prof: { id: 'u_new', name: 'Web' } }], bannedIds: {}, net: { active: true, role: 'host', roster: { pC: { id: 'u_c' } } },
                 getActiveCampaign: () => camp, denyJoin: () => {}, own: H.own, validProfileId: H.validProfileId, admitPlayer: (c, p) => admitted.push(p.id), toast: s => toasts.push(s), logEvent: () => {},
                 SC: () => ({ playsAs: (cp, pid) => (pid === 'u_a' ? 'Kael' : '') }),
-                showConfirm: (text, cb, o) => { asks.push({ text, o: o || {} }); if (opts && opts.dropAt === asks.length) conn.open = false; const a = ans.shift(); cb(a === undefined ? false : a); } };
+                document: { createElement: tag => ({ tagName: tag, children: [], className: '', textContent: '', value: '', appendChild(c) { this.children.push(c); if (this.tagName === 'select' && this.value === '') this.value = c.value; return c; } }) },
+                showConfirm: (text, cb, o) => { asks.push({ text, o: o || {} }); if (opts && opts.dropAt === asks.length) conn.open = false; let a = ans.shift(); if (a && typeof a === 'object') { o.body.children[1].value = a.pick; a = true; } cb(a === undefined ? false : a); } };
             if (opts && opts.noOthers) camp.players = { u_c: { name: 'Cy' } };
             const names = Object.keys(env);
             let threw = ''; try { new Function(...names, apS + '\nprocessNextApproval();\nreturn { sameCandidates, takeOver };')(...names.map(n => env[n])); } catch (e) { threw = String(e && e.message); }
             return { camp, asks, admitted, toasts, threw };
         };
-        const A = run(['alt', 'alt', true]);   // Same person as…, not Bo, yes Ana
-        const B = run(['alt', false, true]);   // Same person as…, Cancel at Bo: the first question again, then plain Let them in
-        const C = run(['alt', true], { dropAt: 2 });   // the connection drops while the second question is up
+        const A = run(['alt', { pick: 'u_a' }]);   // Same person as…, Ana picked from the list (1.5.7: one list, not one question a player)
+        const B = run(['alt', false, true]);   // Same person as…, Cancel at the list: the first question again, then plain Let them in
+        const C = run(['alt', { pick: 'u_a' }], { dropAt: 2 });   // the connection drops while the list is up
         const D = run([true], { noOthers: true });   // nobody to be: no third button
-        const E = run(['alt', 'alt', 'alt', true]);   // past the last known player: back to the first question, then let in as new
+        const E = run(['alt', { pick: 'u_c' }, true]);   // a pick that was never offered (a player at the table): the first question again, then let in as new
         const fns = new Function(...['net', 'own', 'validProfileId', 'showConfirm', 'admitPlayer', 'toast', 'getActiveCampaign', 'pendingJoins', 'approvalOpen', 'bannedIds', 'denyJoin'], apS + '\nreturn { sameCandidates, takeOver };')({}, H.own, H.validProfileId, () => {}, () => {}, () => {}, () => null, [], false, {}, () => {});
         const cs = mkCamp(), cand = fns.sameCandidates(cs, 'u_new', { pC: { id: 'u_c' } }), tc = mkCamp(), took = fns.takeOver(tc, 'u_a', 'u_new'), bad = [fns.takeOver(mkCamp(), 'u_zz', 'u_new'), fns.takeOver(mkCamp(), 'u_a', 'u_a'), fns.takeOver(mkCamp(), 'u_a', 'bad id!')];
         const J2 = JSON.stringify;
@@ -15913,12 +15914,13 @@ pendingChecks.push((async () => {
             [A, B, C, D, E].every(r => r.threw === '') && J2(cand) === J2(['u_b', 'u_a'])
             && took && !tc.players.u_a && tc.players.u_new.was === 'u_a' && tc.players.u_new.key === undefined && tc.players.u_new.charId === 'c_1' && tc.players.u_new.lastMap === 'm1' && tc.chars.c_1.ownerId === 'u_new' && tc.chars.c_2.ownerId === 'u_b'
             && tc.items.m1.whiteboard[0].ownerId === 'u_new' && tc.items.m1.whiteboard[1].ownerId === 'u_b' && tc.items.m2.whiteboard[0].ownerId === 'u_new' && bad.every(b => b === false)
-            && A.asks.length === 3 && A.asks[0].o.alt === 'Same person as…' && /Bo/.test(A.asks[1].text) && A.asks[1].o.yes === 'Yes, the same' && A.asks[1].o.alt === 'Not them' && /Ana", who plays Kael/.test(A.asks[2].text) && A.asks.every(a => a.o.noEnter === true && a.o.noEscape === true)
+            && A.asks.length === 2 && A.asks[0].o.alt === 'Same person as…' && /Who is "Web"/.test(A.asks[1].text) && A.asks[1].o.yes === 'Yes, the same' && A.asks[1].o.alt === undefined && A.asks.every(a => a.o.noEnter === true && a.o.noEscape === true)
+            && A.asks[1].o.body.className === 'player-pick' && J2(A.asks[1].o.body.children[1].children.map(c => c.value)) === J2(['u_b', 'u_a']) && J2(A.asks[1].o.body.children[1].children.map(c => c.textContent)) === J2(['Bo', 'Ana, plays Kael'])
             && J2(A.admitted) === J2(['u_new']) && A.camp.players.u_new.was === 'u_a' && A.camp.chars.c_1.ownerId === 'u_new' && /takes over from Ana, playing Kael/.test(A.toasts.join())
             && B.asks.length === 3 && /wants to join/.test(B.asks[2].text) && J2(B.admitted) === J2(['u_new']) && !B.camp.players.u_new && B.camp.players.u_a.key === 'K_A'
             && C.admitted.length === 0 && C.camp.players.u_a && !C.camp.players.u_new && /already dropped/.test(C.toasts.join())
             && D.asks.length === 1 && D.asks[0].o.alt === undefined && J2(D.admitted) === J2(['u_new'])
-            && E.asks.length === 4 && /wants to join/.test(E.asks[3].text) && J2(E.admitted) === J2(['u_new']) && !E.camp.players.u_new, J2([cand, A.asks.map(a => a.text.slice(0, 60)), A.admitted, A.toasts, B.asks.length, C.toasts, D.asks.length, E.asks.length, [A, B, C, D, E].map(r => r.threw)]));
+            && E.asks.length === 3 && /wants to join/.test(E.asks[2].text) && J2(E.admitted) === J2(['u_new']) && !E.camp.players.u_new && E.camp.players.u_c, J2([cand, A.asks.map(a => a.text.slice(0, 60)), A.admitted, A.toasts, B.asks.length, C.toasts, D.asks.length, E.asks.length, [A, B, C, D, E].map(r => r.threw)]));
     }
     /* ---- 1.5.6: a GM-only page keeps every page nested under it from players (found at a test join on 2026-10-24: 55 old pages under a GM-only folder reached a player) ---- */
     pendingChecks.push((async () => { try {

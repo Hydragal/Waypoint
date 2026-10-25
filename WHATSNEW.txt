@@ -19,6 +19,11 @@ Combat
   you move it, and a player's sheet shows it with no minus or plus. So an
   Attack that hits can open one Damage roll and no more.
 
+Multiplayer
+- Same person as... and Merge into... pick the player from one list, each
+  by name, whom they play and when they were last seen, in place of a
+  question for each player in turn.
+
 Calendar
 - Time passes as Active while a fight runs. Rest cannot be picked until
   the fight ends.

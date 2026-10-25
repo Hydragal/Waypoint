@@ -5982,6 +5982,23 @@ function sameCandidates(camp, newId, roster) {
         return pid !== newId && !on[pid] && !!r && typeof r === 'object' && validProfileId(pid) && pid.indexOf('tk:') !== 0 && !(camp.bannedPlayers && own(camp.bannedPlayers, pid));
     }).sort(function(a, b) { return (Number(camp.players[b].lastSeen) || 0) - (Number(camp.players[a].lastSeen) || 0); }).slice(0, 12);
 }
+// 1.5.7 (the owner, 2026-10-25: "flipping through a bunch of prompts looking for a particular player when a dropdown bar can complete the same
+// function, is inefficient and not good UI"): the known players as ONE list in the question, each by its name, whom it plays and when it was last
+// seen, made of elements and text alone (a name comes from the table or a file); pick() answers the chosen id, only one of those offered
+function playerPick(camp, ids, label) {
+    var d = typeof document !== 'undefined' ? document : null; if (!d || !camp || !camp.players || !ids || !ids.length) return null;
+    var box = d.createElement('label'); box.className = 'player-pick';
+    var cap = d.createElement('span'); cap.className = 'player-pick-cap'; cap.textContent = label; box.appendChild(cap);
+    var sel = d.createElement('select'); sel.className = 'player-pick-list';
+    var Sp = typeof SC === 'function' ? SC() : null;
+    ids.forEach(function(pid) {
+        var r = camp.players[pid] || {}, plays = Sp && Sp.playsAs ? Sp.playsAs(camp, pid) : '', seen = Number(r.lastSeen) || 0, o = d.createElement('option');
+        o.value = pid; o.textContent = String(r.name || 'A player').slice(0, 60) + (plays ? ', plays ' + String(plays).slice(0, 60) : '') + (seen > 1e11 ? ' \u00b7 last seen ' + new Date(seen).toLocaleDateString() : '');
+        sel.appendChild(o);
+    });
+    box.appendChild(sel);
+    return { el: box, pick: function() { var v = sel.value; return ids.indexOf(v) >= 0 ? v : null; } };
+}
 function takeOver(camp, oldId, newId) {
     if (!camp || !camp.players || typeof camp.players !== 'object' || !own(camp.players, oldId) || oldId === newId || !validProfileId(newId)) return false;
     var rec = camp.players[oldId], nr = Object.assign({}, rec && typeof rec === 'object' ? rec : {});
@@ -6019,12 +6036,12 @@ function processNextApproval() {
     approvalOpen = true;
     var hint = next.why ? ' — a name this table already knows, but without its table key (a fresh install, or someone else using that name)' : '';
     var who = next.prof.name || 'A player', sameOf = campQ && typeof sameCandidates === 'function' ? sameCandidates(campQ, next.prof.id, net.roster) : [];
-    var askSame = function(k) {   // 1.5.6: one known player at a time; Cancel goes back to the first question
-        if (k >= sameOf.length) { askMain(); return; }
-        var pid = sameOf[k], recS = campQ.players[pid] || {}, Sp = typeof SC === 'function' ? SC() : null, plays = Sp && Sp.playsAs ? Sp.playsAs(campQ, pid) : '';
-        showConfirm('Is "' + who + '" the same person as "' + String(recS.name || 'a player') + '"' + (plays ? ', who plays ' + plays : '') + '? Yes gives them that player\'s character, tokens and place, and retires the old name.', function(ans) {
-            if (ans === 'alt') { askSame(k + 1); return; }
+    var askSame = function() {   // 1.5.7: the known players in one list, most recently seen first; Cancel goes back to the first question
+        var pk = typeof playerPick === 'function' ? playerPick(campQ, sameOf, 'Same person as') : null;
+        showConfirm('Who is "' + who + '"? Pick the player they were. Yes gives them that player\'s character, tokens and place, and retires the old name.', function(ans) {
             if (ans !== true) { askMain(); return; }
+            var pid = pk ? pk.pick() : sameOf[0]; if (!pid) { askMain(); return; }
+            var recS = campQ.players[pid] || {}, Sp = typeof SC === 'function' ? SC() : null, plays = Sp && Sp.playsAs ? Sp.playsAs(campQ, pid) : '';
             approvalOpen = false;
             if (!net.active || net.role !== 'host') return;
             if (!next.conn.open) { toast(who + ' had already dropped — you will be asked again when they come back.'); processNextApproval(); return; }
@@ -6032,11 +6049,11 @@ function processNextApproval() {
             if (campT && takeOver(campT, pid, next.prof.id)) { toast(who + ' takes over from ' + String(recS.name || 'a player') + (plays ? ', playing ' + plays : '') + '.'); if (typeof logEvent === 'function') logEvent('player', who + ' took over from ' + String(recS.name || 'a player')); }
             admitPlayer(next.conn, next.prof);
             processNextApproval();
-        }, { noEnter: true, noEscape: true, yes: 'Yes, the same', alt: 'Not them' });
+        }, { noEnter: true, noEscape: true, yes: 'Yes, the same', body: pk ? pk.el : undefined });
     };
     var askMain = function() {
     showConfirm('"' + who + '" wants to join your table' + hint + '. Let them in?' + (sameOf.length ? ' If they played here before from another app or browser, Same person as… gives them that player\'s character.' : ''), function(yes) {
-        if (yes === 'alt' && sameOf.length) { askSame(0); return; }
+        if (yes === 'alt' && sameOf.length) { askSame(); return; }
         approvalOpen = false;
         if (!net.active || net.role !== 'host') return;
         if (yes) {
@@ -9159,18 +9176,19 @@ function mergeAsk(camp, oldId) {
     if (on[oldId]) { toast('Merge a player while they are not at the table.'); return; }
     var nmO = String(camp.players[oldId].name || 'Player'), cands = Object.keys(camp.players).filter(function(pid) { return pid !== oldId && !on[pid]; })
         .sort(function(a, b) { return (Number(camp.players[b].lastSeen) || 0) - (Number(camp.players[a].lastSeen) || 0); });
-    var ask = function(i) {
-        if (i >= cands.length || getActiveCampaign() !== camp) { renderPlayersPanel(); return; }
-        var kid = cands[i], nmK = String((camp.players[kid] || {}).name || 'Player');
-        showConfirm('Merge "' + nmO + '" into "' + nmK + '"? ' + nmK + ' keeps its name and table key, and takes ' + nmO + '\'s character, tokens and history. ' + nmO + '\'s record goes.', function(ans) {
-            if (ans === 'alt') { ask(i + 1); return; }
+    if (!cands.length) { toast('There is no other player here to merge into.'); return; }
+    var ask = function() {   // 1.5.7: the players to merge into in one list, most recently seen first
+        var pk = typeof playerPick === 'function' ? playerPick(camp, cands, 'Merge into') : null;
+        showConfirm('Merge "' + nmO + '" into another player? The one you pick keeps its name and table key, and takes ' + nmO + '\'s character, tokens and history. ' + nmO + '\'s record goes.', function(ans) {
             if (ans !== true || getActiveCampaign() !== camp) { renderPlayersPanel(); return; }
+            var kid = pk ? pk.pick() : cands[0]; if (!kid) { renderPlayersPanel(); return; }
+            var nmK = String((camp.players[kid] || {}).name || 'Player');
             if (Object.values(net.roster).some(function(p) { return p && (p.id === oldId || p.id === kid); })) { toast('One of them is at the table now. Merge when neither is.'); renderPlayersPanel(); return; }
             if (mergeRecords(camp, oldId, kid)) { save(); if (typeof logEvent === 'function') logEvent('player', nmO + ' merged into ' + nmK); toast(nmO + ' merged into ' + nmK + '.'); if (typeof render === 'function') render(); }
             renderPlayersPanel();
-        }, { noEnter: true, noEscape: true, yes: 'Merge', alt: 'Not them' });
+        }, { noEnter: true, noEscape: true, yes: 'Merge', body: pk ? pk.el : undefined });
     };
-    ask(0);
+    ask();
 }
 
 var _playersBtn = ui('netPlayersBtn');
