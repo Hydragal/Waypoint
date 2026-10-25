@@ -10584,7 +10584,7 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             && lcM2.includes("    var frT = s(f.needsFrom).trim(), frF = Number(frT); if (rlF && frT !== '' && isFinite(frF)) out.needsFrom = frF;") && lcM2.includes("rl = typeof e.needsIf === 'string' && e.needsIf && typeof e.needsFrom !== 'number' ? e.needsIf : '';")
             && wnM2.includes("fr.placeholder = 'From level'; fr.value = typeof n.from === 'number' ? String(n.from) : '';") && wnM2.includes("            fr.addEventListener('input', function() { if (fr.value.trim() === '' || !isFinite(Number(fr.value))) delete n.from; else n.from = Number(fr.value); });")
             && wnM2.includes("    field(form, 'needsFrom', 'Rule from level', e.needsFrom, {") && wnM2.includes("needsIf: g('needsIf'), needsFrom: g('needsFrom'), needsMsg: g('needsMsg') });")
-            && (rdL('scripts/systemcore.js').match(/reason: 'needs'/g) || []).length === 3   // 1.5.8: a deliberate change of this pin, the third a switch's needs (switchOk), which judges no entry
+            && (rdL('scripts/systemcore.js').match(/reason: 'needs'/g) || []).length === 4   // 1.5.8: a deliberate change of this pin, the third a switch's needs (switchOk), the fourth Loads only where (rowLoad), neither of which judges an entry
             && outY[0].needsIf === 'ST >= 12' && outY[0].needsFrom === 3 && j(outY[0].needs) === j([{ id: 'i_ly', from: 2, name: 'LY' }]) && outY[1].needsIf === 'ST >= 12' && !('needsFrom' in outY[1]) && !('needsIf' in outN[0]) && !('needsFrom' in outN[0])
             && j(kL) === j([['w_a', 'ST >= 12', 3], ['w_b', '', '-'], ['w_c', 'ST >= 12', '-'], ['w_d', 'ST >= 12', '-'], ['w_e', '', '-']]), j([kL, outY[0].needsFrom]));
     }
@@ -13493,6 +13493,22 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             && shD.includes("dieSel('sys-roll-die', r.die,") && shD.includes("dieSel('sys-list-rolldie', rr.die,") && shD.includes("dieSel('sys-fielddie', f.rollDie,")
             && shD.includes("else if (c.indexOf('sys-roll-die') >= 0) { if (t.value) r.die = t.value; else delete r.die; }") && shD.includes("else if (c.indexOf('sys-fielddie') >= 0) { if (t.value) f.rollDie = t.value; else delete f.rollDie; }")
             && shD.includes("if (t.value) riD.die = t.value; else delete riD.die; }") && shD.includes("import { dieNode, DIE_LABELS } from './dieicons.js';"));
+    }
+    {   // 1.5.8 Loads only where: a formula a row must meet before it may load (an unload is never judged), kept as a list roll's needs
+        const lw = { id: 'f_lw', key: 'Gear', label: 'Gear', kind: 'item-list', vis: 'all', edit: 'owner', list: { cats: ['Gear'], multi: true, stats: [{ key: 'kind', label: 'Kind' }], counters: [{ key: 'ch', label: 'Charge', max: 'Row.loadmax' }], load: { from: 'f_lc', ct: 'ch', needs: 'Row.kind = 1', needsText: 'It takes no cell.' } } };
+        const lc = { id: 'f_lc', key: 'Cells', label: 'Cells', kind: 'item-list', vis: 'all', edit: 'owner', list: { cats: ['Cell'], multi: true, lvl: { label: 'Charge', min: 0, max: 100, def: 0 } } };
+        const sysW = S.cleanSystem({ fields: [lw, lc], items: [{ id: 'i_glow', name: 'Glowstick', category: 'Gear', stats: { kind: 1 } }, { id: 'i_rope', name: 'Rope', category: 'Gear', stats: { kind: 0 } }, { id: 'i_cell', name: 'Cell', category: 'Cell', lvl: 40 }] }, { F, gmView: true });
+        const sysP = S.cleanSystem(sysW, { F, gmView: false }), lf = S.fieldById(sysW, 'f_lw');
+        const kael = { id: 'c_kael', name: 'Kael', values: { f_lw: [{ id: 'w_glow', defId: 'i_glow', qty: 1 }, { id: 'w_rope', defId: 'i_rope', qty: 1 }], f_lc: [{ id: 'w_cell', defId: 'i_cell', qty: 2, lvl: 40 }] } };
+        const no = S.applyRowOp(sysW, kael, 'f_lw', { op: 'load', rowId: 'w_rope', from: 'w_cell', back: 'w_bk1' }, F, {}), yes = S.applyRowOp(sysW, kael, 'f_lw', { op: 'load', rowId: 'w_glow', from: 'w_cell', back: 'w_bk2' }, F, {});
+        const after = yes.ok ? Object.assign({}, kael, { values: Object.assign({}, kael.values, { f_lw: yes.value }, yes.also || {}) }) : kael;
+        const rs = S.resolveAll(sysW, kael, F), ldOk = rs.f_lw && rs.f_lw.ldOk;
+        const kael2 = JSON.parse(JSON.stringify(after)); kael2.values.f_lw.forEach(r => { if (r.id === 'w_glow' && r.defId) r.defId = 'i_glow'; }); kael2.values.f_lw[0].ov = { stats: { kind: 0 } };
+        const out = S.applyRowOp(sysW, kael2, 'f_lw', { op: 'load', rowId: 'w_glow', from: null, back: 'w_bk3' }, F, {});
+        check('1.5.8 Loads only where: kept as a list roll\'s needs in both views; a row that does not meet it is refused with its words and one that does loads; the sheet\'s verdict per row; an unload never judged',
+            j(lf.list.load) === j({ from: 'f_lc', ct: 'ch', needs: 'Row.kind = 1', needsText: 'It takes no cell.' }) && j(S.fieldById(sysP, 'f_lw').list.load) === j(lf.list.load)
+            && no.ok === false && no.reason === 'needs' && /takes no cell/.test(no.msg || '') && yes.ok === true && !!ldOk && ldOk.w_glow === true && ldOk.w_rope === false && out.ok === true,
+            [lf.list.load, no, yes.ok, ldOk, out.ok, out.reason]);
     }
     {   // 1.5.8 Loads from (docs/LOAD_PLAN.md; the owner, 2026-10-25, by prompt: "Full pack swap now"): a row loads one unit of a row of another list
         const tools = (load, extra) => Object.assign({ id: 'f_tools', key: 'Tools', label: 'Tools', kind: 'item-list', vis: 'all', edit: 'owner', list: Object.assign({ on: { label: 'Held' }, trade: true, counters: [{ key: 'ch', label: 'Charge', max: 'Row.loadmax' }], cols: [{ key: 'Full', label: 'Full', formula: 'Row.loadmax' }, { key: 'In', label: 'In', formula: 'Row.loaded' }] }, load === undefined ? { load: { from: 'f_cells', ct: 'ch', cats: ['Cell'] } } : load) }, extra || {});

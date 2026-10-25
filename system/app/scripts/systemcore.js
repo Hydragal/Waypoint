@@ -1850,7 +1850,7 @@ function cleanListSpec(v, gmView, F) {   // F (F4c1): the engine, for a stat key
         var ldF = typeof v.load.from === 'string' && FIELD_ID.test(v.load.from) ? v.load.from : '', ldK = typeof v.load.ct === 'string' ? lower(v.load.ct.trim()) : '', ldT = '';
         out.counters.forEach(function(x) { if (!ldT && lower(x.key) === ldK) ldT = x.key; });
         if (ldF && ldT) {
-            var ldo = { from: ldF, ct: ldT };
+            var ldo = { from: ldF, ct: ldT }; rollNeedsInto(ldo, v.load);   // Loads only where: what a row must meet before it may load, and its words
             if (Array.isArray(v.load.cats)) { var ldc = [], seenL = map(); v.load.cats.forEach(function(c) { var lt = cutText(c, LIMITS.category); if (!lt || seenL[lower(lt)] || ldc.length >= LIMITS.listCats) return; seenL[lower(lt)] = 1; ldc.push(lt); }); if (ldc.length || (!gmView && v.load.cats.length === 0)) ldo.cats = ldc; }
             out.load = ldo;
         }
@@ -2268,7 +2268,8 @@ function cleanSystem(sys, opts) {
         var capMentions = function(t) { return String(t).split('{').slice(1).some(function(p) { return mentions(capExpr(p.split('}')[0]).expr); }); };   // Stage 6: after every "{" (closed or not, drawn or not), the ± stripped   // Fold B: a caption's {formula} is formula text too
         out.fields.forEach(function(f) { var p = DEF_PROP[f.kind]; if (p && f[p] && mentions(f[p])) f[p] = null; if (f.roll && mentions(f.roll)) delete f.roll; if (f.caption && capMentions(f.caption)) delete f.caption; if (f.list && Array.isArray(f.list.cols)) f.list.cols.forEach(function(c) { if (c.formula && mentions(c.formula)) c.formula = null; }); if (f.list && Array.isArray(f.list.stats)) f.list.stats.forEach(function(x) { if (x.kind !== 'pick') return; x.opts = x.opts.filter(function(o) { return !mentions(o.name); }); if (x.def && !x.opts.some(function(o) { return lower(o.label) === lower(x.def); })) delete x.def; }); if (f.list && Array.isArray(f.list.counters)) f.list.counters.forEach(function(t) { if (t.max && mentions(t.max)) t.max = null; }); if (f.list && Array.isArray(f.list.rolls)) { f.list.rolls = f.list.rolls.filter(function(r) { return r.apply ? !r.apply.some(function(c) { return mentions(c.formula); }) : !mentions(r.formula); }); if (!f.list.rolls.length) delete f.list.rolls; } });   // F5b: a list roll naming a GM-only value is dropped   // F5a2: a choice's option naming a GM-only value is dropped (critic 3: never a blanked one)   // F5a1: a list column too (it reads "GM only")
         out.fields.forEach(function(f) { if (f.list && Array.isArray(f.list.rolls)) f.list.rolls.forEach(function(r) { if (r.then && r.then.some(function(c) { return mentions(c.formula); })) delete r.then; if (r.needs && mentions(r.needs)) { delete r.needs; delete r.needsText; } if (r.malf && mentions(r.malf)) delete r.malf; }); });
-        out.fields.forEach(function(f) { if (f.list && isObj(f.list.on) && f.list.on.needs && mentions(f.list.on.needs)) { delete f.list.on.needs; delete f.list.on.needsText; } });   // 1.5.8: a switch's needs naming a GM-only value go, as a list roll's (players' switches are then not held back by them)   // R2b: a list roll's consequences, or its needs, naming a GM-only value go (players' rolls then change nothing / are not held back)
+        out.fields.forEach(function(f) { if (f.list && isObj(f.list.on) && f.list.on.needs && mentions(f.list.on.needs)) { delete f.list.on.needs; delete f.list.on.needsText; } });
+        out.fields.forEach(function(f) { if (f.list && isObj(f.list.load) && f.list.load.needs && mentions(f.list.load.needs)) { delete f.list.load.needs; delete f.list.load.needsText; } });   // 1.5.8 Loads only where, alike   // 1.5.8: a switch's needs naming a GM-only value go, as a list roll's (players' switches are then not held back by them)   // R2b: a list roll's consequences, or its needs, naming a GM-only value go (players' rolls then change nothing / are not held back)
         out.rolls = out.rolls.filter(function(r) { return r.apply ? !r.apply.some(function(c) { return mentions(c.formula); }) : !mentions(r.formula); });   // H7: an apply action naming a GM-only value goes whole
         out.rolls.forEach(function(r) { if (r.then && r.then.some(function(c) { return mentions(c.formula); })) delete r.then; if (r.malf && mentions(r.malf)) delete r.malf; if (r.needs && mentions(r.needs)) { delete r.needs; delete r.needsText; if (r.every) delete r.every.whileNeeds; if (r.inFight) delete r.inFight.whileNeeds; } });   // 1.5.4: its needs naming one go, as a list roll's (players' presses are then not held back by them); 1.5.5: and Only while its needs hold with them   // R3: a Malf naming one too   // R1: a consequence naming a GM-only value takes them all (players' rolls then change nothing)
         out.rolls.forEach(function(r) { if (r.label.indexOf('{') >= 0 && capMentions(r.label)) r.label = labelHead(r.label); });   // HUD frame (HF5a, H3): a label naming a GM-only value keeps only its plain text before the first {...} (fail closed, as a caption)
@@ -3337,7 +3338,7 @@ function applyRowOp(sys, char, fieldId, q, F, opts) {
     var hnd = opts.player && !mkR ? 'player' : 'gm', gsp = opts.player ? (actorSpec(sys, fieldId, spec, opts) || spec) : spec;   // 1.5.4 One at a time: whose hand, and the list options a row's group is read by (a player's own view, on the host and on their own app alike)
     var at = function(rid) { for (var i = 0; i < list.length; i++) if (rowIdOf(list[i]) === rid) return i; return -1; };
     if (q.op !== 'add' && typeof q.rowId === 'string') { var oxA = at(q.rowId); if (oxA >= 0 && isObj(list[oxA]) && typeof list[oxA].opn === 'string' && (opts.player || q.op !== 'remove')) return { ok: false, reason: 'opened' }; }   // 1.5.8: an opened row comes and goes with what opens it (openSync); only the GM may take one off, and it comes back while it is opened
-    if (q.op === 'load') return rowLoad(sys, char, f, list, spec, q, opts, at, vo);   // 1.5.8 Loads from
+    if (q.op === 'load') return rowLoad(sys, char, f, list, spec, q, opts, at, vo, F);   // 1.5.8 Loads from
     if (q.op === 'add') {
         if (typeof q.defId !== 'string' || !ITEM_ID.test(q.defId)) return { ok: false, reason: 'value' };
         var ent = itemDef(sys, q.defId), fromLib = false;
@@ -3575,7 +3576,7 @@ function loadSame(sys, sl, a, b) {
 }
 function loadSrc(sys, spec) { var ld = isObj(spec) && isObj(spec.load) ? spec.load : null, sf = ld && isObj(sys) && Array.isArray(sys.fields) ? fieldById(sys, ld.from) : null; return sf && sf.kind === 'item-list' && isObj(sf.list) && isObj(sf.list.lvl) ? sf : null; }
 function loadMax(sys, spec, row) { if (!isObj(row) || !isObj(row.ld)) return 0; var sf = loadSrc(sys, spec); if (!sf) return 0; var rd = rowDef(sys, row.ld); return rowLvl(sf.list, null, rd ? rd.def : null); }   // the copy's full level: its entry's own, else the source list's default
-function rowLoad(sys, char, f, list, spec, q, opts, at, vo) {
+function rowLoad(sys, char, f, list, spec, q, opts, at, vo, F) {
     var ld = isObj(spec) && isObj(spec.load) ? spec.load : null, sf = loadSrc(sys, spec), sl = sf ? sf.list : null;
     if (!ld || !sf || sf.id === f.id) return { ok: false, reason: 'field' };
     if (opts.player && ((sf.edit !== 'owner' && !openChar(char)) || sf.vis !== 'all')) return { ok: false, reason: 'field' };
@@ -3585,6 +3586,7 @@ function rowLoad(sys, char, f, list, spec, q, opts, at, vo) {
     if (!t) return { ok: false, reason: 'field' };
     if ((h.qty | 0) !== 1) return { ok: false, reason: 'value' };   // a stack of them is not one
     var from = typeof q.from === 'string' ? q.from : null; if (from === null && !isObj(h.ld)) return { ok: false, reason: 'value' };
+    if (from !== null && typeof ld.needs === 'string' && ld.needs && !switchOk(sys, char, f, h, ld.needs, F)) return { ok: false, reason: 'needs', msg: rollNeedsSays(ld) };   // Loads only where: this row loads nothing (the GM's hand too: it is what the row is)
     var sList = JSON.parse(JSON.stringify(isObj(char) && isObj(char.values) && Array.isArray(char.values[sf.id]) ? char.values[sf.id] : [])), known = knownItems(sys, opts), name = '';
     h.ct = isObj(h.ct) ? h.ct : {};
     if (isObj(h.ld)) {   // what comes out first: the copy, at what the counter has left
@@ -4674,7 +4676,7 @@ function resolveAll(sys, char, F, tctx, ropts) {   // tctx: tokenCtx(...) = { fa
         var e = { value: undefined, text: '', error: null };
         var k = f.kind;
         if (k === 'text' || k === 'select' || k === 'notes') { e.value = storedOf(f, char); e.text = String(e.value); }
-        else if (k === 'item-list') { e.value = storedOf(f, char); e.text = ''; if (!(ropts && ropts.noRows) && f.list && Array.isArray(f.list.cols) && f.list.cols.length) listCells(f, e, r); if (!(ropts && ropts.noRows) && f.list && Array.isArray(f.list.counters) && f.list.counters.length) listCts(f, e, r); if (!(ropts && ropts.noRows) && f.list && Array.isArray(f.list.rolls) && f.list.rolls.some(function(x) { return isObj(x) && x.needs; })) listNeeds(f, e, r); if (!(ropts && ropts.noRows) && f.list && isObj(f.list.on) && typeof f.list.on.needs === 'string' && f.list.on.needs) listOnNeeds(f, e, r); }   // a carried list; sheets.js renders it, not a number. F5a1: its columns' cells and totals
+        else if (k === 'item-list') { e.value = storedOf(f, char); e.text = ''; if (!(ropts && ropts.noRows) && f.list && Array.isArray(f.list.cols) && f.list.cols.length) listCells(f, e, r); if (!(ropts && ropts.noRows) && f.list && Array.isArray(f.list.counters) && f.list.counters.length) listCts(f, e, r); if (!(ropts && ropts.noRows) && f.list && Array.isArray(f.list.rolls) && f.list.rolls.some(function(x) { return isObj(x) && x.needs; })) listNeeds(f, e, r); if (!(ropts && ropts.noRows) && f.list && isObj(f.list.on) && typeof f.list.on.needs === 'string' && f.list.on.needs) listOnNeeds(f, e, r); if (!(ropts && ropts.noRows) && f.list && isObj(f.list.load) && typeof f.list.load.needs === 'string' && f.list.load.needs) listLdNeeds(f, e, r); }   // a carried list; sheets.js renders it, not a number. F5a1: its columns' cells and totals
         else if (k === 'effects') { e.value = storedOf(f, char); e.text = ''; e.active = activeEffects(sys, e.value); }   // 5h: the rows; e.active names the ones switched on
         else if (k === 'toggle' || k === 'number') { var tv = r(f.key); e.value = (tv === undefined || (tv && typeof tv === 'object')) ? storedOf(f, char) : tv; e.text = k === 'number' ? figText(f, e.value) : fmtNum(e.value); }   // 5h: through the resolver, so an effect shows; 1.5.4: a number by its decimals and grouping
         else {
@@ -4731,6 +4733,7 @@ function listCells(f, e, r) {
     e.cells = cells; e.foot = foot;
 }
 // Stage 6 HUD R2b: each row's answer to its list rolls' needs — e.rn: rowId -> [true | false per roll] (a roll that needs nothing: true)
+function listLdNeeds(f, e, r) { var ok = map(); (Array.isArray(e.value) ? e.value : []).forEach(function(row) { var id = rowIdOf(row); if (!id) return; try { ok[id] = r.needsOk(f, row, f.list.load.needs); } catch (x) { ok[id] = false; } }); e.ldOk = ok; }   // 1.5.8 Loads only where, by row
 function listOnNeeds(f, e, r) { var ok = map(); (Array.isArray(e.value) ? e.value : []).forEach(function(row) { var id = rowIdOf(row); if (!id) return; try { ok[id] = r.needsOk(f, row, f.list.on.needs); } catch (x) { ok[id] = false; } }); e.onOk = ok; }   // 1.5.8: whether each row's switch may be switched on (its list switch's needs)
 function listNeeds(f, e, r) { var rn = map(); (Array.isArray(e.value) ? e.value : []).forEach(function(row) { var id = rowIdOf(row); if (!id) return; rn[id] = f.list.rolls.map(function(x) { return !(isObj(x) && x.needs) || r.needsOk(f, row, x.needs); }); }); e.rn = rn; }
 // Stage 6 HUD R2: a list's counters for the sheet — e.cts: rowId -> [{ key, label, value, max }] (max: the row's own most worked out, else null)

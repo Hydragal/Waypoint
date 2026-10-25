@@ -2652,7 +2652,7 @@ function itemListInto(wrap, f, c, carried, sysI, canThrow, editable, gm, empty, 
         lostBits(line, rd, entry, c, f, gm, chg); needBits(line, sysI, c, entry, rd, gm); gmItemBits(line, def, entry, gm, !!(spec && spec.on)); keyShareChip(line, entry, rd, unseenL); modsBits(line, def, entry, spec, sysI);
         if (typeof onceBits === 'function') onceBits(line, sysI, c, f, carried, entry);   // 1.5.8 Counted once
         var noteLn = null;
-        if (spec) { statChips(line, def, spec, ovc); colChips(line, spec, res && res.cells ? res.cells[rid] : null); ctCtl(line, entry, c, f, spec, editable, res && res.cts ? res.cts[rid] : null); if (typeof loadCtl === 'function') loadCtl(line, entry, c, f, spec, editable, sysI); var lc = lvlCtl(entry, def, c, f, spec, chg && !opnR); if (lc) line.appendChild(lc); var oc = onCtl(entry, c, f, spec, editable, true, res && res.onOk ? res.onOk[rid] : undefined); if (oc) line.appendChild(oc); var pcL = paidCtl(entry, def, c, f, spec, chg, gm, true); if (pcL) line.appendChild(pcL); noteLn = hudRow ? null : noteBits(entry, def, c, f, chg, ovc); }   // F4c1: the stats shown On the row, what one cost
+        if (spec) { statChips(line, def, spec, ovc); colChips(line, spec, res && res.cells ? res.cells[rid] : null); ctCtl(line, entry, c, f, spec, editable, res && res.cts ? res.cts[rid] : null); if (typeof loadCtl === 'function') loadCtl(line, entry, c, f, spec, editable, sysI, res && res.ldOk ? res.ldOk[rid] : undefined); var lc = lvlCtl(entry, def, c, f, spec, chg && !opnR); if (lc) line.appendChild(lc); var oc = onCtl(entry, c, f, spec, editable, true, res && res.onOk ? res.onOk[rid] : undefined); if (oc) line.appendChild(oc); var pcL = paidCtl(entry, def, c, f, spec, chg, gm, true); if (pcL) line.appendChild(pcL); noteLn = hudRow ? null : noteBits(entry, def, c, f, chg, ovc); }   // F4c1: the stats shown On the row, what one cost
         if (def.area && canThrow && (gm || def.vis !== 'gm') && entry.hid !== 1) line.appendChild(itemThrowBtn(def, c, f, rid));   // a GM-only item: the GM's throw only (a player's copy never carries its area)
         rowRollBtns(line, spec, entry, def, c, f, res);   // F5b: the list's rolls on this row
         if (noteLn) line.appendChild(noteToggle(noteLn, entry, c, f));
@@ -2720,8 +2720,9 @@ function ctCtl(host, entry, c, f, spec, editable, cells) {
 // [sinkcheck:loadctl-start]
 // 1.5.8 Loads from (the owner, 2026-10-25, by prompt: "Full pack swap now"): what a row of a list with a load holds, and its Load menu. A play
 // control, as a counter is (a locked sheet and the HUD load too). Every name from a campaign as text
-function loadCtl(host, entry, c, f, spec, editable, sysI) {
+function loadCtl(host, entry, c, f, spec, editable, sysI, okL) {
     if (!spec || !spec.load || typeof spec.load !== 'object' || !entry || entry.hid === 1) return;
+    if (okL === false && !(entry.ld && typeof entry.ld === 'object')) return;   // Loads only where: a row that loads nothing shows nothing (one that still holds a copy keeps its chip, to unload it)
     var sys = sysI || systemOf(getActiveCampaign()), sf = sys ? fieldById(sys, spec.load.from) : null; if (!sf || sf.kind !== 'item-list' || !sf.list) return;
     var ld = entry.ld && typeof entry.ld === 'object' ? entry.ld : null, rd = ld ? rowDef(sys, ld) : null, nm = ld ? ((rd && rd.def && rd.def.name) || 'Loaded') : 'Empty';
     var w = el('span', 'sheet-chip sheet-item-load' + (ld ? '' : ' sheet-item-load-none')); w.title = ld ? 'Loaded: ' + nm : 'Nothing loaded from ' + (sf.label || sf.key || 'its list');
@@ -5952,6 +5953,8 @@ function listCard(f, allCats, targets, acts) {   // acts (turn-based combat T1):
             ctsL.forEach(function(x) { if (!x || typeof x.key !== 'string' || !x.key) return; var o = el('option', null, (x.label || x.key) + ' (' + x.key + ')'); o.value = x.key; if (ldS.ct === x.key) o.selected = true; csel.appendChild(o); });
             lrw.appendChild(csel);
             lrw.appendChild(input('sys-list-loadcats field', Array.isArray(ldS.cats) ? ldS.cats.join(', ') : '', 'The categories of that list a row may load, separated by commas. Blank: any of its rows', 'Categories it takes (blank: any)'));
+            lrw.appendChild(input('sys-list-loadneeds field', typeof ldS.needs === 'string' ? ldS.needs : '', 'A formula a row must meet to load, read with its own names (Row.*), no dice. Blank: every row. A row that does not meet it shows no Load', 'Loads only where (blank: every row)'));
+            lrw.appendChild(input('sys-list-loadneedstext field', typeof ldS.needsText === 'string' ? ldS.needsText : '', 'What a refused load says', 'Its words'));
         }
         cb2.appendChild(lrw);
     }
@@ -7298,6 +7301,8 @@ function onInput(e) {
             if (lcc.indexOf('sys-list-needstext') >= 0) { if (t.value.trim()) nR.needsText = t.value.slice(0, LIMITS.label); else delete nR.needsText; }
             else { if (t.value.trim()) nR.needs = t.value.slice(0, LIMITS.formula); else delete nR.needs; }
         }
+        else if (lcc.indexOf('sys-list-loadneedstext') >= 0) { if (!lsp.load || typeof lsp.load !== 'object') return; if (t.value.trim()) lsp.load.needsText = t.value; else delete lsp.load.needsText; }   // 1.5.8 Loads only where's words
+        else if (lcc.indexOf('sys-list-loadneeds') >= 0) { if (!lsp.load || typeof lsp.load !== 'object') return; if (t.value.trim()) lsp.load.needs = t.value; else delete lsp.load.needs; }   // 1.5.8 Loads only where (Save cleans it as a list roll's needs)
         else if (lcc.indexOf('sys-list-loadcats') >= 0) { if (!lsp.load || typeof lsp.load !== 'object') return; var lcv = t.value.split(',').map(function(s) { return s.trim(); }).filter(Boolean); if (lcv.length) lsp.load.cats = lcv; else delete lsp.load.cats; }   // 1.5.8 Loads from (Save cleans them)
         else if (lcc.indexOf('sys-list-ct') >= 0) {   // Stage 6 HUD R2: a counter's boxes (Save cleans them)
             var ctrw = t.closest('.sys-list-ct'), ctix = ctrw ? +ctrw.dataset.ti : -1, ctL = Array.isArray(lsp.counters) ? lsp.counters : null; if (!ctL || !(ctix >= 0 && ctix < ctL.length)) return;

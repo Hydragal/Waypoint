@@ -1868,6 +1868,7 @@ Plain paragraphs are text: **bold**, *italic*, ~~strike~~, &lt;u&gt;underline&lt
                                   <li>A list&rsquo;s <b>Loads from</b> lets a row load one unit of a row of another list, as a blaster loads a power pack. Pick that list, the counter that holds what is loaded, and the categories it takes.</li>
                                   <li>The unit comes off its stack, and what it holds, its level, goes into the counter. The row shows what it holds and a <b>Load</b> button, on a locked sheet and in the HUD too.</li>
                                   <li><b>Swap</b> or <b>Unload</b> puts the old one back with what it has left. It joins a stack only where it is the same thing in the same state. <code>Row.loaded</code> is 1 while a row holds one, and <code>Row.loadmax</code> is its full level.</li>
+                                  <li><b>Loads only where</b> is a formula a row must meet before it may load, such as <code>Row.Kind = 1</code>. A row that does not meet it shows no Load button. Unloading is always allowed.</li>
                               </ul>
                           </li>
                           <li><b>Point budgets</b> watch the points a character has against the points it has spent. You set them up at the top of the <b>Lists</b> tab.
