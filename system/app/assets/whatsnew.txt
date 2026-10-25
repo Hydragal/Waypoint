@@ -1,3 +1,12 @@
+WAYPOINT 1.5.9 — What's New
+============================
+
+Character sheets
+- Every roll on the sheet and the HUD has a small ± button beside it. It
+  opens the modifier popover for that roll: add a bonus or a penalty, or
+  roll twice and keep the better or worse. Shift-click on the roll still
+  does the same.
+
 WAYPOINT 1.5.8 — What's New
 ============================
 

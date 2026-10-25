@@ -3971,6 +3971,78 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             j(viaG) === j([['plain', 'c_d', 'd100', 'Hidden Sanity', { gmOnly: true }], ['mod', 'c_d', 'd100', 'Hidden Sanity', { gmOnly: true }]])
             && j(askedG) === j([['d100', { priv: false, gmOnly: true, charId: 'c_d', label: 'Hidden Sanity' }], ['d6', { priv: false, gmOnly: false, charId: 'c_d', label: 'Luck' }], ['d6', { priv: true, gmOnly: true, charId: 'c_d', label: 'Both' }]])
             && /closeModPop\(\); rollFor\(charId, r\.expr, label, opts && \(opts\.act \|\| \(opts\.row && typeof opts\.row\.i === 'number'\)\) \? Object\.assign\(\{\}, opts, \{ mod: mod \|\| undefined, adv: advMode !== 'normal' \? advMode : undefined \}\) : opts\); \}\);/.test(dkG), j([viaG, askedG]));
+        /* 1.5.9 (the owner, at the table: "theres no way to add modifiers to rolls in the character sheet"; by prompt: "A ± button on each roll"):
+           a small ± beside each roll button the sheet and the HUD draw (rollNode, a list row's rolls, a field's own die, the Custom roller) opens
+           the very popover shift-click opens, for that very roll, anchored to the ± itself; disabled with its roll; none on paper. All run for real */
+        {
+            const pmSrc = shD.slice(shD.indexOf('function rollModBtn('), shD.indexOf('var ROLL_TONE_CLS'));
+            const feP = (tag, cls, text) => { const o = { tag, className: cls || '', textContent: text || '', children: [], title: '', disabled: false, type: '', attrs: {}, on: {}, parent: null,
+                get firstChild() { return this.children[0] || null; },
+                get nextElementSibling() { const p = this.parent; if (!p) return null; const i = p.children.indexOf(this); return p.children[i + 1] || null; },
+                appendChild(x) { if (x.parent) x.parent.children.splice(x.parent.children.indexOf(x), 1); x.parent = this; this.children.push(x); return x; },
+                insertBefore(x, ref) { if (x.parent) x.parent.children.splice(x.parent.children.indexOf(x), 1); x.parent = this; const i = ref ? this.children.indexOf(ref) : -1; if (i < 0) this.children.push(x); else this.children.splice(i, 0, x); return x; },
+                setAttribute(k, v) { this.attrs[k] = String(v); }, querySelector(sel) { const c = sel.replace(/^\./, ''); const walk = n => { for (const k of n.children) { if (k.classList && k.classList.contains(c)) return k; const d = walk(k); if (d) return d; } return null; }; return walk(this); }, addEventListener(k, f) { this.on[k] = f; }, closest: () => null };
+                o.classList = { contains: c => o.className.split(/\s+/).includes(c), add(c) { if (!o.classList.contains(c)) o.className = (o.className + ' ' + c).trim(); }, remove(c) { o.className = o.className.split(/\s+/).filter(x => x !== c).join(' '); } };
+                return o; };
+            const PM8 = String.fromCharCode(0xB1), hP = fs.readFileSync(path.join(app, 'index.html'), 'utf8');
+            const isPm = x => !!x && x.classList.contains('sheet-roll-mod'), PM_TIP = 'Add a modifier, or roll twice and keep the better or worse';
+            // rollNode with the ± maker beside it
+            const rnSrcP = shD.slice(shD.indexOf('var LABEL_CTRL_G = '), shD.indexOf('// A roll from this character\'s sheet: the dice feature on'));
+            const nodeP = (r, o) => { o = o || {}; const sent = [];
+                const api = new Function('F', 'net', 'isClient', 'captionParts', 'labelNames', 'labelGmNames', 'gmDerivedNames', 'gmEffectNames', 'el', 'iconNode', 'canRoll', 'sheetRoll', 'toast', 'ROLL_TONE_CLS', 'getActiveCampaign', 'charById', 'resolveAll', 'tokenCtxFor', 'rollNeedsOk', 'window', rnSrcP + pmSrc + '\nreturn { rollNode: rollNode };')(
+                    () => F, () => null, () => false, S.captionParts, S.labelNames, S.labelGmNames, S.gmDerivedNames, S.gmEffectNames, feP, (v, c) => feP('span', c), () => o.can !== false, (e, cid, expr, label, opts) => sent.push({ shift: !!e.shiftKey, at: e.currentTarget, args: [cid, expr, label, opts] }), () => {}, {}, () => ({ chars: {} }), () => null, S.resolveAll, () => null, () => o.needs !== false, { wpPrintCopy: o.print === true });
+                const box = api.rollNode(r, { id: 'c_p', values: {} }, { fields: [], rolls: [r] }, () => ({ value: 1 })); return { box, sent }; };
+            const rP = { id: 'r_atk', label: 'Attack', formula: 'd20 + 3', then: [{ when: 'hit', f: 'f_x', v: '1' }] }, nP = nodeP(rP), bP = nP.box.children[0], pmP = nP.box.children[1];
+            bP.on.click({}); pmP.on.click({});
+            const offP = nodeP(rP, { can: false }), needP = nodeP(Object.assign({ needs: 'Lvl > 9', needsText: 'Too low' }, rP), { needs: false }), prP = nodeP(rP, { print: true });
+            check('1.5.9 the roll ±: a system roll (rollNode, run for real) has a ± after its button, in a pair box; it sends the button\'s very roll with shift, anchored to the ± (so the popover opens by it), where a click sends the roll plain; disabled with its roll (dice off, its needs) with the roll\'s reason; none in a print copy',
+                nP.box.children.length === 2 && isPm(pmP) && pmP.textContent === PM8 && pmP.type === 'button' && pmP.title === PM_TIP && nP.box.classList.contains('sheet-roll-pair') && !pmP.disabled
+                && nP.sent.length === 2 && !nP.sent[0].shift && nP.sent[1].shift && nP.sent[1].at === pmP && j(nP.sent[0].args) === j(nP.sent[1].args) && nP.sent[1].args[3] && nP.sent[1].args[3].act === 'r_atk'
+                && offP.box.children[1].disabled === true && offP.box.children[0].disabled === true
+                && needP.box.children[0].disabled === true && needP.box.children[1].disabled === true && needP.box.children[1].title === needP.box.children[0].title && /Too low/.test(needP.box.children[1].title)
+                && prP.box.children.length === 1 && !prP.box.classList.contains('sheet-roll-pair'), j([nP.box.children.map(x => x.className), nP.sent.map(x => [x.shift, x.args]), needP.box.children.map(x => [x.disabled, x.title]), prP.box.children.length]));
+            // a list row's rolls
+            const rrSrcP = shD.slice(shD.indexOf('function rowRollBtns('), shD.indexOf('// Stage 6 HUD R2: a row\'s counters'));
+            const rowP = (o) => { o = o || {}; const sent = [], host = feP('div', 'host');
+                new Function('_fxLive', 'window', 'rowIdOf', 'canRoll', 'canApply', 'el', 'sheetRoll', rrSrcP + pmSrc + '\nreturn rowRollBtns;')(true, { wpPrintCopy: o.print === true }, r => r.id, () => o.can !== false, () => false, feP, (e, cid, expr, label, opts) => sent.push({ shift: !!e.shiftKey, at: e.currentTarget, args: [cid, expr, label, opts] }))(
+                    host, { rolls: [{ label: 'Hit', formula: 'd20 + Row.Hit' }, { label: 'Dmg', formula: '2d6', needs: 'Row.on', needsText: 'Switch it on' }] }, { id: 'w_1' }, { name: 'Blaster' }, { id: 'c_p' }, { id: 'f_wp' }, { rn: { w_1: [true, o.needs !== false] } });
+                return { host, sent }; };
+            const lP = rowP(), lK = lP.host.children; lK[0].on.click({}); lK[1].on.click({});
+            const lNo = rowP({ needs: false }), lPr = rowP({ print: true });
+            check('1.5.9 the roll ±: a list row\'s rolls (rowRollBtns, run for real) each have a ± right after the button, sending its very roll with shift from the ±; one greyed by its needs greys its ± with the reason; a print copy draws the rolls and no ±; the button keeps the tooltip the 1.5.8 comment had swallowed',
+                j(lK.map(x => isPm(x))) === j([false, true, false, true]) && lP.sent.length === 2 && !lP.sent[0].shift && lP.sent[1].shift && lP.sent[1].at === lK[1] && j(lP.sent[0].args) === j(lP.sent[1].args) && j(lP.sent[1].args) === j(['c_p', 'd20 + Row.Hit', 'Blaster · Hit', { row: { f: 'f_wp', r: 'w_1' } }])
+                && /shift-click adds a modifier/.test(lK[0].title) && !lK[1].disabled
+                && lNo.host.children[2].disabled === true && lNo.host.children[3].disabled === true && /Switch it on/.test(lNo.host.children[3].title)
+                && lPr.host.children.length === 2 && !lPr.host.children.some(isPm), j([lK.map(x => [x.className, x.disabled, x.title]), lP.sent.map(x => x.args), lPr.host.children.length]));
+            // a field's own die, and inlineRow keeping its ± beside it
+            const fbSrcP = shD.slice(shD.indexOf('function fieldNodeBody('), shD.indexOf('// A roll from a sheet button: shift/alt-click'));
+            const fieldP = (can) => { const sent = [];
+                const fnb = new Function('el', 'canRoll', 'sheetRoll', 'signTone', 'valueTone', 'TONE_CLASS', 'fxMark', 'window', fbSrcP + pmSrc + '\nreturn fieldNodeBody;')(feP, () => can, (e, cid, expr, label, opts) => sent.push({ shift: !!e.shiftKey, at: e.currentTarget, args: [cid, expr, label, opts] }), () => '', () => '', {}, () => null, { wpPrintCopy: false });
+                const box = fnb({ id: 'f_lk', key: 'Luck', label: 'Luck', kind: 'formula', formula: '3', vis: 'all', roll: 'd6 + Luck' }, { id: 'c_p', values: {} }, { value: 3, text: '3' }, true, true, { fields: [] }); return { box, sent }; };
+            const fP = fieldP(true), labP = fP.box.children[0], fRb = labP.children[0], fPm = labP.children[1]; fRb.on.click({}); fPm.on.click({});
+            const fOff = fieldP(false);
+            const irSrcP = shD.slice(shD.indexOf('var INLINE_KINDS'), shD.indexOf('// Stage 6 look fold (L8)', shD.indexOf('var INLINE_KINDS')));
+            const irP = new Function('dieFor', irSrcP + '\nreturn inlineRow;')(undefined), boxI = feP('div', 'sheet-field sheet-kind-formula'), labI = boxI.appendChild(feP('label', 'sheet-label', 'Luck'));
+            const rbI = labI.appendChild(feP('button', 'tool ghost sheet-field-roll', 'die')), pmI = labI.appendChild(feP('button', 'tool ghost sheet-roll-mod', PM8)); boxI.appendChild(feP('div', 'sheet-value')); boxI.appendChild(feP('div', 'sheet-caption'));
+            irP(boxI, { kind: 'formula', roll: 'd6' });
+            check('1.5.9 the roll ±: a field\'s own die (fieldNodeBody, run for real) has its ± beside it in the label, sending the field\'s roll with shift from the ±, disabled where dice are off; inlineRow (run for real) moves the ± with the roll, before the caption',
+                isPm(fPm) && labP.children.length === 2 && fP.sent.length === 2 && fP.sent[1].shift && fP.sent[1].at === fPm && j(fP.sent[0].args) === j(fP.sent[1].args) && j(fP.sent[1].args) === j(['c_p', 'd6 + Luck', 'Luck', undefined])
+                && fOff.box.children[0].children[1].disabled === true
+                && j(boxI.children.map(x => x.className.split(' ').pop())) === j(['sheet-label', 'sheet-value', 'sheet-inline-roll', 'sheet-roll-mod', 'sheet-caption']) && boxI.children[3] === pmI && labI.children.length === 0, j([labP.children.map(x => x.className), fP.sent.map(x => x.args), boxI.children.map(x => x.className)]));
+            // the Custom roller
+            const rlSrcP = shD.slice(shD.indexOf('var _rl = Object.create(null);'), shD.indexOf('// A handbook link placement'));
+            const viaP = [], rlP = new Function('el', 'input', 'LIMITS', 'canRoll', 'toast', 'window', rlSrcP + pmSrc + '\nreturn rollerNode;')(feP, (cls, v) => Object.assign(feP('input', cls), { value: v, dataset: {} }), { formula: 200, label: 60 }, () => true, () => {},
+                { wpPrintCopy: false, wpDice: { rollFor: (...a) => viaP.push(['plain'].concat(a)), rollWithMod: (...a) => viaP.push(['mod'].concat(a)) } });
+            const boxR = rlP({ formula: '2d6 + 3', text: 'Custom' }, { id: 'c_p', name: 'Kael' }, 'k1'), rowR = boxR.children[0], goR = rowR.children[2], pmR = rowR.children[3];
+            goR.on.click({}); pmR.on.click({});
+            check('1.5.9 the roll ±: the Custom roller (rollerNode, run for real) has a ± after its Roll, opening the popover for the very formula and name, anchored to the ±; Roll still rolls plain',
+                isPm(pmR) && viaP.length === 2 && j(viaP[0]) === j(['plain', 'c_p', '2d6 + 3', 'Custom', { source: 'sheet' }]) && viaP[1][0] === 'mod' && j(viaP[1].slice(1, 5)) === j(['c_p', '2d6 + 3', 'Custom', { source: 'sheet' }]) && viaP[1][5] === pmR, j(viaP.map(v => v.slice(0, 5))));
+            const cssP = fs.readFileSync(path.join(app, 'style.css'), 'utf8').replace(/\r\n/g, '\n');
+            check('1.5.9 the roll ± (source): styled as the app\'s own, hidden on paper by the print rule (it is no .sheet-roll), Help names it and keeps shift-click, both release notes say it',
+                /\.sheet-roll-mod \{[^}]*flex: 0 0 auto/.test(cssP) && /\.sheet-kind-roll\.sheet-roll-pair \{/.test(cssP) && /#sheetPrint button:not\(\.sheet-roll\):not\(\.sheet-item-roll\) \{ display: none !important; \}/.test(cssP)
+                && /Press the &plusmn; beside a sheet roll/.test(hP) && /Shift-click on the roll button opens the same popover/.test(hP)
+                && ['WHATSNEW.txt', 'system/app/assets/whatsnew.txt'].every(n => /WAYPOINT 1\.5\.9[\s\S]*?small ± button beside it[\s\S]*?WAYPOINT 1\.5\.8/.test(fs.readFileSync(path.join(__dirname, '..', n), 'utf8').replace(/\r\n/g, '\n'))), '');
+        }
         const hG = fs.readFileSync(path.join(app, 'index.html'), 'utf8');
         check('GM-only rolls (source): Help says a GM-only field\'s own roll, a GM-only roll and the damage of a GM-only item (or one thrown from a GM-only list) are kept private, and what a visible item\'s damage and a GM-only item\'s blast show',
             /A GM-only field&rsquo;s own roll and a GM-only roll are kept private too\.<\/li>\s*<li>So is the damage of an item that is GM-only or thrown from a GM-only list\./.test(hG) && /A visible item&rsquo;s damage is rolled at the table like any roll\. The damage of a GM-only item, or of one thrown from a GM-only list, goes to you alone, and its blast reaches players without its name\./.test(hG) && !/Item formulas never leave your machine/.test(hG));
