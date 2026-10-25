@@ -38,6 +38,10 @@ System editor
   saying what opened it, and goes when the row is switched off. A row of
   it bought the usual way takes its place. Formulas read Row.opened as 1
   on an opened row, so its cost can be 0.
+- A row you remove from a list on a sheet can come back: a notice with
+  Undo stays for ten seconds and puts the very row back, with its values,
+  at its place. A player's Undo goes through the GM's Waypoint, which
+  says so when the row cannot come back because the list changed since.
 - A list's switch can need something before a row is switched on: in the
   Lists tab, give Rows have a switch a Needs to switch on formula, such as
   Row.Charge > 0, and the words it says. A player's switch is greyed out

@@ -96,7 +96,7 @@ function validPageId(id) { return typeof id === 'string' && PAGE_ID.test(id) && 
 var FIELD_ID = /^f_[A-Za-z0-9_]{1,24}$/, ROLL_ID = /^r_[A-Za-z0-9_]{1,24}$/, SECTION_ID = /^s_[A-Za-z0-9_]{1,24}$/, TAB_ID = /^t_[A-Za-z0-9_]{1,24}$/, CHAR_ID = /^c_[A-Za-z0-9_]{1,24}$/, ITEM_ID = /^i_[A-Za-z0-9_]{1,24}$/, RID_RE = /^[A-Za-z0-9_-]{1,24}$/;
 var SHAPES = Object.freeze({ circle: 1 }), BLAST_AUTO = Object.freeze({ full: 1, roll: 1, measure: 1 });
 // Stage 6 F4a: a carried row's id (w_…; a legacy {defId, qty} row's is derived from its item) and the row ops a change may carry
-var ROW_ID = /^w_[A-Za-z0-9_]{1,24}$/, ROW_OPS = Object.freeze({ add: 1, remove: 1, setQty: 1, keep: 1, undo: 1, set: 1, ov: 1, custom: 1, load: 1 });   // undo (Stage 6): a pickup taken back; set (F4b): a row's facts; ov (F4c2): a copy's own values; custom (F4c3): a character's own row, made or changed
+var ROW_ID = /^w_[A-Za-z0-9_]{1,24}$/, ROW_OPS = Object.freeze({ add: 1, remove: 1, setQty: 1, keep: 1, undo: 1, set: 1, ov: 1, custom: 1, load: 1, restore: 1 });   // restore (1.5.8): a removed row put back whole at its place (its Undo)   // undo (Stage 6): a pickup taken back; set (F4b): a row's facts; ov (F4c2): a copy's own values; custom (F4c3): a character's own row, made or changed
 // Stage 6 F4b: an item's key in formulas (F5a: Skills.<Key>.lvl) — never a row word, which a row's own names use
 var ITEM_KEY = /^[A-Za-z][A-Za-z0-9_]{0,39}$/, ROW_WORDS = Object.freeze({ count: 1, qty: 1, on: 1, has: 1, lvl: 1, paid: 1, row: 1, opened: 1, loaded: 1, loadmax: 1 });   // 1.5.8 Loads from: loaded, a row that holds a loaded copy; loadmax, that copy's full level   // 1.5.8: opened, a row another row opens (openSync)
 // 1.5.4: the words a list's names put between the list and what they read — List.on.Wt (the rows switched on), List.max.Parry and List.min.Wt
@@ -3372,6 +3372,11 @@ function applyRowOp(sys, char, fieldId, q, F, opts) {
         var cx = at(q.rowId), g0C = cx >= 0 ? onGroup(sys, spec, list[cx], gsp) : null;   // 1.5.4 One at a time: a row that is there, and its group before the change
         var cu = applyCustom(sys, list, q, spec, F, opts, extra, actorSpec(sys, fieldId, spec, opts), fl); if (cu) return cu;
         if (cx >= 0) { var mvC = onMoved(sys, spec, list, cx, g0C, hnd, extra, { read: gsp, onGrace: opts.onGrace === true }); if (mvC) return mvC; }   // ... moved by its stats into a group that holds one on: it goes off
+    } else if (q.op === 'restore') {   // 1.5.8: a removed row put back whole at its place, the very row (q.row, q.at) the caller kept from before it went: the GM's sheet, or the host's own record for a player (never the player's word)
+        if (typeof q.rowId !== 'string' || !ROW_ID.test(q.rowId) || !isObj(q.row) || rowIdOf(q.row) !== q.rowId || at(q.rowId) >= 0) return { ok: false, reason: 'missing' };
+        if (list.filter(function(r) { return !(isObj(r) && r.hid === 1); }).length >= LIMITS.carried) return { ok: false, reason: 'field' };
+        var atR = Math.max(0, Math.min(list.length, cleanNum(q.at, list.length) | 0));
+        list.splice(atR, 0, JSON.parse(JSON.stringify(q.row))); extra.row = q.rowId; extra.qty = q.row.qty | 0; extra.restored = true;
     } else {
         if (typeof q.rowId !== 'string' || !ROW_ID.test(q.rowId)) return { ok: false, reason: 'value' };
         if (q.op === 'ov' && (!spec || (opts.player && !fl && !(isObj(sys.listRules) && sys.listRules.ownerStats === true)))) return { ok: false, reason: 'field' };   // F4c2: a copy's own values need a list shaped in the Lists tab; its owner changes them only under Setting A (the rules of the system judged on: the host's, the client's view)

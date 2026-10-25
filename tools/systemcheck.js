@@ -5410,6 +5410,25 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             && shSW.includes("orow.appendChild(input('sys-list-swneeds field',") && shSW.includes("lsp.on.needs = t.value.slice(0, LIMITS.formula); else delete lsp.on.needs;") && shSW.includes("lsp.on.needsText = t.value.slice(0, LIMITS.label); else delete lsp.on.needsText;")
             && shSW.includes("'The switch has words but no Needs to switch on, so Save drops its words.'") && /<li><b>Needs to switch on<\/b> is a formula a row must meet before its switch goes on/.test(hSW) && /<b>Needs to switch on<\/b><small>/.test(hSW));
     }
+    /* ---- 1.5.8 (the owner, 2026-10-25): a removed row's Undo, the row op restore ---- */
+    {
+        const sysU = cleanSystem({ v: 1, name: 'U', rolls: [], sheet: { sections: [] }, fields: [{ id: 'f_bg', key: 'Bag', kind: 'item-list', edit: 'owner', list: { on: { label: 'Out' }, stats: [{ key: 'Wt' }] } }],
+            items: [{ id: 'i_ro', name: 'Rope', stats: { Wt: 2 } }, { id: 'i_la', name: 'Lamp', stats: { Wt: 1 } }] }, { F, gmView: true });
+        const rowsU = [{ id: 'w_a', defId: 'i_ro', qty: 2 }, { id: 'w_b', defId: 'i_la', qty: 1, on: true, note: 'lit' }, { id: 'w_c', defId: 'i_ro', qty: 1 }], chU = list => ({ id: 'c_u', name: 'Kael', ownerId: 'u_a', npc: false, values: { f_bg: list } });
+        const rmU = S.applyRowOp(sysU, chU(rowsU), 'f_bg', { op: 'remove', rowId: 'w_b' }, F, {}), back = S.applyRowOp(sysU, chU(rmU.value), 'f_bg', { op: 'restore', rowId: 'w_b', row: rowsU[1], at: 1 }, F, {});
+        const odd = [S.applyRowOp(sysU, chU(rowsU), 'f_bg', { op: 'restore', rowId: 'w_b', row: rowsU[1], at: 1 }, F, {}), S.applyRowOp(sysU, chU(rmU.value), 'f_bg', { op: 'restore', rowId: 'w_b', row: rowsU[0], at: 1 }, F, {}), S.applyRowOp(sysU, chU(rmU.value), 'f_bg', { op: 'restore', rowId: 'w_b', at: 1 }, F, {}),
+            S.applyRowOp(sysU, chU(rmU.value), 'f_bg', { op: 'restore', rowId: 'w_b', row: rowsU[1], at: 99 }, F, {}), S.applyRowOp(sysU, chU(rmU.value), 'f_bg', { op: 'restore', rowId: 'w_b', row: rowsU[1], at: -4 }, F, {})].map(r => r.ok ? r.value.map(x => x.id).join(',') : r.reason);
+        const ciU = [S.cleanCharItem({ rid: 'e1', charId: 'c_u', fieldId: 'f_bg', op: 'restore', rowId: 'w_b', row: rowsU[1], at: 1 }), S.cleanCharItem({ rid: 'e1', charId: 'c_u', fieldId: 'f_bg', op: 'restore' })];
+        check('1.5.8 restore (applyRowOp): the very row put back whole at its place, its values kept (quantity, switch, note), the rest as they were; refused as missing where a row of that id is there, the row named is another or none; its place held to the list; the wire carries only its row id, never a row',
+            rmU.ok && back.ok && j(back.value) === j(rowsU) && back.restored === true && back.row === 'w_b' && j(odd) === j(['missing', 'missing', 'missing', 'w_a,w_c,w_b', 'w_b,w_a,w_c'])
+            && j(ciU[0]) === j({ rid: 'e1', charId: 'c_u', fieldId: 'f_bg', op: 'restore', rowId: 'w_b' }) && ciU[1] === null, j([back, odd, ciU]));
+        const shU = fs.readFileSync(path.join(app, 'scripts', 'sheets.js'), 'utf8').replace(/\r\n/g, NL), ioU = fs.readFileSync(path.join(app, 'scripts', 'io.js'), 'utf8').replace(/\r\n/g, NL), nU = fs.readFileSync(path.join(app, 'scripts', 'net.js'), 'utf8').replace(/\r\n/g, NL), hU = fs.readFileSync(path.join(app, 'index.html'), 'utf8');
+        check('1.5.8 a removed row\'s Undo (source): commitItem keeps the row before a removal and offers a notice with Undo once it is gone, never after a sale; the Undo checks the list on the GM\'s machine and goes through the host on a player\'s app, sent and waited for; io.js has a notice with one button, ten seconds long; a refused Undo has words of its own; Help says so',
+            shU.includes("var goneB = typeof goneOf === 'function' ? goneOf(c, f, q) : null;") && shU.includes("if (goneB && !(mvG && mvG.values)) goneNote(c, f, goneB);") && shU.includes("if (goneB && r && !r.error) goneNote(c, f, goneB);")
+            && shU.includes("if (!isClient() && JSON.stringify(cur) !== after) { toast(nm + ' cannot come back: the list changed since.'); return; }") && shU.includes("commitItem(cN, f, { op: 'restore', rowId: rid, row: g.row, at: g.at });") && shU.includes("}, LIMITS.undoMs);")
+            && /export function toastAction\(msg, label, fn, ms\) \{/.test(ioU) && ioU.includes("tb.hidden = true; _toastAct = null; ++_toastGen;") && nU.includes("|| q.op === 'restore') {   // 1.5.6 a purchase or a sale")
+            && shU.includes("'That cannot come back now: the list changed since, or the moment passed.'") && /A row you or a player remove wholly can come back too\./.test(hU));
+    }
     /* ---- Stage 6 HUD G10: Each round — apply actions the host runs on every character in a combat when its round changes ---- */
     {
         const rawG = { v: 1, name: 'G', fields: [{ id: 'f_t', key: 'Turn', kind: 'number', def: 0 }, { id: 'f_p', key: 'Parries', kind: 'number', def: 0 }, { id: 'f_y', key: 'Tally', kind: 'number', def: 0 }],

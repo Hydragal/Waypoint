@@ -3291,6 +3291,24 @@ pendingChecks.push((async () => {
     check('1.5.8 a player\'s switch-on of a row its list switch\'s needs refuse (char-item, run for real): answered char-deny with the reason needs and the switch\'s own words, nothing stored, sent or saved; a row whose needs hold is switched on, stored, sent and saved',
         J(wEm.answer) === J([{ type: 'char-deny', rid: 'i1', reason: 'needs', msg: 'It has no charge left.' }]) && wEm.rows === 'w_f:false w_e:false' && wEm.owner.length === 0 && wEm.saves === 0
         && J(wFu.answer) === J([{ type: 'char-ack', rid: 'i1' }]) && wFu.rows === 'w_f:true w_e:false' && wFu.owner.length === 1 && wFu.saves === 1, J([wEm, wFu]));
+    // 1.5.8: a removed row's Undo, through the host's real char-item branch: the host keeps the row its player's own removal took out, and puts
+    // back only that very row, at its place, while the list is as the removal left it (the row a message names is never read)
+    const mkU = () => { const camp = { id: 'k', system: sysW, chars: { c_1: { id: 'c_1', name: 'Ana', ownerId: 'u_a', npc: false, values: { f_wd: [{ id: 'w_f', defId: 'i_fu', qty: 1, on: true, note: 'old' }, { id: 'w_e', defId: 'i_em', qty: 3 }, { id: 'w_g', defId: 'i_fu', qty: 1 }] } } } }, out = { answer: [], owner: [], saves: 0 }, box = b => m => { packCheck(m); b.push(JSON.parse(J(m))); };
+        const net = { active: true, role: 'host', paused: false, conns: [{ peer: 'pA', open: true, send: box(out.owner) }], roster: { pA: { id: 'u_a' } } };
+        const win = { wpFormula: Fx, wpVtt: { on: () => true }, wpSheets: { playerSystem: c => Sx.cleanSystem(c.system, { F: Fx, gmView: false }), charChanged() {} }, wpDiceCore: null };
+        const Hh = new Function('net', 'SC', 'window', 'peerPaused', 'getActiveCampaign', 'saveRemoteSoon', 'sendFailed', 'peerProfileId', 'lim', 'toast', 'logEvent',
+            'var charLimit = lim, _charSlowSaid = {}, _charPending = {}, _charHost = {}, _rowGrace = {};\n' + dlSrc + '\n' + ntSrc + '\nreturn { handle: function(msg, conn) {\n' + ciSrc + '\n} };')(
+            net, () => Sx, win, () => false, () => camp, () => { out.saves++; }, e => { throw e; }, c => (net.roster[c.peer] ? net.roster[c.peer].id : null), { allow: () => true }, () => {}, () => {});
+        let n = 0; const send = m => { out.answer.length = 0; Hh.handle(Object.assign({ type: 'char-item', rid: 'u' + (++n), charId: 'c_1', fieldId: 'f_wd' }, m), { peer: 'pA', send: box(out.answer) }); return J(out.answer.map(a => a.type + (a.reason ? ':' + a.reason : ''))); };
+        const rows = () => J(camp.chars.c_1.values.f_wd);
+        return { camp, out, send, rows }; };
+    const u1 = mkU(), u1a = u1.rows(), u1r = u1.send({ op: 'remove', rowId: 'w_f' }), u1b = u1.rows(), u1u = u1.send({ op: 'restore', rowId: 'w_f', row: { id: 'w_f', defId: 'i_fu', qty: 99 } }), u1c = u1.rows(), u1again = u1.send({ op: 'restore', rowId: 'w_f' });
+    const u2 = mkU(); u2.send({ op: 'remove', rowId: 'w_f' }); u2.camp.chars.c_1.values.f_wd[0].qty = 2; const u2u = u2.send({ op: 'restore', rowId: 'w_f' }), u2r = u2.rows();   // the GM changed the list since
+    const u3 = mkU(), u3u = u3.send({ op: 'restore', rowId: 'w_f' }), u3b = mkU(); u3b.send({ op: 'setQty', rowId: 'w_e', qty: 1 }); const u3c = u3b.send({ op: 'restore', rowId: 'w_e' });   // nothing removed; a quantity only lowered
+    const u4 = mkU(); u4.send({ op: 'remove', rowId: 'w_e' }); const u4u = u4.send({ op: 'restore', rowId: 'w_e' }), u4r = J(u4.camp.chars.c_1.values.f_wd.map(r => r.id + ':' + r.qty));   // the middle row, back at its place
+    check('1.5.8 a removed row\'s Undo (char-item, run for real): restore puts back the very row the host took out, its values whole and at its place, stored and sent, once; a row a message names is never read; refused as stale once the list changed since, when nothing was removed, or when a quantity was only lowered',
+        u1r === J(['char-ack']) && u1b !== u1a && u1u === J(['char-ack']) && u1c === u1a && u1again === J(['char-deny:stale']) && u2u === J(['char-deny:stale']) && !/w_f/.test(u2r)
+        && u3u === J(['char-deny:stale']) && u3c === J(['char-deny:stale']) && u4u === J(['char-ack']) && u4r === J(['w_f:1', 'w_e:3', 'w_g:1']), J([u1r, u1u, u1c === u1a, u1again, u2u, u3u, u3c, u4u, u4r]));
 })());
 
 // [m410] SITE_EQUIVALENT_PLAN fold 2 on the wire, each behaviour by a case of its own (the tests that go with the mutations of m410): (B) a player's own

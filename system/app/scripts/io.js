@@ -2089,6 +2089,8 @@ export function toast(msg) {
 
         document.getElementById('toast').className = 'show';
 
+        tb.hidden = true; _toastAct = null; ++_toastGen;   // 1.5.8: a plain notice wears no button, and takes the place of one that did (toastAction)
+
         setTimeout(function(){ document.getElementById('toast').className=''; }, 3000);
 
     }
@@ -2100,6 +2102,17 @@ export function toast(msg) {
 // Every module's local toast() shim delegates to window.appToast — hook it up here.
 
 window.appToast = toast;
+
+// 1.5.8: a notice with one button (Undo), up for ms (10 s by default): a press runs fn once and puts the notice away; a newer notice takes its place
+var _toastGen = 0, _toastAct = null, _toastWired = false;
+export function toastAction(msg, label, fn, ms) {
+    toast(msg);
+    var tb = document.getElementById('toastBtn'), te = document.getElementById('toast'); if (!tb || !te || typeof fn !== 'function') return;
+    if (!_toastWired) { _toastWired = true; tb.addEventListener('click', function() { var a = _toastAct; _toastAct = null; tb.hidden = true; te.className = ''; ++_toastGen; if (a) a(); }); }
+    var tg = ++_toastGen; _toastAct = fn; tb.textContent = label || 'Undo'; tb.hidden = false;
+    var iv = setInterval(function() { if (tg !== _toastGen) { clearInterval(iv); return; } te.className = 'show'; }, 250);   // held up past a plain notice's own 3 s, until a newer notice or its time
+    setTimeout(function() { clearInterval(iv); if (tg === _toastGen) { te.className = ''; tb.hidden = true; _toastAct = null; } }, typeof ms === 'number' && ms > 0 ? ms : 10000);
+}
 
 // Dev/power-user: drop any queued autosave and re-read data.json from disk via the existing load()
 // path, so an externally rebuilt save appears without the stop/write/restart dance. Clearing the

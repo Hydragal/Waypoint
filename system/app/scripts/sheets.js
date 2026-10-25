@@ -5,7 +5,7 @@
    the engine formula.js. Design of record: docs/SHEET_BUILDER_PLAN.md. */
 import { state } from './state.js';
 import { getActiveCampaign } from './models.js';
-import { save, toast } from './io.js';
+import { save, toast, toastAction } from './io.js';
 import { picRef } from './safecore.js';
 import { showConfirm, showPrompt } from './dialogs.js';
 import { cleanDamageRules, openSync, moneyBoxes, moneyHeld, rowOpMoney, catHome, catPlace, cleanPlaceCats, catSplits, cleanFieldUnit, unitTail, heightWords, measureWords, unitWords, unitHead, listWords, unitOf, textWords, measureStore, rollNeedsOk, rollNeedsSays, timeRuleRun, ruleRunCtx, chainsShallow, makeResolver, hasDice, figText, cleanEvery, cleanInFight, droppedCounts, validPageId, LIMITS, KINDS, showsIf, rowRollNames, gmOnlyNames, applyAct, applyScope, applyRound, dueActs, combatChars, roundSecs, fxLeftNow, lastsSecs, APPLY_KINDS, TURN_UNITS, LIGHT_UNITS, RANGE_UNITS, HEIGHT_UNITS, TIME_WORDS, STORED, DEF_PROP, BAND_KINDS, IDENTITY_KINDS, LEDGER_KINDS, headerEntry, captionParts, emptySystem, uid, validKey, cleanSystem, cleanChar, validateSystem, resolveAll, hoverLines, autoLayout, applyEdit, applyStyle, cleanLooks, lookOf, lookFor, lookRule, applyEffectOp, fxText, fmtNum, budgetsOf, budgetWatch, budgetSays, needsMet, needsSays, initRoll, applyProposal, cleanUploads, sideOf, threatArc, facingCtx, facingNow, setAimSource, stanceCtx, tokenCtx, POSTURE_IDS, POSTURE_NAMES, DEFAULT_POSTURES, postureList, postureAt, autoEffectsOn, initTie, charTokenOn, cycleThreat, valueTone, TONES, activeCharOf, playableChars, ownedTokenPlan, applyOwnerOps, migrateBindings, capExpr, cleanValue, fieldById, valueOpts, applyRowOp, rowIdOf, rowDef, orphanRows, stampRows, cleanRowDef, projectRows, STAT_KEY, PALETTE_KEYS, GLYPHS, glyphPath, headerEdits, pinTargets, pinTargetsAll, hudView, hudHasContent, resetTargets, cleanListSpec, statKey, rowStat, plusText, rowPaid, itemReach, gmDerivedNames, labelGmNames, gmEffectNames, labelNames, withRound, rangeCtx, withRange, rowLvl, rowOn, cleanItemKey, charForView, secretFieldIds, gmViewFields } from './systemcore.js';
@@ -4193,12 +4193,14 @@ function commitItem(c, f, q) {   // Stage 6 F4a: a row op q = { op: add|remove|s
     var camp = getActiveCampaign(), sys = systemOf(camp); if (!camp || !sys) return;
     if (!q.priced && typeof priceAsk === 'function' && priceAsk(c, f, q)) return;   // 1.5.6: a priced row bought or sold asks its price first
     if (q.priced) { q = Object.assign({}, q); delete q.priced; }
+    var goneB = typeof goneOf === 'function' ? goneOf(c, f, q) : null;   // 1.5.8: the row as it stood, for the Undo its removal offers
     var before = q.rowId ? rowQty(c, f, q.rowId) : 0;
     var undoFollow = function(r) { if (!r || !r.ok) return; if (r.added > 0) noteUndo(c, f, r); else if (q.rowId && q.op !== 'undo' && before > (r.qty | 0)) takeBack(c, f, q.rowId, before - (r.qty | 0)); };   // Stage 6: a pickup opens the Undo; a drop takes it down
     if (isClient()) {
         var n = net(); if (!n || !n.charItem) return;
         var r = n.charItem(c.id, f.id, q);
         if (r && r.error) toast(r.error); else undoFollow(r);
+        if (goneB && r && !r.error) goneNote(c, f, goneB);   // 1.5.8: a removal's Undo
         renderViews(c.id);
         return;
     }
@@ -4218,6 +4220,28 @@ function commitItem(c, f, q) {   // Stage 6 F4a: a row op q = { op: add|remove|s
     if (mvG && mvG.values) Object.keys(mvG.values).forEach(function(k) { c.values[k] = mvG.values[k]; d[k] = mvG.values[k]; });
     if (ownerSeesSame(camp, sys, prev, res.value, f.id)) d = {};   // Stage 6: a change only to a row its owner never holds (a kept curse) is saved and never sent — even an unchanged copy would tell them
     afterCharChange(c, false, d);
+    if (goneB && !(mvG && mvG.values)) goneNote(c, f, goneB);   // 1.5.8: never after a sale
+}
+// 1.5.8 (the owner, 2026-10-25): a row your own hand takes wholly off its list gets a notice with Undo for LIMITS.undoMs that puts the very row back
+// at its place: on the GM's machine at once while the list is as the removal left it; on a player's app through the host, which keeps its own copy of
+// the row and judges it as any change of theirs. Never a sale (its money moved) and never a row kept out of its player's sight
+function goneOf(c, f, q) {
+    if (!q || (q.op !== 'remove' && q.op !== 'setQty' && q.op !== 'undo') || typeof q.get === 'number' || typeof q.rowId !== 'string') return null;
+    var v = c && c.values && Array.isArray(c.values[f.id]) ? c.values[f.id] : [];
+    for (var i = 0; i < v.length; i++) if (rowIdOf(v[i]) === q.rowId) return v[i] && v[i].hid === 1 ? null : { row: clone(v[i]), at: i };
+    return null;
+}
+function goneNote(c, f, g) {
+    if (!g || !c || !f) return; var v = c.values && Array.isArray(c.values[f.id]) ? c.values[f.id] : [], rid = rowIdOf(g.row);
+    if (!rid || v.some(function(r) { return rowIdOf(r) === rid; })) return;   // still there (a quantity lowered, a curse kept): nothing to put back
+    var sys = systemOf(getActiveCampaign()), rd = sys ? rowDef(sys, g.row) : null, nm = rd && rd.def && rd.def.name ? rd.def.name : 'The item', after = JSON.stringify(v), cid = c.id;
+    if (typeof toastAction !== 'function') return;
+    toastAction(nm + ' was removed.', 'Undo', function() {
+        var camp = getActiveCampaign(), cN = charById(cid, camp); if (!cN) return;
+        var cur = cN.values && Array.isArray(cN.values[f.id]) ? cN.values[f.id] : [];
+        if (!isClient() && JSON.stringify(cur) !== after) { toast(nm + ' cannot come back: the list changed since.'); return; }
+        commitItem(cN, f, { op: 'restore', rowId: rid, row: g.row, at: g.at });
+    }, LIMITS.undoMs);
 }
 // Stage 6: whether the owner's copy of a list is the same before and after (the players' view, the full library for GM-only inline rows)
 function ownerSeesSame(camp, sys, a, b, fid) {
@@ -4947,7 +4971,7 @@ function ownerFromToken(w) {
     giveCharacter(w.ownerId || '', c.id, { keep: w.id });   // a same-owner pick on a kept character's token makes it the one in play, with its token placed where they stand
 }
 function charGone(id) { var shown = false; if (sheetOpen === id) { closeSheet(); shown = true; } if (typeof id === 'string' && huds[id]) { closeHud(id); shown = true; } if (shown) toast('That character is no longer shared with you.'); if (window.appRender) window.appRender(); }
-function editResult(rid, ok, reason, msg, op) { if (!ok) toast(reason === 'none' ? 'Nothing to apply.' : reason === 'error' ? (msg || 'That amount could not be worked out.') : op === 'apply' && reason === 'field' ? 'That action is not on your sheet now.' : op === 'apply' && reason === 'timeout' ? 'No answer from the GM.' : reason === 'budget' ? (msg || 'That would take the character over a point budget.') : reason === 'money' || reason === 'change' || reason === 'max' ? (msg || 'Not enough money for that.') : reason === 'needs' ? (msg || 'Your character does not meet what that needs.') : reason === 'stays' ? (msg || (op === 'set' ? 'It stays on.' : 'You can\u2019t get rid of it.')) : reason === 'field' && op === 'custom' ? 'Only the GM changes that row now.' : reason === 'field' && op === 'ov' ? 'Only the GM changes this copy’s stats now.' : reason === 'long' ? 'This list\u2019s own rows hold all the long text they may.' : reason === 'off' ? 'Character sheets are off here.' : reason === 'owner' ? 'That sheet is not yours.' : reason === 'field' ? 'That field cannot be edited.' : reason === 'slow' ? 'Slow down a little.' : reason === 'missing' ? 'That is no longer there.' : reason === 'timeout' ? 'No answer from the GM; the change was undone.' : reason === 'making' ? 'Finish the character first (press Done on its sheet).' : reason === 'paused' ? 'The table is paused.' : 'That value was not accepted.'); renderViews(null); }
+function editResult(rid, ok, reason, msg, op) { if (!ok) toast(reason === 'none' ? 'Nothing to apply.' : reason === 'error' ? (msg || 'That amount could not be worked out.') : op === 'apply' && reason === 'field' ? 'That action is not on your sheet now.' : op === 'apply' && reason === 'timeout' ? 'No answer from the GM.' : reason === 'budget' ? (msg || 'That would take the character over a point budget.') : reason === 'money' || reason === 'change' || reason === 'max' ? (msg || 'Not enough money for that.') : reason === 'needs' ? (msg || 'Your character does not meet what that needs.') : reason === 'stays' ? (msg || (op === 'set' ? 'It stays on.' : 'You can\u2019t get rid of it.')) : reason === 'field' && op === 'custom' ? 'Only the GM changes that row now.' : reason === 'field' && op === 'ov' ? 'Only the GM changes this copy’s stats now.' : reason === 'long' ? 'This list\u2019s own rows hold all the long text they may.' : reason === 'off' ? 'Character sheets are off here.' : reason === 'owner' ? 'That sheet is not yours.' : reason === 'field' ? 'That field cannot be edited.' : reason === 'slow' ? 'Slow down a little.' : reason === 'missing' || (reason === 'stale' && op === 'restore') ? (op === 'restore' ? 'That cannot come back now: the list changed since, or the moment passed.' : 'That is no longer there.') : reason === 'timeout' ? 'No answer from the GM; the change was undone.' : reason === 'making' ? 'Finish the character first (press Done on its sheet).' : reason === 'paused' ? 'The table is paused.' : 'That value was not accepted.'); renderViews(null); }
 
 /* ---------- the editor: fields, rolls, characters ---------- */
 var draft = null, dirty = false, tab = 'fields', errorsById = {}, warningsById = {}, layoutView = 'sheet';   // layoutView (HUD frame HF1): 'sheet' | 'hud'
