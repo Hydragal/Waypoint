@@ -1670,8 +1670,12 @@ function cleanMod(m, fieldKinds) {
     if (m.op !== 'add') return null;
     var v = typeof m.v === 'number' ? m.v : Number(m.v); if (!isFinite(v) || Math.abs(v) > LIMITS.effectAmount) return null;
     if (m.part === 'max') return k === 'resource' ? { f: m.f, op: 'add', v: v, part: 'max' } : null;
+    if (k === 'item-list') return rowModAim(m) ? { f: m.f, op: 'add', v: v, key: m.key, col: m.col } : null;   // 1.5.8: one row of a list, by its key
     return (k === 'number' || k === 'skill' || k === 'formula') ? { f: m.f, op: 'add', v: v } : null;
 }
+// 1.5.8 (the owner, by prompt: "A change on one skill"): a change aimed at one row of an item list names the entry's key and one of the list's
+// columns; it adds to that column as it is worked out for every row whose entry has that key (a skill not bought, read at its default, too)
+function rowModAim(m) { return isObj(m) && typeof m.key === 'string' && ITEM_KEY.test(m.key) && typeof m.col === 'string' && STAT_KEY.test(m.col); }
 // 5h: what a library effect and an ad hoc row share — name, icon, tone, duration note, notes, changes (plain literals, fixed key order)
 function cleanEffectCore(d, fieldKinds) {
     var mods = [];
@@ -2889,7 +2893,7 @@ function patchOf(v, keys, cap) {   // the keys it knows, each null or of its typ
         else if (k === 'stats') { var sp = statsPatch(x); if (!sp) return null; if (Object.keys(sp).length) out.stats = sp; }
         else if (k === 'mods') {   // Stage 6 F6b: a custom row's changes by their shape only (applyCustom judges their fields); a malformed one refuses the message
             if (!Array.isArray(x) || x.length > LIMITS.effectMods) return null; var pm = [];
-            for (var mi = 0; mi < x.length; mi++) { var mx = x[mi]; if (!isObj(mx) || typeof mx.f !== 'string' || !FIELD_ID.test(mx.f) || (mx.op !== 'add' && mx.op !== 'on')) return null; var po = { f: mx.f, op: mx.op }; if (mx.op === 'add') { if (typeof mx.v !== 'number' || !fin(mx.v)) return null; po.v = mx.v; if (mx.part === 'max') po.part = 'max'; if (mx.lvl === true) po.lvl = true; } pm.push(po); }
+            for (var mi = 0; mi < x.length; mi++) { var mx = x[mi]; if (!isObj(mx) || typeof mx.f !== 'string' || !FIELD_ID.test(mx.f) || (mx.op !== 'add' && mx.op !== 'on')) return null; var po = { f: mx.f, op: mx.op }; if (mx.op === 'add') { if (typeof mx.v !== 'number' || !fin(mx.v)) return null; po.v = mx.v; if (mx.part === 'max') po.part = 'max'; else if (rowModAim(mx)) { po.key = mx.key; po.col = mx.col; } if (mx.lvl === true) po.lvl = true; } pm.push(po); }
             out.mods = pm;
         }
         else if (k === 'modsOn') { if (x !== true) return null; out.modsOn = true; }
@@ -3692,15 +3696,16 @@ function storedOf(field, char) {
 // 5h: every change the character's active effects make, keyed by the name the resolver works it out under (a key, or "key.max" for a
 // resource's max), in a fixed order (fields, then rows) so every machine adds in the same order. Null when nothing applies: the resolver
 // then behaves exactly as before. Each change is checked against the field's CURRENT kind (the system may have moved on since the row).
+function rowModSlot(listKey, key, col) { return lower(listKey) + '#k:' + lower(key) + '.' + lower(col); }   // 1.5.8: where a change aimed at one row is kept
 function fxIndex(sys, char, stance, autos) {   // conditions C3: stance (stanceCtx) — the posture the token takes, from the system's own list; C4: autos (autoEffectsOn) — the automatic effects on
     var idx = null, lib = null, byId = map(), seenRef = map();   // a library effect counts once per character, whichever list holds it
     (sys && Array.isArray(sys.fields) ? sys.fields : []).forEach(function(x) { if (isObj(x) && typeof x.id === 'string') byId[x.id] = x; });
     var put = function(m, name, gm, mult) {   // one change onto the field it names (checked against that field's kind), with its source for the breakdown
         var tf = isObj(m) ? byId[m.f] : null; if (!tf) return;
         if (m.op === 'on') { if (tf.kind !== 'toggle') return; }
-        else if (m.op === 'add') { if (typeof m.v !== 'number' || !isFinite(m.v)) return; if (m.part === 'max' ? tf.kind !== 'resource' : !(tf.kind === 'number' || tf.kind === 'skill' || tf.kind === 'formula')) return; }
+        else if (m.op === 'add') { if (typeof m.v !== 'number' || !isFinite(m.v)) return; if (tf.kind === 'item-list' ? m.part === 'max' || !rowModAim(m) : m.part === 'max' ? tf.kind !== 'resource' : !(tf.kind === 'number' || tf.kind === 'skill' || tf.kind === 'formula')) return; }
         else return;
-        var v = m.op === 'add' ? m.v * mult : 0, key = lower(tf.key) + (m.part === 'max' ? '.max' : '');
+        var v = m.op === 'add' ? m.v * mult : 0, key = tf.kind === 'item-list' ? rowModSlot(tf.key, m.key, m.col) : lower(tf.key) + (m.part === 'max' ? '.max' : '');
         idx = idx || map(); var slot = idx[key] || (idx[key] = { add: 0, on: false, src: [] });
         if (m.op === 'on') slot.on = true; else slot.add += v;
         srcKeep(slot.src, { name: name, op: m.op, v: v, gm: gm });   // 12 at most, a GM-only one kept past them
@@ -3743,7 +3748,7 @@ function fxIndex(sys, char, stance, autos) {   // conditions C3: stance (stanceC
 // the resolver skips a field that is not there); lvl: true multiplies it by the row's level. At most LIMITS.effectMods; none: null
 function cleanItemMod(m, kinds) {
     if (!isObj(m) || typeof m.f !== 'string' || !FIELD_ID.test(m.f)) return null;
-    var c = kinds ? cleanMod(m, kinds) : m.op === 'on' ? { f: m.f, op: 'on' } : m.op === 'add' && typeof m.v === 'number' && isFinite(m.v) && Math.abs(m.v) <= LIMITS.effectAmount ? (m.part === 'max' ? { f: m.f, op: 'add', v: m.v, part: 'max' } : { f: m.f, op: 'add', v: m.v }) : null;
+    var c = kinds ? cleanMod(m, kinds) : m.op === 'on' ? { f: m.f, op: 'on' } : m.op === 'add' && typeof m.v === 'number' && isFinite(m.v) && Math.abs(m.v) <= LIMITS.effectAmount ? (m.part === 'max' ? { f: m.f, op: 'add', v: m.v, part: 'max' } : rowModAim(m) ? { f: m.f, op: 'add', v: m.v, key: m.key, col: m.col } : m.key !== undefined || m.col !== undefined ? null : { f: m.f, op: 'add', v: m.v }) : null;   // 1.5.8: an aim at a row that is no aim is no change
     if (c && c.op === 'add' && m.lvl === true) c.lvl = true;
     return c;
 }
@@ -3771,8 +3776,8 @@ function unseenMods(c, view, full) {
             var lv = rowLvl(spec, r, d); lv = typeof lv === 'number' && isFinite(lv) ? lv : 0;
             d.mods.forEach(function(m) {
                 var cm = isObj(m) && vk[m.f] ? cleanMod(m, vk) : null; if (!cm) return;
-                var key = cm.f + '|' + cm.op + '|' + (cm.part || '');
-                if (!agg[key]) { agg[key] = { f: cm.f, op: cm.op }; if (cm.op === 'add') agg[key].v = 0; if (cm.part) agg[key].part = cm.part; order.push(key); }
+                var key = cm.f + '|' + cm.op + '|' + (cm.part || '') + '|' + (cm.key || '') + '|' + (cm.col || '');
+                if (!agg[key]) { agg[key] = { f: cm.f, op: cm.op }; if (cm.op === 'add') agg[key].v = 0; if (cm.part) agg[key].part = cm.part; if (cm.key) { agg[key].key = cm.key; agg[key].col = cm.col; } order.push(key); }
                 if (cm.op === 'add') agg[key].v += cm.v * (m.lvl === true ? lv : 1);
             });
         });
@@ -4269,8 +4274,12 @@ function makeResolver(sys, char, F, ropts) {   // ropts.noFx: the values with no
         var res = F.evaluateAst(p.ast, { vars: rowVars(L, x), random: noDice, depth: chain.length, stack: chain.map(function(n) { return pretty[n] || n; }) });   // the engine's own loop message reads Skills[Karate].Cost, never a row id
         chain.pop();
         if (!res.ok) return { error: res.error };
-        var vv = viaOf(res.breakdown && res.breakdown.names); if (vv) detail[canon] = { base: res.value, mods: [], via: vv };   // owed review F5a1#4: gmEffectNames sees a GM-only effect through a column
-        cache[canon] = res.value; return res.value;
+        var vv = viaOf(res.breakdown && res.breakdown.names), out = res.value;
+        var rk = x.d && typeof x.d.key === 'string' && ITEM_KEY.test(x.d.key) ? x.d.key : x.virt && typeof x.id === 'string' && x.id.slice(0, 2) === 'k:' ? x.id.slice(2) : '';   // a row not carried: the key it was asked by
+        var rs = fx && rk ? fx[rowModSlot(L.f.key, rk, c.key)] : null;   // 1.5.8: the changes aimed at this row's entry by its key
+        if (rs && typeof out === 'number') { out += rs.add; if (out > 1e15) out = 1e15; else if (out < -1e15) out = -1e15; }
+        if (rs || vv) detail[canon] = { base: res.value, mods: rs ? rs.src : [], via: vv || [] };   // owed review F5a1#4: gmEffectNames sees a GM-only effect through a column
+        cache[canon] = out; return out;
     }
     function totalOf(L, l, w, onlyOn) {   // L.count | L.qty | L.paid | L.<stat> | L.<col> (L.on.* over the rows switched on): a stat and paid per unit × qty, a column summed (true counts 1); the first row error wins
         if (l in cache) return cache[l];
@@ -4955,7 +4964,7 @@ function projectEffects(rows, sys, own, lib) {
             if (own && view[r.ref]) { var pr0 = { id: r.id, ref: r.ref, on: on }, pt0 = cleanFxTimer(r.t); if (pt0) pr0.t = pt0; out.push(pr0); return; }   // T5a: its timer to its owner
             d = view[r.ref] || (own && lib && lib[r.ref]) || null; if (!d) return;
         }
-        var mods = own ? (Array.isArray(d.mods) ? d.mods : []).filter(function(m) { return isObj(m) && vf[m.f] === 1; }).map(function(m) { var o = { f: m.f, op: m.op }; if (m.op === 'add') o.v = m.v; if (m.part) o.part = m.part; return o; }) : [];
+        var mods = own ? (Array.isArray(d.mods) ? d.mods : []).filter(function(m) { return isObj(m) && vf[m.f] === 1; }).map(function(m) { var o = { f: m.f, op: m.op }; if (m.op === 'add') o.v = m.v; if (m.part) o.part = m.part; else if (m.op === 'add' && rowModAim(m)) { o.key = m.key; o.col = m.col; } return o; }) : [];
         var pr1 = { id: r.id, name: d.name || 'Effect', icon: d.icon || '', tone: d.tone || '', dur: own ? (d.dur || '') : '', notes: own ? (d.notes || '') : '', on: on, mods: mods }, pt1 = own ? cleanFxTimer(r.t) : null; if (pt1) pr1.t = pt1;   // T5a: the owner's timer (a teammate gets names only)
         out.push(pr1);
     });
@@ -5112,7 +5121,7 @@ function cleanCharEffect(msg) {
     var q = { rid: msg.rid, charId: msg.charId, fieldId: msg.fieldId, op: msg.op };
     if (msg.op === 'adhoc') {
         if (!isObj(msg.row) || typeof msg.row.id !== 'string' || !FXROW_ID.test(msg.row.id)) return null;
-        var mods = Array.isArray(msg.row.mods) ? msg.row.mods.slice(0, LIMITS.effectMods).map(function(m) { return isObj(m) ? { f: typeof m.f === 'string' ? m.f.slice(0, 40) : '', op: m.op === 'on' ? 'on' : 'add', v: Number(m.v), part: m.part === 'max' ? 'max' : undefined } : null; }) : [];
+        var mods = Array.isArray(msg.row.mods) ? msg.row.mods.slice(0, LIMITS.effectMods).map(function(m) { return isObj(m) ? { f: typeof m.f === 'string' ? m.f.slice(0, 40) : '', op: m.op === 'on' ? 'on' : 'add', v: Number(m.v), part: m.part === 'max' ? 'max' : undefined, key: m.op !== 'on' && m.part !== 'max' && rowModAim(m) ? m.key : undefined, col: m.op !== 'on' && m.part !== 'max' && rowModAim(m) ? m.col : undefined } : null; }) : [];
         q.row = { id: msg.row.id, name: str(msg.row.name, LIMITS.name), icon: str(msg.row.icon, 32), tone: msg.row.tone === 'buff' || msg.row.tone === 'debuff' ? msg.row.tone : '', dur: str(msg.row.dur, 200), notes: str(msg.row.notes, LIMITS.text), on: msg.row.on !== false, mods: mods };
         return q;
     }

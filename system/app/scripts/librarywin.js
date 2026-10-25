@@ -353,7 +353,16 @@ function opensBox(form, e) {
 function modTargets() {
     var c = camp(), out = [];
     ((c && c.system && c.system.fields) || []).forEach(function(x) { var nm = x.label || x.key || '(field)'; if (x.kind === 'number' || x.kind === 'formula') out.push([x.id + '|add', nm]); else if (x.kind === 'skill') out.push([x.id + '|add', nm + ' (total)']); else if (x.kind === 'resource') out.push([x.id + '|max', nm + ' max']); else if (x.kind === 'toggle') out.push([x.id + '|on', nm + ' — switch on']); });
+    // 1.5.8 (the owner, by prompt: "A change on one skill"): one entry of a list that has columns, by the entry's key, as -2 to Disguise
+    itemLists().forEach(function(x) { if (Array.isArray(x.list.cols) && x.list.cols.length) out.push([x.id + '|row', (x.label || x.key || '(list)') + ': one entry']); });
     return out;
+}
+// 1.5.8: the list a change aims at one entry of, and the entries of the library and the system that list holds, each by its key, for the key box
+function rowListOf(fid) { return itemLists().filter(function(f) { return f.id === fid; })[0] || null; }
+function rowKeys(f) {
+    var cats = f && Array.isArray(f.list.cats) && f.list.cats.length ? f.list.cats.map(function(s) { return String(s).toLowerCase(); }) : null, seen = map(), out = [];
+    allEntries().concat(sysItems()).forEach(function(e) { if (!e || typeof e.key !== 'string' || !e.key || seen[e.key]) return; if (cats && cats.indexOf(String(e.category || '').toLowerCase()) < 0) return; seen[e.key] = 1; out.push([e.key, e.name || e.key]); });
+    return out.sort(function(a, b) { return a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0; }).slice(0, 2000);
 }
 function modsBox(form, e) {
     if (st.fmFor !== e.id || !st.fm) { st.fm = clone(Array.isArray(e.mods) ? e.mods : []); st.fmFor = e.id; }
@@ -363,10 +372,18 @@ function modsBox(form, e) {
     var draw = function() {
         box.textContent = '';
         st.fm.forEach(function(m, mi) {
-            var ln = el('div', 'lib-ctl lib-mod'), val = m.f + '|' + (m.op === 'on' ? 'on' : m.part === 'max' ? 'max' : 'add'), opts = targets.slice();
+            var ln = el('div', 'lib-ctl lib-mod'), val = m.f + '|' + (m.op === 'on' ? 'on' : m.part === 'max' ? 'max' : typeof m.col === 'string' ? 'row' : 'add'), opts = targets.slice();
             if (!opts.some(function(o) { return o[0] === val; })) opts.unshift([val, '(a field that is gone or changed kind)']);
             var sel = select(opts, val); sel.title = 'What this change affects'; ln.appendChild(sel);
-            sel.addEventListener('change', function() { var tp = sel.value.split('|'); m.f = tp[0]; if (tp[1] === 'on') { m.op = 'on'; delete m.v; delete m.part; delete m.lvl; } else { m.op = 'add'; if (typeof m.v !== 'number') m.v = 1; if (tp[1] === 'max') m.part = 'max'; else delete m.part; } draw(); });
+            sel.addEventListener('change', function() { var tp = sel.value.split('|'); m.f = tp[0]; delete m.key; delete m.col; if (tp[1] === 'on') { m.op = 'on'; delete m.v; delete m.part; delete m.lvl; } else { m.op = 'add'; if (typeof m.v !== 'number') m.v = 1; if (tp[1] === 'max') m.part = 'max'; else delete m.part; if (tp[1] === 'row') { var rl = rowListOf(m.f); m.key = ''; m.col = rl && rl.list.cols[0] ? rl.list.cols[0].key : ''; } } draw(); });
+            if (val.slice(-4) === '|row') {   // 1.5.8: which entry, by its key, and which of the list's columns it adds to
+                var rl = rowListOf(m.f), ky = el('input', 'field lib-mod-key'), dlId = 'libRowKeys' + mi, dl = el('datalist');
+                dl.id = dlId; (rl ? rowKeys(rl) : []).forEach(function(k) { var op = el('option'); op.value = k[0]; op.label = k[1]; dl.appendChild(op); }); ln.appendChild(dl);
+                ky.type = 'text'; ky.setAttribute('list', dlId); ky.placeholder = 'Entry key'; ky.value = typeof m.key === 'string' ? m.key : ''; ky.title = 'The key of the entry it changes, such as Disguise. A character who does not have that entry yet still gets it on the entry’s default.'; ln.appendChild(ky);
+                ky.addEventListener('input', function() { m.key = ky.value.trim(); });
+                var cs = select((rl ? rl.list.cols : []).map(function(c) { return [c.key, c.label || c.key]; }), m.col); cs.title = 'The column of that entry it adds to, such as its Target'; ln.appendChild(cs);
+                cs.addEventListener('change', function() { m.col = cs.value; });
+            }
             if (m.op !== 'on') {
                 var am = el('input', 'field lib-mod-amt'); am.type = 'number'; am.step = 'any'; am.value = typeof m.v === 'number' ? String(m.v) : ''; am.title = 'How much it adds (negative to take away)'; ln.appendChild(am);
                 am.addEventListener('input', function() { m.v = am.value === '' ? 0 : Number(am.value); });
@@ -394,6 +411,7 @@ function saveEntry() {
     var raw = readForm(); if (!raw.name.trim()) { toast('Give the entry a name.'); return; }
     var SCr = window.wpSystemCore, rlT = typeof raw.needsIf === 'string' ? raw.needsIf.trim() : ''; if (rlT && !(SCr && SCr.needRule && SCr.needRule(rlT, F()))) { toast('The rule under What it needs is not a formula this sheet can work out. A rule rolls no dice.'); return; }   // 126b: never dropped in silence
     var kyT = typeof raw.key === 'string' ? raw.key.trim() : ''; if (kyT && SCr && SCr.cleanItemKey && !SCr.cleanItemKey(kyT, F())) { toast('\u201c' + kyT + '\u201d is not a usable key. A key is a letter, then letters, digits and _. It is not a word formulas already use, such as on, max, min, count or lvl.'); return; }   // 1.5.4: never dropped in silence (List.max.<name> is the list's highest)
+    if (st.fmFor === e.id && (st.fm || []).some(function(m) { return m && typeof m.col === 'string' && !/^[A-Za-z][A-Za-z0-9_]{0,39}$/.test(typeof m.key === 'string' ? m.key : ''); })) { toast('A change on one entry needs that entry’s key, such as Disguise. Pick it in the key box or remove the change.'); return; }   // 1.5.8
     var c = cleanLibEntry(raw, gmCtx()); if (!c) { toast('That entry could not be kept.'); return; }
     var list = workOf(st.packId), i = -1; list.forEach(function(x, k) { if (x.id === c.id) i = k; });
     var was = i >= 0 ? list[i] : null;

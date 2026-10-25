@@ -654,6 +654,35 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         check('the Library window\'s form and its working copies (the owed review of 2026-10-09; librarywin.js renderForm, needsBox, modsBox and readForm, sliced and run for real on a page of plain objects): a form reads back the entry as stored; a need and a change taken off in the form are off in what the form reads, before any save; the form drawn again shows and reads the entry as it is stored, never what an earlier form left behind; an entry replaced under the form, as an import by id does, is read as it now is; levels nobody typed in are kept as stored, and a box that was typed in is read line by line',
             !!fw && j(fw.first) === j([[{ id: 'i_b' }, { id: 'i_c', lvl: 2 }], [{ f: 'f_st', op: 'add', v: 1 }], [{ lvl: 2, tag: 'a): b', text: 't' }]]) && j(fw.edited) === j([[{ id: 'i_c', lvl: 2 }], null, [{ lvl: 2, tag: 'a): b', text: 't' }]]) && j(fw.again) === j(fw.first)
             && j(fw.replaced) === j([[{ id: 'i_c' }], [{ f: 'f_st', op: 'add', v: 7 }], [{ lvl: 2, tag: 'a): b', text: 't' }]]) && j(fw.typed) === j([{ lvl: 1, text: 'one' }]) && j(fw.kept) === j(['i_a', 'i_a']), fwErr || j(fw));
+        // 1.5.8 (the owner, by prompt: "A change on one skill"): the Changes box aims a change at one entry of a list, by its key and a column
+        let rw = null, rwErr = '';
+        try {
+            const mA = winS2.indexOf('function modTargets() {'), mZ = winS2.indexOf('function modsBox(form, e) {'), bZ = winS2.indexOf('\n// the form as an entry');
+            const FIELDS = [{ id: 'f_st', key: 'ST', label: 'ST', kind: 'number' }, { id: 'f_sk', key: 'Skills', label: 'Skills', kind: 'item-list', list: { cats: ['Skill'], cols: [{ key: 'Target', label: 'Target' }, { key: 'Half', label: 'Half' }] } },
+                { id: 'f_tr', key: 'Traits', label: 'Traits', kind: 'item-list', list: { lvl: { min: 1, max: 3 } } }];
+            const lists = () => FIELDS.filter(f => f.kind === 'item-list'), ents = [{ id: 'i_s', name: 'Sneak', key: 'Sneak', category: 'Skill' }, { id: 'i_c', name: 'Climb', key: 'Climb', category: 'skill' }, { id: 'i_g', name: 'Rope', key: 'Rope', category: 'Gear' }, { id: 'i_x', name: 'No key', category: 'Skill' }];
+            const mkE = tag => ({ tag, kids: [], on: {}, dataset: {}, value: '', attrs: {}, appendChild(c) { this.kids.push(c); return c; }, addEventListener(t2, f) { this.on[t2] = f; }, setAttribute(k, v) { this.attrs[k] = v; }, set textContent(v) { this.kids = []; this._t = v; }, get textContent() { return this._t || ''; } });
+            const el = (tag, cls, text) => { const e = mkE(tag); if (cls) e.className = cls; if (text !== undefined && text !== null) e._t = String(text); return e; };
+            const select = (opts, val) => { const s = mkE('select'); s.opts = opts; s.value = val; return s; };
+            const stR = { fm: null, fmFor: null };
+            const api = new Function('camp', 'itemLists', 'allEntries', 'sysItems', 'map', 'el', 'select', 'st', 'clone', 'document', '"use strict";\n' + winS2.slice(mA, bZ) + '\nreturn { modTargets, rowListOf, rowKeys, modsBox };')(
+                () => ({ system: { fields: FIELDS } }), lists, () => ents.slice(0, 3), () => ents.slice(3), () => Object.create(null), el, select, stR, v => JSON.parse(JSON.stringify(v)), { createTextNode: x => ({ text: x }) });
+            const tg = api.modTargets(), keys = api.rowKeys(api.rowListOf('f_sk'));
+            const form = mkE('div'); api.modsBox(form, { id: 'i_m', mods: [{ f: 'f_sk', op: 'add', v: -2, key: 'Sneak', col: 'Target' }] });
+            const line = form.kids[1].kids[0], kinds = line.kids.map(k => k.tag + (k.className ? '.' + k.className : '')), val0 = line.kids[0].value;
+            const keyBox = line.kids.find(k => k.className === 'field lib-mod-key'), colSel = line.kids.find(k => k.tag === 'select' && k.opts && k.opts[0] && k.opts[0][0] === 'Target');
+            keyBox.value = ' Climb '; keyBox.on.input(); colSel.value = 'Half'; colSel.on.change(); const typed = JSON.stringify(stR.fm);
+            line.kids[0].value = 'f_st|add'; line.kids[0].on.change(); const back = JSON.stringify(stR.fm);
+            const line2 = form.kids[1].kids[0]; line2.kids[0].value = 'f_sk|row'; line2.kids[0].on.change(); const fresh = JSON.stringify(stR.fm);
+            rw = { tg, keys, kinds, val: val0, colOpts: colSel.opts, typed, back, fresh };
+        } catch (e) { rwErr = String(e && e.stack || e).slice(0, 600); }
+        const saveA = winS2.indexOf('function saveEntry() {'), saveS = winS2.slice(saveA, winS2.indexOf('\n}', saveA));
+        check('1.5.8 the Changes box aims a change at one entry of a list (librarywin.js modTargets, rowListOf, rowKeys and modsBox, sliced and run for real on a page of plain objects): each item list with columns is a target of its own, "one entry"; the key box offers the library\'s and the system\'s entries of that list\'s categories by their key, sorted by name, never one with no key; a change aimed at a row shows its target, a key box with those suggestions and the list\'s columns, and what is typed is kept, trimmed; another target takes the key and the column off, and the one-entry target again starts with no key and the first column; Save refuses a change on one entry with no usable key, in words',
+            !!rw && JSON.stringify(rw.tg) === JSON.stringify([['f_st|add', 'ST'], ['f_sk|row', 'Skills: one entry']]) && JSON.stringify(rw.keys) === JSON.stringify([['Climb', 'Climb'], ['Sneak', 'Sneak']])
+            && rw.val === 'f_sk|row' && rw.kinds.join(' ') === 'select datalist input.field lib-mod-key select input.field lib-mod-amt label.lib-mod-lvl button.tool ghost' && JSON.stringify(rw.colOpts) === JSON.stringify([['Target', 'Target'], ['Half', 'Half']])
+            && rw.typed === JSON.stringify([{ f: 'f_sk', op: 'add', v: -2, key: 'Climb', col: 'Half' }]) && rw.back === JSON.stringify([{ f: 'f_st', op: 'add', v: -2 }]) && rw.fresh === JSON.stringify([{ f: 'f_sk', op: 'add', v: -2, key: '', col: 'Target' }])
+            && saveS.includes("toast('A change on one entry needs that entry\u2019s key, such as Disguise. Pick it in the key box or remove the change.'); return; }") && saveS.indexOf('A change on one entry') < saveS.indexOf('cleanLibEntry(raw'),
+            rwErr || JSON.stringify(rw));
         // ... and what the window says of a rule, and what it exports, while a pack of the campaign is not read
         let fq = null, fqErr = '';
         try {

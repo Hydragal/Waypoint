@@ -13263,6 +13263,34 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         check('1.5.7 a roll\'s change and an apply action may switch a tick: the cleaner keeps one aimed at a toggle, Set to 1 turns it on and 0 off, its line counting 1 for on and 0 for off; a failure changes nothing',
             med.then[0].f === 'f_med' && wake.apply[0].f === 'f_med' && on.ok && on.values.f_med === true && on.lines[0].v === 1 && off.ok && off.values.f_med === false && off.lines[0].v === 0 && S.thenChanges(med, false, false).length === 0, j([med, on, off]));
     }
+    {   // 1.5.8 (the owner, 2026-10-25, by prompt: "A change on one skill"): a change aimed at one entry of a list by its key adds to one of that
+        // list's columns as it is worked out for that entry's rows, and for the entry read at its default when it is not carried; invented entries
+        const j = JSON.stringify, mk = gm => S.cleanSystem({ v: 1, name: 'R', fields: [
+            { id: 'f_sk', key: 'Skills', label: 'Skills', kind: 'item-list', edit: 'owner', vis: 'all', list: { lvl: { label: 'Level', min: 0, max: 20, def: 10 }, noQty: true, cols: [{ key: 'Target', label: 'Target', formula: 'if(Row.has, Row.lvl, 3)' }, { key: 'Half', label: 'Half', formula: 'floor(Row.Target / 2)' }] } },
+            { id: 'f_tr', key: 'Traits', label: 'Traits', kind: 'item-list', edit: 'owner', vis: 'all', list: { lvl: { label: 'Level', min: 1, max: 5, def: 1 }, noQty: true } },
+            { id: 'f_hid', key: 'Hidden', label: 'Hidden', kind: 'item-list', edit: 'gm', vis: 'gm', list: { noQty: true } }],
+            rolls: [], items: [{ id: 'i_sneak', name: 'Sneak', key: 'Sneak', category: 'Skill' }, { id: 'i_climb', name: 'Climb', key: 'Climb', category: 'Skill' },
+                { id: 'i_mark', name: 'Pebble Mark', key: 'PebbleMark', mods: [{ f: 'f_sk', op: 'add', v: -2, key: 'Sneak', col: 'Target' }, { f: 'f_sk', op: 'add', v: -1, key: 'Climb', col: 'Target', lvl: true },
+                    { f: 'f_sk', op: 'add', v: 5, key: 'bad key', col: 'Target' }, { f: 'f_sk', op: 'add', v: 5, key: 'Sneak' }, { f: 'f_sk', op: 'on', key: 'Sneak', col: 'Target' }, { f: 'f_sk', op: 'add', v: 5, key: 'Sneak', col: 'Target', part: 'max' }] },
+                { id: 'i_curse', name: 'Grey Charm', key: 'GreyCharm', vis: 'gm', mods: [{ f: 'f_sk', op: 'add', v: -4, key: 'Sneak', col: 'Target' }] }] }, { F, gmView: gm });
+        const sR = mk(true), mark = sR.items.find(x => x.id === 'i_mark');
+        const ch = (tr, sk) => ({ id: 'c_p', name: 'Pebbles', values: { f_tr: tr, f_sk: sk } });
+        const val = (c, n) => { const R = S.makeResolver(sR, c, F, null), v = R(n); return v && typeof v === 'object' && 'value' in v ? v.value : v; };
+        const none = ch([], [{ id: 'w_s', defId: 'i_sneak', qty: 1, lvl: 12 }]), with1 = ch([{ id: 'w_m', defId: 'i_mark', qty: 1, lvl: 2 }], [{ id: 'w_s', defId: 'i_sneak', qty: 1, lvl: 12 }]);
+        const R1 = S.makeResolver(sR, with1, F, null), r1v = R1('Skills.Sneak.Target'), det = R1.detail ? R1.detail('Skills.Sneak.Target') : null;   // the details of a name once it is worked out, as a roll's card asks them
+        const own = S.cleanItemMods([{ f: 'f_sk', op: 'add', v: 3, key: 'Sneak', col: 'Half' }, { f: 'f_sk', op: 'add', v: 3, key: '', col: 'Half' }], null);
+        const hidC = { id: 'c_q', name: 'Kael', values: { f_tr: [], f_hid: [{ id: 'w_c', defId: 'i_curse', qty: 1 }], f_sk: [{ id: 'w_s', defId: 'i_sneak', qty: 1, lvl: 12 }] } };
+        const un = S.unseenMods(hidC, mk(false), sR);
+        check('1.5.8 a change on one entry of a list (the owner, by prompt: "A change on one skill"; cleanMod, fxIndex and a column worked out, run for real): the cleaner keeps an add aimed at a list by an entry\'s key and a column, and drops one with no usable key, no column, a switch or a max; a row of that entry works the column out with it (12 to 10), and a column that reads it follows (6 to 5); per level counts it by the trait\'s level; an entry not carried, read at its default, takes it too (3 to 1); another entry\'s column is as it was; the breakdown names the trait; a row\'s copy cleaned by its shape keeps the aim and drops an aim that is none; what its owner cannot see is summed per entry and column',
+            j(mark.mods) === j([{ f: 'f_sk', op: 'add', v: -2, key: 'Sneak', col: 'Target' }, { f: 'f_sk', op: 'add', v: -1, key: 'Climb', col: 'Target', lvl: true }])
+            && val(none, 'Skills.Sneak.Target') === 12 && val(with1, 'Skills.Sneak.Target') === 10 && val(none, 'Skills.Sneak.Half') === 6 && val(with1, 'Skills.Sneak.Half') === 5
+            && val(ch([], []), 'Skills.Climb.Target') === 3 && val(ch([{ id: 'w_m', defId: 'i_mark', qty: 1, lvl: 2 }], []), 'Skills.Climb.Target') === 1
+            && val(ch([{ id: 'w_m', defId: 'i_mark', qty: 1, lvl: 2 }], []), 'Skills.Sneak.Target') === 1
+            && !!det && det.base === 12 && det.mods.length === 1 && det.mods[0].name === 'Pebble Mark' && det.mods[0].v === -2
+            && j(own) === j([{ f: 'f_sk', op: 'add', v: 3, key: 'Sneak', col: 'Half' }])
+            && j(un) === j([{ f: 'f_sk', op: 'add', v: -4, key: 'Sneak', col: 'Target' }]),
+            j([mark.mods, val(none, 'Skills.Sneak.Target'), val(with1, 'Skills.Sneak.Target'), val(with1, 'Skills.Sneak.Half'), val(ch([{ id: 'w_m', defId: 'i_mark', qty: 1, lvl: 2 }], []), 'Skills.Climb.Target'), det, own, un]));
+    }
     {   // 1.5.8 (book handoff 90, after the website: a technique a Form opens "shows by itself" while the Form holds): an entry's What it opens and
         // the rows other rows open, kept in step (cleanOpens, openSync, Row.opened, applyRowOp), on invented entries, run for real
         const j = JSON.stringify, mk = gm => S.cleanSystem({ v: 1, name: 'O', fields: [
