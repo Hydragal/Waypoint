@@ -127,20 +127,32 @@ function pageHost(win) {
     try { var w = win && win.wpPopout ? win.opener : win; return w && !w.closed && w.wpPageShelf && typeof w.wpPageShelf.linkGo === 'function' ? w : null; }
     catch (e) { return null; }
 }
-function pageGo(win, pg, way, e) {
+// 1.5.8 (Back and Forward): a plain press on a page link that stands in a place a page is read (pagenav.js NAV_PLACES), and Open here, open the
+// page in that same place, which notes where it stood first (wpPageNav.follow), so Back brings the reader back to the very spot. A press with a
+// key held, and a link anywhere else, open as before. way 'here' is Open here
+function pageGo(win, pg, way, e, a) {
     var d = win && win.document, b = d && d.body;
     if (b && b.classList && b.classList.contains('stream-mode')) return false;
-    var w = pageHost(win); if (!w || !pg) return false;
+    if (!pg) return false;
+    var nav = win.wpPageNav, plain = !(e && (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey)), root = null;
+    if ((way === 'here' || (!way && plain)) && a && nav && typeof nav.placeOf === 'function' && typeof nav.follow === 'function') { try { root = nav.placeOf(a); } catch (err) { root = null; } }
+    if (root) { try { return !!nav.follow(root, pg.id, pg.at || ''); } catch (err) { return false; } }
+    var w = pageHost(win); if (!w) return false;
+    if (way === 'here') way = '';
     try { var sh = w.wpPageShelf; sh.linkGo(pg.id, pg.at || '', way || (win.wpPopout ? 'window' : sh.wayNow(e))); } catch (err) { return false; }
     return true;
 }
+// 1.5.8: the right button on a page link shows where it may open (its own slice, below); with no menu to be had, a window of its own as before
 function pageMenu(win) {
     return function(e) {
         var a = linkAt(e.target); if (!a) return;
         var pg = typeof pageLink === 'function' ? pageLink(cleanLink(linkOf(a))) : null; if (!pg) return;
         var c = linkWhere(a, win); if (c.editing !== false || c.held === true) return;
         e.preventDefault(); e.stopPropagation();
-        pageGo(win, pg, 'window', e);
+        var d = win && win.document, b = d && d.body;
+        if (b && b.classList && b.classList.contains('stream-mode')) return;
+        if (typeof lmOpen === 'function' && d && typeof d.createElement === 'function' && lmOpen(win, d, a, pg, e)) return;
+        pageGo(win, pg, 'window', e, a);
     };
 }
 // The address an <a> carries — null where it carries none. A diagram draws its links as SVG <a> elements whose address is in
@@ -170,7 +182,7 @@ function linkGate(win, doc, ask) {
         e.preventDefault();   // the engine follows nothing: whatever opens is opened below
         var c = linkWhere(a, win); c.link = cleanLink(raw);
         var pg = typeof pageLink === 'function' ? pageLink(c.link) : null;   // 1.5.6: a link to a page of the campaign opens it, with no question; the middle button, a window of its own
-        if (pg) { if (c.editing === false && c.held !== true) pageGo(win, pg, e.type === 'auxclick' ? 'window' : '', e); return; }
+        if (pg) { if (c.editing === false && c.held !== true) pageGo(win, pg, e.type === 'auxclick' ? 'window' : '', e, a); return; }
         var v = linkVerdict(c), url = v === 'none' ? null : readUrl(c.link);
         if (!url) return;   // no link, a link in a box that is being edited, or an address the parser cannot read: nothing opens
         var link = c.link;
@@ -280,11 +292,12 @@ function peekEl(doc, make) {   // the one strip of this document; made on first 
     (home || doc.body).appendChild(el);
     return el;
 }
-function peekHide(doc) { var el = peekEl(doc, false); if (el && el.hidden !== true) el.hidden = true; }
+function peekHide(doc) { var el = peekEl(doc, false); if (el && el.hidden !== true) el.hidden = true; if (typeof popHide === 'function') popHide(doc, false); }   // 1.5.8: and the open-in-a-new-window button beside a page link, a moment later
 function peekShow(win, doc, a, e) {
     var text = a ? peekOf(win, a) : '';
     if (text && doc.body && doc.body.classList && doc.body.classList.contains('stream-mode')) text = '';   // the stream window is a picture for an audience: nobody clicks there, and nothing is said over it
     if (!text) { peekHide(doc); return false; }
+    if (typeof popShow === 'function') popShow(win, doc, a);   // 1.5.8: beside a page link, a button that opens it in a new window
     var el = peekEl(doc, true); if (!el) return false;
     if (el.firstChild) el.firstChild.nodeValue = text; else el.appendChild(doc.createTextNode(text));
     el.hidden = false;
@@ -349,6 +362,132 @@ function peekWire(win, doc) {
 }
 // [sinkcheck:linkpeek-end]
 
+// [sinkcheck:linkmenu-start]
+// 1.5.8: where a page link may open (the owner, 2026-10-25, by prompt: "Both"). The right button on a page link shows a small menu: Open here, as
+// a press opens it; Open in a new window; Open in the panel over the map, from the main window or through it from a window of its own, and never
+// from the panel itself. A player's app opens a page in its reader alone, so there it holds Open here alone. Nothing in the stream window.
+// ONE menu a document, made here of elements and text nodes: the page's name is a text node. The arrow keys, Home and End go through its rows,
+// Enter or a press takes one, Escape and Tab put it away (esckey.js leaves it its own Escape: ESC_OWN_MENUS) and give the focus back to the link
+var LM_ID = 'pageLinkMenu';
+function lmRows(win, a) {
+    var nav = win && win.wpPageNav, root = null, w = pageHost(win), rows = [];
+    try { root = nav && typeof nav.placeOf === 'function' ? nav.placeOf(a) : null; } catch (e) { root = null; }
+    if (root || w) rows.push(['here', root ? 'Open here' : 'Open']);
+    if (atTable(win) === true || !w) return rows;
+    rows.push(['window', 'Open in a new window']);
+    if (!(root && root.id === 'docPanelBody')) rows.push(['panel', 'Open in the panel over the map']);
+    return rows;
+}
+function lmEl(doc, make) {
+    var m = doc.getElementById(LM_ID); if (m || !make) return m || null;
+    m = doc.createElement('div'); m.id = LM_ID; m.className = 'linkmenu'; m.setAttribute('role', 'menu'); m.hidden = true;
+    var home = doc.body && doc.body.classList && doc.body.classList.contains('popout-mode') ? doc.getElementById('popoutWrap') : null;
+    (home || doc.body).appendChild(m);
+    m.addEventListener('click', function(e) {
+        var r = e.target && e.target.closest ? e.target.closest('.linkmenu-row') : null; if (!r) return;
+        e.preventDefault(); e.stopPropagation();
+        var s = m.wpAt; lmClose(doc, false); if (s) pageGo(s.win, s.pg, r.dataset.way, null, s.a);
+    });
+    m.addEventListener('keydown', function(e) {
+        var rows = Array.prototype.slice.call(m.querySelectorAll('.linkmenu-row')), at = rows.indexOf(doc.activeElement), to = -1;
+        if (e.key === 'Tab') { e.preventDefault(); lmClose(doc, true); return; }
+        if (e.key === 'ArrowDown') to = at < 0 || at === rows.length - 1 ? 0 : at + 1;
+        else if (e.key === 'ArrowUp') to = at <= 0 ? rows.length - 1 : at - 1;
+        else if (e.key === 'Home') to = 0;
+        else if (e.key === 'End') to = rows.length - 1;
+        if (to < 0 || !rows[to]) return;
+        e.preventDefault(); e.stopPropagation(); rows[to].focus();
+    });
+    doc.addEventListener('keydown', function(e) { if (e.key === 'Escape' && lmShown(doc)) { e.preventDefault(); e.stopPropagation(); lmClose(doc, true); } }, true);
+    doc.addEventListener('pointerdown', function(e) { var t = e.target; if (lmShown(doc) && !(t && typeof m.contains === 'function' && m.contains(t))) lmClose(doc, false); }, true);
+    doc.addEventListener('scroll', function(e) { if (lmShown(doc) && !(e && e.target && typeof m.contains === 'function' && m.contains(e.target))) lmClose(doc, false); }, true);
+    var win = doc.defaultView; if (win && typeof win.addEventListener === 'function') { win.addEventListener('blur', function() { lmClose(doc, false); }); win.addEventListener('resize', function() { lmClose(doc, false); }); }
+    return m;
+}
+function lmShown(doc) { var m = lmEl(doc, false); return !!m && m.hidden !== true; }
+function lmClose(doc, refocus) {
+    var m = lmEl(doc, false); if (!m || m.hidden === true) return false;
+    var s = m.wpAt; m.hidden = true; m.wpAt = null;
+    if (refocus && s && s.a && s.a.isConnected !== false && typeof s.a.focus === 'function') { try { s.a.focus(); } catch (e) {} }
+    return true;
+}
+// the menu for a link: its heading the page's own name, then a row a way. Answers whether it is up
+function lmOpen(win, doc, a, pg, e) {
+    var rows = lmRows(win, a); if (!rows.length) return false;
+    var m = lmEl(doc, true); if (!m) return false;
+    while (m.firstChild) m.removeChild(m.firstChild);
+    var w = pageHost(win), words = '';
+    try { words = w ? String(w.wpPageShelf.linkWords(pg.id, pg.at) || '') : ''; } catch (err) { words = ''; }
+    var head = doc.createElement('div'); head.className = 'linkmenu-head'; head.appendChild(doc.createTextNode(words || (w ? 'A page that is not here' : 'A page'))); m.appendChild(head);
+    rows.forEach(function(r) {
+        var b = doc.createElement('button'); b.type = 'button'; b.className = 'linkmenu-row'; b.setAttribute('role', 'menuitem'); b.dataset.way = r[0];
+        b.appendChild(doc.createTextNode(r[1])); m.appendChild(b);
+    });
+    m.wpAt = { win: win, a: a, pg: pg };
+    if (typeof peekHide === 'function') peekHide(doc);
+    if (typeof popHide === 'function') popHide(doc, true);
+    m.style.left = '0px'; m.style.top = '0px'; m.hidden = false;
+    var px = e && e.button === 2 && typeof e.clientX === 'number' ? e.clientX : null, py = px !== null && typeof e.clientY === 'number' ? e.clientY : null;
+    if ((px === null || py === null) && a.getBoundingClientRect) { var r = a.getBoundingClientRect(); px = r.left; py = r.bottom + 2; }   // by the keyboard: under the link itself
+    var vw = (win && win.innerWidth) || 0, vh = (win && win.innerHeight) || 0, mw = m.offsetWidth || 0, mh = m.offsetHeight || 0;
+    m.style.left = Math.max(4, Math.min(+px || 0, vw - mw - 4)) + 'px'; m.style.top = Math.max(4, Math.min(+py || 0, vh - mh - 4)) + 'px';
+    if (!(e && e.button === 2)) { var first = m.querySelector('.linkmenu-row'); if (first) first.focus(); }   // opened by the keyboard (the menu key, Shift+F10): its first row has the focus
+    return true;
+}
+// [sinkcheck:linkmenu-end]
+
+// [sinkcheck:linkpop-start]
+// 1.5.8 (the owner, 2026-10-25, by prompt: "Both"): while the pointer or the keyboard's focus rests on a page link (the strip above says which
+// page), a small button beside its end opens the page in a new window. ONE button a document, made here: its drawing is the page panel's own
+// pop-out drawing, made by name. Never on a link in a box being edited or just dragged, never on a player's app, where a page opens in the reader
+// alone, never in the stream window. It goes a moment after the link is left, so the pointer can reach it, and at once at a scroll or a press
+var POP_ID = 'pageLinkPop', POP_PATHS = ['M6.5 3.5H3.2A1.2 1.2 0 0 0 2 4.7v8.1A1.2 1.2 0 0 0 3.2 14h8.1a1.2 1.2 0 0 0 1.2-1.2V9.5', 'M9.5 2.5H14v4.5', 'M14 2.5 7.5 9'];
+var SVG_NS = 'http://www.w3.org/2000/svg';
+function popEl(doc, make) {
+    var el = doc.getElementById(POP_ID); if (el || !make) return el || null;
+    el = doc.createElement('button'); el.id = POP_ID; el.type = 'button'; el.className = 'linkpop'; el.hidden = true; el.tabIndex = -1;
+    el.title = 'Open this page in a new window'; el.setAttribute('aria-label', 'Open this page in a new window');
+    if (typeof doc.createElementNS === 'function') {
+        var svg = doc.createElementNS(SVG_NS, 'svg');
+        [['viewBox', '0 0 16 16'], ['width', '12'], ['height', '12'], ['fill', 'none'], ['stroke', 'currentColor'], ['stroke-width', '1.6'], ['stroke-linecap', 'round'], ['stroke-linejoin', 'round'], ['aria-hidden', 'true']].forEach(function(x) { svg.setAttribute(x[0], x[1]); });
+        POP_PATHS.forEach(function(d) { var p = doc.createElementNS(SVG_NS, 'path'); p.setAttribute('d', d); svg.appendChild(p); });
+        el.appendChild(svg);
+    }
+    var home = doc.body && doc.body.classList && doc.body.classList.contains('popout-mode') ? doc.getElementById('popoutWrap') : null;
+    (home || doc.body).appendChild(el);
+    el.addEventListener('mouseenter', function() { el.wpHover = true; if (el.wpT) { clearTimeout(el.wpT); el.wpT = null; } });
+    el.addEventListener('mouseleave', function() { el.wpHover = false; popHide(doc, false); });
+    el.addEventListener('mousedown', function(e) { e.preventDefault(); });   // the focus stays where it is
+    el.addEventListener('click', function(e) {
+        e.preventDefault(); e.stopPropagation();
+        var a = el.wpLink, win = el.wpWin, pg = a ? pageLink(cleanLink(linkOf(a))) : null;
+        popHide(doc, true);
+        if (a && pg && a.isConnected !== false) pageGo(win, pg, 'window', null, a);
+    });
+    doc.addEventListener('scroll', function() { popHide(doc, true); }, true);
+    return el;
+}
+function popHide(doc, now) {
+    var el = popEl(doc, false); if (!el || el.hidden === true) return false;
+    if (el.wpT) { clearTimeout(el.wpT); el.wpT = null; }
+    var go = function() { el.wpT = null; if (now !== true && el.wpHover) return; el.hidden = true; el.wpLink = null; el.wpWin = null; el.wpHover = false; };
+    if (now === true) go(); else el.wpT = setTimeout(go, 250);
+    return true;
+}
+// shown beside a page link the gate would open, or put away for anything else. Answers whether it is up
+function popShow(win, doc, a) {
+    var pg = a ? pageLink(cleanLink(linkOf(a))) : null, c = pg ? linkWhere(a, win) : null, b = doc.body;
+    if (!pg || c.editing !== false || c.held === true || atTable(win) === true || !pageHost(win) || (b && b.classList && b.classList.contains('stream-mode')) || lmShown(doc)) { popHide(doc, true); return false; }
+    var el = popEl(doc, true); if (!el) return false;
+    if (el.wpT) { clearTimeout(el.wpT); el.wpT = null; }
+    var rs = typeof a.getClientRects === 'function' ? a.getClientRects() : null, r = rs && rs.length ? rs[rs.length - 1] : (a.getBoundingClientRect ? a.getBoundingClientRect() : null);
+    var vw = (win && win.innerWidth) || 0, vh = (win && win.innerHeight) || 0;
+    el.wpLink = a; el.wpWin = win; el.hidden = false;
+    if (r) { el.style.left = Math.max(2, Math.min(Math.round(r.right - 1), vw - 24)) + 'px'; el.style.top = Math.max(2, Math.min(Math.round(r.top + (r.height - 20) / 2), vh - 24)) + 'px'; }
+    return true;
+}
+// [sinkcheck:linkpop-end]
+
 // [sinkcheck:runs-start]
 // A text drawn where it is READ, with its look (item 35; lookcore.js). The look is a record that names its text, cleaned here by the rule of
 // the place (opts.rule): a record made for other words, or one that is hostile, draws the text plain. A span for every run, with a strict
@@ -406,4 +545,4 @@ function fillRuns(el, text, rec, doc, opts) {
 if (typeof window !== 'undefined' && typeof document !== 'undefined') wireLinks(window, document, showConfirm);
 if (typeof window !== 'undefined') window.wpTextRead = { fill: fillRuns };
 
-export { linkVerdict, linkWhere, linkOf, linkAt, readUrl, askBody, linkGate, dragGate, wireLinks, fillLinked, atTable, peekText, peekOf, peekShow, peekHide, peekWire, fillRuns };
+export { linkVerdict, linkWhere, linkOf, linkAt, readUrl, askBody, linkGate, dragGate, wireLinks, fillLinked, atTable, peekText, peekOf, peekShow, peekHide, peekWire, fillRuns, lmRows, lmOpen, lmClose, popShow, popHide };

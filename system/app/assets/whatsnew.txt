@@ -5,6 +5,21 @@ Top row
 - The Fog pill is gone from the top row. The toolbar's fog button already
   says whether this map's fog is on, and opens the fog options.
 
+Pages
+- Back and Forward: after you follow a link to another page or to a
+  part of one, the left arrow beside Outline takes you back to the page
+  and the very spot you clicked from. The right arrow goes forward
+  again. Alt+Left and Alt+Right do the same. Each place a page is read
+  keeps its own way back: the planner's own view, the panel over the
+  map, a window of its own and a player's reader.
+- A click on a page link opens it in the place you clicked it, so the
+  panel over the map and a window of its own follow the link
+  themselves. Ctrl and click or the middle button still open a window
+  of its own.
+- Right-click a page link to choose where it opens: here, in a new
+  window or in the panel over the map. While the pointer rests on a
+  page link, a small button beside it opens the page in a new window.
+
 System editor
 - A change can aim at one entry of a list: for an item or a status effect,
   in the System editor or the Library's entry form, pick a list's "one

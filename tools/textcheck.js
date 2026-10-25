@@ -2748,6 +2748,22 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             EN.prototype.scrollIntoView = scroll0; delete EN.prototype.closest;
         }
 
+        /* ---- 1.5.8: a page link followed in a window of its own opens its page there (popout.js, its popgo slice run for real) ---- */
+        {
+            const go = slice('popout.js', 'popgo'), ticks = [], cleared = [];
+            const W = new Function('window', 'kind', 'body', 'finder', 'findBox', 'tick', 'pp0', 'var pp = pp0, itemNow = pp0.item, landed = true, lastSig = "old", landPend = { gen: 1 };\n' + go
+                + '\nreturn { go: popGo, now: function() { return { pp: pp, itemNow: itemNow, landed: landed, lastSig: lastSig, landPend: landPend }; } };');
+            const win = { wpPageNav: { landOf: v => v && typeof v.at === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(v.at) ? { at: v.at } : null } }, body = { scrollTop: 640 }, box = { value: 'reeds' };
+            const P = W(win, 'doc', body, { clear() { cleared.push(1); } }, box, () => ticks.push(1), { camp: 'c 1', head: 'c 1/', item: 'p1', rest: 'p1', land: null });
+            const r1 = P.go('p2', { at: 'b_x' }), s1 = P.now(), key1 = win.wpPopoutKey;
+            const r2 = P.go('p3', { at: 'bad id' }), s2 = P.now(), r3 = P.go('', null), r4 = P.go(7, null);
+            const S = W({}, 'sheet', { scrollTop: 5 }, null, null, () => ticks.push('s'), { camp: 'c', head: 'c/', item: 'ch', rest: 'ch', land: null }), r5 = S.go('p2', null);
+            check('1.5.8 a page link followed in a window of its own opens its page there (popout.js popGo, run for real): the window shows that page of its campaign from its next drawing, at the top or where the link lands, the landing cleaned by the page navigation, its folds and Dock back following it (wpPopoutKey, itemNow), its Find cleared, and it is drawn at once; a window of a sheet, and an id that is no text or is empty, take nothing; it is published for the page navigation, and its lines are plain ASCII in a file still binary to git',
+                r1 === true && J(s1.pp) === J({ camp: 'c 1', head: 'c 1/', item: 'p2', rest: 'p2', land: { at: 'b_x' } }) && s1.itemNow === 'p2' && s1.landed === false && s1.lastSig === '' && s1.landPend === null && key1 === 'c 1/p2'
+                && body.scrollTop === 0 && box.value === '' && cleared.length === 1 && r2 === true && s2.pp.land === null && r3 === false && r4 === false && r5 === false && ticks.length === 2 && win.wpPopoutGo === P.go
+                && !/[^\x00-\x7f]/.test(go) && !/popout=doc:|location|replaceState|innerHTML/.test(go), J([r1, s1, r2, s2, ticks]));
+        }
+
         /* ---- the text blocks' own bar: its colour and size controls, wired (planner.js wireRte, sliced and run on the test page) ---- */
         {
             const pg = mkPage({ map: mapOf(B0()) }), looks = [], cmds = [];

@@ -5106,6 +5106,79 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             lgAll.includes("    doc.addEventListener('contextmenu', pageMenu(win), true);") && lgAll.includes("import { pageLink } from './textfmt.js';"));
     }
 
+    {   // 1.5.8: where a page link may open (linkgate.js sliced by its linkgate, linkpeek, linkmenu and linkpop markers and run for real on tools/boxdom.js,
+        // a page of plain objects that refuses markup). The owner, 2026-10-25, by prompt: "Both": a right-click menu, and a button beside a page link
+        const J = JSON.stringify, TFg = await import(modUrl('textfmt.js')), { makeDom } = require('./boxdom.js');
+        const src = ['linkgate', 'linkpeek', 'linkmenu', 'linkpop'].map(n => slice('linkgate.js', n)).join('\n');
+        const mkWorld = (o) => {
+            o = o || {};
+            const dom = makeDom(), doc = dom.document, timers = [], calls = [];
+            const G = new Function('cleanLink', 'linkParts', 'URL', 'pageLink', 'setTimeout', 'clearTimeout', src + '\nreturn { pageMenu: pageMenu, lmRows: lmRows, lmOpen: lmOpen, lmClose: lmClose, popShow: popShow, popHide: popHide, peekHide: peekHide, pageGo: pageGo };')(
+                TFg.cleanLink, TFg.linkParts, URL, TFg.pageLink, fn => { timers.push(fn); return timers.length; }, () => {});
+            const HOSTILE = 'Plan <img src=x onerror=alert(1)> & "q"';
+            const win = { document: doc, innerWidth: 1000, innerHeight: 700, wpNet: o.player ? { foreign: true } : { foreign: false, active: false },
+                wpPageShelf: { linkGo(id, at, way) { calls.push(['go', id, at, way]); return way; }, wayNow() { return 'panel'; }, linkWords(id) { return id === 'p1' ? HOSTILE : ''; } },
+                wpPageNav: { placeOf: el => el.closest('#plannerPreview') || el.closest('#docPanelBody') || el.closest('#docReaderBody') || el.closest('#popoutBody'), follow(root, id, at) { calls.push(['follow', root.id, id, at]); return true; } } };
+            if (o.noHost) { win.wpPopout = true; win.opener = null; win.wpPageShelf = null; }
+            const zone = id => { const z = dom.mk('div', '', null, id); doc.body.appendChild(z); return z; };
+            const link = (parent, href, edit) => { const a = dom.mk('a'); a.setAttribute('href', href); a.appendChild(doc.createTextNode('<b>go</b>')); a.rect = { left: 40, top: 50, right: 120, bottom: 66 }; if (edit) parent.setAttribute('contenteditable', 'true'); parent.appendChild(a); return a; };
+            doc.addEventListener('contextmenu', G.pageMenu(win), true);
+            return { dom, doc, win, G, calls, timers, zone, link, HOSTILE };
+        };
+        const rowsOf = m => m.childNodes.filter(n => n.nodeType === 1 && n.className === 'linkmenu-row').map(b => [b.dataset.way, b.childNodes.map(t => t.nodeType === 3 ? t.nodeValue : '#' + t.tagName).join('')]);
+        const textOnly = el => el.all().every(n => n.tagName === 'DIV' || n.tagName === 'BUTTON') && el.all().every(n => n.childNodes.every(c => c.nodeType === 3 || c.nodeType === 1));
+        // the GM's planner view: three rows, the page's name a text node, each row its own way
+        const A = mkWorld(), pv = A.zone('plannerPreview'), a1 = A.link(pv, '#wp:page:p1:b_d');
+        const e1 = A.dom.fire(a1, 'contextmenu', { button: 2, clientX: 300, clientY: 200 }), m = A.doc.getElementById('pageLinkMenu');
+        const head = m && m.childNodes[0], first = [m && m.hidden, head && head.className, head && head.childNodes.length === 1 && head.childNodes[0].nodeType === 3 && head.childNodes[0].nodeValue, rowsOf(m), m && m.attrs.role, textOnly(m), A.doc.activeElement === A.doc.body];
+        A.dom.fire(m.childNodes[3], 'click'); const afterPanel = [m.hidden, J(A.calls.slice(-1)[0])];
+        A.dom.fire(a1, 'contextmenu', { button: 2 }); A.dom.fire(m.childNodes[1], 'click'); const afterHere = J(A.calls.slice(-1)[0]);
+        A.dom.fire(a1, 'contextmenu', { button: 2 }); A.dom.fire(m.childNodes[2], 'click'); const afterWin = J(A.calls.slice(-1)[0]);
+        check('1.5.8 a page link\'s menu (the right button, run for real): it is one menu made by name of elements and text nodes, its heading the page\'s own name as a text node whatever that name holds, then Open here, Open in a new window and Open in the panel over the map; the press opens nothing and the browser\'s own menu stays away; Open here follows the link in the place it stands in, the others open the page by the shelf\'s own ways; a row taken puts the menu away',
+            e1.defaultPrevented && e1.stopped && J(first) === J([false, 'linkmenu-head', A.HOSTILE, [['here', 'Open here'], ['window', 'Open in a new window'], ['panel', 'Open in the panel over the map']], 'menu', true, true])
+            && J(afterPanel) === J([true, J(['go', 'p1', 'b_d', 'panel'])]) && afterHere === J(['follow', 'plannerPreview', 'p1', 'b_d']) && afterWin === J(['go', 'p1', 'b_d', 'window']) && A.doc.querySelectorAll('#pageLinkMenu').length === 1, J([first, afterPanel, afterHere, afterWin]));
+        // the keyboard: opened by the menu key, the first row takes the focus; the arrows go round; Escape and Tab put it away and give the focus back
+        a1.focus(); A.dom.fire(a1, 'contextmenu', { button: 0 }); const k0 = A.doc.activeElement === m.childNodes[1];
+        A.dom.fire(A.doc.activeElement, 'keydown', { key: 'ArrowDown' }); const k1 = A.doc.activeElement === m.childNodes[2];
+        A.dom.fire(A.doc.activeElement, 'keydown', { key: 'ArrowUp' }); A.dom.fire(A.doc.activeElement, 'keydown', { key: 'ArrowUp' }); const k2 = A.doc.activeElement === m.childNodes[3];
+        A.dom.fire(A.doc.activeElement, 'keydown', { key: 'Home' }); const k3 = A.doc.activeElement === m.childNodes[1];
+        const esc = A.dom.fire(A.doc.activeElement, 'keydown', { key: 'Escape' }); const k4 = [m.hidden, A.doc.activeElement === a1, esc.defaultPrevented];
+        A.dom.fire(a1, 'contextmenu', { button: 0 }); A.dom.fire(A.doc.activeElement, 'keydown', { key: 'Tab' }); const k5 = [m.hidden, A.doc.activeElement === a1];
+        A.dom.fire(a1, 'contextmenu', { button: 2 }); const other = A.dom.mk('div'); A.doc.body.appendChild(other); A.dom.fire(other, 'pointerdown'); const k6 = m.hidden;
+        check('1.5.8 a page link\'s menu by the keyboard: opened by the menu key its first row has the focus, the arrow keys go round its rows and Home goes to the first; Escape puts it away and gives the focus back to the link (esckey.js leaves it its own Escape), so does Tab; a press elsewhere puts it away',
+            k0 && k1 && k2 && k3 && J(k4) === J([true, true, true]) && J(k5) === J([true, true]) && k6 === true && read('esckey.js').includes("var ESC_OWN_MENUS = '#pageNavMenu, #pageLinkMenu, "), J([k0, k1, k2, k3, k4, k5, k6]));
+        // where the rows are: the panel's own link, a player's app, a window with no main window, a link outside every page, the stream window, a box being edited
+        const B = mkWorld(), pnl = B.zone('docPanelBody'), b1 = B.link(pnl, '#wp:page:p1'); B.dom.fire(b1, 'contextmenu', { button: 2 }); const rPanel = rowsOf(B.doc.getElementById('pageLinkMenu'));
+        const C = mkWorld({ player: true }), c1 = C.link(C.zone('docReaderBody'), '#wp:page:p1'); C.dom.fire(c1, 'contextmenu', { button: 2 }); const rPlayer = rowsOf(C.doc.getElementById('pageLinkMenu'));
+        const D = mkWorld({ noHost: true }), d1 = D.link(D.zone('popoutBody'), '#wp:page:p1'); D.dom.fire(d1, 'contextmenu', { button: 2 }); const rLone = rowsOf(D.doc.getElementById('pageLinkMenu')), dHead = D.doc.getElementById('pageLinkMenu').childNodes[0].childNodes[0].nodeValue;
+        const E = mkWorld(), e2 = E.link(E.zone('somewhere'), '#wp:page:p1'); E.dom.fire(e2, 'contextmenu', { button: 2 }); const rOut = rowsOf(E.doc.getElementById('pageLinkMenu'));
+        const F = mkWorld(); F.doc.body.classList.add('stream-mode'); const f1 = F.link(F.zone('plannerPreview'), '#wp:page:p1'); const fe = F.dom.fire(f1, 'contextmenu', { button: 2 });
+        const Gw = mkWorld(), g1 = Gw.link(Gw.zone('plannerPreview'), '#wp:page:p1', true); const ge = Gw.dom.fire(g1, 'contextmenu', { button: 2 });
+        const Hw = mkWorld(), h1 = Hw.link(Hw.zone('plannerPreview'), 'https://ok.example/'); const he = Hw.dom.fire(h1, 'contextmenu', { button: 2 });
+        check('1.5.8 a page link\'s menu, where: from the panel over the map no row for the panel itself; on a player\'s app Open here alone, a page opening there in the reader alone; in a window whose main window is gone Open here alone, named as a page; outside every page Open, as a click opens it; in the stream window and in a box being edited no menu, and a web link keeps the browser\'s own',
+            J(rPanel) === J([['here', 'Open here'], ['window', 'Open in a new window']]) && J(rPlayer) === J([['here', 'Open here']]) && J(rLone) === J([['here', 'Open here']]) && dHead === 'A page'
+            && J(rOut) === J([['here', 'Open'], ['window', 'Open in a new window'], ['panel', 'Open in the panel over the map']])
+            && fe.defaultPrevented && F.doc.getElementById('pageLinkMenu') === null && F.calls.length === 0 && !ge.defaultPrevented && Gw.doc.getElementById('pageLinkMenu') === null && !he.defaultPrevented && Hw.doc.getElementById('pageLinkMenu') === null, J([rPanel, rPlayer, rLone, rOut]));
+        // the button beside a page link
+        const P = mkWorld(), p1 = P.link(P.zone('plannerPreview'), '#wp:page:p1:b_q'), up = P.G.popShow(P.win, P.doc, p1), pop = P.doc.getElementById('pageLinkPop');
+        const shape = [up, pop && pop.tagName, pop && pop.type, pop && pop.hidden, pop && pop.tabIndex, pop && pop.title, pop && pop.childNodes.length === 1 && pop.childNodes[0].tagName, pop && pop.childNodes[0].namespaceURI, pop && pop.childNodes[0].childNodes.map(x => x.tagName + ':' + x.attrs.d.length).join(), pop && pop.style.left, pop && pop.style.top];
+        P.dom.fire(pop, 'click'); const pClick = [J(P.calls.slice(-1)[0]), pop.hidden];
+        P.G.popShow(P.win, P.doc, p1); P.G.peekHide(P.doc); const stays = pop.hidden; P.dom.fire(pop, 'mouseenter'); P.timers.splice(0).forEach(f => f()); const hovered = pop.hidden; P.dom.fire(pop, 'mouseleave'); P.timers.splice(0).forEach(f => f()); const left = pop.hidden;
+        const web = P.link(P.zone('docPanelBody'), 'https://ok.example/'); P.G.popShow(P.win, P.doc, p1); const noWeb = [P.G.popShow(P.win, P.doc, web), pop.hidden];
+        const Q = mkWorld({ player: true }), qUp = Q.G.popShow(Q.win, Q.doc, Q.link(Q.zone('docReaderBody'), '#wp:page:p1'));
+        const R = mkWorld(); R.doc.body.classList.add('stream-mode'); const rUp = R.G.popShow(R.win, R.doc, R.link(R.zone('plannerPreview'), '#wp:page:p1'));
+        const S = mkWorld(), sUp = S.G.popShow(S.win, S.doc, S.link(S.zone('plannerPreview'), '#wp:page:p1', true));
+        const T = mkWorld({ noHost: true }), tUp = T.G.popShow(T.win, T.doc, T.link(T.zone('popoutBody'), '#wp:page:p1'));
+        check('1.5.8 the button beside a page link (run for real): one button made by name, out of the Tab order, saying in fixed words that it opens the page in a new window, its drawing the page panel\'s own pop-out drawing made by name as three paths, placed at the link\'s end; its press opens the page in a window of its own and puts it away; the strip going leaves it a moment and it stays while the pointer is on it, going once the pointer leaves; never for a web link, on a player\'s app, in the stream window, in a box being edited or in a window whose main window is gone',
+            J(shape) === J([true, 'BUTTON', 'button', false, -1, 'Open this page in a new window', 'SVG', 'http://www.w3.org/2000/svg', 'PATH:87,PATH:15,PATH:13', '119px', '48px'])
+            && J(pClick) === J([J(['go', 'p1', 'b_q', 'window']), true]) && stays === false && hovered === false && left === true && J(noWeb) === J([false, true]) && qUp === false && rUp === false && sUp === false && tUp === false, J([shape, pClick, stays, hovered, left, noWeb]));
+        const lgAll = read('linkgate.js').replace(/\r\n/g, '\n'), mp = slice('linkgate.js', 'linkmenu') + slice('linkgate.js', 'linkpop'), css = read('../style.css').replace(/\r\n/g, '\n');
+        check('1.5.8 the menu and the button, wired and in the style sheet (pinned): the strip asks for the button through typeof, so the gate run alone is as it was; neither slice writes markup, a handler or an address; the menu stands over the strip and the button under it, each put away by its hidden attribute, and the stream window\'s rule puts both away',
+            lgAll.includes("    if (typeof popShow === 'function') popShow(win, doc, a);") && lgAll.includes("if (typeof popHide === 'function') popHide(doc, false); }")
+            && !/innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\(|new Function|setAttribute\('on|\.on[a-z]+ = |javascript:|\.open\(|location/.test(mp)
+            && /\n  #pageLinkMenu \{ position: fixed; z-index: 100006;/.test(css) && /\n  #pageLinkPop \{ position: fixed; z-index: 100004;/.test(css) && css.includes('\n  #pageLinkMenu[hidden] { display: none; }\n') && css.includes('\n  #pageLinkPop[hidden] { display: none; }\n') && css.includes('\n  body.stream-mode #pageLinkMenu, body.stream-mode #pageLinkPop { display: none; }\n'));
+    }
+
     /* ---- 1.5.6: the System editor's Taking damage box against a hostile system file — every label, stat or column key, type's key and label and
        formula reaches the box as a value, an option's text, a text node or a data value only, on a page that records every node and refuses markup ---- */
     {

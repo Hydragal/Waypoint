@@ -435,6 +435,147 @@ function navWire() {
 function navRootOf(el) { for (var i = 0; el && el.closest && i < NAV_PLACES.length; i++) { var r = el.closest('#' + NAV_PLACES[i][1]); if (r) return r; } return null; }
 // [pagecheck:menu-end]
 
+// [pagecheck:hist-start]
+// Back and Forward (1.5.8; the owner, 2026-10-25, of a link followed to a chapter of a planner: "I don't want to have to be scrambling around
+// trying to find where I came from after I click one of these and I also don't want to lose the place that I click to trying to go back"; by
+// prompt "Back and Forward buttons (Recommended)"). Each place a page is read keeps its own list of where it has been. A page link followed in
+// a place, whose page opens in that same place, first notes the page and the spot it was left at (histFollow): Back goes there and puts the
+// page back where it was scrolled to once it is drawn, and again as its charts are drawn, unless the reader moves it by their own hand
+// meanwhile (docpanel.js readerHand); Forward goes the other way; a new link followed takes Forward away. A jump within the page on screen is
+// a step too. The folds are the page's own and kept by the folds above. 50 steps a list at most, in this window's memory alone: nothing is
+// stored or sent. A link opened in another place (a window of its own, the panel over the map) notes nothing here.
+var HIST_MAX = 50, HIST_WAIT = [0, 80, 300, 800, 1600];
+var HIST_BOX = { plannerPreview: 'plannerPreviewWrap' };   // the box that scrolls, where it is not the page's own box
+var HIST_AREA = { plannerPreview: 'plannerPreviewWrap', docPanelBody: 'docPanel', docReaderBody: 'docReaderModal', popoutBody: 'popoutWrap' };   // where the focus counts as in the place (Alt+Left, Alt+Right)
+var _hist = Object.create(null), _histLast = '';
+function histOf(id) { if (!Object.prototype.hasOwnProperty.call(_hist, id)) _hist[id] = { back: [], fwd: [], gen: 0 }; return _hist[id]; }
+// a step noted: Back takes it, and Forward is gone
+function histPush(h, e) { if (!e || typeof e !== 'object') return false; h.back.push(e); while (h.back.length > HIST_MAX) h.back.shift(); h.fwd = []; return true; }
+// a step taken, dir -1 Back and 1 Forward: its entry, with where the place stands now put on the other list; null where there is none
+function histTake(h, dir, cur) {
+    var from = dir < 0 ? h.back : h.fwd, to = dir < 0 ? h.fwd : h.back, e = from.pop(); if (!e) return null;
+    if (cur) { to.push(cur); while (to.length > HIST_MAX) to.shift(); }
+    return e;
+}
+function histBoxOf(root) { var d = root && root.ownerDocument, b = d && HIST_BOX[root.id] ? d.getElementById(HIST_BOX[root.id]) : null; return b || root; }
+// the page a place shows now, by its id ('' for none): the key its folds are kept under, after the campaign
+function histPage(root) {
+    var k = ''; try { k = typeof navKeyFor === 'function' ? navKeyFor(root && root.id) : ''; } catch (e) { k = ''; }
+    var s = typeof k === 'string' ? k.indexOf('/') : -1; return s >= 0 ? k.slice(s + 1) : '';
+}
+// where a place stands: its page, where it is scrolled to and how tall it is, and the block at the top with how far into it the view begins
+function histHere(root) {
+    var id = histPage(root); if (!id || !root) return null;
+    var box = histBoxOf(root), e = { id: id, top: Math.max(0, Math.round(+box.scrollTop || 0)), h: Math.round(+box.scrollHeight || 0), blk: '', off: 0 };
+    try {
+        var br = box.getBoundingClientRect(), list = navBlocks(root);
+        for (var i = 0; i < list.length; i++) {
+            var r = list[i].getBoundingClientRect(); if (!(r.bottom > br.top + 1)) continue;
+            var n = list[i].dataset ? list[i].dataset.blk : ''; if (typeof n === 'string' && /^\d{1,6}$/.test(n)) { e.blk = n; e.off = Math.round(br.top - r.top); }
+            break;
+        }
+    } catch (err) {}
+    return e;
+}
+// the spot an entry was left at, put back: where it was scrolled to while the page is as tall as it was, else the block that stood at the top
+function histPut(root, e) {
+    var box = histBoxOf(root), top = e.top;
+    if (e.blk && Math.abs((+box.scrollHeight || 0) - e.h) > 4) {
+        var list = navBlocks(root);
+        for (var i = 0; i < list.length; i++) if (list[i].dataset && list[i].dataset.blk === e.blk) { try { top = Math.round(list[i].getBoundingClientRect().top - box.getBoundingClientRect().top + (+box.scrollTop || 0) + e.off); } catch (err) {} break; }
+    }
+    box.scrollTop = Math.max(0, top);
+    return box.scrollTop;
+}
+// a page opened in a place, by that place's own way: the planner's own view and the panel through the shelf (which says when a page is not
+// here), a player's reader and a window of its own by their own. land: { at } or null. Answers whether it opened
+function histOpen(root, id, land) {
+    var w = typeof window !== 'undefined' ? window : null, rid = root && root.id, sh = w && w.wpPageShelf;
+    try {
+        if (rid === 'popoutBody') return !!(w && typeof w.wpPopoutGo === 'function' && w.wpPopoutGo(id, land));
+        if (rid === 'docReaderBody' && w && typeof w.wpOpenDoc === 'function' && (land ? w.wpOpenDoc(id, land) : w.wpOpenDoc(id))) return true;
+        if (!sh || typeof sh.linkGo !== 'function') return false;
+        return !!sh.linkGo(id, land && land.at ? land.at : '', rid === 'docPanelBody' ? 'panel' : 'go');
+    } catch (e) { return false; }
+}
+// the spot put back once the page is drawn, and again as its charts are; never once the reader has moved it, nor once the place shows another
+// page or has taken another step
+function histRestore(root, h, gen, e) {
+    var w = typeof window !== 'undefined' ? window : null, dp = w && w.wpDocPanel, box = histBoxOf(root), hand = null, mark = null;
+    try { hand = dp && typeof dp.hand === 'function' ? dp.hand(box) : null; } catch (err) { hand = null; }
+    HIST_WAIT.forEach(function(ms, k) {
+        setTimeout(function() {
+            if (h.gen !== gen || histPage(root) !== e.id) return;
+            if (k === 0) mark = hand ? hand.mark() : null; else if (hand && hand.since(mark)) return;   // the mark is taken once the press that asked has been heard
+            histPut(root, e);
+        }, ms);
+    });
+}
+// a page link followed in a place and opened there: where the place stood is noted first. Answers whether it opened
+function histFollow(root, id, at) {
+    if (!root || typeof id !== 'string' || !id) return false;
+    var h = histOf(root.id), cur = histHere(root), land = typeof at === 'string' && LAND_AT.test(at) ? { at: at } : null;
+    if (!histOpen(root, id, land)) return false;
+    h.gen++; histPush(h, cur); histSync();
+    return true;
+}
+// Back (dir -1) or Forward (1) in a place. A page that is no longer there is passed over, and the place stays as it was
+function histStep(root, dir) {
+    if (!root) return false;
+    var h = histOf(root.id), cur = histHere(root), e = histTake(h, dir, cur); if (!e) { histSync(); return false; }
+    var gen = ++h.gen;
+    if (histPage(root) !== e.id && !histOpen(root, e.id, null)) {
+        var other = dir < 0 ? h.fwd : h.back; if (cur && other[other.length - 1] === cur) other.pop();
+        histSync(); return false;
+    }
+    histRestore(root, h, gen, e); histSync();
+    return true;
+}
+// the buttons of every place follow its lists: off where there is nowhere to go
+function histSync() {
+    if (typeof document === 'undefined') return;
+    NAV_PLACES.forEach(function(p) {
+        var h = Object.prototype.hasOwnProperty.call(_hist, p[1]) ? _hist[p[1]] : null;
+        [['Back', h ? h.back.length : 0], ['Fwd', h ? h.fwd.length : 0]].forEach(function(x) { var b = document.getElementById('pageHist' + x[0] + '_' + p[1]); if (b) b.disabled = !x[1]; });
+    });
+}
+// the place a key or a press belongs to: the place whose area holds it and shows; with the focus nowhere in particular, the place pressed last
+function histShown(el) { return !!el && typeof el.getClientRects === 'function' && el.getClientRects().length > 0; }
+function histPlaceAt(t, doc) {
+    for (var i = 0; t && i < NAV_PLACES.length; i++) {
+        var id = NAV_PLACES[i][1], area = doc.getElementById(HIST_AREA[id]), root = doc.getElementById(id);
+        if (area && root && typeof area.contains === 'function' && area.contains(t) && histShown(area)) return root;
+    }
+    return null;
+}
+function histField(t) { var tag = t && t.nodeName ? String(t.nodeName).toUpperCase() : ''; return !!t && (t.isContentEditable === true || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'); }
+function histKeyPlace(doc) {
+    var a = doc.activeElement;
+    if (histField(a)) return null;
+    if (a && a !== doc.body && a !== doc.documentElement) return histPlaceAt(a, doc);
+    var last = _histLast ? doc.getElementById(_histLast) : null, area = last ? doc.getElementById(HIST_AREA[_histLast]) : null;
+    return last && histShown(area) ? last : null;
+}
+// Back and Forward beside each place's Outline button, and Alt+Left and Alt+Right while the focus is in the place and not in a field
+function histWire(doc) {
+    NAV_PLACES.forEach(function(p) {
+        var btn = doc.getElementById(p[0]); if (!btn || !btn.parentNode || doc.getElementById('pageHistBack_' + p[1])) return;
+        [['Back', '\u2190', 'Back', 'Back: to where you were before you followed a link on this page (Alt+Left)', -1], ['Fwd', '\u2192', 'Forward', 'Forward: to where you went back from (Alt+Right)', 1]].forEach(function(x) {
+            var b = doc.createElement('button'); b.type = 'button'; b.id = 'pageHist' + x[0] + '_' + p[1]; b.className = (btn.className ? btn.className + ' ' : '') + 'pagenav-hist';
+            b.title = x[3]; b.setAttribute('aria-label', x[2]); b.disabled = true; b.appendChild(doc.createTextNode(x[1]));
+            b.addEventListener('click', function() { var root = doc.getElementById(p[1]); if (root) histStep(root, x[4]); });
+            btn.parentNode.insertBefore(b, btn);
+        });
+    });
+    doc.addEventListener('pointerdown', function(e) { var r = histPlaceAt(e.target, doc); if (r) _histLast = r.id; }, true);
+    doc.addEventListener('keydown', function(e) {
+        if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') || e.repeat) return;
+        var root = histKeyPlace(doc); if (!root) return;
+        e.preventDefault(); e.stopPropagation(); histStep(root, e.key === 'ArrowLeft' ? -1 : 1);
+    }, true);
+}
+// [pagecheck:hist-end]
+
 // [pagecheck:bartop-start]
 // 1.5.4 (backlog 143, found live 2026-10-16): a block jumped to in a page's own view (the Outline, a landing, a search that lands on it) is
 // brought to the top of the view, and the Find bar stays there over the page. The bar takes one row or more as the view's width allows, so
@@ -477,6 +618,7 @@ function navBarFor(el) {
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     navWire();
     navBarWire(document, window.ResizeObserver);   // backlog 143: a block jumped to in the planner's own view lands clear of its Find bar
+    histWire(document);   // 1.5.8: Back and Forward in every place a page is read
     window.wpPageNav = {
         outline: navOutline, close: function() { navClose(false); }, isOpen: navIsOpen,
         reveal: function(el) { var root = navRootOf(el); return root ? foldReveal(root, el, false) : false; },   // Find, before it scrolls to a hit
@@ -485,4 +627,7 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
         unflash: navUnflash,   // 1.5.4: a block a landing lit, its light taken off when the landing is made again on another (docpanel.js hlFinder)
         landOf: landOf, land: land, flash: navFlash   // 1.5.4: a page opened at one block or at a search hit (docpanel.js, popout.js, pageshelf.js)
     };
+    // 1.5.8: Back and Forward. linkgate.js follows a page link in the place it stands in (placeOf, follow); step is a press of Back (-1) or Forward (1)
+    window.wpPageNav.placeOf = navRootOf; window.wpPageNav.follow = histFollow; window.wpPageNav.step = histStep;
+    window.wpPageNav.hist = function(id) { var h = Object.prototype.hasOwnProperty.call(_hist, id) ? _hist[id] : null; return { back: h ? h.back.length : 0, fwd: h ? h.fwd.length : 0 }; };
 }

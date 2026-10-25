@@ -825,6 +825,97 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         check('the landing clear of the bar is said: both release notes carry the line under 1.5.4\'s fixes, alike', wn.every(t => t.split("- In a planner's or a page's own view, a part the Outline jumps to, or\n  a search lands on, is no longer half hidden under the Find bar. Where\n  the bar took two rows, the top of the part stayed under it.\n").length === 2) && wn[0].indexOf("- In a planner's or a page's own view, a part the Outline jumps to, or\n  a search lands on, is no longer half hidden under the Find bar. Where\n  the bar took two rows, the top of the part stayed under it.\n") < wn[0].indexOf('WAYPOINT 1.5.3'));
     }
 
+    /* ---- 1.5.8: Back and Forward (the hist slice run for real on tools/boxdom.js, with a shelf, a campaign and a reader's hand of this suite's own).
+       The owner, 2026-10-25, of a link followed to a chapter of a planner: "I don't want to have to be scrambling around trying to find where I
+       came from"; by prompt "Back and Forward buttons (Recommended)" ---- */
+    {
+        const d = makeDom(), doc = d.document, cur = { plannerPreview: 'p1', docPanelBody: 'g1', popoutBody: 'w1', docReaderBody: 'r1' }, calls = [];
+        const hand = { n: 0, mark() { return this.n; }, since(m) { return typeof m !== 'number' || this.n !== m; } };
+        const win = { wpPageShelf: { linkGo(id, at, way) { calls.push(['go', id, at, way]); if (id === 'gone' || id === 'planner_x') return ''; cur[way === 'panel' ? 'docPanelBody' : 'plannerPreview'] = id; return way; } },
+            wpDocPanel: { hand: () => hand }, wpPopoutGo(id, land) { calls.push(['pop', id, land]); cur.popoutBody = id; return true; },
+            wpOpenDoc(id, land) { calls.push(['reader', id, land || null]); if (id === 'planner_x') return false; cur.docReaderBody = id; return true; } };
+        const NAVP = [['plannerOutlineBtn', 'plannerPreview'], ['docPanelOutline', 'docPanelBody'], ['docReaderOutline', 'docReaderBody'], ['popoutOutline', 'popoutBody']];
+        const shown = el => { el.getClientRects = () => [1]; return el; };
+        const mkPlace = (areaId, btnId, rootId) => { const area = shown(d.mk('div', '', null, areaId)), btn = d.mk('button', 'tool ghost', null, btnId), root = d.mk('div', '', null, rootId); root.ownerDocument = doc; area.appendChild(btn); area.appendChild(root); doc.body.appendChild(area); return { area, btn, root }; };
+        const P = mkPlace('plannerPreviewWrap', 'plannerOutlineBtn', 'plannerPreview'), Q = mkPlace('docPanel', 'docPanelOutline', 'docPanelBody'), R = mkPlace('docReaderModal', 'docReaderOutline', 'docReaderBody'), W = mkPlace('popoutWrap', 'popoutOutline', 'popoutBody');
+        const blocks = root => root.childNodes.filter(n => n.nodeType === 1 && n.className === 'pv-blk');
+        const H = new Function('document', 'window', 'setTimeout', 'NAV_PLACES', 'LAND_AT', 'navKeyFor', 'navBlocks', slice('hist')
+            + '\nreturn { histOf: histOf, histPush: histPush, histTake: histTake, histHere: histHere, histPut: histPut, histFollow: histFollow, histStep: histStep, histWire: histWire, histSync: histSync, HIST_MAX: HIST_MAX };')(
+            doc, win, d.setTimeout, NAVP, /^[A-Za-z0-9_-]{1,64}$/, id => cur[id] ? 'c1/' + cur[id] : '', blocks);
+        // the lists themselves
+        const h0 = { back: [], fwd: [{ id: 'f' }], gen: 0 }; for (let i = 0; i < 60; i++) H.histPush(h0, { id: 'e' + i });
+        const t1 = H.histTake(h0, -1, { id: 'now' }), t2 = H.histTake(h0, 1, { id: 'now2' }), t3 = H.histTake({ back: [], fwd: [] }, -1, { id: 'x' });
+        check('Back and Forward, the lists (pagecheck hist slice, run for real): a step noted goes on Back and takes Forward away, Back holds the newest 50; a step back hands its entry over and puts where the place stands on Forward, a step forward the other way; nothing to take is null',
+            H.HIST_MAX === 50 && h0.back.length === 50 && t1 && t1.id === 'e59' && t2 && t2.id === 'now' && h0.back[h0.back.length - 1].id === 'now2' && h0.fwd.length === 0 && t3 === null && H.histPush(h0, null) === false, J([h0.back.length, t1, t2]));
+        // the buttons
+        H.histWire(doc);
+        const bk = id => doc.getElementById('pageHistBack_' + id), fw = id => doc.getElementById('pageHistFwd_' + id);
+        const made = ['plannerPreview', 'docPanelBody', 'docReaderBody', 'popoutBody'].map(id => { const a = bk(id), b = fw(id), kids = a && a.parentNode.childNodes; return [!!a && !!b, a && kids.indexOf(a) + 1 === kids.indexOf(b) && kids.indexOf(b) + 1 === kids.indexOf(doc.getElementById(NAVP.filter(p => p[1] === id)[0][0])), a && a.disabled, b && b.disabled, a && a.attrs['aria-label'], b && b.attrs['aria-label'], a && a.childNodes.length === 1 && a.childNodes[0].nodeType === 3]; });
+        H.histWire(doc);
+        check('Back and Forward, the buttons: each place a page is read gets a Back and a Forward button right before its Outline button, named for a screen reader, made by name with one text node each, off while there is nowhere to go, made once however often it is wired',
+            made.every(m => J(m) === J([true, true, true, true, 'Back', 'Forward', true])) && doc.body.all().filter(n => /^pageHist/.test(n.id)).length === 8
+            && bk('plannerPreview').className === 'tool ghost pagenav-hist' && /Alt\+Left/.test(bk('plannerPreview').title) && /Alt\+Right/.test(fw('plannerPreview').title), J(made));
+        // a link followed in the planner's own view: the spot is noted, then Back puts it back once drawn
+        const box = P.area; box.rect = { left: 0, top: 100, right: 500, bottom: 700 }; box.scrollTop = 340; box.scrollHeight = 3000;
+        const pb = (i, top, bottom) => { const b = d.mk('div', 'pv-blk', { blk: i }); b.rect = { left: 0, top: top, right: 500, bottom: bottom }; P.root.appendChild(b); return b; };
+        pb(0, -300, 40); pb(1, 40, 180); pb(2, 180, 400);
+        const here = H.histHere(P.root);
+        const ok1 = H.histFollow(P.root, 'p2', 'b_x'), after1 = [J(calls.slice(-1)[0]), bk('plannerPreview').disabled, fw('plannerPreview').disabled, H.histOf('plannerPreview').back.length];
+        const gone = H.histFollow(P.root, 'gone', ''), badAt = H.histFollow(P.root, 'p3', 'no good'), after2 = [H.histOf('plannerPreview').back.length, J(calls.slice(-1)[0])];
+        check('Back and Forward, following a link: where the place stands is noted as its page, where it was scrolled to, how tall it was and the block at the top with how far into it the view begins; the page opens in the same place by its own way (the planner\'s own view as the page itself) at the block the link names; Back comes on and Forward stays off; a page that is not there opens nothing and is noted nowhere; a block id that is no block id is no landing',
+            J(here) === J({ id: 'p1', top: 340, h: 3000, blk: '1', off: 60 }) && ok1 === true && J(after1) === J([J(['go', 'p2', 'b_x', 'go']), false, true, 1]) && gone === false && badAt === true && J(after2) === J([2, J(['go', 'p3', '', 'go'])]), J([here, after1, after2]));
+        // Back: the page opened again and the spot put back, at the first timer and after the charts; never once the reader moved it
+        d.runTimers(); box.scrollTop = 900;
+        const s1 = H.histStep(P.root, -1); const opened = J(calls.slice(-1)[0]);
+        d.page.timers.shift()(); const put1 = box.scrollTop; box.scrollTop = 5; d.runTimers(); const put2 = box.scrollTop;
+        const s2 = H.histStep(P.root, -1); d.page.timers.shift()(); box.scrollTop = 7; hand.n++; d.runTimers(); const put3 = box.scrollTop;
+        check('Back and Forward, Back: the page the step names opens in the same place and the spot it was left at is put back, once the press has been heard and again as the page\'s charts are drawn, unless the reader has moved the page by their own hand meanwhile (docpanel.js readerHand), which it never overrides; the place\'s own lists follow, Forward now on',
+            s1 === true && opened === J(['go', 'p2', '', 'go']) && put1 === 340 && put2 === 340 && s2 === true && put3 === 7 && J([H.histOf('plannerPreview').back.length, H.histOf('plannerPreview').fwd.length]) === J([0, 2]) && fw('plannerPreview').disabled === false && bk('plannerPreview').disabled === true, J([s1, opened, put1, put2, s2, put3]));
+        // Forward, and a page drawn anew of another height lands by its block
+        const f1 = H.histStep(P.root, 1); const fCall = J(calls.slice(-1)[0]); box.scrollHeight = 2500; box.scrollTop = 0;
+        P.root.childNodes[1].getBoundingClientRect = () => ({ left: 0, right: 500, top: 600 - box.scrollTop, bottom: 740 - box.scrollTop, width: 500, height: 140 });   // the block now 500 into the page, its place on screen moving with the scroll as a browser's does
+        d.runTimers(); const putF = box.scrollTop;
+        const bl = H.histOf('plannerPreview').back.map(e => e.id).join(), nf = H.histStep(P.root, 1), nfCall = J(calls.slice(-1)[0]); d.runTimers(); const n2 = calls.length, nn = H.histStep(P.root, 1), none = nn === false && calls.length === n2;
+        check('Back and Forward, Forward: the step goes the other way; where the page is no longer as tall as it was, the block that stood at the top is brought back to the very place in it; with nowhere to go nothing is opened',
+            f1 === true && fCall === J(['go', 'p2', '', 'go']) && putF === 560 && bl === 'p1' && nf === true && nfCall === J(['go', 'p3', '', 'go']) && none === true, J([f1, fCall, putF, bl, nf, nfCall, nn]));
+        // the same page: nothing is opened again, the spot alone is put back
+        const before = calls.length; cur.plannerPreview = 'p2';
+        const hSame = H.histOf('plannerPreview'); hSame.back.push({ id: 'p2', top: 77, h: 2500, blk: '', off: 0 }); hSame.fwd = [];
+        H.histStep(P.root, -1); d.runTimers();
+        check('Back and Forward, within one page: a step to a spot of the page on screen opens nothing again and puts the spot back', calls.length === before && box.scrollTop === 77, J([calls.length - before, box.scrollTop]));
+        // a page that is gone: the step is passed over and the place stays as it was
+        hSame.back.push({ id: 'gone', top: 10, h: 0, blk: '', off: 0 }); const b4 = hSame.back.length, f4 = hSame.fwd.length;
+        const sg = H.histStep(P.root, -1);
+        check('Back and Forward, a page that is gone: the step is dropped, the shelf says so, and the place and its Forward stay as they were', sg === false && hSame.back.length === b4 - 1 && hSame.fwd.length === f4 && J(calls.slice(-1)[0]) === J(['go', 'gone', '', 'go']));
+        // the other places open by their own ways
+        Q.area.rect = { left: 0, top: 0, right: 400, bottom: 500 }; Q.root.scrollTop = 120; Q.root.scrollHeight = 900;
+        H.histFollow(Q.root, 'g2', 'b_q'); const qCall = J(calls.slice(-1)[0]);
+        H.histFollow(W.root, 'w2', 'b_w'); const wCall = J(calls.slice(-1)[0]);
+        H.histFollow(R.root, 'r2', ''); const rCall = J(calls.slice(-1)[0]); H.histFollow(R.root, 'planner_x', 'b_z'); const rFall = J(calls.slice(-2));
+        check('Back and Forward, every place by its own way: the panel over the map through the shelf as the panel, a window of its own in itself (popout.js wpPopoutGo), a player\'s reader in itself (handbook.js wpOpenDoc) and, for what the reader cannot open, the shelf, which says why; each place keeps its own lists',
+            qCall === J(['go', 'g2', 'b_q', 'panel']) && wCall === J(['pop', 'w2', { at: 'b_w' }]) && rCall === J(['reader', 'r2', null]) && rFall === J([['reader', 'planner_x', { at: 'b_z' }], ['go', 'planner_x', 'b_z', 'go']])
+            && H.histOf('docPanelBody').back.length === 1 && H.histOf('popoutBody').back.length === 1 && H.histOf('docReaderBody').back.length === 1 && H.histOf('docPanelBody').back[0].id === 'g1', J([qCall, wCall, rCall, rFall]));
+        // the keys
+        const link = d.mk('a'); link.attrs.href = '#'; Q.root.appendChild(link); link.focus();
+        const k1 = d.fire(link, 'keydown', { key: 'ArrowLeft', altKey: true }); const kCall = J(calls.slice(-1)[0]);
+        const input = d.mk('input'); Q.area.appendChild(input); input.focus(); const n0 = calls.length; const k2 = d.fire(input, 'keydown', { key: 'ArrowRight', altKey: true });
+        link.focus(); const k3 = d.fire(link, 'keydown', { key: 'ArrowRight', altKey: true, ctrlKey: true }), k4 = d.fire(link, 'keydown', { key: 'ArrowRight' }), k5 = d.fire(link, 'keydown', { key: 'ArrowRight', altKey: true, repeat: true });
+        const n1 = calls.length; link.blur(); d.fire(W.root, 'pointerdown', {}); const k6 = d.fire(doc.body, 'keydown', { key: 'ArrowLeft', altKey: true }); const k6Call = J(calls.slice(-1)[0]);
+        check('Back and Forward, the keys: Alt+Left in a place goes back there, taken from the page; in a field, with another key held, without Alt or held down nothing happens; with the focus nowhere in particular the place pressed last answers',
+            k1.defaultPrevented && k1.stopped && kCall === J(['go', 'g1', '', 'panel']) && !k2.defaultPrevented && !k3.defaultPrevented && !k4.defaultPrevented && !k5.defaultPrevented && n1 === n0
+            && k6.defaultPrevented && k6Call === J(['pop', 'w1', null]), J([kCall, k6Call, n0, n1, calls.length]));
+        const srcH = slice('hist');
+        check('Back and Forward, wired and kept to memory: the module wires them once its places and the bar are, and publishes the place of a link, a follow and a step; nothing of a step is stored or sent, and the buttons are made by name with text nodes alone',
+            src.includes("    navBarWire(document, window.ResizeObserver);   // backlog 143: a block jumped to in the planner's own view lands clear of its Find bar\n    histWire(document);")
+            && src.includes('    window.wpPageNav.placeOf = navRootOf; window.wpPageNav.follow = histFollow; window.wpPageNav.step = histStep;\n')
+            && !/localStorage|sessionStorage|wpNet|innerHTML|insertAdjacentHTML|fetch\(/.test(srcH) && (srcH.match(/createElement\('[a-z]+'\)/g) || []).join() === "createElement('button')");
+        // said
+        const ixH = read('index.html'), wnH = [fs.readFileSync(path.join(root, 'WHATSNEW.txt'), 'utf8'), read('assets/whatsnew.txt')].map(s => s.replace(/\r\n/g, '\n'));
+        check('Back and Forward is said: Help names the arrows beside Outline, the keys and right-clicking a page link, and both release notes carry the same lines under 1.5.8',
+            ixH.includes('<li><b>Back and Forward.</b> After you follow a page link, the left arrow beside <b>Outline</b>') && ixH.includes('<li>Right-click a page link to choose where it opens: here, in a new window or in the panel over the map.')
+            && wnH.every(t => t.includes('- Back and Forward: after you follow a link to another page or to a\n') && t.indexOf('- Back and Forward: after') < t.indexOf('WAYPOINT 1.5.7')) && wnH[0].slice(0, wnH[0].indexOf('WAYPOINT 1.5.7')) === wnH[1].slice(0, wnH[1].indexOf('WAYPOINT 1.5.7')));
+    }
+
     summed = true;
     console.log('\n' + pass + ' passed, ' + fail + ' failed.');
     if (fail) process.exit(1);

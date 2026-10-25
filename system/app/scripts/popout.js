@@ -129,6 +129,21 @@ if (spec) {
         if (!landed && itemId === pp.item) { landed = true; popLandNow(pp, window.wpPageNav, body, it, finder, findBox, false); landPend = { gen: gen, hand: popHand ? popHand.mark() : null }; }   // 1.5.4: once, at the first drawing that holds the page
         if (window.mermaid) { var nodes = Array.prototype.slice.call(body.querySelectorAll('pre.mermaid')); if (nodes.length) { try { Promise.resolve(window.mermaid.run({ nodes: nodes })).then(function() { if (window.wpFcPostProcess) window.wpFcPostProcess(body, it); }).catch(function() {}).then(function() { charted(gen, it); }).catch(function() {}); } catch (e) {} } }   // 1.5.4 (the review of step 1): a chart the library could not draw stops neither the Find nor the landing (it rejects the whole run for one)
     }
+    // [textcheck:popgo-start]
+    // 1.5.8: a page link followed in this window opens its page here (pagenav.js histFollow, and Back and Forward): the window shows that page of
+    // its campaign from its next drawing, at the top or where the link lands, its folds and Dock back following it; the landing is cleaned by
+    // pagenav.js. The window keeps its address and its name: docpanel.js popOut alone writes a window's address. Answers whether it was taken
+    function popGo(id, land) {
+        if (kind !== 'doc' || typeof id !== 'string' || !id) return false;
+        var nav = window.wpPageNav, L = nav && typeof nav.landOf === 'function' ? nav.landOf(land) : null;
+        pp = { camp: pp.camp, head: pp.head, item: id, rest: id, land: L };
+        itemNow = id; window.wpPopoutKey = pp.head + id; landed = false; lastSig = ''; landPend = null; body.scrollTop = 0;
+        if (finder && findBox.value) { findBox.value = ''; finder.clear(); }
+        tick();
+        return true;
+    }
+    window.wpPopoutGo = popGo;
+    // [textcheck:popgo-end]
     // [systemcheck:popsheet-start]
     function tickSheet(data) {
         var slash = arg.indexOf('/'), campId = slash >= 0 ? arg.slice(0, slash) : '', charId = slash >= 0 ? arg.slice(slash + 1) : arg;
