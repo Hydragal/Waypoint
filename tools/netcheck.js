@@ -16059,6 +16059,13 @@ Promise.all(pendingChecks).then(() => {   // the async checks land before the su
         check('a snapshot\'s items (wired): applySnapshot hands each campaign\'s items to snapItems, the one place that keeps or drops them, before the active item is chosen; nothing else in it walks the items one by one',
             snapAt > 0 && src.split('snapItems(').length === 3 && /\n        delete cS\.players;[^\n]*\n        snapItems\(cS\);[^\n]*\n        var actS = cS\.items && cS\.items\[cS\.activeItemId\];/.test(snapBody) && !/Object\.keys\(cS\.items \|\| \{\}\)\.forEach/.test(snapBody));
     }
+    {   // 1.5.7: a damage roll's type rides on its card, worked out where the roll is made: the GM's own roll and a player's on the host, each from the roll's entry through systemcore dmgTypeOf, never from the roller's word
+        const dIdx = src.indexOf('if ((entR && entR.dmg === true) || o.dmg === true) rec.dmg = 1;'), qIdx = src.indexOf('if (actQ && actQ.dmg === true) recQ.dmg = 1;');
+        const dLine = src.slice(dIdx, src.indexOf('\n', src.indexOf('\n', dIdx) + 1)), qLine = src.slice(qIdx, src.indexOf('\n', src.indexOf('\n', qIdx) + 1));
+        check('1.5.7 a damage card names its damage type: on the GM\'s own roll (net.diceRoll) and on a player\'s (the roll-req branch, on the host) the type is worked out from the roll\'s entry by systemcore dmgTypeOf with the row\'s own names, only for a damage roll, and nothing of the request names it',
+            dIdx > 0 && qIdx > 0 && /rec\.dmg === 1 && entR && SR && typeof SR\.dmgTypeOf === 'function'[^\n]*SR\.dmgTypeOf\(campR\.system, entR, varsR, F\); if \(dtR\) rec\.dtype = dtR;/.test(dLine)
+            && /recQ\.dmg === 1 && [^\n]*SQ\.dmgTypeOf\(campQ\.system, actQ, varsQ, Fq\); if \(dtQ\) recQ\.dtype = dtQ;/.test(qLine) && !/dtype/.test(src.slice(src.indexOf('net.diceRoll = function'), src.indexOf('var campR = getActiveCampaign(), SR = SC()'))));
+    }
     summed = true;
     console.log('\n' + pass + ' passed, ' + fail + ' failed.');
     if (fail) process.exit(1);

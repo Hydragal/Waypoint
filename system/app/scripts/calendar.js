@@ -144,7 +144,7 @@ function ownTime(groups) {   // the one counter: each group's spans, once, to th
     groups.forEach(function(g0) {
         if (!g0 || typeof g0 !== 'object' || !Array.isArray(g0.ids)) return;
         var g = Object.assign({}, g0); g.kind = g.kind === 'fight' || g.kind === 'out' ? g.kind : 'clock';
-        if (g.kind === 'fight') g.rest = false; else if (g.kind === 'out') g.rest = restMode;   // a fight is activity; outside one, time passes as the window says (settled 16)
+        if (g.kind === 'fight') g.rest = false; else if (g.kind === 'out') g.rest = restMode && !ordersRun();   // 1.5.7: no rest while a fight runs   // a fight is activity; outside one, time passes as the window says (settled 16)
         if (typeof g.secs !== 'number') g.secs = Math.max(0, tSpanMs(g.t0, g.t1) / 1000);
         var spans = g.spans && typeof g.spans === 'object' ? g.spans : null; if (!spans) { g.marked = false; spans = spansOf(camp, g); if (g.marked) marked = true; }   // a move of the clock hands its spans in, and writes them with the clock
         if (!Object.keys(spans).length) return;
@@ -571,6 +571,7 @@ function dayNotes(body, cal, notes, day, gm) {   // the picked day's notes: the 
 function renderWin() {
     var body = document.getElementById('calendarBody'), camp = getActiveCampaign(); if (!body) return;
     if (!shown(camp)) { closeWin(); return; }
+    if (restMode && ordersRun()) restMode = false;   // 1.5.7: a fight is activity, so the window shows Active while one runs
     var cal = sysCal(), ck = clockOf(camp) || { t: 0 }, t = ck.t, gm = !isPlayer(), sys = sysNow(), dl = dayLength(cal), now = dateOf(cal, t);
     if (camp.id !== winCamp) { view = null; pick = null; winCamp = camp.id; pendFor(camp); }   // another campaign on screen: its own calendar, from the clock
     if (!view) view = viewOf(cal, t);
@@ -750,7 +751,7 @@ function onWinClick(e) {
     if (act === 'caltoday') { view = viewOf(cal, tOf(camp)); pick = null; renderWin(); return; }
     if (isPlayer()) { if (act === 'calhideme' && window.wpVtt && window.wpVtt.setLocal('calendar', true)) { closeWin(); toast('The clock is hidden for you. Settings \u25b8 VTT features brings it back.'); } return; }
     var body = document.getElementById('calendarBody'), q = function(c) { return body ? body.querySelector('.' + c) : null; };
-    if (act === 'calkind') { restMode = b.dataset.kind === 'rest'; renderWin(); return; }   // K5
+    if (act === 'calkind') { if (b.dataset.kind === 'rest' && ordersRun()) { restMode = false; toast('A fight is running: time passes as Active until it ends.'); renderWin(); return; } restMode = b.dataset.kind === 'rest'; renderWin(); return; }   // K5; 1.5.7: no Rest while a fight runs
     if (act === 'callive') { setHold(b.dataset.live === 'hold'); return; }   // 1.5.4: Runs / Held
     if (act === 'calpendapply') { pendDone(true); return; }
     if (act === 'calpendskip') { pendDone(false); return; }

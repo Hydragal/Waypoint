@@ -7787,12 +7787,24 @@ if(_el_shapeHexTriggerBtn) _el_shapeHexTriggerBtn.addEventListener('click', func
 
   // Flat-top hex tile (a flat side faces up): 90x52 covers two half-offset columns
 
+  // 1.5.7: the lattice's seven edges a tile, and the copies of them from the eight tiles around it that come within a stroke's reach of this one,
+  // each edge once (an edge is the same edge drawn from either end), as path data of whole numbers
+  function hexTilePaths() {
+      var base = [[30, 26, 0, 26], [30, 26, 45, 0], [30, 26, 45, 52], [75, 0, 45, 0], [75, 0, 90, 26], [75, 52, 45, 52], [75, 52, 90, 26]], seen = {}, out = '';
+      for (var dx = -90; dx <= 90; dx += 90) for (var dy = -52; dy <= 52; dy += 52) base.forEach(function(e) {
+          var a = [e[0] + dx, e[1] + dy], b = [e[2] + dx, e[3] + dy];
+          if (Math.max(a[0], b[0]) < -4 || Math.min(a[0], b[0]) > 94 || Math.max(a[1], b[1]) < -4 || Math.min(a[1], b[1]) > 56) return;   // nowhere near this tile
+          var k = a[0] < b[0] || (a[0] === b[0] && a[1] <= b[1]) ? a.concat(b).join(',') : b.concat(a).join(','); if (seen[k]) return; seen[k] = 1;
+          out += "<path d='M " + a[0] + ' ' + a[1] + ' L ' + b[0] + ' ' + b[1] + "'/>";
+      });
+      return out;
+  }
   function hexBgCss(alpha) {
 
       // Dual-stroke: a dark line with a light line offset beside it reads on any backdrop
 
       // 90×52 whole-pixel tile (see snapToHex): fractional tiles drift in Chrome
-      var paths = "<path d='M 30 26 L 0 26'/><path d='M 30 26 L 45 0'/><path d='M 30 26 L 45 52'/><path d='M 75 0 L 45 0'/><path d='M 75 0 L 90 26'/><path d='M 75 52 L 45 52'/><path d='M 75 52 L 90 26'/>";
+      var paths = hexTilePaths();   // 1.5.7: the edges of the tile and of its neighbours that reach into it, once each
 
       var svg = "<svg xmlns='http://www.w3.org/2000/svg' width='90' height='52' viewBox='0 0 90 52'>" +
 

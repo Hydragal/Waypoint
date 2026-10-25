@@ -18,6 +18,25 @@ function playerHue(id) { var h = 0, s = String(id); for (var i = 0; i < s.length
 function chatTime(ts) { if (!ts) return ''; var d = new Date(ts); return (d.getHours() < 10 ? '0' : '') + d.getHours() + ':' + (d.getMinutes() < 10 ? '0' : '') + d.getMinutes(); }
 
 /* ---------- the card (a chat entry with m.roll = the record and m.res = the replayed result) ---------- */
+// 1.5.7: a roll worked out from a sheet, said in plain figures: each dice group with its dice, then what a check came to and what it needed.
+// The formula and its whole working stay on the line's hover. Text nodes only.
+function readableInto(brk, res, parts, expr) {
+    var groups = parts.filter(function(p) { return p && typeof p === 'object' && p.die; }), b = res.breakdown || {}, top = null;
+    (Array.isArray(b.checks) ? b.checks : []).forEach(function(c) { if (c && c.top) top = c; });
+    groups.forEach(function(p, i) {
+        if (i) brk.appendChild(document.createTextNode(' + '));
+        var d = p.die, head = d && typeof d.count === 'number' && d.faces !== undefined ? d.count + 'd' + d.faces + ' ' : '';
+        brk.appendChild(document.createTextNode(head + '['));
+        brk.appendChild(el('span', 'roll-die', p.text));
+        brk.appendChild(document.createTextNode(']'));
+    });
+    if (top && typeof top.left === 'number' && typeof top.right === 'number' && isFinite(top.left) && isFinite(top.right)) {
+        var w = top.op === '<=' ? ' or less' : top.op === '>=' ? ' or more' : top.op === '<' ? ', under it' : top.op === '>' ? ', over it' : '';
+        brk.appendChild(document.createTextNode((groups.length ? ' = ' : '') + fmtNum(top.left) + ' \u00b7 needs ' + fmtNum(top.right) + w));
+    }
+    var full = parts.map(function(p) { return typeof p === 'string' ? p : p.text; }).join('');
+    brk.title = String(expr || '') + (full ? '\n' + full : '');
+}
 function renderCard(m) {
     var rec = m.roll, res = m.res, n = net(), Fm = F();
     var priv = !!(rec.priv || rec.to);
@@ -39,22 +58,25 @@ function renderCard(m) {
         if (rec.dmg === 1) wrap.className += ' card-dmg';   // a damage roll needs no dice to be one
         return wrap;
     }
-    var exprLine = el('div', 'roll-expr', rec.expr); exprLine.title = rec.expr; wrap.appendChild(exprLine);
+    var named = false; try { named = typeof Fm.names === 'function' && Fm.names(rec.expr).length > 0; } catch (e) { named = false; }   // 1.5.7 (the owner: the formula "is showing as the roll information instead of being readable by everyone")
+    var exprLine = el('div', 'roll-expr', rec.expr); exprLine.title = rec.expr; if (!named) wrap.appendChild(exprLine);
     var brk = el('div', 'roll-break');
     var sy = window.wpSheets && window.wpSheets.systemOf ? window.wpSheets.systemOf() : null, rule = sy && sy.combat && sy.combat.checks === 'under3d6' ? 'under3d6' : '';   // Stage 6 F8: the campaign's roll outcomes
     var v = verdictOf(res, rule), crit = critOf(res, rule), mf = malfOf(rec, res);   // R3: a malfunction is a failure, whatever the test said
     var parts = typeof Fm.parts === 'function' ? Fm.parts(res, 40) : [Fm.describe(res, { maxChars: LIMITS.cardChars })];
     if (v && v.crit !== undefined && parts.length && typeof parts[parts.length - 1] === 'string') parts[parts.length - 1] = parts[parts.length - 1].replace(/:\s*(success|failure)( by [^:]*)?$/, '');   // F8: the rule's verdict is the line below (never the arithmetic's)
-    parts.forEach(function(p) { if (typeof p === 'string') brk.appendChild(document.createTextNode(p)); else brk.appendChild(el('span', 'roll-die', p.text)); });
+    if (named) readableInto(brk, res, parts, rec.expr);
+    else parts.forEach(function(p) { if (typeof p === 'string') brk.appendChild(document.createTextNode(p)); else brk.appendChild(el('span', 'roll-die', p.text)); });
     wrap.appendChild(brk);
     wrap.className += mf ? ' card-malf' : v && v.kind === 'check' ? (v.pass ? ' card-ok' : ' card-fail') : rec.dmg === 1 ? ' card-dmg' : '';   // chat cards: the left stripe — a malfunction, the check's outcome, else a damage roll, else plain
     var total = el('div', 'roll-total' + (mf ? ' roll-fail roll-malf' : v && v.kind === 'check' ? (v.pass ? ' roll-ok' : ' roll-fail') : rec.dmg === 1 ? ' roll-dmg' : ''), mf ? 'malfunction (Malf ' + rec.malf + ')' : v ? (v.kind === 'check' ? v.text : '= ' + v.text) : '');
     if (crit) total.appendChild(el('span', 'roll-' + crit, v && v.crit ? (crit === 'crit' ? 'critical success' : 'critical failure') : crit === 'crit' ? 'natural 20' : 'natural 1'));
     wrap.appendChild(total);
     var dS = window.wpSheets, dv = res && typeof res.value === 'number' && isFinite(res.value) ? res.value : null;   // 1.5.6, the damage step: the GM takes a damage roll off its target in one press
-    if (rec.dmg === 1 && dv !== null && !mf && dS && typeof dS.damageOn === 'function' && typeof dS.damageFromRoll === 'function' && dS.damageOn()) {
-        var ab = el('button', 'tool ghost chat-dmgapply', 'Apply to target\u2026'); ab.type = 'button'; ab.title = 'Take this damage off the character its roller targets, through its DR. Its window opens first.';
-        ab.addEventListener('click', function() { dS.damageFromRoll(rec.from && rec.from.id, dv); });
+    if (rec.dmg === 1 && dv !== null && !mf && rec.dmgUsed === 1) wrap.appendChild(el('div', 'chat-dmgdone', 'Applied'));   // 1.5.7: a hit is applied once
+    else if (rec.dmg === 1 && dv !== null && !mf && dS && typeof dS.damageOn === 'function' && typeof dS.damageFromRoll === 'function' && dS.damageOn()) {
+        var ab = el('button', 'tool ghost chat-dmgapply', 'Apply to target\u2026'); ab.type = 'button'; ab.title = 'Take this damage off the character its roller targets, through its DR. Its window opens first. Once applied, the button goes.';
+        ab.addEventListener('click', function() { if (rec.dmgUsed === 1) return; dS.damageFromRoll(rec.from && rec.from.id, dv, function() { rec.dmgUsed = 1; if (ab.parentNode) ab.parentNode.replaceChild(el('div', 'chat-dmgdone', 'Applied'), ab); }, typeof rec.dtype === 'string' ? rec.dtype : undefined); });
         wrap.appendChild(ab);
     }
     return wrap;

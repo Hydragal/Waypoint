@@ -1,6 +1,6 @@
 {
   "name": "waypoint",
-  "version": "1.5.6",
+  "version": "1.5.7",
   "main": "main.js",
   "electron": "44.5.1"
 }

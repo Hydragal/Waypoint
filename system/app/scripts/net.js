@@ -7650,6 +7650,7 @@ function handleMessage(msg, conn) {
         var mfQ = null; if (actQ && actQ.malf && varsQ) { var mqQ = Fq.evaluate(actQ.malf, { vars: varsQ }); if (mqQ.ok && typeof mqQ.value === 'number' && isFinite(mqQ.value)) mfQ = Math.max(1, Math.min(1000000, Math.round(mqQ.value))); }   // Stage 6 HUD R3: its Malf, through their view
         if (mfQ !== null) recQ.malf = mfQ;
         if (actQ && actQ.dmg === true) recQ.dmg = 1;   // chat cards: a damage roll, from the entry its formula matched (never the player's word)
+        if (recQ.dmg === 1 && typeof SQ !== 'undefined' && SQ && typeof SQ.dmgTypeOf === 'function' && campQ && campQ.system) { var dtQ = SQ.dmgTypeOf(campQ.system, actQ, varsQ, Fq); if (dtQ) recQ.dtype = dtQ; }   // 1.5.7: the damage type the entry names, worked out on the host
         if (resQ.breakdown && resQ.breakdown.names && resQ.breakdown.names.length) { var nmQ = Dq.cleanNames(resQ.breakdown.names); if (!nmQ) { denyQ('error'); return; } if (nmQ.length) recQ.names = nmQ; }
         if (q.label) recQ.label = q.label;
         if (chQ) recQ.as = String(chQ.name || '').slice(0, Dq.LIMITS.label);
@@ -8823,6 +8824,7 @@ net.diceRoll = function(expr, o) {
     var mfR = null; if (entR && entR.malf && varsR) { var mqR = F.evaluate(entR.malf, { vars: varsR }); if (mqR.ok && typeof mqR.value === 'number' && isFinite(mqR.value)) mfR = Math.max(1, Math.min(1000000, Math.round(mqR.value))); }   // Stage 6 HUD R3: its Malf
     if (mfR !== null) rec.malf = mfR;
     if ((entR && entR.dmg === true) || o.dmg === true) rec.dmg = 1;   // chat cards: a damage roll (its entry; or this machine's own word, a thrown item's damage — never over the wire)
+    if (rec.dmg === 1 && entR && SR && typeof SR.dmgTypeOf === 'function' && campR && campR.system) { var dtR = SR.dmgTypeOf(campR.system, entR, varsR, F); if (dtR) rec.dtype = dtR; }   // 1.5.7: the damage type the roll names, for Apply to target
     if (res.breakdown && res.breakdown.names && res.breakdown.names.length) { var nmR = D.cleanNames(res.breakdown.names); if (!nmR) return { error: 'That roll could not be recorded.' }; if (nmR.length) rec.names = nmR; }
     if (o.label) rec.label = String(o.label).slice(0, D.LIMITS.label);
     if (chR) rec.as = String(chR.name || '').slice(0, D.LIMITS.label);

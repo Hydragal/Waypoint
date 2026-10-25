@@ -209,6 +209,24 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         const rcard = new Function('el', 'playerHue', 'chatTime', 'net', 'F', 'verdictOf', 'critOf', 'malfOf', 'LIMITS', 'window', 'document', "'use strict';\n" + rcSrc + '\nreturn renderCard;')(fe, () => 0, () => '12:00', () => ({ active: false }), () => F, verdictOf, critOf, D.malfOf, LIMITS, { wpSheets: { systemOf: () => null } }, { createTextNode: t => ({ text: t }) });
         const card = (o, draws, noRes) => { const r = rec(o); return rcard({ roll: r, res: noRes ? null : roll(r.expr, draws) }); };
         const cls = c => c.className.split(' ').filter(Boolean), kid = (c, k) => c.children.find(x => x && x.className && x.className.split(' ').indexOf(k) >= 0) || null;
+        {   // 1.5.7: a roll worked out from a sheet reads in plain figures, and a damage card's Apply to target is used once (dice.js readableInto and renderCard, run for real)
+            const rc2Src = dj.slice(dj.indexOf('// 1.5.7: a roll worked out from a sheet, said in plain figures'), dj.indexOf('// Stage 6 HUD H7: an apply action'));
+            const clicks = [];
+            const fe2 = (tag, cls, text) => ({ tag, className: cls || '', textContent: text === undefined ? '' : String(text), children: [], style: {}, title: '', type: '', parentNode: null, listeners: {}, appendChild(c) { this.children.push(c); if (c && typeof c === 'object') c.parentNode = this; return c; }, replaceChild(n, o) { const i = this.children.indexOf(o); if (i >= 0) { this.children[i] = n; n.parentNode = this; } return o; }, addEventListener(k, f) { this.listeners[k] = f; } });
+            const sheets = { systemOf: () => null, damageOn: () => true, damageFromRoll: (from, amt, done, type) => { clicks.push([from, amt, type]); if (typeof done === 'function') done(); return true; } };
+            const rc2 = new Function('el', 'playerHue', 'chatTime', 'net', 'F', 'verdictOf', 'critOf', 'malfOf', 'LIMITS', 'fmtNum', 'window', 'document', "'use strict';\n" + rc2Src + '\nreturn renderCard;')(fe2, () => 0, () => '12:00', () => ({ active: false }), () => F, verdictOf, critOf, D.malfOf, LIMITS, D.fmtNum, { wpSheets: sheets }, { createTextNode: t => ({ text: t }) });
+            const flat = n => !n ? '' : n.text !== undefined ? n.text : (n.textContent || '') + (n.children || []).map(flat).join('');
+            const vars = name => ({ 'row.attack': 15, st: 9 })[name];
+            const resN = F.evaluate('3d6 <= Row.Attack + 2', { random: scripted([4, 2, 5]), vars }), cN = rc2({ roll: rec({ expr: '3d6 <= Row.Attack + 2', label: 'Blade · Attack' }), res: resN });
+            const brkN = kid(cN, 'roll-break'), exN = kid(cN, 'roll-expr');
+            const resP = F.evaluate('2d6 + 3', { random: scripted([4, 5]) }), cP = rc2({ roll: rec({ expr: '2d6 + 3' }), res: resP });
+            const rD = rec({ expr: '3d6', label: 'Blade · Damage', dmg: 1, dtype: 'cut' }), cD = rc2({ roll: rD, res: F.evaluate('3d6', { random: scripted([4, 2, 5]) }) });
+            const btn = kid(cD, 'chat-dmgapply'); btn.listeners.click(); const after = kid(cD, 'chat-dmgapply'), done = kid(cD, 'chat-dmgdone');
+            const cD2 = rc2({ roll: rD, res: F.evaluate('3d6', { random: scripted([4, 2, 5]) }) });
+            check('1.5.7 chat cards (dice.js readableInto and renderCard, run for real): a roll whose formula names the sheet shows no formula line, its dice in brackets, what they came to and what it needed ("3d6 [4, 2, 5] = 11 · needs 17 or less"), the formula and its working on the line\'s tooltip; a typed roll keeps its formula line and whole working; a damage card\'s Apply to target hands the window the roll\'s total and type, and once applied the card says Applied with no button, also when drawn again',
+                !exN && flat(brkN) === '3d6 [4, 2, 5] = 11 \u00b7 needs 17 or less' && /^3d6 <= Row\.Attack \+ 2\n/.test(brkN.title) && !!kid(cP, 'roll-expr') && /3d6|2d6/.test(flat(kid(cP, 'roll-break')))
+                && JSON.stringify(clicks) === JSON.stringify([['u_pat', 11, 'cut']]) && !after && !!done && done.textContent === 'Applied' && rD.dmgUsed === 1 && !kid(cD2, 'chat-dmgapply') && !!kid(cD2, 'chat-dmgdone'), JSON.stringify([flat(brkN), brkN.title, clicks, !!after, !!done]));
+        }
         const kOk = card({ expr: 'd20 + 5 >= 10', draws: [10], label: 'Attack' }, [10]), kNo = card({ expr: 'd20 + 5 >= 10', draws: [1], label: 'Attack' }, [1]);
         const kDm = card({ expr: '2d6', draws: [3, 4], label: 'Sword \u00b7 Damage', dmg: 1 }, [3, 4]), kMf = card({ expr: '3d6', draws: [1, 1, 1], label: 'Blaster', dmg: 1, malf: 3 }, [1, 1, 1]);
         const kPv = card({ expr: 'd20', draws: [7], priv: 'gm' }, [7]), kBad = card({ expr: 'd20', draws: [7], label: 'Lost' }, [7], true), kPl = card({ expr: 'd20', draws: [7] }, [7]);

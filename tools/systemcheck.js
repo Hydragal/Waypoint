@@ -13222,6 +13222,26 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             && pA2.ok && pA2.values.f_gear[0].qty === 3 && pA2.values.f_gear[0].paid === 25 && sold.ok && sold.values.f_chips.filter(x => x.id === 'w_c2')[0].lvl === 518 && upGet.ok && j(Object.keys(upGet.values)) === j(['f_gear'])
             && ci.pay === 12.26 && ciBad.every(x => x === null) && ciGet.get === 4 && ciGet.pay === undefined && S.cleanDenyReason('money') === 'money' && S.cleanDenyReason('change') === 'change', j([pA, pA2, sold]));
     }
+    {   // 1.5.7: a damage roll's type (dmgTypeOf, the cleaner), and a roll's change switching a tick (applyAct), run for real
+        const j = JSON.stringify, mk = gm => S.cleanSystem({ v: 1, name: 'D', fields: [
+            { id: 'f_hp', key: 'HP', label: 'HP', kind: 'resource', maxFormula: '10', vis: 'all', edit: 'owner' }, { id: 'f_ep', key: 'EP', label: 'EP', kind: 'resource', maxFormula: '10', vis: 'all', edit: 'owner' },
+            { id: 'f_med', key: 'Med', label: 'Med', kind: 'toggle', edit: 'owner', vis: 'all' },
+            { id: 'f_w', key: 'Gear', label: 'Gear', kind: 'item-list', edit: 'owner', vis: 'all', list: { stats: [{ key: 'dt', label: 'Type', labels: ['None', 'Crushing', 'Cutting', 'Stun'] }], rolls: [{ label: 'Damage', formula: '2d6', dmg: true, dtype: 'Row.dt' }, { label: 'Zap', formula: '3d6', dmg: true, dtype: 'stun' }, { label: 'Hit', formula: '3d6 <= 12', dtype: 'cut' }] } }],
+            rolls: [{ id: 'r_dmg', label: 'Blow', formula: '1d6', dmg: true, dtype: 'cr' }, { id: 'r_chk', label: 'Check', formula: '3d6 <= 10', dtype: 'cr' }, { id: 'r_med', label: 'Meditate', formula: '3d6 <= 12', then: [{ f: 'f_med', formula: '1', set: true, when: 'hit' }] }, { id: 'r_wake', label: 'Wake', apply: [{ f: 'f_med', formula: '0', set: true }] }],
+            items: [{ id: 'i_club', name: 'Club', stats: { dt: 1 } }, { id: 'i_blade', name: 'Blade', stats: { dt: 2 } }],
+            combat: { damage: { pool: 'f_hp', types: [{ key: 'cr', label: 'Crushing', mult: 1 }, { key: 'cut', label: 'Cutting', mult: 1.5 }, { key: 'stun', label: 'Stun', mult: 1, pool: 'f_ep' }] } } }, { F, gmView: gm });
+        const sD = mk(true), sP = mk(false), lr = sD.fields.find(f => f.id === 'f_w').list.rolls;
+        const ch = { id: 'c', values: { f_w: [{ defId: 'i_club', qty: 1 }, { defId: 'i_blade', qty: 1 }] } }, V = S.makeResolver(sD, ch, F, null), rid = { w1: S.rowIdOf(ch.values.f_w[0]), w2: S.rowIdOf(ch.values.f_w[1]) };
+        const tOf = (rowId, ent) => S.dmgTypeOf(sD, ent, V.row('f_w', rid[rowId]), F);
+        check('1.5.7 a damage roll names its damage type: the cleaner keeps a dtype only beside Damage, on a system roll and a list roll, the same in both views; dmgTypeOf reads a key of the Combat card\'s types as it is, or a formula in the roll\'s own names as the type\'s place in that list, 1 for the first (a club Crushing, a blade Cutting), and gives none for a place outside the list, a roll that is no damage roll, or a system with no damage types',
+            lr[0].dtype === 'Row.dt' && lr[1].dtype === 'stun' && !('dtype' in lr[2]) && sD.rolls[0].dtype === 'cr' && !('dtype' in sD.rolls[1]) && j(sP.fields.find(f => f.id === 'f_w').list.rolls) === j(lr)
+            && tOf('w1', lr[0]) === 'cr' && tOf('w2', lr[0]) === 'cut' && tOf('w1', lr[1]) === 'stun' && tOf('w1', { dmg: true, dtype: '9' }) === '' && tOf('w1', { dmg: true, dtype: '0' }) === '' && tOf('w1', { dmg: true, dtype: '3' }) === 'stun' && S.dmgTypeOf(sD, sD.rolls[0], V, F) === 'cr' && S.dmgTypeOf(sD, { dtype: 'cr' }, V, F) === ''
+            && S.dmgTypeOf(Object.assign({}, sD, { combat: {} }), sD.rolls[0], V, F) === '' && S.dmgTypeOf(sD, { dmg: true, dtype: '1d6' }, V, F) === '', j([lr, sD.rolls[0], tOf('w2', lr[0])]));
+        const med = sD.rolls.find(r => r.id === 'r_med'), wake = sD.rolls.find(r => r.id === 'r_wake'), c0 = { id: 'c', values: {} };
+        const on = S.applyAct(sD, c0, { apply: S.thenChanges(med, true, false) }, S.makeResolver(sD, c0, F, null), F, null, null), c1 = { id: 'c', values: { f_med: true } }, off = S.applyAct(sD, c1, wake, S.makeResolver(sD, c1, F, null), F, null, null);
+        check('1.5.7 a roll\'s change and an apply action may switch a tick: the cleaner keeps one aimed at a toggle, Set to 1 turns it on and 0 off, its line counting 1 for on and 0 for off; a failure changes nothing',
+            med.then[0].f === 'f_med' && wake.apply[0].f === 'f_med' && on.ok && on.values.f_med === true && on.lines[0].v === 1 && off.ok && off.values.f_med === false && off.lines[0].v === 0 && S.thenChanges(med, false, false).length === 0, j([med, on, off]));
+    }
     summed = true;
     console.log(NL + pass + ' passed, ' + fail + ' failed.');
     if (fail) process.exit(1);

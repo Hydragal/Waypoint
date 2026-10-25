@@ -5781,6 +5781,7 @@ function listCard(f, allCats, targets, acts) {   // acts (turn-based combat T1):
         if (rApply) { cb2.appendChild(rw); listApplyEditor(cb2, rr, ri, 'apply', sp, targets); return; }
         var rf = input('sys-list-rollformula field', typeof rr.formula === 'string' ? rr.formula : '', 'Rolled for the row: dice allowed; Row.lvl, Row.<stat>, Row.<column> read the row, any other name the character (3d6 <= Row.Skill, d20 + Row.Hit)', 'Formula (d20 + Row.Hit)'); rf.maxLength = LIMITS.formula; rw.appendChild(rf);
         rw.appendChild(checkLabel('sys-list-dmg', rr.dmg === true, 'Damage', 'A damage roll: its card in Table Chat takes the damage colour, a larger total and a damage tag'));   // chat cards (owner 2026-09-27)
+        var rdt = input('sys-list-rolldtype field', typeof rr.dtype === 'string' ? rr.dtype : '', 'A damage roll\u2019s type, filled in when you press Apply to target on its card: a type\u2019s key from the Combat card (stun), or a formula giving its place in that list, 1 for the first (Row.dt). Kept only on a damage roll', 'Damage type'); rdt.maxLength = LIMITS.formula; rw.appendChild(rdt);   // 1.5.7
         [['rollup', '\u25b2', 'Move up'], ['rolldown', '\u25bc', 'Move down'], ['rolldel', '\u00d7', 'Remove this roll']].forEach(function(bd) { var bb = el('button', 'tool ghost sys-btn', bd[1]); bb.dataset.act = bd[0]; bb.title = bd[2]; rw.appendChild(bb); });
         cb2.appendChild(rw);
         var ndRow = el('div', 'sys-flags sys-list-needsrow'); ndRow.dataset.ri = String(ri);   // Stage 6 HUD R2b: what it needs, then its consequences
@@ -7101,6 +7102,7 @@ function onInput(e) {
             var rD = rL[rix] && typeof rL[rix] === 'object' && !Array.isArray(rL[rix]) ? rL[rix] : (rL[rix] = {});
             if (lcc.indexOf('sys-list-rolllabel') >= 0) rD.label = t.value.slice(0, LIMITS.label);
             else if (lcc.indexOf('sys-list-rollformula') >= 0) rD.formula = t.value.slice(0, LIMITS.formula);
+            else if (lcc.indexOf('sys-list-rolldtype') >= 0) { var dtv = t.value.slice(0, LIMITS.formula).trim(); if (dtv) rD.dtype = dtv; else delete rD.dtype; }   // 1.5.7: a damage roll's type
             else return;
         }
         else if (lcc.indexOf('sys-list-col') >= 0) {   // Stage 6 F5a1: a column's boxes (Save cleans them)
@@ -7618,7 +7620,7 @@ function takeDamage(charId, pre) {
     var bar = el('div', 'dmg-btns'), cancel = el('button', 'tool ghost', 'Cancel'), go = el('button', 'tool', 'Apply'); cancel.type = 'button'; go.type = 'button';
     bar.appendChild(cancel); bar.appendChild(go); card.appendChild(bar);
     cancel.addEventListener('click', dmgClose);
-    go.addEventListener('click', function() { var q = inp(); if (amt.value === '' || !(q.amt >= 0)) { toast('Type the damage first.'); try { amt.focus(); } catch (e) {} return; } if (dmgApply(charId, q)) dmgClose(); });
+    go.addEventListener('click', function() { var q = inp(); if (amt.value === '' || !(q.amt >= 0)) { toast('Type the damage first.'); try { amt.focus(); } catch (e) {} return; } if (dmgApply(charId, q)) { var dn = pre.done; dmgClose(); if (typeof dn === 'function') { try { dn(); } catch (e) {} } } });   // 1.5.7: a card's Apply to target is used once
     box.addEventListener('keydown', function(e) {   // the window's keys are its own: the page reads keys as its own (Backspace deletes what is selected on the map)
         if (e.key === 'Escape') { e.preventDefault(); dmgClose(); }
         else if (e.key === 'Enter' && e.target && e.target.tagName !== 'BUTTON') { e.preventDefault(); go.click(); }
@@ -7647,12 +7649,13 @@ function dmgApply(charId, q) {
     return true;
 }
 // A damage roll's card: its total on the character its roller targets, else on the one character token selected here
-function damageFromRoll(fromId, total) {
+function damageFromRoll(fromId, total, done, type) {   // 1.5.7: done, called once the window applies it; type, the damage type the roll names
     var n = net(), camp = getActiveCampaign(), t = n && dmgObj(n.targets) && typeof fromId === 'string' && Object.prototype.hasOwnProperty.call(n.targets, fromId) ? n.targets[fromId] : null;
     var mp = t && camp && camp.items && Object.prototype.hasOwnProperty.call(camp.items, t.mapId) ? camp.items[t.mapId] : null, tok = mp && Array.isArray(mp.whiteboard) ? mp.whiteboard.find(function(w) { return w && w.id === t.id; }) : null;
     if (!tok) { var am = camp && camp.items ? camp.items[camp.activeItemId] : null, sel = state.selWbIds && state.selWbIds.length === 1 ? state.selWbIds[0] : state.selWbId; if (am && Array.isArray(am.whiteboard) && sel) tok = am.whiteboard.find(function(w) { return w && w.id === sel; }); }
     if (!tok || typeof tok.charId !== 'string' || !tok.charId) { toast('Target a character first, or select its token, then press Apply to target again.'); return false; }
-    return takeDamage(tok.charId, { amt: total });
+    var pre = { amt: total }; if (typeof done === 'function') pre.done = done; if (typeof type === 'string' && type) pre.type = type;
+    return takeDamage(tok.charId, pre);
 }
 function damageOn() { var sys = systemOf(); return !!dmgRules(sys) && !isClient() && canWrite(); }   // the cards' Apply to target: the GM's own machine
 // [systemcheck:dmgwin-end]

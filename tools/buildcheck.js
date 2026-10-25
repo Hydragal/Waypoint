@@ -1608,7 +1608,16 @@ process.on('exit', code => { if (!summed && !code) { console.log(NL + 'FAIL     
     const oddPx = (() => { const ctx = recCtx(); S.draw(ctx, { box: { x: 0, y: 0, w: 101, h: 55 }, scale: 1.4, bg: 'dark', items: [] }); return ctx.calls.slice(2, 6); })();
     const eSq = [['save'], ['beginPath'], ['rect', 0, 0, 400, 300], ['clip'], ['fillStyle', '#15151c'], ['fillRect', 0, 0, 400, 300], ['save'], ['fillStyle', 'rgba(255,255,255,0.55)']].concat([150, 200, 250, 300].map(gx => ['fillRect', (gx - 120.5) * 2, 0, 2, 300]), [100, 150, 200].map(gy => ['fillRect', 0, (gy - 80.5) * 2, 400, 2]),
         [['fillStyle', 'rgba(0,0,0,0.55)']], [150, 200, 250, 300].map(gx => ['fillRect', (gx - 121.5) * 2, 0, 6, 300]), [100, 150, 200].map(gy => ['fillRect', 0, (gy - 81.5) * 2, 400, 6]), [['restore'], ['restore']]);
-    const boardHex = (wbSrcS.match(/<path d='M (\d+) (\d+) L (\d+) (\d+)'\/>/g) || []).map(p => p.match(/\d+/g).map(Number));
+    const boardHex = JSON.parse((/var base = (\[\[[\d, \[\]]+\]\])/.exec(wbSrcS) || [0, '[]'])[1]);   // 1.5.7: the tile's seven edges, as hexTilePaths lists them
+    {   // 1.5.7: the hex grid's tile draws every edge of the lattice that reaches into it, its neighbours' too, each once (whiteboard.js hexTilePaths, run for real)
+        const fnS = wbSrcS.slice(wbSrcS.indexOf('  function hexTilePaths() {'), wbSrcS.indexOf('  function hexBgCss(alpha) {'));
+        const segs = ((new Function(fnS + '\nreturn hexTilePaths;'))()().match(/M (-?\d+) (-?\d+) L (-?\d+) (-?\d+)/g) || []).map(s => s.match(/-?\d+/g).map(Number));
+        const keyOf = e => (e[0] < e[2] || (e[0] === e[2] && e[1] <= e[3]) ? e : [e[2], e[3], e[0], e[1]]).join(','), keys = segs.map(keyOf);
+        const near = e => !(Math.max(e[0], e[2]) < -4 || Math.min(e[0], e[2]) > 94 || Math.max(e[1], e[3]) < -4 || Math.min(e[1], e[3]) > 56);
+        const want = new Set(); for (let dx = -90; dx <= 90; dx += 90) for (let dy = -52; dy <= 52; dy += 52) boardHex.forEach(e => { const t = [e[0] + dx, e[1] + dy, e[2] + dx, e[3] + dy]; if (near(t)) want.add(keyOf(t)); });
+        check('1.5.7, the hex grid: a tile draws each edge of the lattice that comes within a stroke of it once, its seven own and its neighbours\' that reach in, so a corner on the tile\'s edge keeps its whole stroke (the owner: "part of a grid hex is cut off" on every other one)',
+            boardHex.length === 7 && new Set(keys).size === keys.length && keys.length === want.size && keys.every(k => want.has(k)) && boardHex.every(e => keys.includes(keyOf(e))) && keys.length > 7, j([keys.length, want.size]));
+    }
     const gHx = (box, s) => { const ctx = recCtx(); S.draw(ctx, { box, scale: s, bg: 'none', grid: 'hex', items: [] }); return ctx.calls.slice(4, -1); };
     const hx1 = gHx({ x: 0, y: 0, w: 90, h: 52 }, 1), eHx1 = [['save'], ['strokeStyle', 'rgba(0,0,0,0.55)'], ['lineWidth', 3], ['lineCap', 'butt'], ['beginPath']].concat(boardHex.map(e => [['moveTo', e[0], e[1]], ['lineTo', e[2], e[3]]]).flat(), [['stroke'], ['strokeStyle', 'rgba(255,255,255,0.55)'], ['lineWidth', 1.2], ['lineCap', 'butt'], ['beginPath']], boardHex.map(e => [['moveTo', e[0], e[1]], ['lineTo', e[2], e[3]]]).flat(), [['stroke'], ['restore']]);
     const hx2 = gHx({ x: 100, y: 60, w: 100, h: 60 }, 2);
