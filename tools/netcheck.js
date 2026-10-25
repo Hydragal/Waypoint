@@ -2125,6 +2125,29 @@ pendingChecks.push((async () => {
     check('hidden pieces (door-req, run for real with the real fogcore): a player\'s request naming a visible door next to their token opens it (saved, nothing sent); one naming a hidden door — locked or not, hidden as true or as 1 — opens nothing, saves nothing and answers nothing, like one naming nothing on the map; a visible locked door still answers locked',
         j(runDoor({})) === j({ open: true, sent: [], saves: 1 }) && j(runDoor({ hidden: true })) === j({ open: false, sent: [], saves: 0 }) && j(runDoor({ hidden: true, doorLock: true })) === j({ open: false, sent: [], saves: 0 }) && j(runDoor({ hidden: 1 })) === j({ open: false, sent: [], saves: 0 })
         && j(runDoor({}, { itemId: 'nope' })) === j({ open: false, sent: [], saves: 0 }) && j(runDoor({ doorLock: true })) === j({ open: false, sent: ['door-deny:locked'], saves: 0 }), j([runDoor({}), runDoor({ hidden: true }), runDoor({ doorLock: true })]));
+    // 1.5.9 (the owner's game of 2026-10-25): a player's door works on the map the player stands on, whichever map the GM's screen shows. The
+    // branch used to drop every request for a map that was not the GM's active one ("only the GM's current map"): that pin is moved on purpose.
+    // A map the GM is not viewing is judged on that map, toggled there, saved, and sent to its holders through net.sendItem (per recipient,
+    // possession-held, as any change to that map); the GM's own overlay is drawn again only where that map is on screen
+    const runAway = (o) => {
+        o = o || {};
+        const door = { id: 'dr', type: 'rect', blocksSight: true, sightType: 'door', x: 50, y: 50, w: 50, h: 50 }, tok = { id: 'tk', isChar: true, ownerId: 'u_p', x: o.far ? 400 : 100, y: 50, w: 50, h: 50 };
+        const m2 = { id: 'm2', type: 'map', meta: { gridType: 'square' }, fog: { on: true }, whiteboard: [door, tok] }, m1 = { id: 'm1', type: 'map', meta: { gridType: 'square' }, whiteboard: [] };
+        const out = { sent: [], saves: 0, redraws: 0, items: [], seen: [] };
+        const conn = { peer: 'pA', send: m => { packCheck(m); out.sent.push(JSON.parse(j(m))); } };
+        const netD = { role: 'host', active: true, paused: false, roster: { pA: { id: 'u_p', location: o.at || 'm2' } }, sendItem: (c, i) => out.items.push(c + '/' + i) };
+        const items = Object.create(null); items.m1 = m1; items.m2 = m2; if (o.stub) m2.stub = true;
+        new Function('msg', 'conn', 'net', 'peerPaused', 'window', '_doorLimit', 'sendFailed', 'getActiveCampaign', 'getActiveMap', 'save', 'toast', 'moveMode', drSrc)(
+            { type: 'door-req', mapId: o.mapId || 'm2', itemId: 'dr' }, conn, netD, () => false, { wpVtt: { on: () => true }, wpDiceCore: null, wpFogCore: FCd, wpFog: { redraw: () => { out.redraws++; }, invalidateSeen: id => out.seen.push(id) } }, null, e => { throw e; }, () => ({ id: 'c1', items }), () => (o.viewing === 'm2' ? m2 : m1), () => { out.saves++; }, () => {}, moveModeD);
+        return { open: door.doorOpen === true, sent: out.sent.map(m => m.type + ':' + m.reason), saves: out.saves, redraws: out.redraws, items: out.items, seen: out.seen };
+    };
+    const aw = { away: runAway(), here: runAway({ viewing: 'm2' }), notOn: runAway({ at: 'm1' }), far: runAway({ far: true }), none: runAway({ mapId: 'm9' }), proto: runAway({ mapId: '__proto__' }), page: runAway({ mapId: 'constructor' }), stub: runAway({ stub: true }) };
+    const nothing = j({ open: false, sent: [], saves: 0, redraws: 0, items: [], seen: [] });
+    check('1.5.9 door-req on a map the GM is not viewing (run for real with the real fogcore): a player standing on map m2 opens the door beside their token while the GM looks at m1 — saved once, sent to that map\'s holders through net.sendItem (vision judged afresh by the save, as for the map on screen), the GM\'s overlay not drawn; on m2 itself the door opens as before with the overlay drawn and nothing extra sent; a player not on that map, or too far from the door, is answered far as before; a map that is not there, a prototype\'s name and a stub answer nothing',
+        j(aw.away) === j({ open: true, sent: [], saves: 1, redraws: 0, items: ['c1/m2'], seen: [] }) && j(aw.here) === j({ open: true, sent: [], saves: 1, redraws: 1, items: [], seen: [] })
+        && j(aw.notOn) === j({ open: false, sent: ['door-deny:far'], saves: 0, redraws: 0, items: [], seen: [] }) && j(aw.far) === j({ open: false, sent: ['door-deny:far'], saves: 0, redraws: 0, items: [], seen: [] })
+        && j(aw.none) === nothing && j(aw.proto) === nothing && j(aw.page) === nothing && j(aw.stub) === nothing
+        && !drSrc.includes('only the GM\'s current map'), j(aw));
     // see-through barriers (1.5.1): a barrier's door is a door to the same request — the piece carries barrier and no blocksSight
     const runBar = (over, o) => runDoor(Object.assign({ blocksSight: undefined, barrier: true }, over), o), quietD = j({ open: false, sent: [], saves: 0 });
     const lineGate = { type: 'path', x: 50, y: 50, w: 10, h: 50, baseW: 10, baseH: 50, pts: [[0, 0], [0, 50]] };
@@ -4712,6 +4735,25 @@ pendingChecks.push((async () => {
     check('158 setTargetAs and aimsOf (the targetas slice, run for real): the host keys a pointer of one of the GM\'s characters by its token, with its name and its source, sends the pointers and says so, and the same again clears it; refused for the token itself, a key too long, no token, an id that is no text, a player\'s app and no table; what targets a token is each attacker\'s own token on that map (a player\'s character, one of the GM\'s characters), never the token itself, a waiting token, a source its key does not name, another map\'s pointer or one at another token; judged for a player on the host, never an attacker the GM hid or their sight drops; for the GM every one; a player\'s app reads its own copy',
         as1 === true && as1T === j({ 'tk:t_orc': { id: 't_ana', mapId: 'm1', name: 'Orc', from: 't_orc' } }) && as1B === 1 && as2 === true && as2T === '{}' && H1.st.bc === 2 && /Orc is targeting Ana/.test(H1.st.toasts[0]) && asNo.every(x => x === false)
         && aimGm === 't_orc,t_hid,t_q' && aimP === 't_orc,t_q' && aimFog === 't_q' && aimFogGm === 't_orc,t_hid,t_q' && aimC === 't_orc,t_hid,t_q' && aimOff === '', j([as1T, asNo, aimGm, aimP, aimFog, aimFogGm, aimC]));
+    // 1.5.9 (the owner's game of 2026-10-25, by prompt: "Both places"): net.clearTargetOf, the GM taking a player's pointer off (or one of the GM's
+    // characters'), run for real in the targetas slice beside the real broadcastTargets and targetsFor of the combats slice, on a table with fog and one without
+    const ctRun = (o) => {
+        const S = scen(o.fog ? { fog: true, drops: {} } : undefined), st = { toasts: [], applied: [] };
+        S.net.myId = 'u_gm'; S.net.targets = { u_a: { id: 't_orc', mapId: 'm1', name: 'Ana <b>' }, u_b: { id: 't_gob', mapId: 'm1', name: 'Bea' }, 'tk:t_gob': { id: 't_orc', mapId: 'm1', name: 'Goblin', from: 't_gob' } };
+        if (o.role) S.net.role = o.role;
+        const N = new Function('net', 'applyTarget', 'broadcastTargets', 'toast', 'getActiveCampaign', 'fogDrop', 'mapFogged', taS + '\nreturn net;')(S.net,
+            (pid, name, t) => { st.applied.push([pid, name, t]); if (t) S.net.targets[pid] = t; else delete S.net.targets[pid]; }, () => S.N.broadcastTargets(), t => st.toasts.push(t), () => S.camp, () => null, () => false);
+        S.conns.forEach(c => { c.sent.length = 0; }); const b0 = S.bcast.length;
+        const ret = o.pids.map(p => N.clearTargetOf(p));
+        const per = S.conns.map(c => c.sent.filter(m => m.type === 'targets').map(m => tgKeys(m.targets)));
+        return { ret, left: tgKeys(S.net.targets), per, bc: S.bcast.slice(b0).filter(m => m.type === 'targets').map(m => tgKeys(m.targets)), toasts: st.toasts };
+    };
+    const ctF = ctRun({ fog: true, pids: ['u_a'] }), ctU = ctRun({ pids: ['u_a', 'tk:t_gob'] }), ctNo = ctRun({ pids: ['u_zz', '', 5, null, '__proto__', 'x'.repeat(81)] }), ctP = ctRun({ role: 'client', pids: ['u_a'] });
+    check('1.5.9 net.clearTargetOf (the targetas slice run for real with the real broadcastTargets and targetsFor): the host takes a player\'s pointer off and the pointers go to everyone afresh, each player\'s own copy on a fogged table and the one broadcast on a table without, with the cleared pointer in none of them; one of the GM\'s characters\' pointers is cleared the same way; the GM is told whose it was, the name as given (the notice sets it as text); a key that holds no pointer, one that is no text, empty, too long or a prototype\'s name changes nothing and sends nothing; nothing on a player\'s app',
+        j(ctF.ret) === j([true]) && ctF.left === 'tk:t_gob,u_b' && ctF.per.slice(0, 2).every(l => l.length === 1 && !/u_a/.test(l[0])) && ctF.bc.length === 0 && j(ctF.toasts) === j(['Ana <b>\u2019s target is cleared.'])
+        && j(ctU.ret) === j([true, true]) && ctU.left === 'u_b' && j(ctU.bc) === j(['tk:t_gob,u_b', 'u_b']) && j(ctU.toasts) === j(['Ana <b>\u2019s target is cleared.', 'Goblin\u2019s target is cleared.'])
+        && ctNo.ret.every(r => r === false) && ctNo.left === 'tk:t_gob,u_a,u_b' && ctNo.bc.length === 0 && ctNo.per.every(l => l.length === 0) && ctNo.toasts.length === 0
+        && j(ctP.ret) === j([false]) && ctP.left === 'tk:t_gob,u_a,u_b' && ctP.toasts.length === 0, j([ctF, ctU, ctNo, ctP]));
     const ioSrcM0 = fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', 'io.js'), 'utf8').replace(/\r\n/g, '\n'), undoLine = (ioSrcM0.match(/\n[^\n]*if \(hosting\) \{ window\.wpNet\.applyingRemote = true; save\(true\);[^\n]*/) || [''])[0];
     check('fold M0 (source): the GM\'s undo while hosting (io.js), saved as a remote change so the host\'s save hook returns early, calls net.syncCombatHidden itself, after the map and the other maps it undid went out',
         undoLine.length > 0 && /window\.wpNet\.sendItem\(camp\.id, item\.id\);[^\n]*wUndo\.forEach\([^\n]*broadcastItemFiltered[^\n]*\}\); if \(window\.wpNet\.syncCombatHidden\) window\.wpNet\.syncCombatHidden\(\); \}/.test(undoLine), undoLine.slice(0, 400));

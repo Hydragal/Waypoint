@@ -1,3 +1,17 @@
+WAYPOINT 1.5.9 — What's New
+============================
+
+At the table
+- A player's click on a door now works on the map they stand on, whatever
+  map the GM is looking at. Before, the click did nothing while the GM
+  had another map open.
+- A player's own token that stands over a door's edge no longer hides the
+  door: a click there opens or closes the door, and the token stays
+  selected and can still be dragged.
+- The GM can clear someone's target. Right-click the token they target
+  for Clear and their name, or right-click their chip on the party
+  strip. Everyone at the table sees the pointer go.
+
 WAYPOINT 1.5.8 — What's New
 ============================
 
