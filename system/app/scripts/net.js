@@ -5296,6 +5296,17 @@ net.setTargetAs = function(from, itemId, mapId, itemName) {
     toast(next ? who + ' is targeting ' + (itemName || 'that token') + '. Do it again to clear it.' : who + '\u2019s target is cleared.');
     return true;
 };
+// 1.5.9 (the owner's game of 2026-10-25, by prompt: "Both places"): the GM takes a pointer off, a player's (keyed by their profile id) or one of the
+// GM's characters' ('tk:' and its token's id), from the token's right-click menu or the party strip. The host's alone; the pointers go to the
+// table afresh (broadcastTargets, per recipient as ever) and the GM is told whose it was, the name set as text by the notice. A key that holds
+// no pointer changes nothing and sends nothing
+net.clearTargetOf = function(pid) {
+    if (!net.active || net.role !== 'host' || typeof pid !== 'string' || !pid || pid.length > 80 || !net.targets || !Object.prototype.hasOwnProperty.call(net.targets, pid) || !net.targets[pid]) return false;
+    var t = net.targets[pid], who = String((t && typeof t.name === 'string' && t.name) || 'Player').slice(0, 40);
+    applyTarget(pid, who, null); broadcastTargets();
+    toast(pid === net.myId ? 'Target cleared.' : who + '\u2019s target is cleared.');
+    return true;
+};
 // What targets a token on a map, as the facing rules read it (systemcore setAimSource, registered by the sheet module): each attacker's own
 // token there, a player's character or one of the GM's characters, never the token itself. Judged for a viewer on the host (a player's
 // roll): only an attacker that player sees, never one the GM hid or their sight drops. With no viewer, every attacker this screen holds; on a
@@ -7231,7 +7242,8 @@ function handleMessage(msg, conn) {
         if (_doorLimit && _doorLimit.allow(conn.peer, Date.now()) !== true) return;    // a toggle triggers a per-recipient resend, so keep it tight; silent drop
         var denyDR = function(reason) { try { conn.send({ type: 'door-deny', reason: reason }); } catch (e) { sendFailed(e); } };
         var campDR = getActiveCampaign(); if (!campDR) return;
-        var amDR = getActiveMap(); if (!amDR || amDR.id !== msg.mapId) return;         // only the GM's current map
+        var amDR = Object.prototype.hasOwnProperty.call(campDR.items || {}, msg.mapId) ? campDR.items[msg.mapId] : null;   // 1.5.9: the map the player stands on, whichever map the GM's screen shows (own keys only: an id from the wire)
+        if (!amDR || amDR.type !== 'map' || amDR.stub === true) return;
         var profDR = net.roster[conn.peer]; if (!profDR) return;
         if (profDR.location && profDR.location !== amDR.id) { denyDR('far'); return; }   // the player must BE on this map, not merely own a token left behind on it
         var doorEl = (amDR.whiteboard || []).find(function(w) { return w && w.id === msg.itemId; });
@@ -7248,8 +7260,12 @@ function handleMessage(msg, conn) {
         });
         if (!adjacentR) { denyDR('far'); return; }
         doorEl.doorOpen = !doorEl.doorOpen;
-        save(true);                                                                   // host save -> onLocalSave: invalidateVision + resend the map fog-filtered per recipient
-        if (window.wpFog) window.wpFog.redraw();                                       // refresh the GM's own overlay
+        var onDR = getActiveMap(), hereDR = !!onDR && onDR.id === amDR.id;
+        save(true);                                                                   // host save -> onLocalSave: invalidateVision + resend the map on screen fog-filtered per recipient
+        if (!hereDR && net.sendItem) {                                                // 1.5.9: a map the GM is not viewing goes to its holders as a change to that map does (per recipient, possession-held; save(true) has judged vision afresh, as for the map on screen)
+            net.sendItem(campDR.id, amDR.id);
+        }
+        if (hereDR && window.wpFog) window.wpFog.redraw();                             // refresh the GM's own overlay, only where that map is on screen
         // [netcheck:doorreq-end]
     } else if (msg.type === 'door-deny' && net.role === 'client') {
         toast(msg.reason === 'locked' ? 'The GM has that door locked.' : msg.reason === 'far' ? 'Move a token next to that door to open it.' : 'Cannot open that door right now.');

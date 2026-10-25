@@ -2827,6 +2827,7 @@ window.wpFitToGrid = fitToGrid;
               if (viewingOther) items.push({ act: 'summonAllHere', label: '\uD83D\uDCE3 Summon everyone to this map (' + amTitle + ')' });
               var waitT = ownerId && window.wpSystemCore && window.wpSystemCore.waitingTokensOf ? window.wpSystemCore.waitingTokensOf(camp, ownerId)[0] : null;   // Onboarding F1a
               if (waitT) { items.push({ act: 'waitHide', label: (waitT.w.hidden ? '\uD83D\uDC41 Show ' : '\uD83D\uDE48 Hide ') + name + '\u2019s waiting token' }); items.push({ act: 'waitRemove', label: '\u2716 Remove ' + name + '\u2019s waiting token (for this session)' }); }
+              if (!window.wpStream && window.wpNet.targets && Object.prototype.hasOwnProperty.call(window.wpNet.targets, ownerId) && window.wpNet.targets[ownerId] && typeof window.wpNet.clearTargetOf === 'function') items.push({ act: 'clearTarget', label: '\u25EF Clear ' + name + '\u2019s target' });   // 1.5.9: the GM takes a player's pointer off (the label through esc, as every row's)
               if (connected) {
                   var pausedP = window.wpNet.isPlayerPaused && window.wpNet.isPlayerPaused(ownerId);
                   items.push({ act: pausedP ? 'unpausePlayer' : 'pausePlayer', label: (pausedP ? '\u25B6\uFE0F Resume ' : '\u23F8\uFE0F Pause ') + name + ' (just this player)' });
@@ -2887,6 +2888,7 @@ window.wpFitToGrid = fitToGrid;
           else if (act === 'summonAllHere') { var amA = getActiveMap(); if (amA && amA.type === 'map' && window.wpNet.summonAllToMap) window.wpNet.summonAllToMap(amA.id); }
           else if (act === 'waitHide') { var cWt = getActiveCampaign(), tWt = cWt && window.wpSystemCore && window.wpSystemCore.waitingTokensOf ? window.wpSystemCore.waitingTokensOf(cWt, key.slice(2))[0] : null; if (tWt && window.wpNet.hideWaiting) window.wpNet.hideWaiting(key.slice(2), !tWt.w.hidden); }   // Onboarding F1a
           else if (act === 'waitRemove') { if (window.wpNet.removeWaiting && window.wpNet.removeWaiting(key.slice(2))) toast('Waiting token removed for this session \u2014 Give a character\u2026 still works.'); }
+          else if (act === 'clearTarget') { if (window.wpNet.clearTargetOf) window.wpNet.clearTargetOf(key.slice(2)); }   // 1.5.9: the host's alone (clearTargetOf answers nothing elsewhere)
           else if (act === 'pausePlayer') { if (window.wpNet.pausePlayer) window.wpNet.pausePlayer(key.slice(2), true); }
           else if (act === 'unpausePlayer') { if (window.wpNet.pausePlayer) window.wpNet.pausePlayer(key.slice(2), false); }
           else if (act === 'joinCard') { if (window.wpJoinCard) window.wpJoinCard.show(); }
@@ -2908,19 +2910,36 @@ window.wpFitToGrid = fitToGrid;
   /* ---- targeting (players) ----
      The owner's ruling of 2026-10-01: a plain click on a token targets nothing (a look at a token used to target it by mistake). A player
      targets by the token's right-click menu, or with T while pointing at one (showTargetMenu / toggleTarget below); the same again, or Esc,
-     clears. A click on a door still asks the host to open or close it. */
+     clears. A click on a door still asks the host to open or close it. 1.5.9 (the owner's game of 2026-10-25): a token of the player's own that
+     stands beside a door overlaps the door's edge, so a press there landed on the token and opened nothing; a press on a token of their own
+     with a door under it at that point asks for the door too, while the token's own selection and drag go on exactly as before. */
+  function wbIdsAt(x, y) {   // the ids of the board's pieces under a point, topmost first, each once
+      var out = [], els = document.elementsFromPoint ? document.elementsFromPoint(x, y) : [];
+      for (var i = 0; i < els.length; i++) { var w = els[i] && els[i].closest ? els[i].closest('#whiteboard .wb-item') : null, id = w && w.dataset ? w.dataset.id : ''; if (id && out.indexOf(id) < 0) out.push(id); }
+      return out;
+  }
   (function wireTargeting() {
       var down = null;
       document.addEventListener('pointerdown', function(e) {
           down = null;
           if (e.button !== 0 || !e.target || !e.target.closest) return;
-          if (!(window.wpNet && window.wpNet.active && window.wpNet.role === 'client')) return;
+          if (!(window.wpNet && window.wpNet.active && window.wpNet.role === 'client') || window.wpStream) return;
           if (window.isDrawingMode || window.isEraserMode || window.isMeasureMode || window.isPanMode || window.isFogMode) return;
           var el = e.target.closest('#whiteboard .wb-item'); if (!el) return;
           var am = getActiveMap(); if (!am || am.type !== 'map' || state.viewMode !== 'visual') return;
           var item = am.whiteboard.find(function(x) { return x.id === el.dataset.id; });
+          var myId = window.wpNet.myId, idsAt = wbIdsAt;
           // [fogcheck:doorclick-start]
-          if (item && (item.blocksSight || item.barrier === true) && item.sightType === 'door' && !item.hidden) down = { doorId: item.id, mapId: am.id, x: e.clientX, y: e.clientY };   // a client clicks a door (a wall's or a see-through barrier's) to request opening/closing it
+          var doorOf = function(it) { return !!it && (it.blocksSight || it.barrier === true) && it.sightType === 'door' && !it.hidden; };
+          if (doorOf(item)) down = { doorId: item.id, mapId: am.id, x: e.clientX, y: e.clientY };   // a client clicks a door (a wall's or a see-through barrier's) to request opening/closing it
+          else if (item && (item.isChar || item.waiting) && !item.hidden && !!myId && item.ownerId === myId && typeof idsAt === 'function') {   // 1.5.9: a press on a token of their own: the topmost door under it at that point
+              var under = idsAt(e.clientX, e.clientY) || [];
+              for (var iU = 0; iU < under.length; iU++) {
+                  if (under[iU] === item.id) continue;
+                  var dU = (am.whiteboard || []).find(function(x) { return x && x.id === under[iU]; });
+                  if (doorOf(dU)) { down = { doorId: dU.id, mapId: am.id, x: e.clientX, y: e.clientY, via: item.id }; break; }
+              }
+          }
           // [fogcheck:doorclick-end]
       }, true);
       document.addEventListener('pointerup', function(e) {
@@ -2928,7 +2947,7 @@ window.wpFitToGrid = fitToGrid;
           var d = down; down = null;
           if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 6) return;   // a drag (of your own token underneath), not a click
           var el = e.target && e.target.closest && e.target.closest('#whiteboard .wb-item');
-          if (el && el.dataset.id === d.doorId && window.wpNet.doorReq) window.wpNet.doorReq(d.mapId, d.doorId);   // door open/close request (host validates adjacency + lock)
+          if (el && (el.dataset.id === d.doorId || (d.via && el.dataset.id === d.via)) && window.wpNet.doorReq) window.wpNet.doorReq(d.mapId, d.doorId);   // door open/close request (host validates adjacency + lock); 1.5.9: or let go on the token of their own that lies over it
       }, true);
       document.addEventListener('keydown', function(e) {
           if (e.key === 'Escape') {   // 1.5.4 (the owner, 2026-10-17: "Close the top one"): only when nothing else was open, and never from a field, whose key it is
@@ -8884,7 +8903,8 @@ function gmFightModel(map, items, sel) {   // sel (158): the one token the GM ha
     ids.forEach(function(f) { var c = n.combats[f]; if (c && Array.isArray(c.rows)) c.rows.forEach(function(r) { if (r && typeof r.tokId === 'string') inIds[r.tokId] = f; }); });
     var one = toks.length === 1 && items.length === 1 && !toks[0].hidden ? toks[0] : null, t = n.targets && n.myId ? n.targets[n.myId] : null;
     var as = one && sel && typeof sel === 'object' && sel.isChar && !sel.waiting && sel.id !== one.id && (map.whiteboard || []).indexOf(sel) >= 0 ? sel : null, ta = as && n.targets ? n.targets['tk:' + as.id] : null;   // 158: Target as the selected character
-    return { toks: toks, running: ids.length > 0, fights: ids, add: toks.filter(function(w) { return typeof inIds[w.id] !== 'string' && !w.hidden; }), drop: toks.filter(function(w) { return typeof inIds[w.id] === 'string'; }), target: one, mine: !!(one && t && t.id === one.id && t.mapId === map.id), as: as, asMine: !!(as && ta && ta.id === one.id && ta.mapId === map.id) };
+    var clears = one && n.targets && typeof n.clearTargetOf === 'function' ? Object.keys(n.targets).filter(function(k) { var p = n.targets[k]; return k !== n.myId && !!p && typeof p === 'object' && p.id === one.id && p.mapId === map.id; }).slice(0, 12).map(function(k) { return { pid: k, name: String(n.targets[k].name || 'Player').slice(0, 40) }; }) : [];   // 1.5.9: each pointer someone else holds at it, which the GM may clear
+    return { toks: toks, running: ids.length > 0, fights: ids, add: toks.filter(function(w) { return typeof inIds[w.id] !== 'string' && !w.hidden; }), drop: toks.filter(function(w) { return typeof inIds[w.id] === 'string'; }), target: one, mine: !!(one && t && t.id === one.id && t.mapId === map.id), as: as, asMine: !!(as && ta && ta.id === one.id && ta.mapId === map.id), clears: clears };
 }
 function gmEsc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }   // 158: a character's name, the one word of a token this menu writes
 function gmFightHtml(m) {
@@ -8892,6 +8912,7 @@ function gmFightHtml(m) {
     var h = '';
     if (m.target && m.as) { var asN = gmEsc(String(m.as.charName || m.as.name || 'your character').slice(0, 40)); h += '<div class="menu-item cm-gm-fight" data-fight="targetas" title="' + (m.asMine ? 'Stop ' + asN + ' targeting it' : asN + ' targets it: its rolls read the range from its own token, and the facing rules know where the attack comes from') + '">' + (m.asMine ? '&#9711; ' + asN + ' stops targeting' : '&#9678; Target as ' + asN) + '</div>'; }
     if (m.target) h += '<div class="menu-item cm-gm-fight" data-fight="target" title="' + (m.mine ? 'Stop targeting it (Esc does too)' : 'Point at it as the GM: your NPCs&rsquo; rolls read the range to it, and it is ticked when you start a fight (T while pointing at a token does the same)') + '">' + (m.mine ? '&#9711; Clear target' : '&#9678; Target') + '</div>';
+    if (m.target && Array.isArray(m.clears)) m.clears.forEach(function(c, i) { var cN = gmEsc(c.name); h += '<div class="menu-item cm-gm-fight" data-fight="clear:' + i + '" title="Take ' + cN + '&rsquo;s target pointer off this token. Everyone at the table sees it go">&#9711; Clear ' + cN + '&rsquo;s target</div>'; });   // 1.5.9: the row says the pointer by its place in the model, never by its key
     if (!m.running) h += '<div class="menu-item cm-gm-fight" data-fight="start" title="Open the roster with ' + (m.toks.length === 1 ? 'this token' : 'these tokens') + ' ticked, and whoever is targeted">&#9876; Start combat&hellip;</div>';
     else {
         var two = Array.isArray(m.fights) && m.fights.length > 1;
@@ -8905,6 +8926,7 @@ function gmFightDo(map, m, act) {
     var n = window.wpNet; if (!m || !n || !map) return false;
     if (act === 'target') { if (!m.target || !n.setTarget) return false; n.setTarget(m.target.id, map.id, m.target.charName || m.target.name); return true; }
     if (act === 'targetas') { if (!m.target || !m.as || !n.setTargetAs) return false; return n.setTargetAs(m.as, m.target.id, map.id, m.target.charName || m.target.name) === true; }
+    if (typeof act === 'string' && /^clear:\d{1,2}$/.test(act)) { var cl = Array.isArray(m.clears) ? m.clears[Number(act.slice(6))] : null; if (!cl || typeof n.clearTargetOf !== 'function') return false; return n.clearTargetOf(cl.pid) === true; }   // 1.5.9
     if (act === 'start') { if (m.running) return false; openCombatModal(map.id, { pre: m.toks.filter(function(w) { return !w.hidden; }).map(function(w) { return w.id; }) }); return true; }
     if (act === 'new') { if (!m.running || !m.add.length) return false; openCombatModal(map.id, { fresh: true, pre: m.add.map(function(w) { return w.id; }) }); return true; }   // fold 2: another fight beside the one on this map
     var ids = Array.isArray(m.fights) ? m.fights.filter(function(f) { return !!(n.combats && Object.prototype.hasOwnProperty.call(n.combats, f) && n.combats[f] && Array.isArray(n.combats[f].rows)); }) : []; if (!ids.length || (act !== 'add' && act !== 'drop')) return false;
