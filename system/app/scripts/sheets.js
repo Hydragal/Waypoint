@@ -2707,6 +2707,7 @@ function ctCtl(host, entry, c, f, spec, editable, cells) {
     spec.counters.forEach(function(t) {
         if (!t || typeof t.key !== 'string') return;
         var cell = byKey[t.key], v = cell && typeof cell.value === 'number' ? cell.value : (entry.ct && typeof entry.ct[t.key] === 'number' ? entry.ct[t.key] : (t.def || 0)), mx = cell && typeof cell.max === 'number' ? cell.max : null;
+        if (mx === 0 && !(entry.ct && typeof entry.ct[t.key] === 'number' && entry.ct[t.key] > 0)) return;   // 1.5.8: a counter whose most works out to 0 on this row holds nothing here (a sword's Charges): no chip
         var w = el('span', 'sheet-chip sheet-item-ct'); w.title = t.label || t.key;
         w.appendChild(el('span', 'sheet-item-ctl', (t.label || t.key) + ' '));
         var set = function(n) { var o = {}; o[t.key] = n; commitItem(c, f, { op: 'set', rowId: rid, facts: { ct: o } }); };

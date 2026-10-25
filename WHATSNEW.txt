@@ -29,6 +29,7 @@ System editor
   stack only where it is the same thing in the same state. Formulas read
   Row.loaded and Row.loadmax. Loads only where is a formula a row must
   meet before it may load, so a sword shows no Load where a blaster does.
+  A counter whose most works out to 0 on a row shows nothing there.
 - Counted once: in the Lists tab, rows whose Group stat reads the same
   figure, not 0, are one thing held two ways. The higher applies, and the
   others give none of their changes. Formulas read Row.once,
