@@ -16,6 +16,11 @@ System editor
   saying what opened it, and goes when the row is switched off. A row of
   it bought the usual way takes its place. Formulas read Row.opened as 1
   on an opened row, so its cost can be 0.
+- A roll's + Then... changes can happen On a critical success or On a
+  critical failure too, with 3d6 roll-under criticals as the Roll outcomes
+  on the Combat card. On success still counts every success, and On
+  failure every failure. A change's amount can read RollCrit: 1 on a
+  critical success, minus 1 on a critical failure, and 0 otherwise.
 
 Chat
 - A roll's card lists what changed the values it rolled against. Each

@@ -3465,6 +3465,43 @@ pendingChecks.push((async () => {
         gA.ret.ok && j(gA.pushed) === j([['global', '', 3]]) && j(gA.vals) === j({ f_j: 1 }) && gG.ret.ok && gG.pushed[0][1] === 'gm' && gG.pushed[0][2] === 3 && gG.toasts.some(t => /GMFig/.test(t)), j([gA.pushed, gA.vals, gG.pushed, gG.toasts]));
 })());
 
+// 1.5.8 (the owner, 2026-10-25: "a roll's Then gets critical success and critical failure beside success and failure"): the host's roll-req branch
+// and the GM's own net.diceRoll apply an On a critical success or On a critical failure change only on that outcome, by the system's Roll outcomes
+// (3d6 roll-under criticals), and a consequence's amount reads RollCrit; the suite's own dice (a random source handed to the formula engine)
+pendingChecks.push((async () => {
+    const url = f => 'file:///' + path.resolve(path.join(__dirname, '..', 'system', 'app', 'scripts', f)).split(String.fromCharCode(92)).join('/');
+    const Sx = await import(url('systemcore.js')), Fx0 = await import(url('formula.js')), Dx = await import(url('dicecore.js'));
+    const src4 = fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', 'net.js'), 'utf8').replace(/\r\n/g, '\n');
+    const line = k => { const i = src4.indexOf(k); if (i < 0) throw new Error('netcheck: ' + k + ' not found'); return src4.slice(i, src4.indexOf('\n', i)); };
+    const helpers = ['function own(', 'function peerProfileId(', 'function fxLib(', 'function itemLib(', 'function diceFrom('].map(line).join('\n') + '\n';
+    const rqSrc = (ordersSrc + '\n' + between('// [netcheck:rollreq-start]', '// [netcheck:rollreq-end]', 'rollreq')), drSrc = between('// [netcheck:diceroll-start]', '// [netcheck:diceroll-end]', 'diceroll');
+    let dq = []; const Fx = Object.assign({}, Fx0, { evaluate: (e, o) => Fx0.evaluate(e, Object.assign({ random: () => { if (!dq.length) throw new Error('netcheck: no die left'); return dq.shift(); } }, o)) });
+    const rawK = { v: 1, name: 'K', fields: [{ id: 'f_st', key: 'Steady', kind: 'number', def: 4 }, { id: 'f_gd', key: 'Guard', kind: 'number', def: 0 }, { id: 'f_x', key: 'Spark', kind: 'number', def: 0, min: 0 }],
+        rolls: [{ id: 'r_sg', label: 'Steady Guard', formula: '3d6 <= 12', then: [{ f: 'f_gd', formula: 'Steady + max(0, RollCrit)', set: true, when: 'hit' }, { f: 'f_gd', formula: 'floor(Steady / 2) * (RollCrit + 1)', set: true, when: 'miss' }, { f: 'f_x', formula: '1', add: true, when: 'crit' }, { f: 'f_x', formula: '5', set: true, when: 'fumble' }] }] };
+    const sysK = Sx.cleanSystem(Object.assign({}, rawK, { combat: { checks: 'under3d6' } }), { F: Fx, gmView: true }), sysN = Sx.cleanSystem(rawK, { F: Fx, gmView: true });
+    const runK = (sys, dice) => { const out = { table: [], sent: [], deltas: [] }; dq = dice.slice();
+        const camp = { id: 'k', activeItemId: 'm1', system: sys, chars: { c_a: { id: 'c_a', name: 'Kael', ownerId: 'u_a', npc: false, values: {} } }, items: { m1: { type: 'map', whiteboard: [] } } };
+        const net = { role: 'host', paused: false, roster: { pA: { id: 'u_a', name: 'Pat', location: 'm1' } }, combats: {}, syncCharDelta: (id, d) => out.deltas.push(JSON.parse(JSON.stringify(d))) };
+        const conn = { peer: 'pA', send(m) { packCheck(m); out.sent.push(JSON.parse(JSON.stringify(m))); } };
+        const win = { wpFormula: Fx, wpSheets: { playerSystem: c => Sx.cleanSystem(c.system, { F: Fx, gmView: false }), charChanged() {} }, wpVtt: { on: () => true, rulesOn: () => true } };
+        new Function('msg', 'conn', 'net', 'DC', 'SC', 'window', 'getActiveCampaign', 'peerPaused', 'sendFailed', 'sendTable', 'pushRoll', 'logEvent', 'saveRemoteSoon', 'var diceLimit = null, _diceSlowSaid = {};\n' + helpers + rqSrc)(
+            { type: 'roll-req', rid: 'q1', charId: 'c_a', act: 'r_sg', expr: '3d6 <= 12' }, conn, net, () => Dx, () => Sx, win, () => camp, () => false, e => { throw e; }, rec => { packCheck(rec); out.table.push(JSON.parse(JSON.stringify(rec))); }, () => {}, () => {}, () => {});
+        out.vals = camp.chars.c_a.values; out.left = dq.length; return out; };
+    const kC = runK(sysK, [1, 1, 1]), kS = runK(sysK, [2, 3, 4]), kF = runK(sysK, [5, 5, 4]), kU = runK(sysK, [6, 6, 6]), kN = runK(sysN, [1, 1, 1]), kNu = runK(sysN, [6, 6, 6]);
+    check('1.5.8 a player\'s roll (the host\'s roll-req branch, the suite\'s own dice): a critical success (3) takes On success with RollCrit 1 (Guard 4 + 1) and On a critical success (Spark +1); a success (9) Guard 4 alone; a failure (14) half of it (2); a critical failure (18) none (0) and On a critical failure (Spark 5); a system with no criticals takes neither on the same dice, RollCrit reading 0',
+        kC.table.length === 1 && kC.left === 0 && j(kC.vals) === j({ f_gd: 5, f_x: 1 }) && j(kS.vals) === j({ f_gd: 4 }) && j(kF.vals) === j({ f_gd: 2 }) && j(kU.vals) === j({ f_gd: 0, f_x: 5 })
+        && j(kN.vals) === j({ f_gd: 4 }) && j(kNu.vals) === j({ f_gd: 2 }) && j(kC.deltas) === j([{ f_gd: 5, f_x: 1 }]), j([kC.vals, kS.vals, kF.vals, kU.vals, kN.vals, kNu.vals, kC.deltas]));
+    const runKG = (sys, dice) => { const out = { pushed: [] }; dq = dice.slice();
+        const camp = { id: 'k', system: sys, chars: { c_a: { id: 'c_a', name: 'Kael', ownerId: 'u_a', npc: false, values: {} } } };
+        const net = { active: true, role: 'host', stream: false, conns: [], roster: {}, syncCharDelta() {} };
+        const dr = new Function('net', 'DC', 'SC', 'window', 'getActiveCampaign', 'getProfile', 'toast', 'ui', 'sendFailed', 'sendTable', 'pushRoll', 'logEvent', 'save', 'var _dicePending = null;\n' + helpers + drSrc + '\nreturn net.diceRoll;')(
+            net, () => Dx, () => Sx, { wpFormula: Fx, wpVtt: { on: () => true }, wpSheets: { tokenCtxFor: () => null, charChanged() {} } }, () => camp, () => ({ id: 'u_gm', name: 'GM' }), () => {}, () => null, e => { throw e; }, () => {}, (rec, res, scope) => out.pushed.push(scope), () => {}, () => {});
+        out.ret = dr('3d6 <= 12', { charId: 'c_a', act: 'r_sg' }); out.vals = camp.chars.c_a.values; return out; };
+    const gC = runKG(sysK, [1, 1, 1]), gS = runKG(sysK, [2, 3, 4]), gF = runKG(sysK, [5, 5, 4]), gU = runKG(sysK, [6, 6, 6]), gN = runKG(sysN, [6, 6, 6]);
+    check('1.5.8 the GM\'s own roll (net.diceRoll): On a critical success and On a critical failure happen only on that outcome, RollCrit read in the amounts; a system with no criticals as before',
+        gC.ret.ok && j(gC.vals) === j({ f_gd: 5, f_x: 1 }) && j(gS.vals) === j({ f_gd: 4 }) && j(gF.vals) === j({ f_gd: 2 }) && j(gU.vals) === j({ f_gd: 0, f_x: 5 }) && j(gN.vals) === j({ f_gd: 2 }), j([gC.vals, gS.vals, gF.vals, gU.vals, gN.vals]));
+})());
+
 // Chat cards (owner 2026-09-27): a damage roll's mark — the host puts it on the record from the roll entry its formula matched (a system roll by
 // its id, a list's roll by its index), never from the player's word; the GM's own roll from its entry, or this machine's own word (a thrown item's damage)
 pendingChecks.push((async () => {
