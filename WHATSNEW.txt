@@ -36,6 +36,12 @@ System editor
   on the Combat card. On success still counts every success, and On
   failure every failure. A change's amount can read RollCrit: 1 on a
   critical success, minus 1 on a critical failure, and 0 otherwise.
+- Dice drawings: a roll's button on the sheet and the HUD wears a drawing
+  of its die, picked from the dice it rolls. 3d6 shows three dice and d20
+  a d20. The Die list beside a roll, a list's roll or a field's roll
+  picks another: a coin, d4, d6, 2d6, 3d6, d8, d10, d12, d20, d100 or
+  Fate dice. The card in Table Chat, the dice roller's buttons and the
+  combat roster wear the drawings too.
 
 Chat
 - A roll's card lists what changed the values it rolled against. Each

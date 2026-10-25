@@ -208,6 +208,28 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         const fe = (tag, cls, text) => ({ tag, className: cls || '', textContent: text === undefined ? '' : String(text), children: [], style: {}, title: '', appendChild(c) { this.children.push(c); return c; } });
         const rcard = new Function('el', 'playerHue', 'chatTime', 'net', 'F', 'verdictOf', 'critOf', 'malfOf', 'LIMITS', 'window', 'document', "'use strict';\n" + rcSrc + '\nreturn renderCard;')(fe, () => 0, () => '12:00', () => ({ active: false }), () => F, verdictOf, critOf, D.malfOf, LIMITS, { wpSheets: { systemOf: () => null } }, { createTextNode: t => ({ text: t }) });
         const card = (o, draws, noRes) => { const r = rec(o); return rcard({ roll: r, res: noRes ? null : roll(r.expr, draws) }); };
+        {   // 1.5.8, backlog 149: a card's die, the one its formula rolls, drawn first on its dice line (dice.js dieInto and renderCard, run for real with
+            // the real systemcore dieOf and dieicons.js dieNode on a page that writes down what it is asked and refuses markup)
+            const J = JSON.stringify, S9 = await import(url('systemcore.js')), DI9 = await import(url('dieicons.js'));
+            const diSrc = dj.slice(dj.indexOf('function dieInto(host, rec) {'), dj.indexOf('/* ---------- the card'));
+            const mk9 = (tag, cls, text) => { const e = { tag, className: cls || '', children: [], style: {}, title: '', attrs: {}, appendChild(c) { this.children.push(c); return c; }, insertBefore(c, ref) { const i = ref ? this.children.indexOf(ref) : -1; if (i < 0) this.children.push(c); else this.children.splice(i, 0, c); return c; }, setAttribute(k, v) { this.attrs[k] = String(v); } };
+                Object.defineProperty(e, 'firstChild', { get() { return e.children[0] || null; } }); Object.defineProperty(e, 'innerHTML', { set() { throw new Error('markup'); } }); e.textContent = text === undefined ? '' : String(text); return e; };
+            const doc9 = { createTextNode: t => ({ text: t }), createElementNS: (ns, tag) => Object.assign(mk9(tag), { ns }), createElement() { throw new Error('createElement'); } };
+            let rc9 = null, e9 = '';
+            try { rc9 = new Function('el', 'playerHue', 'chatTime', 'net', 'F', 'verdictOf', 'critOf', 'malfOf', 'LIMITS', 'window', 'document', 'dieNode', "'use strict';\n" + diSrc + rcSrc + '\nreturn renderCard;')(mk9, () => 0, () => '12:00', () => ({ active: false }), () => F, verdictOf, critOf, D.malfOf, LIMITS, { wpSheets: { systemOf: () => null }, wpSystemCore: S9 }, doc9, DI9.dieNode); } catch (e) { e9 = e.stack || e.message; }
+            const brk9 = c => (c.children.find(k => k.className === 'roll-break') || { children: [] }), dieOf9 = c => { const s = brk9(c).children[0]; return s && s.tag === 'svg' ? s : null; };
+            const pathsOf = n => J(DI9.DIE_ICONS[n].map(p => p.d)), drawn = c => { const s = dieOf9(c); return s ? J(s.children.map(p => p.attrs.d)) : ''; };
+            let k3 = null, k20 = null, kF = null, kBad = null, kHost = null;
+            try {
+                k3 = rc9({ roll: rec({ expr: '3d6', draws: [2, 3, 4], label: 'Strength' }), res: roll('3d6', [2, 3, 4]) }); k20 = rc9({ roll: rec({ expr: 'd20 + 5', draws: [11] }), res: roll('d20 + 5', [11]) });
+                kF = rc9({ roll: rec({ expr: '1d20 + 1d6', draws: [5, 2] }), res: roll('1d20 + 1d6', [5, 2]) }); kBad = rc9({ roll: rec({ expr: '2d6', draws: [1, 1] }), res: null });
+                kHost = rc9({ roll: rec({ expr: '2d6 + 1', draws: [3, 3], die: '<img src=x onerror=1>' }), res: roll('2d6 + 1', [3, 3]) });
+            } catch (e) { e9 = e9 || e.stack || e.message; }
+            check('1.5.8 a card draws the die its formula rolls (dice.js dieInto in renderCard, run for real): 3d6 three faces, d20 + 5 a d20, several kinds the d6, each the first thing on its dice line, an svg made by name with its class ico ico-die roll-die-ico; a card whose roll could not be read draws none; a record that names a die of its own is drawn by its formula all the same, and nothing of the record reaches markup',
+                !!k3 && drawn(k3) === pathsOf('3d6') && drawn(k20) === pathsOf('d20') && drawn(kF) === pathsOf('d6') && dieOf9(k3).attrs.class === 'ico ico-die roll-die-ico' && dieOf9(k3).ns === 'http://www.w3.org/2000/svg'
+                && !kBad.children.some(k => k.className === 'roll-break') && drawn(kHost) === pathsOf('2d6') && !J(kHost).includes('onerror')
+                && dj.includes("    if (typeof dieInto === 'function') dieInto(brk, rec);   // 1.5.8: the die its formula rolls, first on the dice line\n    wrap.appendChild(brk);"), e9 || J([k3 && dieOf9(k3), kF && drawn(kF)]));
+        }
         {   // 1.5.8 (book handoff 90 Part B): what changed the values a roll read — the host's list cleaned (cleanMods) and drawn under the dice (modsInto, run for real)
             const md = [{ n: 'Row.Attack', b: 14, a: 17, m: [{ s: 'Battle Rage', v: 3 }], w: [{ s: 'Cracked charm', v: -1, t: 'Skill' }, { s: 'High Guard', v: 1, t: 'Skill' }] }, { n: 'Parry', b: 12, a: 12, w: [{ s: 'Combat Reflexes', v: 1, t: 'ParryBonus' }] }];
             const kept = cleanRoll(Object.assign({}, rec({ label: 'Hit' }), { mods: md }));

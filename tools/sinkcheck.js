@@ -5266,6 +5266,31 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         check('1.5.6 buying and selling, the price box\'s window: in the page once with its buttons, closed by Escape through its close button, and commitItem asking it first for a row not yet priced',
             ixP.split('id="priceModal"').length === 2 && /id="priceOkBtn"/.test(ixP) && /id="priceAltBtn"/.test(ixP) && esc.includes("['priceModal', 'priceCloseBtn']") && shP.includes("if (!q.priced && typeof priceAsk === 'function' && priceAsk(c, f, q)) return;"));
     }
+    {   // 1.5.8, backlog 149: a roll's die from a campaign file reaches a button only as a drawing of the set (sheets.js dieFor and the four buttons'
+        // own statements, run for real with the real systemcore and dieicons.js on a page that writes down every node and refuses markup)
+        const J = JSON.stringify, SYd = await import(modUrl('systemcore.js') + '?dice'), DId = await import(modUrl('dieicons.js') + '?dice'), FRd = await import(modUrl('formula.js') + '?dice'), shD = read('sheets.js');
+        const made = [], mkD = (tag, cls, text) => { const e = { tag, className: cls || '', children: [], attrs: {}, title: '', disabled: false, dataset: {}, appendChild(c) { this.children.push(c); return c; }, insertBefore(c, ref) { const i = ref ? this.children.indexOf(ref) : -1; if (i < 0) this.children.push(c); else this.children.splice(i, 0, c); return c; }, setAttribute(k, v) { this.attrs[k] = String(v); }, addEventListener() {} };
+            Object.defineProperty(e, 'firstChild', { get() { return e.children[0] || null; } }); Object.defineProperty(e, 'innerHTML', { set() { throw new Error('markup'); } }); if (text !== undefined) e.textContent = String(text); made.push(e); return e; };
+        const docD = { createElementNS: (ns, tag) => Object.assign(mkD(tag), { ns }), createElement: tag => mkD(tag), createTextNode: t => ({ text: String(t) }) };
+        const dfA = shD.indexOf('function dieFor('), dfZ = shD.indexOf('\n', dfA), dfSrc = dfA >= 0 && dfZ > dfA ? shD.slice(dfA, dfZ) : '';
+        let dieForD = null, eD = '';
+        try { dieForD = new Function('window', 'document', 'dieNode', dfSrc + '\nreturn dieFor;')({ wpSystemCore: SYd }, docD, DId.dieNode); } catch (e) { eD = e.stack || e.message; }
+        const hostile = SYd.cleanSystem({ v: 1, name: '<img src=x onerror=1>', fields: [{ id: 'f_a', key: 'A', kind: 'number', roll: 'd20 + A', rollDie: '"><script>x</script>' }],
+            rolls: [{ id: 'r_a', label: '<b>Hit</b>', formula: '3d6', die: 'javascript:x' }, { id: 'r_b', label: 'B', formula: '2d6', icon: '\u2694', die: 'd12' }] }, { F: FRd, gmView: true });
+        let nodes = [], eD2 = '';
+        try { nodes = [dieForD(hostile.fields[0].rollDie, hostile.fields[0].roll), dieForD(hostile.rolls[0].die, hostile.rolls[0].formula, 'sheet-roll-die'), dieForD(hostile.rolls[1].die, hostile.rolls[1].formula), dieForD('<svg onload=1>', '<img src=x onerror=1> 1d8', '" onclick="y')]; } catch (e) { eD2 = e.stack || e.message; }
+        const dOf = n => J(n.children.map(p => p.attrs.d)), want = k => J(DId.DIE_ICONS[k].map(p => p.d));
+        const walkD = n => [n].concat((n.children || []).flatMap(walkD)), every = nodes.flatMap(walkD);
+        check('1.5.8 a roll\'s die from a campaign file (sheets.js dieFor, run for real with the real systemcore and dieicons.js): a hostile pick is dropped by the cleaner and the button reads its formula\'s die, a pick of the set is drawn as its drawing, a hostile formula or class handed in draws only a die of the set; every node an svg or a path made by createElementNS, its attributes the class, the grid, aria-hidden and the path alone, and no markup written',
+            nodes.length === 4 && !('rollDie' in hostile.fields[0]) && !('die' in hostile.rolls[0]) && hostile.rolls[1].die === 'd12'
+            && dOf(nodes[0]) === want('d20') && dOf(nodes[1]) === want('3d6') && dOf(nodes[2]) === want('d12') && dOf(nodes[3]) === want('d8') && nodes[3].attrs.class === 'ico ico-die'
+            && every.every(n => (n.tag === 'svg' || n.tag === 'path') && n.ns === 'http://www.w3.org/2000/svg' && Object.keys(n.attrs).every(k => ['class', 'viewBox', 'aria-hidden', 'd'].includes(k)))
+            && !/script|onerror|onload|onclick|javascript/.test(J(every.map(n => n.attrs))), eD || eD2 || J(nodes.map(n => n.attrs)));
+        const wbD = read('whiteboard.js'), dsD = read('dieicons.js');
+        check('1.5.8 the dice drawings written as markup are the app\'s own constants (dieicons.js dieSvg, the combat roster\'s row in whiteboard.js): the name only picks a drawing, a class that is not one plain name is left off, and the roster passes a fixed name',
+            DId.dieSvg('"><img src=x onerror=1>') === DId.dieSvg('d6') && DId.dieSvg('d6', '"><b>') === DId.dieSvg('d6') && /^<svg class="ico ico-die" viewBox="0 0 24 24" aria-hidden="true">(<path( class="ico-pip")? d="[MmLlHhVvAaZz0-9 .,-]+"\/>)+<\/svg>$/.test(DId.dieSvg('3d6'))
+            && wbD.includes("window.wpDieIcons.dieSvg('d6')") && (wbD.match(/wpDieIcons\.dieSvg\(/g) || []).length === 1 && !/innerHTML|insertAdjacentHTML|outerHTML/.test(dsD));
+    }
     summed = true;
     console.log('\n' + pass + ' passed, ' + fail + ' failed.');
     if (fail) process.exit(1);

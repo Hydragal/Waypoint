@@ -178,6 +178,13 @@
   #helpModal .help-pane .ico, #tourCard .ico { width: 1.15em; height: 1.15em; vertical-align: -0.2em; }   /* a tool's own drawing beside its name, in Help and on a tour card: it takes the size of the words */
   .tool:not(.icon) .ico { margin-right: 2px; }
   .seg-btn .ico { width: 14px; height: 14px; vertical-align: -2px; margin-right: 3px; }
+  .ico.ico-die .ico-pip { stroke-width: 2.6; }   /* 1.5.8, backlog 149: a die's pips, strokes of no length drawn round, read as dots */
+  .sheet-field-roll .ico-die { width: 13px; height: 13px; margin: 0; vertical-align: -2px; }
+  .sheet-inline-roll .ico-die, .sheet-item-roll .ico-die { width: 14px; height: 14px; margin-right: 4px; vertical-align: -3px; }
+  .sheet-roll .ico-die.sheet-roll-die { width: 15px; height: 15px; margin-right: 6px; vertical-align: -3px; }
+  .roll-break .ico-die { width: 14px; height: 14px; margin-right: 5px; vertical-align: -3px; color: var(--ink); }
+  .dice-quick button .ico-die { width: 13px; height: 13px; margin-right: 4px; vertical-align: -2px; }
+  .dice-head .ico-die, .combat-roll .ico-die, #combatRollAllBtn .ico-die { width: 14px; height: 14px; vertical-align: -3px; }
   .sidebar h3 .tool .ico, .section-head .tool .ico { width: 13px; height: 13px; vertical-align: -2px; }
   #netBtn.net-live{border-color:var(--green);color:var(--green);box-shadow:0 0 6px rgba(92,184,122,0.5)}
 

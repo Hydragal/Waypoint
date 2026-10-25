@@ -4,6 +4,7 @@
    handlers); the validators, replay and text in dicecore.js. Design of record: docs/DICE_PLAN.md. */
 import { toast } from './io.js';
 import { LIMITS, cleanExpr, composeModifier, withAdvantage, verdictOf, critOf, cardText, fmtNum, malfOf } from './dicecore.js';
+import { dieNode } from './dieicons.js';   // 1.5.8, backlog 149: the dice drawings (pure)
 
 var ui = function(id) { return document.getElementById(id); };
 var NL = String.fromCharCode(10);
@@ -17,6 +18,12 @@ function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.cl
 function playerHue(id) { var h = 0, s = String(id); for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return ((h % 360) + 360) % 360; }
 function chatTime(ts) { if (!ts) return ''; var d = new Date(ts); return (d.getHours() < 10 ? '0' : '') + d.getHours() + ':' + (d.getMinutes() < 10 ? '0' : '') + d.getMinutes(); }
 
+// 1.5.8, backlog 149: a card's die, the one its formula rolls (systemcore dieOf: 3d6 three dice, d20 a d20), drawn first on its dice line with
+// createElementNS. Asked through typeof by renderCard, so a harness that slices the card alone draws it as before
+function dieInto(host, rec) {
+    var core = window.wpSystemCore; if (!host || !rec || typeof rec.expr !== 'string' || !core || typeof core.dieOf !== 'function') return;
+    host.insertBefore(dieNode(document, core.dieOf(rec.expr), 'roll-die-ico'), host.firstChild);
+}
 /* ---------- the card (a chat entry with m.roll = the record and m.res = the replayed result) ---------- */
 // 1.5.7: a roll worked out from a sheet, said in plain figures: each dice group with its dice, then what a check came to and what it needed.
 // The formula and its whole working stay on the line's hover. Text nodes only.
@@ -85,6 +92,7 @@ function renderCard(m) {
     if (v && v.crit !== undefined && parts.length && typeof parts[parts.length - 1] === 'string') parts[parts.length - 1] = parts[parts.length - 1].replace(/:\s*(success|failure)( by [^:]*)?$/, '');   // F8: the rule's verdict is the line below (never the arithmetic's)
     if (named) readableInto(brk, res, parts, rec.expr);
     else parts.forEach(function(p) { if (typeof p === 'string') brk.appendChild(document.createTextNode(p)); else brk.appendChild(el('span', 'roll-die', p.text)); });
+    if (typeof dieInto === 'function') dieInto(brk, rec);   // 1.5.8: the die its formula rolls, first on the dice line
     wrap.appendChild(brk);
     if (typeof modsInto === 'function') modsInto(wrap, rec.mods);   // 1.5.8: what changed the values it read (asked through typeof for a suite that slices the card alone)
     wrap.className += mf ? ' card-malf' : v && v.kind === 'check' ? (v.pass ? ' card-ok' : ' card-fail') : rec.dmg === 1 ? ' card-dmg' : '';   // chat cards: the left stripe — a malfunction, the check's outcome, else a damage roll, else plain

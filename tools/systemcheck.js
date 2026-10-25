@@ -13365,6 +13365,54 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             && again.length === 0 && j(clean.values.f_mv.map(r => r.opn)) === j(['w_h', 'w_h']) && j(S.cleanOpens([{ f: 'f_mv', id: 'i_a', from: 0 }, { f: 'f_mv', id: 'i_b', from: 7.6 }])) === j([{ f: 'f_mv', id: 'i_a', from: 1 }, { f: 'f_mv', id: 'i_b', from: 8 }]) && S.cleanOpens('x') === undefined,
             j([heron.opens, rows1, c2.values.f_mv, bought, pSet, pRm, gRm.ok, cost(rid6), opd(rid6), again, clean.values.f_mv]));
     }
+    {   // 1.5.8, backlog 149 (the owner, by prompt: "From the formula, GM can change it (Recommended)"): the die a roll is drawn with. The cleaner
+        // keeps a roll's die, a list roll's die and a field's rollDie only as a name of the set, the same in both views, a field's only beside its
+        // roll; absent, a roll reads its formula's die (dieOf), and a system that sets none cleans exactly as before
+        const DI = await import(url('dieicons.js'));
+        const rawD = () => ({ v: 1, name: 'Dice kit', fields: [
+            { id: 'f_str', key: 'STR', kind: 'number', roll: '3d6 <= STR', rollDie: 'd20' }, { id: 'f_dex', key: 'DEX', kind: 'number', roll: 'd20 + DEX', rollDie: 'd7' },
+            { id: 'f_wis', key: 'WIS', kind: 'number', rollDie: 'd20' }, { id: 'f_cha', key: 'CHA', kind: 'number', roll: '2d6', rollDie: ['d6'] },
+            { id: 'f_gear', key: 'Gear', label: 'Gear', kind: 'item-list', list: { rolls: [{ label: 'Hit', formula: 'd20', die: '4dF' }, { label: 'Bad', formula: 'd20', die: '<svg onload=1>' }, { label: 'Plain', formula: 'd20' }] } }],
+            rolls: [{ id: 'r_a', label: 'A', formula: '2d6', die: 'd100' }, { id: 'r_b', label: 'B', formula: '2d6', die: { toString: 'd6' } }, { id: 'r_c', label: 'C', formula: '2d6' }, { id: 'r_d', label: 'D', formula: '1d4', die: '__proto__' }] });
+        const noDie = () => { const r = rawD(); r.fields.forEach(f => { delete f.rollDie; if (f.list) f.list.rolls.forEach(x => delete x.die); }); r.rolls.forEach(x => delete x.die); return r; };
+        let gD = null, pD = null, gN = null, pN = null, dErr = '';
+        try { gD = S.cleanSystem(rawD(), { F, gmView: true }); pD = S.cleanSystem(rawD(), { F, gmView: false }); gN = S.cleanSystem(noDie(), { F, gmView: true }); pN = S.cleanSystem(noDie(), { F, gmView: false }); } catch (e) { dErr = e.stack || e.message; }
+        const fdOf = s => s.fields.map(f => f.rollDie === undefined ? '-' : f.rollDie), rdOf = s => s.rolls.map(r => r.die === undefined ? '-' : r.die), ldOf = s => s.fields.find(f => f.id === 'f_gear').list.rolls.map(r => r.die === undefined ? '-' : r.die);
+        const strip = s => { const c = JSON.parse(j(s)); c.fields.forEach(f => { delete f.rollDie; if (f.list && f.list.rolls) f.list.rolls.forEach(x => delete x.die); }); c.rolls.forEach(x => delete x.die); return j(c); };
+        check('1.5.8 a roll\'s die (systemcore cleanDie in cleanSystem, both views): a roll\'s die, a list roll\'s die and a field\'s rollDie are kept only as a name of the set (a coin, d4, d6, 2d6, 3d6, d8, d10, d12, d20, d100, dF, 4dF), a field\'s only beside its roll; anything else (a die the set does not draw, a list, an object, markup, a prototype\'s name) leaves no key, the same in both views; a system with no die at all cleans to exactly the JSON it gave before, and taking the dice away leaves nothing else changed',
+            !!gD && j(fdOf(gD)) === j(['d20', '-', '-', '-', '-']) && j(rdOf(gD)) === j(['d100', '-', '-', '-']) && j(ldOf(gD)) === j(['4dF', '-', '-']) && j(fdOf(pD)) === j(fdOf(gD)) && j(rdOf(pD)) === j(rdOf(gD)) && j(ldOf(pD)) === j(ldOf(gD))
+            && strip(gD) === j(gN) && strip(pD) === j(pN) && !JSON.stringify(gN).includes('"die"') && !JSON.stringify(gN).includes('rollDie')
+            && Object.keys(gD.rolls[0]).indexOf('die') === Object.keys(gD.rolls[0]).indexOf('vis') + 1 && Object.keys(gD.fields[0]).indexOf('rollDie') === Object.keys(gD.fields[0]).indexOf('roll') + 1,
+            dErr || j([gD && [fdOf(gD), rdOf(gD), ldOf(gD)], pD && [fdOf(pD), rdOf(pD), ldOf(pD)]]));
+        const DO = [['3d6 <= Skill', '3d6'], ['d20 + STR', 'd20'], ['2d6 + 3', '2d6'], ['1d6', 'd6'], ['4d6kh3', '3d6'], ['10d6', '3d6'], ['1d%', 'd100'], ['1d100', 'd100'], ['4dF', '4dF'], ['dF + 2', 'dF'], ['2d20kh1 + 5', 'd20'],
+            ['2d10', 'd10'], ['d12', 'd12'], ['1d8 + 1d8', 'd8'], ['d4', 'd4'], ['1d2', 'd2'], ['Skill.d20 + 5', 'd6'], ['Bd6 + 1', 'd6'], ['1d20 + 1d6', 'd6'], ['5', 'd6'], ['1d3', 'd6'], ['0d6', 'd6'], ['', 'd6'], [null, 'd6'], [42, 'd6'], ['dFate', 'd6']];
+        const doBad = DO.filter(p => S.dieOf(p[0]) !== p[1]);
+        check('1.5.8 the die a formula rolls (systemcore dieOf, the one reader): its dice as the dice roller writes them, never letters inside a name (Skill.d20, Bd6); one kind of die: a d6 by how many (one, two, or three and more), a Fate die by how many, any other die of the set as itself; no dice, several kinds or a die the set does not draw is the d6; rollDie takes the GM\'s pick first, a name that is none its formula\'s',
+            doBad.length === 0 && S.rollDie('d12', '3d6') === 'd12' && S.rollDie('x', '3d6') === '3d6' && S.rollDie(undefined, 'd20') === 'd20' && S.cleanDie('d20') === 'd20' && S.cleanDie('D20') === '' && S.cleanDie(['d6']) === '',
+            j(doBad.map(p => [p[0], S.dieOf(p[0])])));
+        check('1.5.8 the set the cleaner keeps is the set dieicons.js draws, in the same order, each with its words for the System editor\'s list',
+            j(S.DIE_NAMES) === j(Object.keys(DI.DIE_ICONS)) && j(S.DIE_NAMES) === j(Object.keys(DI.DIE_LABELS)) && Object.isFrozen(S.DIE_NAMES) && S.DIE_NAMES.length === 12, j([S.DIE_NAMES, Object.keys(DI.DIE_ICONS)]));
+        // the sheet: dieSel (the System editor's list) run for real, and dieFor and the buttons' wiring pinned
+        const shD = fs.readFileSync(path.join(app, 'scripts', 'sheets.js'), 'utf8').replace(/\r\n/g, '\n');
+        const dsA = shD.indexOf('function dieFor('), dsZ = shD.indexOf('function pref(', dsA), dsSrc = dsA >= 0 && dsZ > dsA ? shD.slice(dsA, dsZ) : '';
+        const mkS = (tag, cls, text) => ({ tag, className: cls || '', textContent: text === undefined ? '' : String(text), value: '', selected: false, title: '', children: [], appendChild(c) { this.children.push(c); return c; } });
+        const optS = (v, t, s) => { const o = mkS('option', null, t); o.value = v; o.selected = !!s; return o; };
+        let dsel = null, dsErr = '';
+        try { dsel = new Function('el', 'opt', 'window', 'DIE_LABELS', 'dieNode', 'document', dsSrc + '\nreturn dieSel;')(mkS, optS, { wpSystemCore: S }, DI.DIE_LABELS, DI.dieNode, null); } catch (e) { dsErr = e.stack || e.message; }
+        const sA = dsel && dsel('sys-roll-die', 'd20', 'tip'), sB = dsel && dsel('sys-roll-die', '<b>x</b>'), sC = dsel && dsel('sys-roll-die');
+        check('1.5.8 the System editor\'s Die list (sheets.js dieSel, run for real): Die: from its formula first, then the set in its order by its own words, the value a name of the set; the stored pick selected, a pick that is none or no pick leaves From its formula selected; its tooltip',
+            !!sA && sA.tag === 'select' && sA.children.length === 13 && sA.children[0].value === '' && sA.children[0].textContent === 'Die: from its formula' && j(sA.children.slice(1).map(o => o.value)) === j(S.DIE_NAMES)
+            && sA.children.filter(o => o.selected).map(o => o.value).join() === 'd20' && sA.children[1].textContent === 'Die: Coin (d2)' && sA.title === 'tip'
+            && sB.children.filter(o => o.selected).map(o => o.value).join() === '' && sC.children[0].selected === true && !j(sB).includes('<b>'), dsErr || j(sA));
+        check('1.5.8 the sheet draws each roll\'s die (sheets.js, pinned): a field\'s roll button, its inline row, a system roll\'s button (the GM\'s pick, else its formula\'s; an icon of its own in place of its formula\'s die) and a list roll\'s button on each row, each asking dieFor through typeof; the Rolls tab, the Lists tab and the Fields tab each have a Die list and its handler',
+            shD.includes("var rb = el('button', 'tool ghost sheet-field-roll', typeof dieFor === 'function' ? undefined : String.fromCharCode(55356, 57266)); if (typeof dieFor === 'function') rb.appendChild(dieFor(f.rollDie, f.roll));")
+            && shD.includes("if (typeof dieFor === 'function' && f.roll) rb.insertBefore(dieFor(f.rollDie, f.roll), rb.firstChild);")
+            && shD.includes("if (typeof dieFor === 'function' && (r.die || !r.icon)) b.insertBefore(dieFor(r.die, r.formula, 'sheet-roll-die'), b.firstChild);")
+            && shD.includes("b = el('button', 'tool ghost sheet-item-roll', lb); b.type = 'button'; if (typeof dieFor === 'function') b.insertBefore(dieFor(r.die, r.formula), b.firstChild);")
+            && shD.includes("dieSel('sys-roll-die', r.die,") && shD.includes("dieSel('sys-list-rolldie', rr.die,") && shD.includes("dieSel('sys-fielddie', f.rollDie,")
+            && shD.includes("else if (c.indexOf('sys-roll-die') >= 0) { if (t.value) r.die = t.value; else delete r.die; }") && shD.includes("else if (c.indexOf('sys-fielddie') >= 0) { if (t.value) f.rollDie = t.value; else delete f.rollDie; }")
+            && shD.includes("if (t.value) riD.die = t.value; else delete riD.die; }") && shD.includes("import { dieNode, DIE_LABELS } from './dieicons.js';"));
+    }
     summed = true;
     console.log(NL + pass + ' passed, ' + fail + ' failed.');
     if (fail) process.exit(1);

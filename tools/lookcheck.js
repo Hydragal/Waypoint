@@ -3152,5 +3152,42 @@ const swSrc = sliceOf(setSrc, 'viewswitch'), cornerSrc = sliceOf(mainSrc, 'corne
         && named.every(id => count(ix, 'id="' + id + '"') === 1) && !/class="[^"]*\bweb-join\b/.test(ix) && INVENTORY.every(id => count(ix, 'id="' + id + '"') === 1), J([writers, rulesW.length, scoped, named.filter(id => count(ix, 'id="' + id + '"') !== 1), gateW, gateRules]));
 }
 
+/* ---------- the dice drawings (1.5.8, backlog 149) ---------- */
+// The owner, 2026-10-25: "implement the custom dice icons for the character sheet where there are currently emoji dice icons", and of the
+// drawings on docs/sheets/dice-icons-sheet.html, the face (A) for 1d6, three faces (C) for 3d6 and the rest of the set: "those look pretty good"
+{
+    const dsrc = read('scripts/dieicons.js');
+    let DI = null, diErr = '';
+    try { DI = new Function(dsrc.replace(/^export \{[^\n]*\};?$/m, '') + '\nreturn API;')(); } catch (e) { diErr = e.stack || e.message; }
+    const DICE_HASH = '122549aaa79f98cc13714fb66ef16fa88cf4028a0e5e4e8db99de64a2c43862a';   // the set as the owner passed it on the dice sheet, 2026-10-25
+    const names = DI ? Object.keys(DI.DIE_ICONS) : [], setD = names.map(n => n + '=' + DI.DIE_ICONS[n].map(p => (p.pip ? 'pip:' : '') + p.d).join('|')).join('\n');
+    const hD = crypto.createHash('sha256').update(setD).digest('hex');
+    const plainD = names.every(n => DI.DIE_ICONS[n].every(p => /^[MmLlHhVvAaZz0-9 .,-]+$/.test(p.d) && (!p.pip || /^(M[0-9.]+ [0-9.]+h0)+$/.test(p.d))));
+    // the sheet the owner passed, read where it is on this machine (docs/ is kept out of the repository): each drawing is its card's, path for path
+    let sheetD = null; try { sheetD = fs.readFileSync(path.join(root, 'docs', 'sheets', 'dice-icons-sheet.html'), 'utf8').replace(/\r\n/g, '\n'); } catch (e) { sheetD = null; }
+    const CARD = { d2: 'd2 coin', d4: 'd4', d6: '<span class="letter">A</span>1d6, a face', '2d6': '2d6 faces', '3d6': '<span class="letter">C</span>3d6, three faces', d8: 'd8', d10: 'd10', d12: 'd12', d20: 'd20', d100: 'd100', dF: 'dF Fate die', '4dF': '4dF' };
+    const fromSheet = n => { const a = sheetD.indexOf('<h2>' + CARD[n] + '</h2>'), s = a < 0 ? -1 : sheetD.indexOf('<svg', a), z = s < 0 ? -1 : sheetD.indexOf('</svg>', s); return z < 0 ? null : [...sheetD.slice(s, z).matchAll(/<path( class="pip")? d="([^"]*)"\/>/g)].map(m => (m[1] ? 'pip:' : '') + m[2]).join('|'); };
+    const offSheet = sheetD === null ? [] : names.filter(n => fromSheet(n) !== DI.DIE_ICONS[n].map(p => (p.pip ? 'pip:' : '') + p.d).join('|'));
+    check('the dice drawings are the set the owner passed on the dice sheet ("those look pretty good"), drawing for drawing: the face for d6, three faces for 3d6, two faces for 2d6, the coin, d4, d8, d10, d12, d20, the faceted ball for d100, the Fate die and four Fate dice, each path a plain path on the 24 by 24 grid and each pip a stroke of no length; where the sheet is on this machine each is its card\'s, path for path; a changed or a new drawing is shown to the owner first, and this pin moves only then',
+        !!DI && hD === DICE_HASH && names.length === 12 && plainD && offSheet.length === 0 && Object.isFrozen(DI.DIE_ICONS), diErr || J([hD, offSheet]));
+    // dieNode on a document that writes down what it is asked; dieSvg's markup from the constants alone
+    const made = [], docD = { createElementNS(ns, tag) { const e = { ns, tag, attrs: {}, children: [], setAttribute(k, v) { this.attrs[k] = String(v); }, appendChild(c) { this.children.push(c); return c; } }; made.push(e); return e; }, createElement() { throw new Error('createElement'); } };
+    const n3 = DI && DI.dieNode(docD, '3d6', 'sheet-roll-die'), nBad = DI && DI.dieNode(docD, '<img src=x>', 'a b" onclick="x');
+    const svgOk = s => s.tag === 'svg' && s.ns === 'http://www.w3.org/2000/svg' && s.attrs.viewBox === '0 0 24 24' && s.attrs['aria-hidden'] === 'true' && s.children.every(p => p.tag === 'path' && p.ns === s.ns && Object.keys(p.attrs).every(k => k === 'd' || (k === 'class' && p.attrs[k] === 'ico-pip')));
+    check('a die is drawn by name (dieicons.js dieNode, run for real): an svg of the 24 by 24 grid and its paths made with createElementNS alone, its class ico ico-die and one plain class of the caller\'s, a pip\'s path the class ico-pip; a name the set lacks draws the d6, and a class that is not one plain name is left off; dieSvg writes the very same drawing from the constants alone, a hostile name the d6',
+        !!n3 && svgOk(n3) && svgOk(nBad) && n3.attrs.class === 'ico ico-die sheet-roll-die' && nBad.attrs.class === 'ico ico-die' && n3.children.length === 4 && n3.children[3].attrs.class === 'ico-pip'
+        && J(nBad.children.map(p => p.attrs.d)) === J(DI.DIE_ICONS.d6.map(p => p.d)) && made.every(e => e.tag === 'svg' || e.tag === 'path')
+        && DI.dieSvg('d20') === '<svg class="ico ico-die" viewBox="0 0 24 24" aria-hidden="true">' + DI.DIE_ICONS.d20.map(p => '<path d="' + p.d + '"/>').join('') + '</svg>'
+        && DI.dieSvg('<script>', '"x') === DI.dieSvg('d6') && !/script|"x/.test(DI.dieSvg('<script>', '"x')) && /^\/\* [^]*\*\/\n'use strict';\n/.test(dsrc) && !/\bimport\b|innerHTML|document\./.test(dsrc.replace(/^\/\*[^]*?\*\//, '')), J([n3, nBad && nBad.attrs]));
+    // where the drawings stand today: the dice roller's button, its heading and its quick buttons, the roster's Roll all and a row's roll
+    const d6 = DI ? DI.dieSvg('d6') : '?', quick = ['d4', 'd6', 'd8', 'd10', 'd12', 'd20', 'd100'].map(n => '<button data-die="' + n + '">' + (DI ? DI.dieSvg(n) : '?') + n + '</button>').join('');
+    check('the dice roller and the combat roster wear the drawings (the page and whiteboard.js, pinned): the roller\'s button by the message box and its heading the d6, each quick button its own die before its name, Roll all and a row\'s initiative roll the d6, and none of them the old glyph; the pips\' rule in the style sheet; dieicons.js loaded by the sheet and the dice modules',
+        ix.includes('id="diceBtn" title="Roll dice &mdash; or type /roll 2d6 + 3 in the box" aria-label="Roll dice">' + d6 + '</button>') && ix.includes('<span class="notepad-title">' + d6 + ' Roll</span>')
+        && ix.includes('<div class="dice-quick">' + quick + '<button data-op="+">') && ix.includes('(one rolled or given a number keeps it)">' + d6 + ' Roll all</button>')
+        && wbSrc.includes("aria-label=\"Roll initiative\">' + (window.wpDieIcons && typeof window.wpDieIcons.dieSvg === 'function' ? window.wpDieIcons.dieSvg('d6') : '&#127922;') + '</button>'")
+        && !/id="diceBtn"[^>]*>&#127922;|&#127922; Roll/.test(ix) && css.includes('  .ico.ico-die .ico-pip { stroke-width: 2.6; }')
+        && read('scripts/sheets.js').includes("import { dieNode, DIE_LABELS } from './dieicons.js';") && read('scripts/dice.js').includes("import { dieNode } from './dieicons.js';"));
+}
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed.');
 if (fail) process.exit(1);
