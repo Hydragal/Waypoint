@@ -745,7 +745,7 @@ function appVersionPromise() {   // the newer of the shell's version and the app
    can take it (canSelfInstall): the shell downloads the installer, checks it, runs it and Waypoint
    reopens; Get Installer and its steps remain for every case where that cannot be done. */
 var _upd = { info: null, shellOld: null, shell: null, selfBusy: false, selfFailed: false, selfText: '', failNote: '', failSeen: '' };
-var SHELL_WANTED = '1.5.6';   // 1.5.6 adds the right-click menu of a text box, Cut, Copy, Paste and Select all (shellguard.editMenuTemplate); 1.5.0 added /api/library (the item library's pack files beside the save), serves a file in byte ranges under its media type (servefile.js: a video seeks without being read whole), takes only signed updates, keeps a way back and updates its own core; 1.4.6 added /api/delete-image (Image Library → Delete picture)   // the core this app expects; older cores are walked through the installer. It is the version tools/shellrev.json records as the core's last change: updatercheck holds the two together, and a release's manifest says the same as minShell
+var SHELL_WANTED = '1.5.9';   // 1.5.9 carries the outside sheet reader's folder (system/app/private) across an update and a restore; 1.5.6 adds the right-click menu of a text box, Cut, Copy, Paste and Select all (shellguard.editMenuTemplate); 1.5.0 added /api/library (the item library's pack files beside the save), serves a file in byte ranges under its media type (servefile.js: a video seeks without being read whole), takes only signed updates, keeps a way back and updates its own core; 1.4.6 added /api/delete-image (Image Library → Delete picture)   // the core this app expects; older cores are walked through the installer. It is the version tools/shellrev.json records as the core's last change: updatercheck holds the two together, and a release's manifest says the same as minShell
 var RELEASES_PAGE = 'https://github.com/ImmuneMoon/Waypoint/releases/latest';
 function vcmp(x, y) { var p = String(x).split('-')[0].split('.').map(Number), q = String(y).split('-')[0].split('.').map(Number); for (var k = 0; k < 3; k++) { if ((p[k] || 0) !== (q[k] || 0)) return (p[k] || 0) - (q[k] || 0); } return 0; }
 // Is the core older than this app wants? The shell says so itself from 1.3.6 on; before that, the
@@ -852,7 +852,7 @@ function runHotUpdate() {
             btns.forEach(function(b) { if (b) b.disabled = true; }); wcStrip();
             fetch('/api/update-apply', { method: 'POST' }).then(function(r) { return r.json(); }).then(function(r) {
                 if (!r.ok) throw new Error(r.error || 'update failed');
-                toast('Updated to ' + r.version + ' — reloading… If you had a Stream window open, close and reopen it.');
+                toast('Updated to ' + r.version + ' — reloading… If you had a Stream window open, close and reopen it.' + (typeof r.privateNote === 'string' ? ' ' + r.privateNote.slice(0, 200) : ''));   // the shell's own words when the outside sheet reader could not be carried
                 try { new BroadcastChannel('waypoint').postMessage({ type: 'reload' }); } catch (e) {}   // a stream window on the new code reloads itself
                 setTimeout(function() { location.reload(); }, 900);
             }).catch(function(e) { btns.forEach(function(b) { if (b) b.disabled = false; }); wcStrip(); toast('Update failed: ' + (e.message || e)); });
@@ -874,7 +874,7 @@ function runRestore() {
             fetch('/api/update-rollback', { method: 'POST' }).then(function(r) { return r.json(); }).then(function(r) {
                 if (!r || r.ok !== true) throw new Error((r && typeof r.error === 'string' && r.error) || 'nothing was restored');
                 var v = cleanVer(r.version);
-                toast('Restored ' + (v ? 'Waypoint Alpha ' + v : 'the previous version') + ' — reloading… If you had a Stream window open, close and reopen it.');
+                toast('Restored ' + (v ? 'Waypoint Alpha ' + v : 'the previous version') + ' — reloading… If you had a Stream window open, close and reopen it.' + (typeof r.privateNote === 'string' ? ' ' + r.privateNote.slice(0, 200) : ''));
                 try { new BroadcastChannel('waypoint').postMessage({ type: 'reload' }); } catch (e) {}   // a stream window reloads itself onto the restored code
                 setTimeout(function() { location.reload(); }, 900);
             }).catch(function(e) { if (b) b.disabled = false; toast('Could not restore the previous version: ' + String(e && e.message || e).slice(0, 200)); });

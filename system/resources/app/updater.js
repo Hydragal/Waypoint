@@ -230,6 +230,52 @@ function readZip(buf) {
 
 function rmrf(p) { if (fs.existsSync(p)) fs.rmSync(p, { recursive: true, force: true }); }
 
+/* The outside sheet reader's folder (system/app/private) is not part of any release: the maintainer copies it into an
+   install by hand. An update or a restore replaces the whole app folder, so the folder is carried across: copied, never
+   moved, from the app in use into the app that takes its place. Only a real folder is carried: a link or a junction named
+   private, or one anywhere inside it, is never followed, and the folder is then not carried at all. It is bounded
+   (PRIVATE_FILES files, PRIVATE_BYTES bytes): past that it is not carried and the update goes on without it. The answer
+   says what became of it (private: 'kept', 'none' or 'left', and privateNote in plain words when it was left). */
+const PRIVATE_DIR = 'private';
+const PRIVATE_FILES = 2000;
+const PRIVATE_BYTES = 64 * 1024 * 1024;
+const PRIVATE_LEFT = 'The outside sheet reader in the app folder was not carried over: copy it into the app again.';
+// what is under a folder, or why it cannot be carried: { files: [[rel, size]], dirs: [rel] } or { why }
+function privateList(dir) {
+    let st;
+    try { st = fs.lstatSync(dir); } catch (e) { return null; }   // there is none
+    if (st.isSymbolicLink() || !st.isDirectory()) return { why: 'not a plain folder' };
+    const files = [], dirs = []; let bytes = 0;
+    const stack = [''];
+    while (stack.length) {
+        const rel = stack.pop(), here = path.join(dir, rel);
+        for (const name of fs.readdirSync(here)) {
+            const r = rel ? path.join(rel, name) : name, s = fs.lstatSync(path.join(dir, r));
+            if (s.isSymbolicLink()) return { why: 'it holds a link' };
+            if (s.isDirectory()) { dirs.push(r); stack.push(r); continue; }
+            if (!s.isFile()) return { why: 'it holds something that is no file' };
+            files.push([r, s.size]); bytes += s.size;
+            if (files.length > PRIVATE_FILES || bytes > PRIVATE_BYTES) return { why: 'too large' };
+        }
+        if (dirs.length > PRIVATE_FILES) return { why: 'too large' };
+    }
+    return { files, dirs };
+}
+// copy fromApp/private into toDir (which must not exist yet): true when it was copied, null when there was none, false when left
+function privateCopy(fromApp, toDir) {
+    const src = path.join(fromApp, PRIVATE_DIR), list = privateList(src);
+    if (list === null) return null;
+    if (list.why) return false;
+    try {
+        fs.mkdirSync(toDir);
+        for (const d of list.dirs.slice().sort((a, b) => a.length - b.length)) fs.mkdirSync(path.join(toDir, d), { recursive: true });
+        for (const [r] of list.files) fs.copyFileSync(path.join(src, r), path.join(toDir, r), fs.constants.COPYFILE_EXCL);
+        return true;
+    } catch (e) { try { rmrf(toDir); } catch (_) {} return false; }
+}
+// an archive never brings a private folder: a release that holds one is malformed (release.js refuses to pack it)
+function privateInArchive(rel) { return rel.split('/')[0].replace(/[. ]+$/, '').toLowerCase() === PRIVATE_DIR; }
+
 /* Verify, download, unpack and swap. opts: { systemDir, appZip, appZipName, sha256 (url|null), sig (url|null), version, pubKey, shellVersion }
    pubKey defaults to the shell's own (updatekey.js); only this module's callers can pass another (the tests do), never a request.
    Returns { ok, version, previous } — the previous app folder is kept as app.prev for one rollback. */
@@ -260,6 +306,8 @@ async function applyAppUpdate(opts) {
     const first = entries[0].name.split('/')[0];
     if (entries.every(e => e.name.startsWith(first + '/'))) prefix = first + '/';
     if (!entries.some(e => e.name === prefix + 'index.html')) throw new Error('archive does not contain the app (no index.html)');
+    if (entries.some(e => privateInArchive(e.name.slice(prefix.length)))) throw new Error('the update archive holds a private folder — refused');
+    let carried = null;
     try {
         rmrf(newDir); fs.mkdirSync(newDir, { recursive: true });
         for (const e of entries) {
@@ -277,6 +325,8 @@ async function applyAppUpdate(opts) {
         if (inside !== version) throw new Error('the archive is not version ' + version + ' — update aborted');
         // the signed archive says itself which core it needs (the manifest beside it is not signed): app files never land on a core older than that
         if (needs !== undefined && needs !== null && (!plainVersion(needs) || !plainVersion(opts.shellVersion) || cmpVersion(opts.shellVersion, needs) < 0)) throw new Error('this update needs a newer core than this copy has — it comes as the installer');
+        // the outside sheet reader the maintainer added stays: copied into the new app before the swap
+        carried = privateCopy(appDir, path.join(newDir, PRIVATE_DIR));
         // swap: app -> app.prev (replacing any older rollback copy), app.new -> app
         rmrf(prevDir);
         fs.renameSync(appDir, prevDir);
@@ -286,7 +336,9 @@ async function applyAppUpdate(opts) {
         try { rmrf(newDir); } catch (_) {}   // nothing half-unpacked is left behind
         throw e;
     }
-    return { ok: true, version: version, previous: prevDir };
+    const out = { ok: true, version: version, previous: prevDir, private: carried === true ? 'kept' : carried === null ? 'none' : 'left' };
+    if (carried === false) out.privateNote = PRIVATE_LEFT;
+    return out;
 }
 
 /* The way back. What the shell kept of the app as it was before the last hot update (system/app.prev), and whether it may
@@ -310,12 +362,23 @@ function rollbackAppUpdate(opts) {
     const badDir = path.join(systemDir, 'app.bad');
     const p = prevInfo(systemDir, opts.shellVersion);
     if (!p.hasPrev) throw new Error('no previous version to restore');
+    // the app that comes back keeps the outside sheet reader of the app in use: copied in beside, then put in place of its own.
+    // With none in use, or one that cannot be carried, it keeps whatever it held itself.
+    const carry = path.join(prevDir, PRIVATE_DIR + '.carry');
+    rmrf(carry);
+    const carried = privateCopy(appDir, carry);
+    if (carried === true) {
+        try { rmrf(path.join(prevDir, PRIVATE_DIR)); fs.renameSync(carry, path.join(prevDir, PRIVATE_DIR)); }
+        catch (e) { try { rmrf(carry); } catch (_) {} throw e; }
+    }
     rmrf(badDir);
     fs.renameSync(appDir, badDir);
     try { fs.renameSync(prevDir, appDir); }
     catch (e) { fs.renameSync(badDir, appDir); throw e; }   // put the current app back if the swap fails
     try { rmrf(badDir); } catch (e) { /* a leftover is cleared by the next restore */ }
-    return { ok: true, version: p.prevVersion };
+    const out = { ok: true, version: p.prevVersion, private: carried === true ? 'kept' : carried === null ? 'none' : 'left' };
+    if (carried === false) out.privateNote = PRIVATE_LEFT;
+    return out;
 }
 
 /* ---- an update that changes the core: the shell fetches the installer, checks it, and runs it over this copy ---- */
@@ -532,5 +595,5 @@ function makeHandler(cfg) {
     };
 }
 
-module.exports = { cmpVersion, checkForUpdate, applyAppUpdate, rollbackAppUpdate, prevInfo, signedText, verifyUpdate, readZip, makeHandler, fetchBuffer,
+module.exports = { cmpVersion, checkForUpdate, applyAppUpdate, rollbackAppUpdate, prevInfo, signedText, verifyUpdate, readZip, makeHandler, fetchBuffer, PRIVATE_FILES, PRIVATE_BYTES,
     fetchToFile, downloadInstaller, runInstaller, sweepInstallerDirs, installFailed, UPDATE_ROUTES, INSTALLER_NAME, INSTALLER_ARGS };
