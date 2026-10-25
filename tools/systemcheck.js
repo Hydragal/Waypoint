@@ -13549,6 +13549,83 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         const msgBad = [{ from: 5 }, { from: 'x' }, { back: 'nope' }].map(x => S.cleanCharItem(Object.assign({ rid: 'r1', charId: 'c_kael', fieldId: 'f_tools', op: 'load', rowId: 'w_t1', from: 'w_c1' }, x)));
         check('1.5.8 Loads from, the wire\'s shape (cleanCharItem): from a row id or null, back a row id; anything else refuses the message', j(msgL) === j({ rid: 'r1', charId: 'c_kael', fieldId: 'f_tools', op: 'load', rowId: 'w_t1', from: 'w_c1', back: 'w_b1' }) && msgU && msgU.from === null && msgU.back === undefined && msgBad.every(x => x === null), j([msgL, msgU, msgBad]));
     }
+    {   // 1.5.8 Counted once (the owner, 2026-10-25, by prompt: "Paired traits counted once"): a list option, rows of one group held two ways count once
+        const listO = (once) => ({ noQty: true, multi: true, lvl: { label: 'Level', min: 0, max: 10, def: 0 }, on: { label: 'Active', def: true },
+            stats: [{ key: 'grp', label: 'Group' }, { key: 'rk', label: 'Rank' }, { key: 'bp', label: 'Base' }, { key: 'granted', label: 'Free' }, { key: 'kind', label: 'Kind', kind: 'pick', opts: [{ label: 'A', name: 'KA' }] }],
+            cols: [{ key: 'Raw', label: 'Raw', formula: 'Row.bp' }, { key: 'Pts', label: 'Pts', formula: 'if(Row.once, max(0, Row.oncecost - Row.oncefree), 0)' }, { key: 'O', label: 'O', formula: 'Row.once * 100 + Row.oncefree' }], once });
+        const rawO = (once) => ({ v: 1, name: 'T', rolls: [], fields: [
+            { id: 'f_def', key: 'Defense', label: 'Defense', kind: 'number', def: 10, vis: 'all' },
+            { id: 'f_trt', key: 'Traits', label: 'Traits', kind: 'item-list', vis: 'all', edit: 'owner', list: listO(once) },
+            { id: 'f_tot', key: 'Spent', label: 'Spent', kind: 'formula', formula: 'Traits.Pts', vis: 'all' }],
+            items: [
+                { id: 'i_quick', name: 'Quick Hands', vis: 'all', stats: { grp: 1, rk: 15, bp: 15 }, mods: [{ f: 'f_def', op: 'add', v: 1 }] },
+                { id: 'i_quick2', name: 'Quick Hands (Gears)', vis: 'all', stats: { grp: 1, rk: 15, bp: 15 }, mods: [{ f: 'f_def', op: 'add', v: 1 }] },
+                { id: 'i_nose', name: 'Keen Nose', vis: 'all', stats: { grp: 2, rk: 2, bp: 2 }, mods: [{ f: 'f_def', op: 'add', v: 10 }] },
+                { id: 'i_nose2', name: 'Keen Nose (Implant)', vis: 'all', stats: { grp: 2, rk: 3, bp: 3 }, mods: [{ f: 'f_def', op: 'add', v: 100 }], modsOn: true },
+                { id: 'i_lone', name: 'Lone Trait', vis: 'all', stats: { bp: 5 }, mods: [{ f: 'f_def', op: 'add', v: 1000 }] }] });
+        const ONCE = { by: 'GRP', rank: 'rk', cost: 'raw', free: 'granted' };
+        const sysO = cleanSystem(rawO(ONCE), { F, gmView: true }), plO = cleanSystem(rawO(ONCE), { F, gmView: false }), nonO = cleanSystem(rawO(undefined), { F, gmView: true });
+        const once = sysO.fields[1].list.once;
+        const cl = o => (S.cleanListSpec(Object.assign(listO(undefined), { once: o }), true, F) || {}).once;
+        check('1.5.8 Counted once, the cleaner: by and free a number stat, rank the level or a number stat, cost a number stat or a column, each as the list spells it; the same in both views; none without a group stat and a Higher by, none of a choice, none for a word that is no stat; a list that names none holds no once key',
+            j(once) === j({ by: 'grp', rank: 'rk', cost: 'Raw', free: 'granted' }) && j(plO.fields[1].list.once) === j(once)
+            && j(cl({ by: 'grp', rank: 'lvl' })) === j({ by: 'grp', rank: 'lvl' }) && cl({ by: 'grp' }) === undefined && cl({ rank: 'rk' }) === undefined && cl({ by: 'kind', rank: 'rk' }) === undefined
+            && j(cl({ by: 'grp', rank: 'rk', cost: 'nope', free: 'kind' })) === j({ by: 'grp', rank: 'rk' }) && j(cl({ by: 'grp', rank: 'rk', cost: 'bp' })) === j({ by: 'grp', rank: 'rk', cost: 'bp' })
+            && (S.cleanListSpec(Object.assign(listO(undefined), { lvl: undefined }), true, F) || {}).lvl === undefined && (S.cleanListSpec(Object.assign(listO(undefined), { lvl: undefined, once: { by: 'grp', rank: 'lvl' } }), true, F) || {}).once === undefined
+            && !('once' in nonO.fields[1].list) && cl('x') === undefined && cl(null) === undefined,
+            j([once, plO.fields[1].list.once, cl({ by: 'grp', rank: 'lvl' })]));
+        // the one judge: rank, then less given free, then the later row; a kept curse, a group of one and a group figure of 0 are in no group
+        const it = (st, extra) => ({ r: Object.assign({ id: 'w_x' }, extra || {}), d: { name: 'n', stats: st } }), sp = sysO.fields[1].list;
+        const g1 = S.onceOf(sp, [it({ grp: 1, rk: 3 }), it({ grp: 1, rk: 5 }), it({ grp: 1, rk: 4 })]);
+        const g2 = S.onceOf(sp, [it({ grp: 1, rk: 5, granted: 2 }), it({ grp: 1, rk: 5, granted: 0 })]);
+        const g3 = S.onceOf(sp, [it({ grp: 1, rk: 5, granted: 0 }), it({ grp: 1, rk: 5, granted: 2 })]);
+        const g4 = S.onceOf(sp, [it({ grp: 1, rk: 5 }), it({ grp: 1, rk: 5 })]);
+        const g5 = S.onceOf(sp, [it({ grp: 1, rk: 9 }, { hid: 1 }), it({ grp: 1, rk: 1 }), it({ grp: 0, rk: 7 }), it({ grp: 3, rk: 2 })]);
+        check('1.5.8 Counted once, the one judge (onceOf): the higher figure applies; a tie goes to the row with less given free, then to the later row; a kept curse, a group of one row and a group figure of 0 are in no group; a list with no option answers null',
+            g1[0].top === 1 && g1[1].top === 1 && g1[2].top === 1 && j(g1[0].mem) === j([0, 1, 2]) && g2[0].top === 1 && g3[0].top === 0 && g4[0].top === 1
+            && j(g5) === j([null, null, null, null]) && S.onceOf(nonO.fields[1].list, [it({ grp: 1 }), it({ grp: 1 })]) === null && S.onceOf(sp, 'x') === null,
+            j([g1, g2, g3, g4, g5]));
+        // the resolver: the changes of a row that does not apply are not counted; the cost column charges a group once, less the largest part given free
+        const rowsO = [{ id: 'w_a', defId: 'i_quick', qty: 1 }, { id: 'w_b', defId: 'i_quick2', qty: 1 }, { id: 'w_c', def: { name: 'Keen Nose', stats: { grp: 2, rk: 2, bp: 2, granted: 2 }, mods: [{ f: 'f_def', op: 'add', v: 10 }] }, qty: 1 }, { id: 'w_d', defId: 'i_nose2', qty: 1 }, { id: 'w_e', defId: 'i_lone', qty: 1 }];
+        const chO = (rows, opts) => Object.assign({ id: 'c_kael', name: 'Kael', ownerId: 'u_p', npc: false, values: { f_trt: rows } }, opts || {});
+        const RO = S.resolveAll(sysO, chO(rowsO), F), RN = S.resolveAll(nonO, chO(rowsO), F), cell = (R, rid, k) => ((R.f_trt.cells || {})[rid] || []).filter(x => x.key === k).map(x => x.value)[0];
+        check('1.5.8 Counted once, the resolver: one row of each group applies, so Defense takes Quick Hands once and the implant\'s +100 alone (10 + 1 + 100 + 1000); a cost column charges each group once, the highest full price less the largest part given free (15, then 3 - 2 = 1, then 5: 21); Row.once is 1 on the row that applies and on a row in no group; with no option every row counts as before (Defense 1122, Spent 0 for the rows the formula charges nothing)',
+            RO.f_def.value === 1111 && RO.f_tot.value === 21 && cell(RO, 'w_a', 'Pts') === 0 && cell(RO, 'w_b', 'Pts') === 15 && cell(RO, 'w_c', 'Pts') === 0 && cell(RO, 'w_d', 'Pts') === 1 && cell(RO, 'w_e', 'Pts') === 5
+            && cell(RO, 'w_c', 'O') === 2 && cell(RO, 'w_d', 'O') === 102 && cell(RO, 'w_e', 'O') === 100
+            && RN.f_def.value === 1122 && cell(RN, 'w_a', 'Pts') === 0 && cell(RN, 'w_e', 'Pts') === 0,
+            j([RO.f_def.value, RO.f_tot.value, RO.f_trt.cells, RN.f_def.value]));
+        // a row whose changes are off by its switch takes no part in the changes: the other route applies; the price is as held
+        const offRows = rowsO.map(r => r.id === 'w_d' ? Object.assign({}, r, { on: false }) : r), ROff = S.resolveAll(sysO, chO(offRows), F);
+        check('1.5.8 Counted once: a row whose changes need its switch and that is off takes no part in what applies, so the other route\'s changes count (Keen Nose\'s +10); the price is the build as held (Spent still 21)',
+            ROff.f_def.value === 1021 && ROff.f_tot.value === 21, j([ROff.f_def.value, ROff.f_tot.value]));
+        // the owner's copy gives the GM's figures
+        const own = S.charFor(chO(rowsO), plO, 'u_p'), RP = own ? S.resolveAll(plO, own, F) : null;
+        check('1.5.8 Counted once: the owner\'s copy of the character gives the GM\'s figures (Defense 1111, Spent 21)', !!RP && RP.f_def.value === 1111 && RP.f_tot.value === 21, j([RP && RP.f_def.value, RP && RP.f_tot.value]));
+        // the validator knows the three words, and a cost column that reads them is a loop
+        const vOk = S.validateSystem(sysO, F), loopSys = cleanSystem(rawO({ by: 'grp', rank: 'rk', cost: 'Pts' }), { F, gmView: true }), vLoop = S.validateSystem(loopSys, F), RL = S.resolveAll(loopSys, chO(rowsO), F);
+        check('1.5.8 Counted once, the validator: Row.once, Row.oncecost and Row.oncefree are names a list\'s columns read; a cost column that reads Row.oncecost itself is a loop, said by the editor and caught by the resolver; three stat keys are no longer usable (once, oncecost, oncefree)',
+            !vOk.errors.some(e => /once/i.test(e.message)) && vLoop.errors.some(e => /loop/i.test(e.message)) && !!RL && S.statKey('once', F) === '' && S.statKey('OnceCost', F) === '' && S.statKey('oncefree', F) === '' && S.statKey('oncer', F) === 'oncer',
+            j([vOk.errors.slice(0, 3), vLoop.errors.slice(0, 3)]));
+        // the sheet's chip and the editor's box, run for real on plain objects
+        const shO = fs.readFileSync(path.join(app, 'scripts', 'sheets.js'), 'utf8').replace(/\r\n/g, NL);
+        const mkEl = (tag, cls, text) => ({ tag, className: cls || '', textContent: text === undefined ? '' : text, kids: [], title: '', value: '', selected: false, appendChild(x) { this.kids.push(x); return x; } });
+        const ob = shO.slice(shO.indexOf('function onceBits('), shO.indexOf('\n}\n', shO.indexOf('function onceBits(')) + 3), bx = shO.slice(shO.indexOf('function onceBox('), shO.indexOf('\n}\n', shO.indexOf('function onceBox(')) + 3);
+        const OB = new Function('el', 'rowDef', 'onceOf', ob + '\nreturn onceBits;')(mkEl, S.rowDef, S.onceOf), OX = new Function('el', bx + '\nreturn onceBox;')(mkEl);
+        const host = (entry, sysX, rows) => { const h = mkEl('div'); OB(h, sysX, chO(rows), sysX.fields[1], rows, entry); return h.kids.map(k => [k.className, k.textContent, k.title]); };
+        const hb = mkEl('div'); OX(hb, sysO.fields[1].list); const rw = hb.kids[0], sels = rw.kids.filter(k => k.tag === 'label').map(l => [l.kids[0].textContent, l.kids[1].className, l.kids[1].kids.map(o => o.value).join('|'), (l.kids[1].kids.filter(o => o.selected)[0] || {}).value]);
+        const hb2 = mkEl('div'); OX(hb2, nonO.fields[1].list);
+        check('1.5.8 Counted once on the sheet and in the editor (run for real): one chip on each row of a group, counted once, its tooltip naming the other rows on the row that applies and the row that applies on one that does not; none on a row in no group nor where the list counts nothing once; the Lists tab\'s box with its four selects of this list\'s own number stats, the level and the columns, each showing what is set, and its note only once a group is set; wired to its handler and to what Save says',
+            j(host(rowsO[1], sysO, rowsO)) === j([['sheet-chip sheet-item-once', 'counted once', 'Counted once with Quick Hands: this one applies.']]) && j(host(rowsO[0], sysO, rowsO)) === j([['sheet-chip sheet-item-once', 'counted once', 'Counted once with Quick Hands (Gears): the higher applies, and this row gives nothing of its own.']])
+            && host(rowsO[4], sysO, rowsO).length === 0 && host(rowsO[1], nonO, rowsO).length === 0
+            && j(sels) === j([['Group', 'sys-list-onceby', '|grp|rk|bp|granted', 'grp'], ['Higher by', 'sys-list-oncerank', 'lvl|grp|rk|bp|granted', 'rk'], ['Full price', 'sys-list-oncecost', '|grp|rk|bp|granted|Raw|Pts|O', 'Raw'], ['Given free', 'sys-list-oncefree', '|grp|rk|bp|granted', 'granted']])
+            && hb.kids.length === 2 && hb2.kids.length === 1
+            && shO.includes("    if (typeof onceBox === 'function') onceBox(cb2, sp);   // 1.5.8 Counted once\n") && shO.includes("        if (typeof onceBits === 'function') onceBits(line, sysI, c, f, carried, entry);   // 1.5.8 Counted once\n") && shO.includes("        if (typeof onceBits === 'function') onceBits(nameTd, sysI, c, f, carried, entry);   // 1.5.8 Counted once\n")
+            && shO.includes("        else if (c.indexOf('sys-list-once') >= 0) {   // 1.5.8 Counted once") && shO.includes("var onceK = (cleanListSpec(sp, true, F()) || {}).once;"),
+            j([host(rowsO[1], sysO, rowsO), host(rowsO[0], sysO, rowsO), sels, hb.kids.length]));
+        const ixO = fs.readFileSync(path.join(app, 'index.html'), 'utf8').replace(/\r\n/g, NL), wnO = fs.readFileSync(path.join(app, '..', '..', 'WHATSNEW.txt'), 'utf8').replace(/\r\n/g, NL), wnO2 = fs.readFileSync(path.join(app, 'assets', 'whatsnew.txt'), 'utf8').replace(/\r\n/g, NL);
+        check('1.5.8 Counted once: Help, the Lists key and both release notes say it', ixO.includes('<li><b>Counted once</b> treats rows whose <b>Group</b> stat reads the same figure, not 0, as one thing held two ways.') && ixO.includes('<b>Counted once</b><small>Rows of one group count as one thing. The higher applies.</small>')
+            && wnO.includes('- Counted once: in the Lists tab, rows whose Group stat reads the same') && wnO2.includes('- Counted once: in the Lists tab, rows whose Group stat reads the same'));
+    }
     summed = true;
     console.log(NL + pass + ' passed, ' + fail + ' failed.');
     if (fail) process.exit(1);

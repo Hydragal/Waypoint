@@ -28,6 +28,11 @@ System editor
   counter. Swap and Unload put it back with what it has left, onto a
   stack only where it is the same thing in the same state. Formulas read
   Row.loaded and Row.loadmax.
+- Counted once: in the Lists tab, rows whose Group stat reads the same
+  figure, not 0, are one thing held two ways. The higher applies, and the
+  others give none of their changes. Formulas read Row.once,
+  Row.oncecost and Row.oncefree, so a cost column can charge a group
+  once.
 - A change can aim at one entry of a list: for an item or a status effect,
   in the System editor or the Library's entry form, pick a list's "one
   entry" choice, the entry's key and the column it adds to. A trait can then give -2 to the Disguise skill's Target alone,

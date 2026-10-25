@@ -5326,6 +5326,19 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         const escD = fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', 'esckey.js'), 'utf8');
         check('1.5.8 Loads from, the menu\'s Escape: the Load menu wears the Download menu\'s class, which Escape\'s router leaves to the menu\'s own listener', escD.includes('.sheet-dl-pop') && ldS.includes("'sheet-dl-pop sheet-load-pop'"));
     }
+    {   // 1.5.8 Counted once: a row's name from a campaign file reaches the chip as text alone, and the editor's box names a hostile stat as an option's text
+        const SYO = await import(modUrl('systemcore.js')), shO = fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', 'sheets.js'), 'utf8').replace(/\r\n/g, '\n');
+        const made = [], mkEl = (tag, cls, text) => { const e = { tag, className: cls || '', textContent: text === undefined ? '' : text, kids: [], title: '', value: '', selected: false, appendChild(x) { this.kids.push(x); return x; } }; Object.defineProperty(e, 'innerHTML', { set() { made.push('innerHTML'); }, get() { return ''; } }); made.push(tag); return e; };
+        const cut = n => shO.slice(shO.indexOf('function ' + n + '('), shO.indexOf('\n}\n', shO.indexOf('function ' + n + '(')) + 3);
+        const OB = new Function('el', 'rowDef', 'onceOf', cut('onceBits') + '\nreturn onceBits;')(mkEl, SYO.rowDef, SYO.onceOf), OX = new Function('el', cut('onceBox') + '\nreturn onceBox;')(mkEl);
+        const BAD = '<img src=x onerror=alert(1)>', spec = { stats: [{ key: 'grp', label: BAD }, { key: 'rk', label: 'Rank' }], once: { by: 'grp', rank: 'rk' } }, f = { id: 'f_t', list: spec };
+        const rows = [{ id: 'w_a', def: { name: BAD, stats: { grp: 1, rk: 5 } } }, { id: 'w_b', def: { name: 'Plain', stats: { grp: 1, rk: 1 } } }], sysX = { fields: [f] }, c = { values: { f_t: rows } };
+        const h = mkEl('div'); OB(h, sysX, c, f, rows, rows[1]); const hb = mkEl('div'); OX(hb, spec);
+        const opts = hb.kids[0].kids.filter(k => k.tag === 'label')[0].kids[1].kids.map(o => o.textContent);
+        check('1.5.8 Counted once: a hostile row name reaches the chip only inside its tooltip as text, and a hostile stat label reaches the editor\'s box only as an option\'s text; nothing writes markup',
+            h.kids.length === 1 && h.kids[0].title === 'Counted once with ' + BAD + ': the higher applies, and this row gives nothing of its own.' && h.kids[0].textContent === 'counted once'
+            && opts.indexOf(BAD + ' (grp)') >= 0 && made.indexOf('innerHTML') < 0 && !/innerHTML|insertAdjacentHTML|outerHTML/.test(cut('onceBits') + cut('onceBox')), JSON.stringify([h.kids.map(k => k.title), opts]));
+    }
     summed = true;
     console.log('\n' + pass + ' passed, ' + fail + ' failed.');
     if (fail) process.exit(1);

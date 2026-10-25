@@ -8,7 +8,7 @@ import { getActiveCampaign } from './models.js';
 import { save, toast, toastAction } from './io.js';
 import { picRef } from './safecore.js';
 import { showConfirm, showPrompt } from './dialogs.js';
-import { cleanDamageRules, openSync, moneyBoxes, moneyHeld, rowOpMoney, catHome, catPlace, cleanPlaceCats, catSplits, cleanFieldUnit, unitTail, heightWords, measureWords, unitWords, unitHead, listWords, unitOf, textWords, measureStore, rollNeedsOk, rollNeedsSays, timeRuleRun, ruleRunCtx, chainsShallow, makeResolver, hasDice, figText, cleanEvery, cleanInFight, droppedCounts, validPageId, LIMITS, KINDS, showsIf, rowRollNames, gmOnlyNames, applyAct, applyScope, applyRound, dueActs, combatChars, roundSecs, fxLeftNow, lastsSecs, APPLY_KINDS, TURN_UNITS, LIGHT_UNITS, RANGE_UNITS, HEIGHT_UNITS, TIME_WORDS, STORED, DEF_PROP, BAND_KINDS, IDENTITY_KINDS, LEDGER_KINDS, headerEntry, captionParts, emptySystem, uid, validKey, cleanSystem, cleanChar, validateSystem, resolveAll, hoverLines, autoLayout, applyEdit, applyStyle, cleanLooks, lookOf, lookFor, lookRule, applyEffectOp, fxText, fmtNum, budgetsOf, budgetWatch, budgetSays, needsMet, needsSays, initRoll, applyProposal, cleanUploads, sideOf, threatArc, facingCtx, facingNow, setAimSource, stanceCtx, tokenCtx, POSTURE_IDS, POSTURE_NAMES, DEFAULT_POSTURES, postureList, postureAt, autoEffectsOn, initTie, charTokenOn, cycleThreat, valueTone, TONES, activeCharOf, playableChars, ownedTokenPlan, applyOwnerOps, migrateBindings, capExpr, cleanValue, fieldById, valueOpts, applyRowOp, rowIdOf, rowDef, orphanRows, stampRows, cleanRowDef, projectRows, STAT_KEY, PALETTE_KEYS, GLYPHS, glyphPath, headerEdits, pinTargets, pinTargetsAll, hudView, hudHasContent, resetTargets, cleanListSpec, statKey, rowStat, plusText, rowPaid, itemReach, gmDerivedNames, labelGmNames, gmEffectNames, labelNames, withRound, rangeCtx, withRange, rowLvl, rowOn, cleanItemKey, charForView, secretFieldIds, gmViewFields } from './systemcore.js';
+import { cleanDamageRules, openSync, moneyBoxes, moneyHeld, rowOpMoney, onceOf, catHome, catPlace, cleanPlaceCats, catSplits, cleanFieldUnit, unitTail, heightWords, measureWords, unitWords, unitHead, listWords, unitOf, textWords, measureStore, rollNeedsOk, rollNeedsSays, timeRuleRun, ruleRunCtx, chainsShallow, makeResolver, hasDice, figText, cleanEvery, cleanInFight, droppedCounts, validPageId, LIMITS, KINDS, showsIf, rowRollNames, gmOnlyNames, applyAct, applyScope, applyRound, dueActs, combatChars, roundSecs, fxLeftNow, lastsSecs, APPLY_KINDS, TURN_UNITS, LIGHT_UNITS, RANGE_UNITS, HEIGHT_UNITS, TIME_WORDS, STORED, DEF_PROP, BAND_KINDS, IDENTITY_KINDS, LEDGER_KINDS, headerEntry, captionParts, emptySystem, uid, validKey, cleanSystem, cleanChar, validateSystem, resolveAll, hoverLines, autoLayout, applyEdit, applyStyle, cleanLooks, lookOf, lookFor, lookRule, applyEffectOp, fxText, fmtNum, budgetsOf, budgetWatch, budgetSays, needsMet, needsSays, initRoll, applyProposal, cleanUploads, sideOf, threatArc, facingCtx, facingNow, setAimSource, stanceCtx, tokenCtx, POSTURE_IDS, POSTURE_NAMES, DEFAULT_POSTURES, postureList, postureAt, autoEffectsOn, initTie, charTokenOn, cycleThreat, valueTone, TONES, activeCharOf, playableChars, ownedTokenPlan, applyOwnerOps, migrateBindings, capExpr, cleanValue, fieldById, valueOpts, applyRowOp, rowIdOf, rowDef, orphanRows, stampRows, cleanRowDef, projectRows, STAT_KEY, PALETTE_KEYS, GLYPHS, glyphPath, headerEdits, pinTargets, pinTargetsAll, hudView, hudHasContent, resetTargets, cleanListSpec, statKey, rowStat, plusText, rowPaid, itemReach, gmDerivedNames, labelGmNames, gmEffectNames, labelNames, withRound, rangeCtx, withRange, rowLvl, rowOn, cleanItemKey, charForView, secretFieldIds, gmViewFields } from './systemcore.js';
 import { fileBase, charToJson, charFromJson, sheetToMarkdown, isCharFile } from './sheetexport.js';
 import { lvlsFromBox, lvlsToText } from './librarycore.js';
 import { dieNode, DIE_LABELS } from './dieicons.js';   // 1.5.8, backlog 149: the dice drawings (pure)
@@ -2573,6 +2573,17 @@ function needBits(host, sys, c, entry, rd, gm) {
     chip.title = 'This character does not meet what it needs. ' + needsSays(null, nm.missing, function(id) { for (var i = 0; i < nd.length; i++) if (nd[i] && nd[i].id === id && typeof nd[i].name === 'string' && nd[i].name) return nd[i].name; return typeof needName === 'function' ? needName(sys, id, gm) : null; });   // the name an owner's copy carries, else what this app can read
     host.appendChild(chip);
 }
+// 1.5.8 Counted once: a row of a group says so in one chip. The row that applies names the others; a row that does not names the one that
+// applies. Grouped over the whole stored list, as the resolver's Row.once reads it (a placement may show some of it). Names as text
+function onceBits(host, sys, c, f, carried, entry) {
+    var spec = f && f.list; if (!spec || !spec.once || typeof onceOf !== 'function' || !entry) return;
+    var rows = c && c.values && Array.isArray(c.values[f.id]) ? c.values[f.id] : Array.isArray(carried) ? carried : [], at = rows.indexOf(entry); if (at < 0) return;
+    var items = rows.map(function(r) { var d = rowDef(sys, r); return { r: r, d: d ? d.def : null }; }), g = onceOf(spec, items, null), gi = g ? g[at] : null; if (!gi) return;
+    var nameAt = function(i) { var d = items[i] && items[i].d; return d && typeof d.name === 'string' && d.name ? d.name : 'another row'; };
+    var chip = el('span', 'sheet-chip sheet-item-once', 'counted once');
+    chip.title = gi.top === at ? 'Counted once with ' + gi.mem.filter(function(i) { return i !== at; }).map(nameAt).join(', ') + ': this one applies.' : 'Counted once with ' + nameAt(gi.top) + ': the higher applies, and this row gives nothing of its own.';
+    host.appendChild(chip);
+}
 // Stage 6 F4a: a copy of an entry deleted from the library — marked; the GM may make it the character's own item
 function lostBits(host, rd, entry, c, f, gm, editable) {
     if (!rd || rd.src !== 'lost') return;
@@ -2639,6 +2650,7 @@ function itemListInto(wrap, f, c, carried, sysI, canThrow, editable, gm, empty, 
         var opnR = typeof entry.opn === 'string'; if (opnR && typeof openedWords === 'function') { line.className += ' sheet-item-opened'; nm.appendChild(el('span', 'sheet-item-opened-tag', ' (' + openedWords(entry, c, sysI, spec) + ')')); }   // 1.5.8: a row another row opens says so, and holds no control that changes it
         if (chips && def.category) line.appendChild(el('span', 'sheet-chip', def.category));
         lostBits(line, rd, entry, c, f, gm, chg); needBits(line, sysI, c, entry, rd, gm); gmItemBits(line, def, entry, gm, !!(spec && spec.on)); keyShareChip(line, entry, rd, unseenL); modsBits(line, def, entry, spec, sysI);
+        if (typeof onceBits === 'function') onceBits(line, sysI, c, f, carried, entry);   // 1.5.8 Counted once
         var noteLn = null;
         if (spec) { statChips(line, def, spec, ovc); colChips(line, spec, res && res.cells ? res.cells[rid] : null); ctCtl(line, entry, c, f, spec, editable, res && res.cts ? res.cts[rid] : null); if (typeof loadCtl === 'function') loadCtl(line, entry, c, f, spec, editable, sysI); var lc = lvlCtl(entry, def, c, f, spec, chg && !opnR); if (lc) line.appendChild(lc); var oc = onCtl(entry, c, f, spec, editable, true, res && res.onOk ? res.onOk[rid] : undefined); if (oc) line.appendChild(oc); var pcL = paidCtl(entry, def, c, f, spec, chg, gm, true); if (pcL) line.appendChild(pcL); noteLn = hudRow ? null : noteBits(entry, def, c, f, chg, ovc); }   // F4c1: the stats shown On the row, what one cost
         if (def.area && canThrow && (gm || def.vis !== 'gm') && entry.hid !== 1) line.appendChild(itemThrowBtn(def, c, f, rid));   // a GM-only item: the GM's throw only (a player's copy never carries its area)
@@ -2805,6 +2817,7 @@ function itemTableInto(wrap, f, c, carried, sysI, canThrow, editable, gm, empty,
         var ovT = ovCtx(entry, rd, gm); ovNameDot(nameTd, ovT);   // F4c2: a dot when the copy holds values of its own
         if (tbl.chips && def.category) nameTd.appendChild(el('span', 'sheet-chip', def.category));
         lostBits(nameTd, rd, entry, c, f, gm, chg); needBits(nameTd, sysI, c, entry, rd, gm); gmItemBits(nameTd, def, entry, gm, hasO); keyShareChip(nameTd, entry, rd, unseenT); modsBits(nameTd, def, entry, spec, sysI);
+        if (typeof onceBits === 'function') onceBits(nameTd, sysI, c, f, carried, entry);   // 1.5.8 Counted once
         tr.appendChild(nameTd);
         cols.forEach(function(col) { tr.appendChild(el('td', 'sheet-itcol-' + col, itemCellText(col, def, typeof blastTag === 'function' ? blastTag : null))); });
         shownSt.forEach(function(s) { var sTd = el('td', 'sheet-itcol-stat', statShown(s, rowStat(spec, def, s.key))), sDt = statDot(s, spec, ovT); if (sDt) sTd.appendChild(sDt); tr.appendChild(sTd); });
@@ -5125,6 +5138,11 @@ function refreshErrors() {
         var onD = sp.on && typeof sp.on === 'object' && !Array.isArray(sp.on) ? sp.on : null, onPer = onD && typeof onD.per === 'string' ? onD.per.trim() : '';   // 1.5.4 One at a time: a Per stat as Save reads it
         if (onPer && !keptW[onPer.toLowerCase()]) errs.push({ message: 'One at a time goes by "' + onD.per + '", which is no stat of this list. ' + (onD.one === true ? 'Save keeps one row on for the whole list.' : 'Save drops it.') });
         if (onD && typeof onD.needsText === 'string' && onD.needsText.trim() && !(typeof onD.needs === 'string' && onD.needs.trim())) errs.push({ message: 'The switch has words but no Needs to switch on, so Save drops its words.' });   // 1.5.8: as the cleaner reads them (rollNeedsInto keeps the words only beside a formula)
+        if (sp.once && typeof sp.once === 'object' && typeof cleanListSpec === 'function') {   // 1.5.8 Counted once, as the cleaner reads it
+            var onceK = (cleanListSpec(sp, true, F()) || {}).once;
+            if (!onceK) errs.push({ message: 'Counted once needs a group stat and what makes a row the higher, each a number stat of this list or its level. Save drops it.' });
+            else { if (sp.once.cost && !onceK.cost) errs.push({ message: 'Counted once: its full price names no number stat or column of this list, so Save drops it.' }); if (sp.once.free && !onceK.free) errs.push({ message: 'Counted once: what was given free names no number stat of this list, so Save drops it.' }); }
+        }
         (Array.isArray(sp.cols) ? sp.cols : []).forEach(function(cc) {   // 1.5.4: a column's Metric list and its decimals, as the cleaner reads them
             if (!cc || typeof cc !== 'object') return;
             var cnU = (typeof cc.label === 'string' && cc.label) || (typeof cc.key === 'string' && cc.key) || 'A column', cmU = typeof cleanFieldUnit === 'function' && !!cleanFieldUnit(typeof unitOf === 'function' ? unitOf(cc.unit, true) : typeof cc.unit === 'string' ? cc.unit.trim() : '', 'number');
@@ -5937,6 +5955,7 @@ function listCard(f, allCats, targets, acts) {   // acts (turn-based combat T1):
         }
         cb2.appendChild(lrw);
     }
+    if (typeof onceBox === 'function') onceBox(cb2, sp);   // 1.5.8 Counted once
     // Stage 6 F5b: the list's rolls — a button on each row, the formula rolled with the row's names (dice allowed), LIMITS.rowRolls at most
     var rls = Array.isArray(sp.rolls) ? sp.rolls : [];
     cb2.appendChild(el('span', 'sys-num-cap', 'Rolls'));
@@ -5965,6 +5984,27 @@ function listCard(f, allCats, targets, acts) {   // acts (turn-based combat T1):
     cb2.appendChild(el('div', 'sys-note sys-list-names', listNamesText(f.key, sp)));
     card.appendChild(cb2);
     return card;
+}
+// 1.5.8 Counted once: the Lists tab's box. A group stat, what makes a row the higher, its full price and what was given free, each a select of
+// this list's own stats (and for the price its columns), by key, so a key or a label typed meanwhile reads at the next draw
+function onceBox(box, sp) {
+    var o = sp.once && typeof sp.once === 'object' ? sp.once : {}, rw = el('div', 'sys-flags sys-list-once');
+    var nums = (Array.isArray(sp.stats) ? sp.stats : []).filter(function(s) { return s && typeof s === 'object' && typeof s.key === 'string' && s.key && s.kind !== 'pick'; }).map(function(s) { return [s.key, s.label && s.label !== s.key ? s.label + ' (' + s.key + ')' : s.key]; });
+    var cols = (Array.isArray(sp.cols) ? sp.cols : []).filter(function(cc) { return cc && typeof cc === 'object' && typeof cc.key === 'string' && cc.key; }).map(function(cc) { return [cc.key, 'Column ' + (cc.label && cc.label !== cc.key ? cc.label + ' (' + cc.key + ')' : cc.key)]; });
+    var sel = function(cls, cap, cur, opts, tip) {
+        var lb = el('label', 'sys-num'), s = el('select', cls); s.title = tip; lb.appendChild(el('span', 'sys-num-cap', cap));
+        var cl = typeof cur === 'string' ? cur.toLowerCase() : '', hit = false;
+        opts.forEach(function(p) { var op = el('option', null, p[1]); op.value = p[0]; if (!hit && cl && p[0].toLowerCase() === cl) { op.selected = true; hit = true; } s.appendChild(op); });
+        if (cl && !hit) { var ox = el('option', null, cur + ' (not on this list)'); ox.value = cur; ox.selected = true; s.appendChild(ox); }
+        lb.appendChild(s); return lb;
+    };
+    rw.appendChild(el('span', 'sys-num-cap', 'Counted once'));
+    rw.appendChild(sel('sys-list-onceby', 'Group', o.by, [['', 'Not counted once']].concat(nums), 'Rows whose figure here is the same, and not 0, are one thing held two ways. Only one of them applies'));
+    rw.appendChild(sel('sys-list-oncerank', 'Higher by', o.rank, (sp.lvl && typeof sp.lvl === 'object' ? [['lvl', 'Its ' + (typeof sp.lvl.label === 'string' && sp.lvl.label ? sp.lvl.label : 'level')]] : []).concat(nums), 'Of a group, the row with the higher figure here applies. A tie goes to the row with less given free, then the later row'));
+    rw.appendChild(sel('sys-list-oncecost', 'Full price', o.cost, [['', 'None']].concat(nums, cols), 'Row.oncecost reads the highest figure here in the row\u2019s group'));
+    rw.appendChild(sel('sys-list-oncefree', 'Given free', o.free, [['', 'None']].concat(nums), 'Row.oncefree reads the largest figure here in the row\u2019s group'));
+    box.appendChild(rw);
+    if (o.by) box.appendChild(el('div', 'sys-note sys-list-oncenote', 'A row of a group that does not apply gives none of its changes. Charge a group once with a cost column such as if(Row.once, max(0, Row.oncecost - Row.oncefree), 0).'));
 }
 // F5a1: the names a list offers formulas, as one line of text for its card (its key as typed)
 function listNamesText(key, sp) {
@@ -7426,6 +7466,11 @@ function onChange(e) {
         else if (c.indexOf('sys-list-colmetric') >= 0 || c.indexOf('sys-list-statmetric') >= 0) { var mcol = c.indexOf('sys-list-colmetric') >= 0, mrw = t.closest(mcol ? '.sys-list-col' : '.sys-list-stat'), mLs = mcol ? lsc.cols : lsc.stats, mD = mrw && Array.isArray(mLs) ? mLs[+(mcol ? mrw.dataset.ci : mrw.dataset.si)] : null; if (!mD || typeof mD !== 'object') return; if (t.value === 'swap' || t.value === 'bare') mD.unitShow = t.value; else delete mD.unitShow; }   // 1.5.4: how a measure reads under Metric
         else if (c.indexOf('sys-list-loadfrom') >= 0) { if (t.value) { var ld0 = lsc.load && typeof lsc.load === 'object' ? lsc.load : {}, ct0 = Array.isArray(lsc.counters) && lsc.counters[0] && typeof lsc.counters[0].key === 'string' ? lsc.counters[0].key : ''; lsc.load = { from: t.value, ct: typeof ld0.ct === 'string' && ld0.ct ? ld0.ct : ct0 }; if (Array.isArray(ld0.cats)) lsc.load.cats = ld0.cats; } else delete lsc.load; }   // 1.5.8 Loads from
         else if (c.indexOf('sys-list-loadct') >= 0) { if (lsc.load && typeof lsc.load === 'object') { if (t.value) lsc.load.ct = t.value; else delete lsc.load.ct; } }
+        else if (c.indexOf('sys-list-once') >= 0) {   // 1.5.8 Counted once (Save keeps it only with a group stat and a Higher by, each of this list)
+            var oKey = c.indexOf('sys-list-onceby') >= 0 ? 'by' : c.indexOf('sys-list-oncerank') >= 0 ? 'rank' : c.indexOf('sys-list-oncecost') >= 0 ? 'cost' : c.indexOf('sys-list-oncefree') >= 0 ? 'free' : ''; if (!oKey) return;
+            if (oKey === 'by' && !t.value) delete lsc.once;
+            else { var oD = lsc.once && typeof lsc.once === 'object' ? lsc.once : (lsc.once = {}); if (t.value) oD[oKey] = t.value; else delete oD[oKey]; if (oKey === 'by' && !oD.rank) { var oN = (Array.isArray(lsc.stats) ? lsc.stats : []).filter(function(s) { return s && typeof s === 'object' && typeof s.key === 'string' && s.key && s.kind !== 'pick'; })[0]; oD.rank = lsc.lvl && typeof lsc.lvl === 'object' ? 'lvl' : oN ? oN.key : ''; if (!oD.rank) delete oD.rank; } }
+        }
         else if (c.indexOf('sys-list-money') >= 0) { if (t.value) lsc.money = t.value; else delete lsc.money; }   // 1.5.6 the Money box (Save keeps a level only with one, a stat only as a number stat)
         else if (c.indexOf('sys-list-price') >= 0) { _priceAt.delete(lsc); if (t.value) lsc.price = t.value; else delete lsc.price; }
         else return;
