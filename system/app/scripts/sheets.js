@@ -8,7 +8,7 @@ import { getActiveCampaign } from './models.js';
 import { save, toast, toastAction } from './io.js';
 import { picRef } from './safecore.js';
 import { showConfirm, showPrompt } from './dialogs.js';
-import { cleanDamageRules, openSync, moneyBoxes, moneyHeld, rowOpMoney, onceOf, catHome, catPlace, cleanPlaceCats, catSplits, cleanFieldUnit, unitTail, heightWords, measureWords, unitWords, unitHead, listWords, unitOf, textWords, measureStore, rollNeedsOk, rollNeedsSays, timeRuleRun, ruleRunCtx, chainsShallow, makeResolver, hasDice, figText, cleanEvery, cleanInFight, droppedCounts, validPageId, LIMITS, KINDS, showsIf, rowRollNames, gmOnlyNames, applyAct, applyScope, applyRound, dueActs, combatChars, roundSecs, fxLeftNow, lastsSecs, APPLY_KINDS, TURN_UNITS, LIGHT_UNITS, RANGE_UNITS, HEIGHT_UNITS, TIME_WORDS, STORED, DEF_PROP, BAND_KINDS, IDENTITY_KINDS, LEDGER_KINDS, headerEntry, captionParts, emptySystem, uid, validKey, cleanSystem, cleanChar, validateSystem, resolveAll, hoverLines, autoLayout, applyEdit, applyStyle, cleanLooks, lookOf, lookFor, lookRule, applyEffectOp, fxText, fmtNum, budgetsOf, budgetWatch, budgetSays, needsMet, needsSays, initRoll, applyProposal, cleanUploads, sideOf, threatArc, facingCtx, facingNow, setAimSource, stanceCtx, tokenCtx, POSTURE_IDS, POSTURE_NAMES, DEFAULT_POSTURES, postureList, postureAt, autoEffectsOn, initTie, charTokenOn, cycleThreat, valueTone, TONES, activeCharOf, playableChars, ownedTokenPlan, applyOwnerOps, migrateBindings, capExpr, cleanValue, fieldById, valueOpts, applyRowOp, rowIdOf, rowDef, orphanRows, stampRows, cleanRowDef, projectRows, STAT_KEY, PALETTE_KEYS, GLYPHS, glyphPath, headerEdits, pinTargets, pinTargetsAll, hudView, hudHasContent, resetTargets, cleanListSpec, statKey, rowStat, plusText, rowPaid, itemReach, gmDerivedNames, labelGmNames, gmEffectNames, labelNames, withRound, rangeCtx, withRange, rowLvl, rowOn, cleanItemKey, charForView, secretFieldIds, gmViewFields } from './systemcore.js';
+import { cleanDamageRules, loadFits, openSync, moneyBoxes, moneyHeld, rowOpMoney, onceOf, catHome, catPlace, cleanPlaceCats, catSplits, cleanFieldUnit, unitTail, heightWords, measureWords, unitWords, unitHead, listWords, unitOf, textWords, measureStore, rollNeedsOk, rollNeedsSays, timeRuleRun, ruleRunCtx, chainsShallow, makeResolver, hasDice, figText, cleanEvery, cleanInFight, droppedCounts, validPageId, LIMITS, KINDS, showsIf, rowRollNames, gmOnlyNames, applyAct, applyScope, applyRound, dueActs, combatChars, roundSecs, fxLeftNow, lastsSecs, APPLY_KINDS, TURN_UNITS, LIGHT_UNITS, RANGE_UNITS, HEIGHT_UNITS, TIME_WORDS, STORED, DEF_PROP, BAND_KINDS, IDENTITY_KINDS, LEDGER_KINDS, headerEntry, captionParts, emptySystem, uid, validKey, cleanSystem, cleanChar, validateSystem, resolveAll, hoverLines, autoLayout, applyEdit, applyStyle, cleanLooks, lookOf, lookFor, lookRule, applyEffectOp, fxText, fmtNum, budgetsOf, budgetWatch, budgetSays, needsMet, needsSays, initRoll, applyProposal, cleanUploads, sideOf, threatArc, facingCtx, facingNow, setAimSource, stanceCtx, tokenCtx, POSTURE_IDS, POSTURE_NAMES, DEFAULT_POSTURES, postureList, postureAt, autoEffectsOn, initTie, charTokenOn, cycleThreat, valueTone, TONES, activeCharOf, playableChars, ownedTokenPlan, applyOwnerOps, migrateBindings, capExpr, cleanValue, fieldById, valueOpts, applyRowOp, rowIdOf, rowDef, orphanRows, stampRows, cleanRowDef, projectRows, STAT_KEY, PALETTE_KEYS, GLYPHS, glyphPath, headerEdits, pinTargets, pinTargetsAll, hudView, hudHasContent, resetTargets, cleanListSpec, statKey, rowStat, plusText, rowPaid, itemReach, gmDerivedNames, labelGmNames, gmEffectNames, labelNames, withRound, rangeCtx, withRange, rowLvl, rowOn, cleanItemKey, charForView, secretFieldIds, gmViewFields } from './systemcore.js';
 import { fileBase, charToJson, charFromJson, sheetToMarkdown, isCharFile } from './sheetexport.js';
 import { lvlsFromBox, lvlsToText } from './librarycore.js';
 import { dieNode, DIE_LABELS } from './dieicons.js';   // 1.5.8, backlog 149: the dice drawings (pure)
@@ -2741,12 +2741,13 @@ var _ldPop = null;
 function closeLoadMenu() { if (_ldPop) { _ldPop.remove(); _ldPop = null; document.removeEventListener('mousedown', ldOutside, true); document.removeEventListener('keydown', ldKey, true); } }
 function ldOutside(e) { if (_ldPop && !_ldPop.contains(e.target) && !(_ldPop._anchor && _ldPop._anchor.contains(e.target))) closeLoadMenu(); }
 function ldKey(e) { if (_ldPop && e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); var a = _ldPop._anchor; closeLoadMenu(); try { if (a) a.focus(); } catch (er) {} } }
-function loadChoices(sys, c, sf, spec) {   // the source rows a load may take: live, not loaded, of a category it takes
+function loadChoices(sys, c, sf, spec, host) {   // the source rows a load may take: live, not loaded, of a category it takes
     var sl = sf.list, ld = spec.load, out = [];
     (c && c.values && Array.isArray(c.values[sf.id]) ? c.values[sf.id] : []).forEach(function(s) {
         if (!s || typeof s !== 'object' || s.hid === 1 || typeof s.opn === 'string' || s.keptOn === 1 || (s.ld && typeof s.ld === 'object')) return;
         var sd = rowDef(sys, s), d = sd ? sd.def : null; if (!d) return;
         if (Array.isArray(ld.cats) && !ld.cats.some(function(x) { return String(x).toLowerCase() === String(d.category || '').trim().toLowerCase(); })) return;
+        if (host && typeof loadFits === 'function' && !loadFits(sys, spec, host, sl, s)) return;   // Matched by: only what fits this row
         out.push({ id: rowIdOf(s), name: d.name || 'Item', qty: s.qty | 0 || 1, lvl: rowLvl(sl, s, d) });
     });
     return out;
@@ -2756,7 +2757,7 @@ function openLoadMenu(anchor, c, f, entry, sf, spec, sys) {
     var rid = rowIdOf(entry), lvL = (sf.list.lvl && sf.list.lvl.label) || 'Level', pop = el('div', 'sheet-dl-pop sheet-load-pop'); pop.setAttribute('role', 'menu'); pop._anchor = anchor;
     var go = function(from) { closeLoadMenu(); commitItem(c, f, { op: 'load', rowId: rid, from: from, back: uid('w_') }); };
     var item = function(label, sub, from) { var b = el('button', 'sheet-dl-item'); b.type = 'button'; b.setAttribute('role', 'menuitem'); b.appendChild(el('span', 'sheet-dl-t', label)); b.appendChild(el('span', 'sheet-dl-s', sub)); b.addEventListener('click', function(e) { e.preventDefault(); go(from); }); pop.appendChild(b); };
-    var ch = loadChoices(sys, c, sf, spec);
+    var ch = loadChoices(sys, c, sf, spec, entry);
     ch.forEach(function(x) { item(x.name + (x.qty > 1 ? ' \u00d7' + x.qty : ''), lvL + ' ' + fmtNum(x.lvl), x.id); });
     if (entry.ld && typeof entry.ld === 'object') item('Unload', 'Back to ' + (sf.label || sf.key || 'its list') + ' with what it has left', null);
     if (!pop.children.length) pop.appendChild(el('div', 'sheet-dl-note', 'Nothing in ' + (sf.label || sf.key || 'that list') + ' to load.'));
@@ -5955,6 +5956,8 @@ function listCard(f, allCats, targets, acts) {   // acts (turn-based combat T1):
             lrw.appendChild(csel);
             lrw.appendChild(input('sys-list-loadcats field', Array.isArray(ldS.cats) ? ldS.cats.join(', ') : '', 'The categories of that list a row may load, separated by commas. Blank: any of its rows', 'Categories it takes (blank: any)'));
             lrw.appendChild(input('sys-list-loadneeds field', typeof ldS.needs === 'string' ? ldS.needs : '', 'A formula a row must meet to load, read with its own names (Row.*), no dice. Blank: every row. A row that does not meet it shows no Load', 'Loads only where (blank: every row)'));
+            lrw.appendChild(input('sys-list-loadby field', typeof ldS.by === 'string' ? ldS.by : '', 'A stat of this list. A row loads only what reads the same figure in the stat below, as a blaster takes its own kind of pack. Blank: anything the categories take', 'Matched by: this list\u2019s stat'));
+            lrw.appendChild(input('sys-list-loadto field', typeof ldS.to === 'string' ? ldS.to : '', 'The stat of the list it loads from that must read the same figure', 'and that list\u2019s stat'));
             lrw.appendChild(input('sys-list-loadneedstext field', typeof ldS.needsText === 'string' ? ldS.needsText : '', 'What a refused load says', 'Its words'));
         }
         cb2.appendChild(lrw);
@@ -7302,6 +7305,8 @@ function onInput(e) {
             if (lcc.indexOf('sys-list-needstext') >= 0) { if (t.value.trim()) nR.needsText = t.value.slice(0, LIMITS.label); else delete nR.needsText; }
             else { if (t.value.trim()) nR.needs = t.value.slice(0, LIMITS.formula); else delete nR.needs; }
         }
+        else if (lcc.indexOf('sys-list-loadby') >= 0) { if (!lsp.load || typeof lsp.load !== 'object') return; if (t.value.trim()) lsp.load.by = t.value.trim(); else delete lsp.load.by; }   // 1.5.8 Matched by (Save keeps the pair only where both name a stat)
+        else if (lcc.indexOf('sys-list-loadto') >= 0) { if (!lsp.load || typeof lsp.load !== 'object') return; if (t.value.trim()) lsp.load.to = t.value.trim(); else delete lsp.load.to; }
         else if (lcc.indexOf('sys-list-loadneedstext') >= 0) { if (!lsp.load || typeof lsp.load !== 'object') return; if (t.value.trim()) lsp.load.needsText = t.value; else delete lsp.load.needsText; }   // 1.5.8 Loads only where's words
         else if (lcc.indexOf('sys-list-loadneeds') >= 0) { if (!lsp.load || typeof lsp.load !== 'object') return; if (t.value.trim()) lsp.load.needs = t.value; else delete lsp.load.needs; }   // 1.5.8 Loads only where (Save cleans it as a list roll's needs)
         else if (lcc.indexOf('sys-list-loadcats') >= 0) { if (!lsp.load || typeof lsp.load !== 'object') return; var lcv = t.value.split(',').map(function(s) { return s.trim(); }).filter(Boolean); if (lcv.length) lsp.load.cats = lcv; else delete lsp.load.cats; }   // 1.5.8 Loads from (Save cleans them)

@@ -13494,6 +13494,18 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             && shD.includes("else if (c.indexOf('sys-roll-die') >= 0) { if (t.value) r.die = t.value; else delete r.die; }") && shD.includes("else if (c.indexOf('sys-fielddie') >= 0) { if (t.value) f.rollDie = t.value; else delete f.rollDie; }")
             && shD.includes("if (t.value) riD.die = t.value; else delete riD.die; }") && shD.includes("import { dieNode, DIE_LABELS } from './dieicons.js';"));
     }
+    {   // 1.5.8 Loads from, Matched by: a stat of each list that must read the same figure (a blaster takes only its own kind of pack)
+        const lw = { id: 'f_mw', key: 'Gear', label: 'Gear', kind: 'item-list', vis: 'all', edit: 'owner', list: { cats: ['Gear'], multi: true, stats: [{ key: 'size', label: 'Size' }], counters: [{ key: 'ch', label: 'Charge', max: 'Row.loadmax' }], load: { from: 'f_mc', ct: 'ch', by: 'Size', to: 'fits' } } };
+        const lc = { id: 'f_mc', key: 'Cells', label: 'Cells', kind: 'item-list', vis: 'all', edit: 'owner', list: { cats: ['Cell'], multi: true, stats: [{ key: 'fits', label: 'Fits' }], lvl: { label: 'Charge', min: 0, max: 100, def: 0 } } };
+        const sysM = S.cleanSystem({ fields: [lw, lc], items: [{ id: 'i_lamp', name: 'Big Lamp', category: 'Gear', stats: { size: 3 } }, { id: 'i_small', name: 'Small Cell', category: 'Cell', lvl: 20, stats: { fits: 1 } }, { id: 'i_big', name: 'Big Cell', category: 'Cell', lvl: 60, stats: { fits: 3 } }] }, { F, gmView: true });
+        const kael = { id: 'c_kael', name: 'Kael', values: { f_mw: [{ id: 'w_lamp', defId: 'i_lamp', qty: 1 }], f_mc: [{ id: 'w_sm', defId: 'i_small', qty: 1, lvl: 20 }, { id: 'w_bg', defId: 'i_big', qty: 1, lvl: 60 }] } };
+        const no = S.applyRowOp(sysM, kael, 'f_mw', { op: 'load', rowId: 'w_lamp', from: 'w_sm', back: 'w_b1' }, F, {}), yes = S.applyRowOp(sysM, kael, 'f_mw', { op: 'load', rowId: 'w_lamp', from: 'w_bg', back: 'w_b2' }, F, {});
+        const loadM = S.fieldById(sysM, 'f_mw').list.load, bad = S.cleanSystem({ fields: [Object.assign({}, lw, { list: Object.assign({}, lw.list, { load: { from: 'f_mc', ct: 'ch', by: 'Nope', to: 'fits' } }) }), lc], items: [] }, { F, gmView: true });
+        check('1.5.8 Loads from, Matched by: kept spelled as this list\'s stat beside the other list\'s, gone where this list has no such stat; a row loads only what reads the same figure (refused in words otherwise); with none named every row fits',
+            loadM.by === 'size' && loadM.to === 'fits' && S.fieldById(bad, 'f_mw').list.load.by === undefined && no.ok === false && /does not fit/.test(no.msg || '') && yes.ok === true && yes.value[0].ct.ch === 60
+            && S.loadFits(sysM, { load: { from: 'f_mc', ct: 'ch' } }, kael.values.f_mw[0], S.fieldById(sysM, 'f_mc').list, kael.values.f_mc[0]) === true,
+            [loadM, no, yes.ok, yes.value && yes.value[0]]);
+    }
     {   // 1.5.8 Loads only where: a formula a row must meet before it may load (an unload is never judged), kept as a list roll's needs
         const lw = { id: 'f_lw', key: 'Gear', label: 'Gear', kind: 'item-list', vis: 'all', edit: 'owner', list: { cats: ['Gear'], multi: true, stats: [{ key: 'kind', label: 'Kind' }], counters: [{ key: 'ch', label: 'Charge', max: 'Row.loadmax' }], load: { from: 'f_lc', ct: 'ch', needs: 'Row.kind = 1', needsText: 'It takes no cell.' } } };
         const lc = { id: 'f_lc', key: 'Cells', label: 'Cells', kind: 'item-list', vis: 'all', edit: 'owner', list: { cats: ['Cell'], multi: true, lvl: { label: 'Charge', min: 0, max: 100, def: 0 } } };
