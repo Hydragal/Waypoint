@@ -12,6 +12,12 @@ At the table
   for Clear and their name, or right-click their chip on the party
   strip. Everyone at the table sees the pointer go.
 
+Character sheets
+- Every roll on the sheet and the HUD has a small ± button beside it. It
+  opens the modifier popover for that roll: add a bonus or a penalty, or
+  roll twice and keep the better or worse. Shift-click on the roll still
+  does the same.
+
 WAYPOINT 1.5.8 — What's New
 ============================
 

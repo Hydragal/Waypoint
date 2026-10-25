@@ -235,11 +235,13 @@ function rollerNode(pl, c, key) {
         if ((box.closest && box.closest('#systemModal')) || !canRoll(c)) return;
         var ex = st.expr.trim(); if (!ex) { toast('Type a formula to roll, for example 2d6 + 3.'); return; }
         var lab = st.label.trim() || pl.text || 'Custom roll';
-        if (e && (e.shiftKey || e.altKey) && window.wpDice.rollWithMod) window.wpDice.rollWithMod(c.id, ex, lab, { source: 'sheet' }, go); else window.wpDice.rollFor(c.id, ex, lab, { source: 'sheet' });
+        if (e && (e.shiftKey || e.altKey) && window.wpDice.rollWithMod) window.wpDice.rollWithMod(c.id, ex, lab, { source: 'sheet' }, (e && e.modAt) || go); else window.wpDice.rollFor(c.id, ex, lab, { source: 'sheet' });   // 1.5.9: anchored to the ± when it was pressed
     };
     go.addEventListener('click', doRoll);
     fx.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); doRoll(e); } });
-    row.appendChild(fx); row.appendChild(lb); row.appendChild(go); box.appendChild(row);
+    row.appendChild(fx); row.appendChild(lb); row.appendChild(go);
+    var pmR = typeof rollModBtn === 'function' ? rollModBtn(go, doRoll) : null; if (pmR) row.appendChild(pmR);   // 1.5.9: its ±
+    box.appendChild(row);
     return box;
 }
 // A handbook link placement: a button that opens its page; nothing at all when the page is not here
@@ -2692,12 +2694,13 @@ function rowRollBtns(host, spec, entry, def, c, f, res) {   // res (R2b): the fi
             host.appendChild(ab); return;
         }
         if (!rollOk || !r || typeof r.formula !== 'string' || !r.formula) return;
-        var lb = r.label || 'Roll', b = el('button', 'tool ghost sheet-item-roll', lb); b.type = 'button'; if (typeof dieFor === 'function') b.insertBefore(dieFor(r.die, r.formula), b.firstChild);   // 1.5.8: its die b.title = nm + ' \u00b7 ' + lb + ': ' + r.formula + ' (shift-click adds a modifier)';
+        var lb = r.label || 'Roll', b = el('button', 'tool ghost sheet-item-roll', lb); b.type = 'button'; if (typeof dieFor === 'function') b.insertBefore(dieFor(r.die, r.formula), b.firstChild); b.title = nm + ' \u00b7 ' + lb + ': ' + r.formula + ' (shift-click adds a modifier)';   // 1.5.8: its die (1.5.9: its title back, which this comment had swallowed)
         var nOk = !r.needs || !(res && res.rn && res.rn[rid]) || res.rn[rid][ri] !== false, withE = !!(Array.isArray(r.then) && r.then.length) || !!r.needs || !!r.malf || !!r.cost || !!r.dmg;   // Stage 6 HUD R2b: its needs for this row; a roll with consequences or needs names its index
         if (!nOk) { b.disabled = true; b.title = (r.needsText || 'Not now') + ' \u2014 it needs ' + r.needs; }
         var cbL = typeof costBlock === 'function' ? costBlock(c, r.cost) : ''; if (cbL) { b.disabled = true; b.title = cbL + ' \u2014 ' + nm + ' \u00b7 ' + lb; }   // turn-based combat T4
-        b.addEventListener('click', function(e) { sheetRoll(e, c.id, r.formula, nm + ' \u00b7 ' + lb, { row: withE ? { f: f.id, r: rid, i: ri } : { f: f.id, r: rid } }); });
-        host.appendChild(b);
+        var goL = function(e) { sheetRoll(e, c.id, r.formula, nm + ' \u00b7 ' + lb, { row: withE ? { f: f.id, r: rid, i: ri } : { f: f.id, r: rid } }); };
+        b.addEventListener('click', goL);
+        host.appendChild(b); var pmL = typeof rollModBtn === 'function' ? rollModBtn(b, goL) : null; if (pmL) host.appendChild(pmL);   // 1.5.9: its ±
     });
 }
 // Stage 6 HUD R2: a row's counters — a chip each (Charges 12/20); −/+ for whoever may change the row's facts (one set op a click, the host judges it)
@@ -3366,7 +3369,7 @@ function inlineRow(node, f) {
     node.classList.add('sheet-inline-row'); node.classList.remove('sheet-tile');
     var rb = node.querySelector('.sheet-field-roll'); if (!rb) return;
     var cap = null; Array.prototype.forEach.call(node.children, function(k) { if (!cap && k.classList.contains('sheet-caption')) cap = k; });
-    rb.textContent = 'Roll'; if (typeof dieFor === 'function' && f.roll) rb.insertBefore(dieFor(f.rollDie, f.roll), rb.firstChild); rb.classList.add('sheet-inline-roll'); node.insertBefore(rb, cap);   // 1.5.8: its die before the word
+    rb.textContent = 'Roll'; if (typeof dieFor === 'function' && f.roll) rb.insertBefore(dieFor(f.rollDie, f.roll), rb.firstChild); rb.classList.add('sheet-inline-roll'); var pmI = rb.nextElementSibling && rb.nextElementSibling.classList && rb.nextElementSibling.classList.contains('sheet-roll-mod') ? rb.nextElementSibling : null; node.insertBefore(rb, cap); if (pmI) node.insertBefore(pmI, cap);   // 1.5.8: its die before the word (1.5.9: its ± goes with it)
 }
 // Stage 6 look fold (L8): a number box with its up and down arrows inside its right edge. The box changes at once; one commit goes about 200 ms
 // after the last click, none when the value is back where it started (unbatched clicks would hit the host's rate gate), as the slider does.
@@ -3420,7 +3423,7 @@ function fieldNodeBody(f, c, e, gm, own, sysArg, plc) {   // plc (F4b): the sect
     if (f.tile) box.classList.add('sheet-tile');   // Stage 3: compact stat tile (value big, label small)
     if (f.vis === 'gm') box.classList.add('sheet-gm');
     var lab = el('label', 'sheet-label', f.label); lab.title = f.key + (f.vis === 'gm' ? ' (GM only)' : ''); box.appendChild(lab);
-    if (f.roll) { var rb = el('button', 'tool ghost sheet-field-roll', typeof dieFor === 'function' ? undefined : String.fromCharCode(55356, 57266)); if (typeof dieFor === 'function') rb.appendChild(dieFor(f.rollDie, f.roll)); rb.title = 'Roll ' + f.roll + ' · shift-click to add a modifier'; rb.disabled = !canRoll(c); rb.addEventListener('click', function(e) { sheetRoll(e, c.id, f.roll, f.label || f.key, f.vis === 'gm' ? { gmOnly: true } : undefined); }); lab.appendChild(rb); }   // the field's own roll (1.5.0); a GM-only field's stays the GM's
+    if (f.roll) { var rb = el('button', 'tool ghost sheet-field-roll', typeof dieFor === 'function' ? undefined : String.fromCharCode(55356, 57266)); if (typeof dieFor === 'function') rb.appendChild(dieFor(f.rollDie, f.roll)); rb.title = 'Roll ' + f.roll + ' · shift-click to add a modifier'; rb.disabled = !canRoll(c); var goF = function(e) { sheetRoll(e, c.id, f.roll, f.label || f.key, f.vis === 'gm' ? { gmOnly: true } : undefined); }; rb.addEventListener('click', goF); lab.appendChild(rb); var pmF = typeof rollModBtn === 'function' ? rollModBtn(rb, goF) : null; if (pmF) lab.appendChild(pmF); }   // the field's own roll (1.5.0); a GM-only field's stays the GM's
     var editable = gm || (own && f.vis === 'all' && (f.edit === 'owner' || c.making === 1 || c.unlocked === 1));
     var lk = typeof lockedNow === 'function' && lockedNow(), use = editable && (typeof fieldOpen !== 'function' || fieldOpen(f));   // the sheet's lock: this field's own control in the view being drawn (locked, only what changes in play). Asked through typeof: a harness that slices this function alone draws it unlocked
     var playOk = editable && (!lk || f.live !== false), editOk = editable && (!lk || f.live === true);   // a list's two halves: what is used in play (a switch, a count, a use), and what changes the character (a level, a row, a note)
@@ -3573,6 +3576,18 @@ function sheetRoll(e, charId, expr, label, opts) {
     if ((e.shiftKey || e.altKey) && window.wpDice.rollWithMod) window.wpDice.rollWithMod(charId, expr, label, opts, e.currentTarget);
     else if (window.wpDice.rollFor) window.wpDice.rollFor(charId, expr, label, opts);
 }
+// 1.5.9 (the owner, at the table: "theres no way to add modifiers to rolls in the character sheet"; by prompt: "A ± button on each roll"): the
+// small ± beside a roll button opens the very popover shift-click opens, for that very roll, anchored to the ±. go is the roll button's own
+// click handler, handed an event that says shift and names the ±, so the roll's formula, label and opts are the button's own. Pressed as the
+// roll is: disabled with it, with its reason. None on paper (a print copy), which shows no control
+function rollModBtn(b, go) {
+    if (!b || typeof go !== 'function' || (typeof window !== 'undefined' && window && window.wpPrintCopy === true)) return null;
+    var pm = el('button', 'tool ghost sheet-roll-mod', '\u00b1'); pm.type = 'button';
+    pm.title = 'Add a modifier, or roll twice and keep the better or worse'; if (pm.setAttribute) pm.setAttribute('aria-label', 'Roll with a modifier');
+    if (b.disabled) { pm.disabled = true; if (b.title) pm.title = b.title; }
+    pm.addEventListener('click', function() { if (pm.disabled) return; go({ shiftKey: true, altKey: false, currentTarget: pm, modAt: pm, preventDefault: function() {} }); });
+    return pm;
+}
 var ROLL_TONE_CLS = { primary: ' sheet-roll-primary', danger: ' sheet-roll-danger', neutral: ' sheet-roll-neutral', outline: ' sheet-roll-outline' };   // Stage 6 look fold: literal classes, looked up by own key
 // HUD frame (HF5a, H3): a roll's label with each {formula} worked out for this character, as a caption is (text only; a value that fails
 // prints a dash); the label as written when there is no resolver. Cut to the dice path's 60 without splitting a surrogate pair (a lone one is dropped)
@@ -3599,12 +3614,15 @@ function rollNode(r, c, sys, vars) {   // sys, vars: the system drawn and the re
     b.title = r.formula + (can ? ' · shift-click to add a modifier' : ' (dice are off here, or this is not your character)'); b.disabled = !can;
     var cbR = can && typeof costBlock === 'function' ? costBlock(c, r.cost) : ''; if (cbR) { b.disabled = true; b.title = cbR + ' \u2014 ' + r.formula; }   // turn-based combat T4
     if (can && r.needs && typeof rollNeedsOk === 'function' && typeof vars === 'function' && !rollNeedsOk(r, vars, F())) { b.disabled = true; b.title = (r.needsText || 'Not now') + ' \u2014 it needs ' + r.needs; }   // 1.5.4: what it needs, as a list roll's button (the host judges a player's roll)
-    b.addEventListener('click', function(e) {
+    var goN = function(e) {   // 1.5.9: named, so its ± runs the very same click
         var lb = label, vv = vars;
         if (sys && typeof vars === 'function' && r.label && r.label.indexOf('{') >= 0 && F()) { try { var campN = getActiveCampaign(), cN = charById(c.id, campN) || c; vv = resolveAll(sys, cN, F(), tokenCtxFor(c.id, campN)).vars; lb = rollLabel(r, sys, cN, vv); } catch (err) { lb = label; vv = vars; } }   // HF5 review: the values as they are at the click, as the roll reads them (a redraw may still wait on a focused box)
         var why = labelSecret(sys, vv, r.label); if (why) toast('Kept private: its label shows a GM-only value (' + why + ').'); var oR = why ? { priv: true } : r.vis === 'gm' ? { gmOnly: true } : undefined; if (r.needs) { oR = oR || {}; oR.act = r.id; } if ((Array.isArray(r.then) && r.then.length) || r.malf || r.cost || r.dmg || r.init === true) { oR = oR || {}; oR.act = r.id; } sheetRoll(e, c.id, r.formula, lb, oR);   // R1: a roll with consequences names itself (initiative O1: the initiative roll too, so the host can trust its number into the fight)   // a GM-only roll stays the GM's
-    });
-    var box = el('div', 'sheet-field sheet-kind-roll'); box.appendChild(b); return box;
+    };
+    b.addEventListener('click', goN);
+    var box = el('div', 'sheet-field sheet-kind-roll'); box.appendChild(b);
+    var pm = typeof rollModBtn === 'function' ? rollModBtn(b, goN) : null; if (pm) { box.appendChild(pm); box.classList.add('sheet-roll-pair'); }   // 1.5.9: its ±, pressed as the roll is
+    return box;
 }
 // A roll from this character's sheet: the dice feature on, and for a player their own character
 // Turn-based combat T4: why a button that costs an action cannot be pressed now — none of it left this turn, as the host last told this player
