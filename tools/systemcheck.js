@@ -616,6 +616,17 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         const curseFull = { id: 'c_1', name: 'P', ownerId: 'u_p', npc: false, values: { f_fx: [{ id: 'x_1', ref: 'e_curse', on: true }] } };
         const rvC = S.makeResolver(GM5, curseFull, F); rvC('HP');
         check('5h review: a GM-only effect on a full pool (through its max) is found, so a public roll of "HP" stays private', S.gmEffectNames(rvC, [{ name: 'HP', value: 7 }]).join() === 'HP', j(rvC.detail('HP')));
+        {   // 1.5.8, book handoff 90 Part B: what changed the values a roll reads, for its card (systemcore rollMods, run for real)
+            const rvM = S.makeResolver(GM5, cc, F); rvM('ST');
+            const mdM = S.rollMods(rvM, [{ name: 'ST', value: 9 }, { name: 'ST', value: 9 }, { name: 'Nope', value: 3 }, { name: 'ST', value: true }, 'x']);
+            const rvR = S.makeResolver(GM5, ch5([{ id: 'x_1', ref: 'e_rage', on: true }]), F); rvR('ST');
+            const mdR = S.rollMods(rvR, [{ name: 'ST', value: 12 }]), mdNone = S.rollMods(S.makeResolver(GM5, ch5([]), F), [{ name: 'ST', value: 10 }]);
+            const stub = n => null; stub.detail = () => ({ base: 5, mods: [{ name: 'A', op: 'add', v: 2, gm: false }, { name: 'A', op: 'add', v: 2, gm: false }, { name: 'On', op: 'on', v: 0, gm: false }, { name: '\u0007', op: 'add', v: 1 }], via: [{ through: 'DX', name: 'B', op: 'add', v: -1, gm: false }] });
+            const mdS = S.rollMods(stub, [{ name: 'Skill', value: 6 }]);
+            check('1.5.8 a roll\'s card names what changed the values it reads (rollMods, run for real): each name an effect changed once, its figure before and after the effects on it and each such change by its source; a GM-only effect never named, its amount left in the figure before (ST 9: Rage +2 shown, 7 before, the Curse folded in); an effect on a value it is worked out from listed apart with what it changed, inside the figure before; a toggle switched on, a name with no change, a value that is no number and a source with no name passed over; none with no change',
+                j(mdM) === j([{ n: 'ST', b: 7, a: 9, m: [{ s: 'Rage', v: 2 }] }]) && j(mdR) === j([{ n: 'ST', b: 10, a: 12, m: [{ s: 'Rage', v: 2 }] }]) && mdNone === null
+                && j(mdS) === j([{ n: 'Skill', b: 4, a: 6, m: [{ s: 'A', v: 2 }], w: [{ s: 'B', v: -1, t: 'DX' }] }]) && S.rollMods(null, []) === null && S.rollMods(stub, 'x') === null, j([mdM, mdR, mdNone, mdS]));
+        }
         const fr = { v: 1, name: 'FR', fields: [{ id: 'f_ht', key: 'HT', kind: 'number', def: 11, vis: 'all' }, { id: 'f_hp', key: 'HP', kind: 'resource', maxFormula: 'HT / 2 + 3', def: 'max', min: 0, vis: 'all', edit: 'owner' }, { id: 'f_fx', key: 'Fx', kind: 'effects', vis: 'all', edit: 'owner' }], rolls: [], effects: [{ id: 'e_t', name: 'Tough', vis: 'all', mods: [{ f: 'f_hp', op: 'add', v: 5, part: 'max' }] }, { id: 'e_o', name: 'Other', vis: 'all', mods: [] }] };
         const FRs = cleanSystem(fr, { F, gmView: true }), chFr = { id: 'c_1', values: { f_hp: { cur: 13 }, f_fx: [{ id: 'x_1', ref: 'e_t', on: true }] } };
         const endT = S.applyEffectOp(FRs, chFr, 'f_fx', { op: 'remove', rowId: 'x_1' }, F, {}), other = S.applyEffectOp(FRs, { id: 'c_1', values: { f_hp: { cur: 13 }, f_fx: [] } }, 'f_fx', { op: 'add', rowId: 'x_2', ref: 'e_o' }, F, {});

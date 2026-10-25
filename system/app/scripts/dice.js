@@ -37,6 +37,24 @@ function readableInto(brk, res, parts, expr) {
     var full = parts.map(function(p) { return typeof p === 'string' ? p : p.text; }).join('');
     brk.title = String(expr || '') + (full ? '\n' + full : '');
 }
+// 1.5.8 (handoff 90 Part B): what changed the values the roll read, under its dice: each value's name and its figure, before and after where
+// effects on it changed it, then each change by its source, and each effect on a value it is worked out from by what it changed, as text
+// nodes; nothing where the host named none
+function modsInto(wrap, mods) {
+    if (!Array.isArray(mods) || !mods.length) return;
+    var box = el('div', 'chat-mods'), any = false;
+    mods.forEach(function(e) {
+        if (!e || typeof e !== 'object') return;
+        var row = el('div', 'chat-mod'), mm = Array.isArray(e.m) ? e.m : [], ww = Array.isArray(e.w) ? e.w : [];
+        row.appendChild(el('span', 'chat-mod-n', String(e.n).replace(/^Row\./i, '')));
+        row.appendChild(document.createTextNode(' ' + (mm.length ? fmtNum(e.b) + ' \u2192 ' : '') + fmtNum(e.a)));
+        box.appendChild(row); any = true;
+        var sg = function(v) { return (v > 0 ? '+' : '\u2212') + fmtNum(Math.abs(v)); };
+        mm.forEach(function(x) { if (x && typeof x === 'object') box.appendChild(el('div', 'chat-mod-src', sg(x.v) + ' ' + x.s)); });
+        ww.forEach(function(x) { if (x && typeof x === 'object') box.appendChild(el('div', 'chat-mod-src', sg(x.v) + ' ' + x.s + ' on ' + String(x.t).replace(/^Row\./i, ''))); });
+    });
+    if (any) wrap.appendChild(box);
+}
 function renderCard(m) {
     var rec = m.roll, res = m.res, n = net(), Fm = F();
     var priv = !!(rec.priv || rec.to);
@@ -68,6 +86,7 @@ function renderCard(m) {
     if (named) readableInto(brk, res, parts, rec.expr);
     else parts.forEach(function(p) { if (typeof p === 'string') brk.appendChild(document.createTextNode(p)); else brk.appendChild(el('span', 'roll-die', p.text)); });
     wrap.appendChild(brk);
+    if (typeof modsInto === 'function') modsInto(wrap, rec.mods);   // 1.5.8: what changed the values it read (asked through typeof for a suite that slices the card alone)
     wrap.className += mf ? ' card-malf' : v && v.kind === 'check' ? (v.pass ? ' card-ok' : ' card-fail') : rec.dmg === 1 ? ' card-dmg' : '';   // chat cards: the left stripe — a malfunction, the check's outcome, else a damage roll, else plain
     var total = el('div', 'roll-total' + (mf ? ' roll-fail roll-malf' : v && v.kind === 'check' ? (v.pass ? ' roll-ok' : ' roll-fail') : rec.dmg === 1 ? ' roll-dmg' : ''), mf ? 'malfunction (Malf ' + rec.malf + ')' : v ? (v.kind === 'check' ? v.text : '= ' + v.text) : '');
     if (crit) total.appendChild(el('span', 'roll-' + crit, v && v.crit ? (crit === 'crit' ? 'critical success' : 'critical failure') : crit === 'crit' ? 'natural 20' : 'natural 1'));

@@ -16082,6 +16082,13 @@ Promise.all(pendingChecks).then(() => {   // the async checks land before the su
             dIdx > 0 && qIdx > 0 && /rec\.dmg === 1 && entR && SR && typeof SR\.dmgTypeOf === 'function'[^\n]*SR\.dmgTypeOf\(campR\.system, entR, varsR, F\); if \(dtR\) rec\.dtype = dtR;/.test(dLine)
             && /recQ\.dmg === 1 && [^\n]*SQ\.dmgTypeOf\(campQ\.system, actQ, varsQ, Fq\); if \(dtQ\) recQ\.dtype = dtQ;/.test(qLine) && !/dtype/.test(src.slice(src.indexOf('net.diceRoll = function'), src.indexOf('var campR = getActiveCampaign(), SR = SC()'))));
     }
+    {   // 1.5.8 (book handoff 90 Part B): what changed the values a roll reads rides on its card, worked out where the roll is made, from the names the roll read and the resolver it was made with (systemcore rollMods), never from the roller's word
+        const flat = src.split('\r\n').join('\n');
+        check('1.5.8 a roll\'s card carries what changed the values it read: on the GM\'s own roll and on a player\'s on the host, after the names are recorded, through systemcore rollMods with the very resolver the roll was made with; nothing else writes it',
+            /if \(nmR\.length\) rec\.names = nmR; \}\n    if \(rec\.names && SR && typeof SR\.rollMods === 'function' && typeof varsR === 'function'\) \{ var mdR = SR\.rollMods\(varsR, rec\.names\); if \(mdR\) rec\.mods = mdR; \}/.test(flat)
+            && /if \(nmQ\.length\) recQ\.names = nmQ; \}\n\s*if \(recQ\.names && typeof SQ !== 'undefined' && SQ && typeof SQ\.rollMods === 'function' && typeof varsQ === 'function'\) \{ var mdQ = SQ\.rollMods\(varsQ, recQ\.names\); if \(mdQ\) recQ\.mods = mdQ; \}/.test(flat)
+            && (flat.match(/\.mods = md[RQ];/g) || []).length === 2);
+    }
     summed = true;
     console.log('\n' + pass + ' passed, ' + fail + ' failed.');
     if (fail) process.exit(1);

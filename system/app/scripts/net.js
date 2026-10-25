@@ -7678,6 +7678,7 @@ function handleMessage(msg, conn) {
         if (actQ && actQ.dmg === true) recQ.dmg = 1;   // chat cards: a damage roll, from the entry its formula matched (never the player's word)
         if (recQ.dmg === 1 && typeof SQ !== 'undefined' && SQ && typeof SQ.dmgTypeOf === 'function' && campQ && campQ.system) { var dtQ = SQ.dmgTypeOf(campQ.system, actQ, varsQ, Fq); if (dtQ) recQ.dtype = dtQ; }   // 1.5.7: the damage type the entry names, worked out on the host
         if (resQ.breakdown && resQ.breakdown.names && resQ.breakdown.names.length) { var nmQ = Dq.cleanNames(resQ.breakdown.names); if (!nmQ) { denyQ('error'); return; } if (nmQ.length) recQ.names = nmQ; }
+        if (recQ.names && typeof SQ !== 'undefined' && SQ && typeof SQ.rollMods === 'function' && typeof varsQ === 'function') { var mdQ = SQ.rollMods(varsQ, recQ.names); if (mdQ) recQ.mods = mdQ; }   // 1.5.8 (handoff 90 Part B): what changed the values it reads
         if (q.label) recQ.label = q.label;
         if (chQ) recQ.as = String(chQ.name || '').slice(0, Dq.LIMITS.label);
         if (!q.priv && tcQ && tcQ.range && typeof rangeUnseen === 'function' && typeof rangeReadBy === 'function' && rangeUnseen(campQ, tcQ.range, pidQ) && rangeReadBy(SQ, viewQ, chvQ, Fq, tcQ, q.expr, q.row)) {   // range R3: its card would tell another player how far a target they cannot see is
@@ -8852,6 +8853,7 @@ net.diceRoll = function(expr, o) {
     if ((entR && entR.dmg === true) || o.dmg === true) rec.dmg = 1;   // chat cards: a damage roll (its entry; or this machine's own word, a thrown item's damage — never over the wire)
     if (rec.dmg === 1 && entR && SR && typeof SR.dmgTypeOf === 'function' && campR && campR.system) { var dtR = SR.dmgTypeOf(campR.system, entR, varsR, F); if (dtR) rec.dtype = dtR; }   // 1.5.7: the damage type the roll names, for Apply to target
     if (res.breakdown && res.breakdown.names && res.breakdown.names.length) { var nmR = D.cleanNames(res.breakdown.names); if (!nmR) return { error: 'That roll could not be recorded.' }; if (nmR.length) rec.names = nmR; }
+    if (rec.names && SR && typeof SR.rollMods === 'function' && typeof varsR === 'function') { var mdR = SR.rollMods(varsR, rec.names); if (mdR) rec.mods = mdR; }   // 1.5.8 (handoff 90 Part B): what changed the values it reads
     if (o.label) rec.label = String(o.label).slice(0, D.LIMITS.label);
     if (chR) rec.as = String(chR.name || '').slice(0, D.LIMITS.label);
     var hosting = net.active && net.role === 'host', toName = '', gmR = [];

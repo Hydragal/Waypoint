@@ -1,3 +1,12 @@
+WAYPOINT 1.5.8 — What's New
+============================
+
+Chat
+- A roll's card lists what changed the values it rolled against. Each
+  value an effect changed shows its figure before and after, then each
+  source and its amount, such as Attack 14 → 17, +3 Reckless Strike.
+  A GM-only effect is never named there.
+
 WAYPOINT 1.5.7 — What's New
 ============================
 

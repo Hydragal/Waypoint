@@ -116,6 +116,34 @@ function cleanNames(list) {
     }
     return out;
 }
+// 1.5.8 (handoff 90 Part B): what changed the values a roll reads, as the host worked it out (systemcore rollMods): at most 8 values, each a
+// name, its figure before and after, at most 8 changes on it (m: a source's name and an amount) and 8 on what it is worked out from (w: the
+// same and what it changed); text and numbers only
+function cleanMods(list) {
+    if (!Array.isArray(list) || !list.length || list.length > 8) return null;
+    var num = function(v) { return typeof v === 'number' && isFinite(v) && Math.abs(v) <= 1e15; }, txt = function(s) { var c = cleanLabel(s); return typeof c === 'string' && c ? c : null; };
+    var out = [];
+    for (var i = 0; i < list.length; i++) {
+        var e = list[i]; if (!e || typeof e !== 'object') return null;
+        var n = txt(e.n); if (!n || !num(e.b) || !num(e.a)) return null;
+        var part = function(arr, needT) {
+            if (arr === undefined) return [];
+            if (!Array.isArray(arr) || !arr.length || arr.length > 8) return null;
+            var got = [];
+            for (var j = 0; j < arr.length; j++) {
+                var x = arr[j]; if (!x || typeof x !== 'object') return null;
+                var s = txt(x.s); if (!s || !num(x.v) || !x.v) return null;
+                var c = { s: s, v: x.v };
+                if (needT) { var t = txt(x.t); if (!t) return null; c.t = t; } else if (x.t !== undefined) return null;
+                got.push(c);
+            }
+            return got;
+        };
+        var m = part(e.m, false), w = part(e.w, true); if (!m || !w || (!m.length && !w.length)) return null;
+        var o = { n: n, b: e.b, a: e.a }; if (m.length) o.m = m; if (w.length) o.w = w; out.push(o);
+    }
+    return out;
+}
 function foldNames(names) { var o = {}; (names || []).forEach(function(n) { o[String(n.name).toLowerCase()] = n.value; }); return o; }
 function cleanRid(msg) { return msg && typeof msg === 'object' && typeof msg.rid === 'string' && RID_RE.test(msg.rid) ? msg.rid : null; }
 // A player's request: { type: 'roll-req', rid, expr, priv? }
@@ -158,6 +186,7 @@ function cleanRoll(rec) {
     if (rec.rid !== undefined) { if (typeof rec.rid !== 'string' || !RID_RE.test(rec.rid)) return null; out.rid = rec.rid; }
     if (rec.names !== undefined) { var nm = cleanNames(rec.names); if (!nm) return null; if (nm.length) out.names = nm; }
     if (rec.malf !== undefined) { if (!isInt(rec.malf) || rec.malf < 1 || rec.malf > 1000000) return null; out.malf = rec.malf; }
+    if (rec.mods !== undefined) { var md = cleanMods(rec.mods); if (md) out.mods = md; }   // 1.5.8: what changed the values it reads (a list that does not clean is left off, the roll kept)
     if (rec.dmg !== undefined) { if (rec.dmg !== 1) return null; out.dmg = 1; }   // chat cards: a damage roll, marked by the host from its roll (never the roller's word)   // Stage 6 HUD R3: the roll's malfunction threshold (every machine works the malfunction out from the draws)
     var lb = cleanLabel(rec.label); if (lb === null) return null; if (lb) out.label = lb;
     var as = cleanLabel(rec.as); if (as === null) return null; if (as) out.as = as;
@@ -361,6 +390,6 @@ function RateLimit(cfg) {
 }
 function uid() { return 'r_' + Math.random().toString(36).slice(2, 10); }
 
-var API = { VERSION: VERSION, LIMITS: LIMITS, cleanExpr: cleanExpr, composeModifier: composeModifier, withAdvantage: withAdvantage, cleanFrom: cleanFrom, cleanRollReq: cleanRollReq, cleanRoll: cleanRoll, cleanApply: cleanApply, applyText: applyText, applyChanges: applyChanges, cleanDue: cleanDue, dueText: dueText, cleanDeny: cleanDeny, cleanRid: cleanRid, cleanLabel: cleanLabel, cleanNames: cleanNames, foldNames: foldNames, replay: replay, checkTableRoll: checkTableRoll, denyText: denyText, parseCommand: parseCommand, verdictOf: verdictOf, critOf: critOf, under3d6: under3d6, cardText: cardText, tagOf: tagOf, naturalOf: naturalOf, malfOf: malfOf, RateLimit: RateLimit, uid: uid, fmtNum: fmtNum, cardLook: cardLook, cleanCardLook: cleanCardLook };
+var API = { VERSION: VERSION, LIMITS: LIMITS, cleanExpr: cleanExpr, composeModifier: composeModifier, withAdvantage: withAdvantage, cleanFrom: cleanFrom, cleanRollReq: cleanRollReq, cleanRoll: cleanRoll, cleanApply: cleanApply, applyText: applyText, applyChanges: applyChanges, cleanDue: cleanDue, dueText: dueText, cleanDeny: cleanDeny, cleanRid: cleanRid, cleanLabel: cleanLabel, cleanNames: cleanNames, cleanMods: cleanMods, foldNames: foldNames, replay: replay, checkTableRoll: checkTableRoll, denyText: denyText, parseCommand: parseCommand, verdictOf: verdictOf, critOf: critOf, under3d6: under3d6, cardText: cardText, tagOf: tagOf, naturalOf: naturalOf, malfOf: malfOf, RateLimit: RateLimit, uid: uid, fmtNum: fmtNum, cardLook: cardLook, cleanCardLook: cleanCardLook };
 if (typeof window !== 'undefined') window.wpDiceCore = API;
-export { VERSION, LIMITS, cleanExpr, composeModifier, withAdvantage, cleanFrom, cleanRollReq, cleanRoll, cleanApply, applyText, applyChanges, cleanDue, dueText, cleanDeny, cleanRid, cleanLabel, cleanNames, foldNames, replay, checkTableRoll, denyText, parseCommand, verdictOf, critOf, under3d6, cardText, tagOf, RateLimit, uid, fmtNum, naturalOf, malfOf, cardLook, cleanCardLook };
+export { VERSION, LIMITS, cleanExpr, composeModifier, withAdvantage, cleanFrom, cleanRollReq, cleanRoll, cleanApply, applyText, applyChanges, cleanDue, dueText, cleanDeny, cleanRid, cleanLabel, cleanNames, cleanMods, foldNames, replay, checkTableRoll, denyText, parseCommand, verdictOf, critOf, under3d6, cardText, tagOf, RateLimit, uid, fmtNum, naturalOf, malfOf, cardLook, cleanCardLook };

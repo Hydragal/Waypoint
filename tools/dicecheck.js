@@ -208,6 +208,21 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         const fe = (tag, cls, text) => ({ tag, className: cls || '', textContent: text === undefined ? '' : String(text), children: [], style: {}, title: '', appendChild(c) { this.children.push(c); return c; } });
         const rcard = new Function('el', 'playerHue', 'chatTime', 'net', 'F', 'verdictOf', 'critOf', 'malfOf', 'LIMITS', 'window', 'document', "'use strict';\n" + rcSrc + '\nreturn renderCard;')(fe, () => 0, () => '12:00', () => ({ active: false }), () => F, verdictOf, critOf, D.malfOf, LIMITS, { wpSheets: { systemOf: () => null } }, { createTextNode: t => ({ text: t }) });
         const card = (o, draws, noRes) => { const r = rec(o); return rcard({ roll: r, res: noRes ? null : roll(r.expr, draws) }); };
+        {   // 1.5.8 (book handoff 90 Part B): what changed the values a roll read — the host's list cleaned (cleanMods) and drawn under the dice (modsInto, run for real)
+            const md = [{ n: 'Row.Attack', b: 14, a: 17, m: [{ s: 'Reckless Strike', v: 3 }], w: [{ s: 'Fractured crystal', v: -1, t: 'Skill' }, { s: 'Form VII', v: 1, t: 'Skill' }] }, { n: 'Parry', b: 12, a: 12, w: [{ s: 'Combat Reflexes', v: 1, t: 'ParryBonus' }] }];
+            const kept = cleanRoll(Object.assign({}, rec({ label: 'Hit' }), { mods: md }));
+            const bads = [[], 'x', [{ n: 'A', b: 1, a: 2, m: [] }], [{ n: 'A', b: 1, a: 2 }], [{ n: 'A', b: 1, a: 2, w: [{ s: 'S', v: 1 }] }], [{ n: 'A', b: 1, a: 2, m: [{ s: 'S', v: 1, t: 'X' }] }], [{ n: 'A', b: 'x', a: 2, m: [{ s: 'S', v: 1 }] }], [{ n: 'A', b: 1, a: 2, m: [{ s: '', v: 1 }] }], [{ n: 'A', b: 1, a: 2, m: [{ s: 'S', v: 0 }] }], [{ n: 'A\u0007', b: 1, a: 2, m: [{ s: 'S', v: 1 }] }], new Array(9).fill(md[0])].map(x => cleanRoll(Object.assign({}, rec({ label: 'Hit' }), { mods: x })));
+            const miSrc = dj.slice(dj.indexOf('function modsInto(wrap, mods) {'), dj.indexOf('function renderCard(m) {'));
+            const doc = { createTextNode: t => ({ textContent: String(t), children: [], className: '' }) };
+            const mi = new Function('el', 'fmtNum', 'document', miSrc + '\nreturn modsInto;')(fe, D.fmtNum, doc);
+            const w = fe('div'); mi(w, kept.mods); const box = w.children[0], txt = n => [n.textContent].concat((n.children || []).map(txt)).join('');
+            const w2 = fe('div'); mi(w2, undefined); mi(w2, []);
+            check('1.5.8 a roll card lists what changed the values it read: cleanMods keeps names, figures and sources as text and numbers (a bad list leaves the roll and drops the list), and the card draws each value before and after and each change by its source, as text',
+                !!kept && j(kept.mods) === j(md) && bads.every(r => r && !('mods' in r)) && box && box.className === 'chat-mods' && txt(box.children[0]) === 'Attack 14 \u2192 17'
+                && box.children[1].textContent === '+3 Reckless Strike' && box.children[2].textContent === '\u22121 Fractured crystal on Skill' && box.children[3].textContent === '+1 Form VII on Skill'
+                && txt(box.children[4]) === 'Parry 12' && box.children[5].textContent === '+1 Combat Reflexes on ParryBonus' && w2.children.length === 0,
+                j([kept && kept.mods, box && box.children.map(txt)]));
+        }
         const cls = c => c.className.split(' ').filter(Boolean), kid = (c, k) => c.children.find(x => x && x.className && x.className.split(' ').indexOf(k) >= 0) || null;
         {   // 1.5.7: a roll worked out from a sheet reads in plain figures, and a damage card's Apply to target is used once (dice.js readableInto and renderCard, run for real)
             const rc2Src = dj.slice(dj.indexOf('// 1.5.7: a roll worked out from a sheet, said in plain figures'), dj.indexOf('// Stage 6 HUD H7: an apply action'));
