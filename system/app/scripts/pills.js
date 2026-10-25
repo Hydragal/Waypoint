@@ -2,8 +2,8 @@
    The owner passed the mock-up of the slim row "as drawn". Of its pills it says: what is going on, in a few words. A pill shows only
    while it has something to say. Outlined means on. Filled means it wants you. A press opens its thing.
 
-   Five pills are made here, each a button that is in the page and put away until it has something to say:
-     Fog on / Fog off     this map's fog, on the play map. A press opens the fog options.
+   Four pills are made here, each a button that is in the page and put away until it has something to say (1.5.8, the owner: "we probably
+   dont need this second fog button in the top of the app": the Fog pill is gone, and the toolbar's fog button says this map's fog):
      Table and a number   you are hosting, and how many players are connected. A press opens Multiplayer.
      Paused               the table is paused. It is filled, so it cannot be missed. A press resumes the table.
      Round and a name     the fight on the map on screen, and whose turn it is. A press opens the turn order.
@@ -17,16 +17,15 @@ import { getActiveMap } from './models.js';
 import { state } from './state.js';
 
 // [lookcheck:pills-start]
-var PILLS = ['fogPill', 'tablePill', 'pausedPill', 'roundPill', 'viewPill'];   // every pill made here, by its id, in the order the row has them
+var PILLS = ['tablePill', 'pausedPill', 'roundPill', 'viewPill'];   // every pill made here, by its id, in the order the row has them
 var PILL_NAME = 24;   // a name on a pill is cut to this many characters
 function pillCut(s) { var a = Array.from(typeof s === 'string' ? s.trim() : ''); return a.length > PILL_NAME ? a.slice(0, PILL_NAME - 1).join('') + '\u2026' : a.join(''); }
 function pillCount(v) { return typeof v === 'number' && isFinite(v) && v > 0 ? Math.min(Math.floor(v), 9999) : 0; }
 // What each pill says, for the state the row is in. st: { gm, play, fog: 'on' | 'off' | none, hosting, players, paused, round, turn, preview,
 // previewName }. A pill that has nothing to say is null. Nothing shows on a screen that is not the GM's
 function pillsModel(st) {
-    var out = { fogPill: null, tablePill: null, pausedPill: null, roundPill: null, viewPill: null }; if (!st || st.gm !== true) return out;
+    var out = { tablePill: null, pausedPill: null, roundPill: null, viewPill: null }; if (!st || st.gm !== true) return out;
     var play = st.play === true, hosting = st.hosting === true;
-    if (play && (st.fog === 'on' || st.fog === 'off')) out.fogPill = st.fog === 'on' ? { text: 'Fog on', on: true, tip: 'Fog is on for this map. Opens the fog options.' } : { text: 'Fog off', on: false, tip: 'Fog is off for this map. Opens the fog options.' };
     if (hosting) { var n = pillCount(st.players); out.tablePill = { text: 'Table \u00b7 ' + n, tip: 'You are hosting. ' + (n === 1 ? '1 player is' : (n ? n : 'No') + ' players are') + ' connected. Opens Multiplayer.' }; }
     if (hosting && st.paused === true) out.pausedPill = { text: 'Paused', tip: 'The table is paused. Press to resume it.' };
     var r = pillCount(st.round), who = pillCut(st.turn);
@@ -37,7 +36,7 @@ function pillsModel(st) {
     }
     return out;
 }
-// The pills as the page shows them: each put away or shown, with its words as text and its tooltip. Fog's edge is gold only while fog is on
+// The pills as the page shows them: each put away or shown, with its words as text and its tooltip
 function pillsDraw(doc, model) {
     var shown = 0;
     PILLS.forEach(function(id) {
@@ -45,7 +44,6 @@ function pillsDraw(doc, model) {
         el.hidden = !p; if (!p) return; shown++;
         var t = el.querySelector('.pill-txt'); if (t && t.textContent !== p.text) t.textContent = p.text;
         if (el.title !== p.tip) el.title = p.tip;
-        if (id === 'fogPill') el.classList.toggle('on', p.on === true);
     });
     return shown;
 }
@@ -67,11 +65,6 @@ function pillsState(w, am, view, fogBtn) {
 // What a press on a pill does: it presses the control that owns the thing, or asks the module that does. Answers what it did
 function pillPress(id, doc, w, am) {
     var press = function(ctl) { var b = doc.getElementById(ctl); if (!b) return ''; b.click(); return ctl; };
-    if (id === 'fogPill') {   // it opens the options and never closes them: the button itself does that. Options that are up while their bar
-        // stood back under a window come in front of it (backlog 143, F3), through the one place that brings a bar forward, whiteboard.js barFront
-        var fm = doc.getElementById('fogMenu'); if (!fm || !fm.classList.contains('show')) return press('fogModeBtn');
-        return typeof w.wpBarFront === 'function' && w.wpBarFront(fm) === true ? 'front' : 'open';
-    }
     if (id === 'tablePill') return press('netBtn');
     if (id === 'pausedPill') return w.wpNet && w.wpNet.paused === true ? press('sessionPauseBtn') : '';   // never a press that would pause a table that runs
     if (id === 'roundPill') { if (!am || typeof w.wpOpenCombat !== 'function') return ''; w.wpOpenCombat(am.id, {}); return 'combat'; }

@@ -6505,7 +6505,7 @@ function barBehind(el, e) {
     return barCovered(el, ptr ? _barSaw : barShowing());
 }
 // Brings the bar that holds el in front of the boxes again where barBehind says el is behind a window, and answers whether it did. Nothing
-// is opened or closed. The Fog pill asks it for fog options that are up (pills.js pillPress, F3)
+// is opened or closed
 function barFront(el) {
     var bar = barOf(el); if (!bar || !barBehind(el)) return false;
     bar.classList.remove(BAR_BACK); return true;

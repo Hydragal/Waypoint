@@ -1,6 +1,10 @@
 WAYPOINT 1.5.8 — What's New
 ============================
 
+Top row
+- The Fog pill is gone from the top row. The toolbar's fog button already
+  says whether this map's fog is on, and opens the fog options.
+
 System editor
 - An entry can open others: in the Library's What it opens box, pick the
   entries it makes usable and from which of its levels. While a row of it
