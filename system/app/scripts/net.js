@@ -4084,7 +4084,7 @@ function turnLimitCheck(camp, map, w, frW, msg, conn) {
     var sys = camp && camp.system, dg = sys && sys.combat && sys.combat.turn ? sys.combat.turn.diag : '';
     var mvO = {}, d = window.wpFog && window.wpFog.moveCells ? window.wpFog.moveCells(map, w, frW.x, frW.y, msg.x, msg.y, dg, mvO) : 0, over = st.moved + d > st.allow + 0.05;
     if (over && d > 0 && mm === 'refuse') { if (!msg.final) return 'stop'; snapBack(camp, map, w, msg, frW, conn); turnNote(conn, thatIsText(d, mvO.len, map) + '; you have ' + cellsText(Math.max(0, st.allow - st.moved), map) + ' left.', w.charId); return 'stop'; }
-    if (msg.final && d > 0) { st.moved += d; var lf = st.allow - st.moved; turnNote(conn, over ? 'That went ' + cellsText(-lf, map) + ' past your move.' : movedText(d, mvO.len, map) + '; ' + cellsText(Math.max(0, lf), map) + ' left.', w.charId); if (over) { toast((w.charName || 'A token') + ' moved ' + cellsText(-lf, map) + ' past their move.'); if (typeof bellOut === 'function') bellOut(w.charId, { title: 'Turn', text: 'Moved ' + cellsText(-lf, map) + ' past the move.' }); } }
+    if (msg.final && d > 0) { st.moved += d; if (typeof mvTold === 'function') mvTold(); var lf = st.allow - st.moved; turnNote(conn, over ? 'That went ' + cellsText(-lf, map) + ' past your move.' : movedText(d, mvO.len, map) + '; ' + cellsText(Math.max(0, lf), map) + ' left.', w.charId); if (over) { toast((w.charName || 'A token') + ' moved ' + cellsText(-lf, map) + ' past their move.'); if (typeof bellOut === 'function') bellOut(w.charId, { title: 'Turn', text: 'Moved ' + cellsText(-lf, map) + ' past the move.' }); } }
     return '';
 }
 // T3: the note of the Refuse rule that stops a player's move of this token from (fx, fy) to (tx, ty) — a wall in the way, out of its turn, past
@@ -4103,7 +4103,7 @@ function moveCounted(camp, map, mapId, w, fx, fy, tx, ty) {
     var cur = cb.rows[cb.turn], st = own(net.turnMove, cb.id) ? net.turnMove[cb.id] : null; if (!cur || cur.tokId !== w.id || !st || st.tokId !== w.id || st.rowId !== cur.id || typeof st.allow !== 'number') return '';
     var sys = camp && camp.system, dg = sys && sys.combat && sys.combat.turn ? sys.combat.turn.diag : '', mvC = {}, d = window.wpFog && window.wpFog.moveCells ? window.wpFog.moveCells(map, w, fx, fy, tx, ty, dg, mvC) : 0;
     if (!(d > 0)) return '';   // nothing moved (a turn in place, a shuffle inside its own cell): nothing to count, nothing to say
-    st.moved += d;
+    st.moved += d; if (typeof mvTold === 'function') mvTold();
     return moveMode(camp, 'move') === 'off' ? '' : movedText(d, mvC.len, map) + '; ' + cellsText(Math.max(0, st.allow - st.moved), map) + ' left.';
 }
 // Difficult terrain T2: a turn note's words for a move that cost d, its own length len (from the fog, when it can tell): the cost and "with
@@ -4499,6 +4499,7 @@ function cleanFightBody(k, mapId) {   // one fight's order, cleaned: { mapId, ro
     if (!rows.length) return null;
     var f = { mapId: mapId, round: Math.max(1, Math.min(9999, Number(k.round) || 1)), turn: Math.max(0, Math.min(rows.length - 1, Number(k.turn) || 0)), rows: rows };
     if (k.side === 'pc' || k.side === 'rest') f.side = k.side;   // initiative O4: the side going first this round (shown to the table)
+    if (k.mv && typeof k.mv === 'object' && typeof k.mv.m === 'number' && typeof k.mv.a === 'number' && isFinite(k.mv.m) && isFinite(k.mv.a)) f.mv = { m: Math.max(0, Math.min(1e6, k.mv.m)), a: Math.max(0, Math.min(1e6, k.mv.a)) };   // 1.5.7: the turn's move, this player's own
     return f;
 }
 // [netcheck:notepad-start]
@@ -4548,6 +4549,8 @@ function combatsFor(recipientId, mapId) {
             return combatRowOut(r, i, unseen);
         }) };
         if (cmb.side === 'pc' || cmb.side === 'rest') out[fid].side = cmb.side;   // initiative O4: which side goes first this round (never its rolls: those are their cards)
+        var stMv = net.turnMove && Object.prototype.hasOwnProperty.call(net.turnMove, fid) ? net.turnMove[fid] : null, curMv = cmb.rows[cmb.turn];   // 1.5.7: the turn's move, to the token's own player alone
+        if (stMv && typeof stMv.allow === 'number' && net.turnMoveOwn && net.turnMoveOwn[fid] === recipientId && curMv && curMv.id === stMv.rowId) out[fid].mv = { m: Math.round(stMv.moved * 100) / 100, a: Math.round(stMv.allow * 100) / 100 };
     });
     return out;
 }
@@ -4706,13 +4709,15 @@ function fightReachKept(had, f) {   // a roster edit: how far the fight has gone
 // system's Move per turn, worked out through its player's view with its token; none, a GM-only one, one that fails: no limit) and how far
 // it has gone; its player hears how far. Turn-based combat on, a player's token only (the GM is never limited)
 net.turnMove = {};
+net.turnMoveOwn = Object.create(null);
 function turnMoveStart(mapId, c) {
-    var fidM = c && typeof c.id === 'string' ? c.id : null; if (fidM) delete net.turnMove[fidM];   // fold 2: per fight (its id), a map may hold two
+    var fidM = c && typeof c.id === 'string' ? c.id : null; if (fidM) { delete net.turnMove[fidM]; delete net.turnMoveOwn[fidM]; }   // fold 2: per fight (its id), a map may hold two
     var row = c && Array.isArray(c.rows) ? c.rows[c.turn] : null; if (!row || typeof row.tokId !== 'string' || !window.wpVtt || !window.wpVtt.on('turns')) return;
     var camp = getActiveCampaign(), map = camp && camp.items && own(camp.items, mapId) ? camp.items[mapId] : null;
     var w = map && Array.isArray(map.whiteboard) ? map.whiteboard.find(function(x) { return x && x.id === row.tokId; }) : null; if (!w || !w.isChar || !w.ownerId) return;
     if (!fidM) return;
     var st = { rowId: row.id, tokId: w.id, moved: 0, allow: null }; net.turnMove[fidM] = st;
+    net.turnMoveOwn[fidM] = w.ownerId;   // 1.5.7: whose it is, so the figures go to them alone (kept apart from the state the turn's rules read)
     var S = SC(), F = window.wpFormula, ch = camp.chars && typeof w.charId === 'string' && own(camp.chars, w.charId) ? camp.chars[w.charId] : null;
     if (!S || !F || !camp.system || !ch || ch.npc || ch.ownerId !== w.ownerId || !window.wpSheets) return;
     var view = window.wpSheets.playerSystem(camp), t = view && view.combat && view.combat.turn; if (!t || !t.move) return;
@@ -4722,7 +4727,11 @@ function turnMoveStart(mapId, c) {
     var r = F.evaluate(t.move, { vars: S.makeResolver(view, chv, F, tc) }); if (!r.ok || typeof r.value !== 'number' || !isFinite(r.value)) return;
     st.allow = S.moveAllowCells(Math.max(0, r.value), t.unit, S.mapCellScale(map));
     noteOwner(w.ownerId, 'Your turn: ' + cellsText(st.allow, map) + ' to move.', w.charId);
+    mvTold();   // 1.5.7: the strip and the player's copy say it
 }
+// 1.5.7: the turn's move changed (a turn began, a move landed): each player's copy of the fights again (only a copy that changed goes), and this strip
+function mvTold() { try { if (typeof broadcastCombats === 'function' && net.active && net.role === 'host') broadcastCombats(); } catch (e) { console.error(e); } if (typeof window !== 'undefined' && window.wpRenderCombatStrip) window.wpRenderCombatStrip(); }
+net.cellsText = function(n, map) { return cellsText(n, map); };   // 1.5.7: the strip and a drag word a move as the turn's notes do
 function noteOwner(pid, text, cid) { net.conns.forEach(function(c) { if (c.open && net.roster[c.peer] && peerProfileId(c) === pid) turnNote(c, text, cid); }); }
 // [netcheck:turnmove-end]
 // [netcheck:turnacts-start]

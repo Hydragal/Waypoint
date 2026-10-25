@@ -1797,6 +1797,7 @@ function cleanListSpec(v, gmView, F) {   // F (F4c1): the engine, for a stat key
             var tk = statKey(tv.key, F); if (!tk || seenT[lower(tk)]) continue; seenT[lower(tk)] = 1;
             var to = { key: tk, label: cutText(tv.label, LIMITS.label) || tk }, tdn = Number(tv.def); if (typeof tv.def === 'number' && fin(tdn) && tdn > 0) to.def = Math.min(1e6, Math.round(tdn));
             if (tv.max === null) to.max = null; else { var tmx = cleanFormulaText(tv.max); if (tmx) to.max = tmx; }
+            if (tv.roll === true) to.roll = true;   // 1.5.7: Set by rolls only (a roll's change, an action and the GM set it; a player never by hand)
             cts.push(to);
         }
         if (cts.length) out.counters = cts;
@@ -3268,6 +3269,7 @@ function applyRowOp(sys, char, fieldId, q, F, opts) {
                 for (var ckk in fx.ct) {
                     if (!Object.prototype.hasOwnProperty.call(fx.ct, ckk)) continue;
                     var tt = null; cst.forEach(function(t) { if (!tt && lower(t.key) === lower(ckk)) tt = t; }); if (!tt) return { ok: false, reason: 'value' };
+                    if (tt.roll === true && opts.player) return { ok: false, reason: 'field' };   // 1.5.7: a counter set by rolls only is never a player's to set by hand
                     var nvv = Number(fx.ct[ckk]); if (!fin(nvv)) return { ok: false, reason: 'value' }; nvv = Math.max(0, Math.min(1e6, Math.round(nvv)));
                     if (tt.max) { rsR = rsR || makeResolver(sys, char, F); var mxv = rsR.ctMax(lfR, rw, tt.key); if (typeof mxv === 'number') nvv = Math.min(nvv, mxv); }
                     nct[tt.key] = nvv;

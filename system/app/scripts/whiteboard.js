@@ -8354,6 +8354,34 @@ function stripSwitch(mapId) { var ids = fightsHere(mapId); if (ids.length < 2) r
 function stripShow(mapId, fid) { var ids = typeof mapId === 'string' ? fightsHere(mapId) : []; if (typeof fid === 'string' && ids.indexOf(fid) >= 0) _stripPick[mapId] = fid; }   // a fight this screen just started is the one its strip shows
 window.wpStripFight = function(mapId) { var n = window.wpNet, f = typeof mapId === 'string' ? stripFightId(mapId) : null; return f && n && n.combats ? n.combats[f] : null; };   // the pill and the menus say the fight the strip shows
 // [lookcheck:stripfight-end]
+// 1.5.7: the turn's move as the strip says it, "Moved 2 of 5 hexes (5 yd)": the host's own record on the GM's screen, the copy the host sends a player
+// for their own token on turn; nothing where the turn has no limit
+function turnMoveOf(n, fid, c, tokId) {
+    if (!n || !c) return null; var cur = c.rows && c.rows[c.turn]; if (!cur || (tokId && cur.tokId !== tokId)) return null;
+    if (n.role === 'host') { var st = n.turnMove && Object.prototype.hasOwnProperty.call(n.turnMove, fid) ? n.turnMove[fid] : null; return st && typeof st.allow === 'number' && st.rowId === cur.id ? { m: st.moved, a: st.allow } : null; }
+    return c.mv && typeof c.mv.m === 'number' && typeof c.mv.a === 'number' ? { m: c.mv.m, a: c.mv.a } : null;
+}
+function stripMoveHtml(n, fid, c, map) {
+    var mv = turnMoveOf(n, fid, c, null); if (!mv || !n.cellsText) return '';
+    var over = mv.m > mv.a + 0.05, r = Math.round(mv.m * 10) / 10;
+    return '<span class="combat-strip-move' + (over ? ' over' : '') + '" data-tip="How far the token on turn has moved, of its move this turn">Moved ' + esc(String(r)) + ' of ' + esc(n.cellsText(mv.a, map)) + '</span>';
+}
+// 1.5.7: a player's drag of their token on turn says live how far it goes and what would be left, beside the pointer (the GM's own drags count against no move, so the GM has the strip alone); nothing for any other drag
+var _moveTipEl = null;
+window.wpMoveTip = function(item, mapId, ox, oy, cx, cy) {
+    var n = window.wpNet, hide = function() { if (_moveTipEl) _moveTipEl.style.display = 'none'; };
+    if (!item || !n || !n.active || n.role !== 'client' || !item.isChar || !window.wpFog || !window.wpFog.moveCells || !n.cellsText) return hide();
+    var am = getActiveMap(); if (!am || am.id !== mapId || !n.combats) return hide();
+    var mv = null; Object.keys(n.combats).some(function(fid) { var c = n.combats[fid]; if (!c || c.mapId !== mapId) return false; mv = turnMoveOf(n, fid, c, item.id); return !!mv; });
+    if (!mv) return hide();
+    var camp = getActiveCampaign(), dg = camp && camp.system && camp.system.combat && camp.system.combat.turn ? camp.system.combat.turn.diag : '';
+    var d = 0; try { d = window.wpFog.moveCells(am, item, ox, oy, item.x, item.y, dg, {}) || 0; } catch (e) { d = 0; }
+    var left = mv.a - mv.m - d, r = Math.round(d * 10) / 10;
+    if (!_moveTipEl) { _moveTipEl = document.createElement('div'); _moveTipEl.id = 'moveTip'; _moveTipEl.className = 'move-tip'; document.body.appendChild(_moveTipEl); }
+    _moveTipEl.textContent = '+' + n.cellsText(r, am) + ' · ' + (left >= -0.05 ? n.cellsText(Math.max(0, left), am) + ' left' : n.cellsText(-left, am) + ' past your move');
+    _moveTipEl.classList.toggle('over', left < -0.05);
+    _moveTipEl.style.left = Math.round(cx + 18) + 'px'; _moveTipEl.style.top = Math.round(cy + 18) + 'px'; _moveTipEl.style.display = 'block';
+};
 function renderCombatStrip() {
     if (typeof window !== 'undefined' && window.wpPills) window.wpPills.sync();   // the top row's Round pill (pills.js) says the same fight
     var strip = document.getElementById('combatStrip'); if (!strip) return;
@@ -8375,6 +8403,7 @@ function renderCombatStrip() {
         + (c.side === 'pc' || c.side === 'rest' ? '<span class="combat-strip-side" title="Side initiative: this round&rsquo;s sides roll put this side first">' + (c.side === 'pc' ? 'players first' : 'the rest first') + '</span>' : '')
         + (host ? '<button class="combat-strip-btn" data-act="prev" title="Previous turn">&#9664;</button>' : '')
         + '<span class="combat-strip-cur" data-tip="Whose turn it is">' + (cur.src ? '<img src="' + esc(resolveImg(cur.src)) + '" alt="">' : '') + nameOf(cur) + '</span>'
+        + (typeof stripMoveHtml === 'function' ? stripMoveHtml(n, fidS, c, am) : '')   // 1.5.7: the turn's move, asked through typeof for the suites that slice the strip alone
         + '<span class="combat-strip-next" data-tip="Up next">next ' + nameOf(nxt) + '</span>'
         + (mine ? '<button class="combat-strip-btn combat-strip-endturn" data-act="endturn" title="End your turn: play moves on to the next in the order">End turn</button>' : '')
         + (host || mine ? '<button class="combat-strip-btn" data-act="hold" title="Hold this turn: play moves on, and Act later this round puts them right after whoever is acting (a hold not used by the round&rsquo;s end is lost)">Hold</button>' : '') + heldH

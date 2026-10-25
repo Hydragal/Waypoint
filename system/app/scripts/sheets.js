@@ -2674,6 +2674,7 @@ function ctCtl(host, entry, c, f, spec, editable, cells) {
         var w = el('span', 'sheet-chip sheet-item-ct'); w.title = t.label || t.key;
         w.appendChild(el('span', 'sheet-item-ctl', (t.label || t.key) + ' '));
         var set = function(n) { var o = {}; o[t.key] = n; commitItem(c, f, { op: 'set', rowId: rid, facts: { ct: o } }); };
+        editable = editable && !(t.roll === true && isClient());   // 1.5.7: a counter set by rolls only shows no - or + on a player's app
         if (editable) { var mb = el('button', 'tool ghost sheet-item-ctb', '\u2212'); mb.type = 'button'; mb.title = 'One less'; mb.disabled = v <= 0; mb.addEventListener('click', function() { set(v - 1); }); w.appendChild(mb); }
         w.appendChild(el('b', 'sheet-item-ctv', fmtNum(v) + (mx !== null ? '/' + fmtNum(mx) : '')));
         if (editable) { var pb = el('button', 'tool ghost sheet-item-ctb', '+'); pb.type = 'button'; pb.title = 'One more'; pb.disabled = mx !== null && v >= mx; pb.addEventListener('click', function() { set(v + 1); }); w.appendChild(pb); }
@@ -5764,6 +5765,7 @@ function listCard(f, allCats, targets, acts) {   // acts (turn-based combat T1):
         var tl = input('sys-list-ctlabel field', typeof tt.label === 'string' ? tt.label : '', 'What the row shows (blank: the key)', 'Label'); tl.maxLength = LIMITS.label; rw.appendChild(tl);
         var tdf = el('input', 'field sys-list-ctdef'); tdf.type = 'number'; tdf.min = '0'; tdf.step = '1'; tdf.value = typeof tt.def === 'number' ? String(tt.def) : ''; tdf.placeholder = 'Starts at 0'; tdf.title = 'Where a new row starts'; rw.appendChild(tdf);
         var tmx = input('sys-list-ctmax field', typeof tt.max === 'string' ? tt.max : '', 'Its most, worked out for each row (no dice): 20, Row.Shots; empty: no most', 'Most (e.g. Row.Shots)'); tmx.maxLength = LIMITS.formula; rw.appendChild(tmx);
+        rw.appendChild(checkLabel('sys-list-ctroll', tt.roll === true, 'Set by rolls only', 'Rolls, actions and you set it. A player cannot change it by hand: their sheet shows it with no \u2212 or +'));   // 1.5.7
         [['ctup', '\u25b2', 'Move up'], ['ctdown', '\u25bc', 'Move down'], ['ctdel', '\u00d7', 'Remove this counter']].forEach(function(bd) { var bb = el('button', 'tool ghost sys-btn', bd[1]); bb.dataset.act = bd[0]; bb.title = bd[2]; rw.appendChild(bb); });
         cb2.appendChild(rw);
     });
@@ -7235,6 +7237,7 @@ function onChange(e) {
         else if (c.indexOf('sys-list-hason') >= 0) { if (t.checked) lsc.on = { label: 'On' }; else delete lsc.on; }
         else if (c.indexOf('sys-list-ondef') >= 0) { if (lsc.on && typeof lsc.on === 'object') { if (t.checked) lsc.on.def = true; else delete lsc.on.def; } }
         else if (c.indexOf('sys-list-onone') >= 0) { if (lsc.on && typeof lsc.on === 'object') { if (t.checked) lsc.on.one = true; else { delete lsc.on.one; delete lsc.on.per; } } }   // 1.5.4 One at a time
+        else if (c.indexOf('sys-list-ctroll') >= 0) { var ctr2 = t.closest('.sys-list-ct'), ctD2 = ctr2 && Array.isArray(lsc.counters) ? lsc.counters[+ctr2.dataset.ti] : null; if (!ctD2 || typeof ctD2 !== 'object') return; if (t.checked) ctD2.roll = true; else delete ctD2.roll; }   // 1.5.7: Set by rolls only
         else if (c.indexOf('sys-list-onper') >= 0) { if (lsc.on && typeof lsc.on === 'object') { lsc.on.one = true; if (t.value) lsc.on.per = t.value; else delete lsc.on.per; } }   // ... for the whole list, or per a stat (Save keeps the one that holds: the stat, else the whole list)
         else if (c.indexOf('sys-list-colhide') >= 0 || c.indexOf('sys-list-colfoot') >= 0) { var chr = t.closest('.sys-list-col'), chD = chr && Array.isArray(lsc.cols) ? lsc.cols[+chr.dataset.ci] : null; if (!chD || typeof chD !== 'object') return; var chK = c.indexOf('sys-list-colhide') >= 0 ? 'hide' : 'foot'; if (t.checked) chD[chK] = true; else delete chD[chK]; }   // Stage 6 F5a1
         else if (c.indexOf('sys-list-statkind') >= 0) { var skr = t.closest('.sys-list-stat'), skD = skr && Array.isArray(lsc.stats) ? lsc.stats[+skr.dataset.si] : null; if (!skD || typeof skD !== 'object') return; delete skD.def; delete skD.labels; if (t.value === 'pick') { skD.kind = 'pick'; skD.opts = Array.isArray(skD.opts) ? skD.opts : []; if (typeof lsc.price === 'string' && skD.key && lsc.price.toLowerCase() === String(skD.key).toLowerCase()) delete lsc.price; } else { delete skD.kind; delete skD.opts; } markDirty(); renderAll(); return; }   // Stage 6 F5a2: a number or a choice (a choice is never the price)

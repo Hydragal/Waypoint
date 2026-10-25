@@ -1002,6 +1002,7 @@ import { getRoomInspectorHtml, attachRoomInspectorEvents, renderInspector,  rend
         if(modeStr==='visual' && window.wpUpdateSelToolbar) window.wpUpdateSelToolbar();   // toolbar rides along with the drag
         if (modeStr === 'visual' && window.wpUpdateHandles) window.wpUpdateHandles();   // dots follow the drag (single or multi)
         if (modeStr === 'visual' && window.wpCircleFollow) window.wpCircleFollow();   // 128: a circle of the Radius tool that sits on a token goes with it
+        if (modeStr === 'visual' && window.wpMoveTip) window.wpMoveTip(item, dragMapId, primaryDrag.ox, primaryDrag.oy, e.clientX, e.clientY);   // 1.5.7: the turn's move, live
       });
 
       // A drag can lose its pointer without a pointerup: the cursor leaves the window, the
@@ -1023,6 +1024,7 @@ import { getRoomInspectorHtml, attachRoomInspectorEvents, renderInspector,  rend
           if (window.wpOpenRightPanel) window.wpOpenRightPanel();
       });
       el.addEventListener('pointerup',function(e){
+        if (window.wpMoveTip) window.wpMoveTip(null);   // 1.5.7: the live move label goes with the drag
         if(!dragging) return;
         if (window.wpHostGestureEnd) window.wpHostGestureEnd();   // fold M6: whatever it was, the gesture is over (abortDrag ends here too)
         if (lockedMq) {   // finish a locked-item interaction: a drag became a marquee, a still click selects the locked item

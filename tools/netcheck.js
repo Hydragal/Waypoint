@@ -4419,6 +4419,20 @@ pendingChecks.push((async () => {
     const snapA = a.N.combatsFor('u_a', 'm1');
     check('combat roster: the join snapshot\'s combats (combatsFor, per player) carry no number either, and building them leaves the host\'s own rows as they were',
         j(snapA) === j(aMsg.combats) && aHost.rows[0].init === 23 && aHost.rows[0].src === 'gob.png' && aHost.rows.every(r => 'init' in r), j([snapA, aHost.rows[0]]));
+    {   // 1.5.7 (the owner: "waypoint should show how much the player has traveled on a move in combat and how much more they can move"): the turn's move
+        // on that fight's copy, { m, a }, for the token's own player alone and only while its row is on turn; a player's app keeps it only as two numbers
+        const cur = aHost.rows[aHost.turn], hadOwn = a.net.turnMoveOwn;
+        a.net.turnMove = { [aFid]: { rowId: cur.id, tokId: cur.tokId, moved: 2.004, allow: 6 } }; a.net.turnMoveOwn = Object.create(null); a.net.turnMoveOwn[aFid] = 'u_a';
+        const mvA = a.N.combatsFor('u_a', 'm1'), mvB = a.N.combatsFor('u_b', 'm1');
+        a.net.turnMove[aFid].rowId = 'r_gone'; const mvGone = a.N.combatsFor('u_a', 'm1');
+        a.net.turnMove[aFid] = { rowId: cur.id, tokId: cur.tokId, moved: 0, allow: null }; const mvNone = a.N.combatsFor('u_a', 'm1');
+        const clMv = a.N.cleanFights({ [aFid]: Object.assign({}, mvA[aFid]) })[aFid], clBad = a.N.cleanFights({ [aFid]: Object.assign({}, mvA[aFid], { mv: { m: 'x', a: 6 } }) })[aFid];
+        const clBig = a.N.cleanFights({ [aFid]: Object.assign({}, mvA[aFid], { mv: { m: -3, a: 1e12, z: 1 } }) })[aFid];
+        a.net.turnMove = {}; a.net.turnMoveOwn = hadOwn;
+        check('1.5.7 the turn\'s move on the wire (combatsFor, run for real): the token\'s own player gets { m, a } on that fight\'s copy, to the hundredth; another player, a row no longer on turn and a turn with no limit carry none; a player\'s app keeps two numbers held to 0 and a million, and nothing else',
+            j(mvA[aFid].mv) === j({ m: 2, a: 6 }) && !('mv' in mvB[aFid]) && !('mv' in mvGone[aFid]) && !('mv' in mvNone[aFid])
+            && !!clMv && j(clMv.mv) === j({ m: 2, a: 6 }) && !!clBad && !('mv' in clBad) && !!clBig && j(clBig.mv) === j({ m: 0, a: 1e6 }), j([mvA, mvB[aFid], clMv, clBad, clBig]));
+    }
     const cl = a.N.cleanFights(aMsg.combats), clF = cl[aFid];
     check('combat roster (a player\'s machine, fold 2: by the fight\'s own id): the host\'s rows without a number clean to 0 each, keeping the order, the turn, the round, the map and the id (nothing on a player\'s side reads the number)',
         !!clF && clF.rows.map(r => r.name + ':' + r.init).join() === 'Goblin:0,Orc:0,Trap:0,Ana:0' && clF.turn === 0 && clF.round === 1 && clF.mapId === 'm1' && clF.id === aFid && Object.keys(cl).length === 1, j(cl));

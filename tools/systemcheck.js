@@ -5213,6 +5213,16 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             j(s5.value[0].ct) === j({ Charges: 5, Hits: 0 }) && s99.value[0].ct.Charges === 30 && sNeg.value[0].ct.Hits === 0 && j(sBad) === j({ ok: false, reason: 'value' }) && sPl.ok && sPl.value[0].ct.Hits === 4
             && S.cleanCharItem({ type: 'char-item', rid: 'i1', charId: 'c_a', fieldId: 'f_wp', op: 'set', rowId: 'w_1', facts: { ct: { Charges: 3 } } }).facts.ct.Charges === 3
             && [{ Charges: '3' }, {}, { a: 1, b: 2, c: 3, d: 4, e: 5, f: 6, g: 7, h: 8, i: 9 }, 'x'].every(ct => S.cleanCharItem({ type: 'char-item', rid: 'i1', charId: 'c_a', fieldId: 'f_wp', op: 'set', rowId: 'w_1', facts: { ct } }) === null), j([s5, s99.value[0].ct, sNeg.value[0].ct, sBad]));
+        {   // 1.5.7 (the owner, of damage rolled as often as a player liked: "After a hit, once"): a counter Set by rolls only, which no player sets by hand
+            const rawR = JSON.parse(j(rawW)), ctsR = rawR.fields.find(f => f.id === 'f_wp').list.counters;
+            ctsR.forEach(c => { if (c && c.key === 'Hits') c.roll = true; else if (c && c.key === 'Charges') c.roll = 'yes'; });
+            const gmR = cleanSystem(rawR, { F, gmView: true }), plR = cleanSystem(rawR, { F, gmView: false }), byK = (s, k) => cW(s).find(c => c.key === k);
+            const setR = (ct, pl) => S.applyRowOp(gmR, chW, 'f_wp', { op: 'set', rowId: 'w_1', facts: { ct } }, F, { player: !!pl, view: plR });
+            const rPl = setR({ Hits: 1 }, true), rGm = setR({ Hits: 1 }), rPlC = setR({ Charges: 4 }, true);
+            check('1.5.7 a counter Set by rolls only: the cleaner keeps roll only as true, the same in both views and on a second clean; a player\'s own set of it is refused (field), the GM\'s goes through, and a player still sets a counter without it',
+                byK(gmR, 'Hits').roll === true && !('roll' in byK(gmR, 'Charges')) && byK(plR, 'Hits').roll === true && j(cleanSystem(gmR, { F, gmView: true })) === j(gmR)
+                && j(rPl) === j({ ok: false, reason: 'field' }) && rGm.ok && rGm.value[0].ct.Hits === 1 && rPlC.ok && rPlC.value[0].ct.Charges === 4, j([cW(gmR), rPl, rGm.ok, rPlC.ok]));
+        }
         const prW = charFor(chW, plW, 'u_a', { items: { i_bl: gmW.items[0] } }), vW = validateSystem(gmW, F).errors.filter(e => e.id === 'f_wp').map(e => e.message);
         check('R2a the owner\'s copy carries each row\'s counters as stored; a most\'s formula is checked as a column\'s (no dice, known names) under the list\'s card',
             j(prW.values.f_wp[0].ct) === j({ Charges: 13, Hits: 0 }) && vW.some(m => /^Counter “Bad”, its most: /.test(m)), j([prW.values.f_wp, vW]));

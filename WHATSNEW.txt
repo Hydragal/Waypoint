@@ -11,6 +11,13 @@ Combat
   formula that gives the type's place in that list, such as Row.dt.
 - A roll's change on a success or failure, and an apply action, can now
   switch a tick on or off: Set to 1 turns it on, 0 turns it off.
+- The turn strip says how far the token on turn has moved this turn and
+  what its move allows, such as Moved 2 of 6 squares. A player sees it
+  for their own token. While they drag it, a label by the pointer says
+  how far the drag goes and what is left.
+- A list's counter can be ticked Set by rolls only. Rolls, actions and
+  you move it, and a player's sheet shows it with no minus or plus. So an
+  Attack that hits can open one Damage roll and no more.
 
 Calendar
 - Time passes as Active while a fight runs. Rest cannot be picked until
