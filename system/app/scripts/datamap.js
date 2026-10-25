@@ -1122,6 +1122,7 @@ import { getRoomInspectorHtml, attachRoomInspectorEvents, renderInspector,  rend
                       break;
                   }
               }
+              if (window.wpMineCheck) { var mdM = multiDrag.filter(function(m) { return m.item === item; })[0]; try { window.wpMineCheck(am, item, mdM ? { x: mdM.ox, y: mdM.oy } : null); } catch (e) { console.error(e); } }   // 1.5.8 explosives: a mine the token stepped into goes off (the GM's own drag; never a player's app)
               // A portal under the token? Travel first, so the room note below only fires when the token actually stays put.
               var traveled = !!(window.wpNet && window.wpNet.tokenDropped && window.wpNet.tokenDropped(item, am, true));   // true: this machine's own hand — on the host, the GM's (a portal locked for players does not stop it); a player's app travels nobody from here
               var toRoom = window.wpAutoRoom ? window.wpAutoRoom(item, am) : null;

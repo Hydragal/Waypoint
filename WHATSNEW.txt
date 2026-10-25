@@ -20,6 +20,26 @@ Pages
   window or in the panel over the map. While the pointer rests on a
   page link, a small button beside it opens the page in a new window.
 
+Explosives
+- Blast damage by the rules: the Combat card's Blast falloff formula
+  gives each token its share of a blast, by its distance in yards. The
+  direct target and the blast's own cell take the whole roll. Each
+  share goes through the damage step with the item's damage type, its
+  armour divisor and the torso, and Undo last throw puts back every
+  value it changed. A blast's damage card has Apply to all in the blast.
+- A throw is aimed at a token or a spot and rolls the Combat card's
+  Throw roll with the range to the aim. A miss scatters along the line
+  of the throw, a yard a point missed and at most half the distance,
+  or by your own Scatter formula. A critical failure drops at the
+  thrower's feet. Longest throw and Shortest throw refuse a throw past
+  them. With the fuse set to the next turn, a throw in a fight goes off
+  at the start of the next turn, its picture on the map until then.
+- Uses one up takes one off the row a blast was thrown or placed from.
+- Placed, not thrown: a mine is placed hidden from players and never
+  goes off as it is placed. It goes off when a character steps into its
+  trigger radius, or with Set off the mine on the GM's right-click menu.
+- With none of these set, blasts work as before.
+
 System editor
 - A row can load a row of another list, as a blaster loads a power pack:
   in the Lists tab, set Loads from to that list, pick the counter that

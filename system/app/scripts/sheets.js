@@ -2371,7 +2371,7 @@ function cantTake(sys, c, it) {
 // ---- item-list widgets (Stage 4: the plain list and the rich table share these) ----
 var ITEM_COL_LABEL = { category: 'Category', cost: 'Cost', damage: 'Damage', area: 'Area', notes: 'Notes' };
 function itemThrowBtn(def, c, f, rid) {   // Stage 6 F4a: the throw names the carried row (the host reads its definition). A GM-only item, or one on a GM-only list: its damage and its blast's name stay the GM's
-    var tb = el('button', 'tool ghost sheet-item-throw', '💥 Throw'); tb.title = 'Throw ' + def.name + ' — then click the map';
+    var plc = !!(def.area && def.area.place === true), tb = el('button', 'tool ghost sheet-item-throw', plc ? '\ud83d\udccd Place' : '💥 Throw'); tb.title = plc ? 'Place ' + def.name + ' \u2014 then click the map where it goes. It goes off when someone steps into it.' : 'Throw ' + def.name + ' — then click your target or a place on the map';   // 1.5.8 explosives: a mine is placed, never thrown
     tb.addEventListener('click', function() { if (window.wpArmBlast) { window.wpArmBlast(def.area.ft, def.area.name || def.name, { charId: c.id, fieldId: f.id, rowId: rid, by: c.name, damage: def.damage || '', gmOnly: def.vis === 'gm' || f.vis === 'gm' }); var hp = tb.closest('.hud-panel'); if (hp) closeHud(hp.dataset.cid); else closeSheet(); } });
     return tb;
 }
@@ -5738,6 +5738,14 @@ function itemRow(it) {
     var area = el('div', 'sys-item-area');
     area.appendChild(select('sys-item-shape', [['', 'No blast'], ['circle', 'Blast (circle)']], it.area ? (it.area.shape || 'circle') : '', 'A thrown blast: a circular area, thrown from the sheet'));
     var ftw = numField('sys-item-ft', it.area ? it.area.ft : '', 'Blast radius in feet', 'ft'); if (!it.area) ftw.style.opacity = '0.5'; area.appendChild(ftw);
+    if (it.area) {   // 1.5.8 explosives: its blast's damage type, whether going off uses one up, and whether it is placed, not thrown, with its trigger radius
+        var dtys = draft.combat && draft.combat.damage && Array.isArray(draft.combat.damage.types) ? draft.combat.damage.types : [];
+        if (dtys.length) area.appendChild(select('sys-item-atype', [['', 'Damage type: none']].concat(dtys.filter(function(y) { return y && typeof y.key === 'string'; }).map(function(y) { return [y.key, 'Damage type: ' + (y.label || y.key)]; })), it.area.type || '', 'The damage type of its blast, as the damage step reads it'));
+        area.appendChild(numField('sys-item-aad', it.area.ad || '', 'Its armour divisor: DR is divided by it (2 for a (2) after the damage). Blank for none', 'divisor', '0.5'));
+        area.appendChild(checkLabel('sys-item-ause', it.area.use === true, 'Uses one up', 'Going off takes one off the row it was thrown or placed from, and the row goes at none'));
+        area.appendChild(checkLabel('sys-item-aplace', it.area.place === true, 'Placed, not thrown', 'A mine: its button places it on the map, hidden from players. It goes off only when a character steps into it, or by your hand'));
+        if (it.area.place === true) area.appendChild(numField('sys-item-atrig', it.area.trig || '', 'Trigger radius in yards: a character whose centre comes this near sets it off', 'trigger yd', '0.5'));
+    }
     top.appendChild(area);
     top.appendChild(input('sys-item-damage field', it.damage, 'Damage roll (dice allowed): 3d6, 2d6 + STRmod', 'Damage (optional)'));
     var flags = el('div', 'sys-flags');
@@ -6078,6 +6086,51 @@ function listApplyEditor(box, rr, ri, key, sp, targets) {   // key (R2b): 'apply
     });
     var addB = el('button', 'tool ghost sys-btn sys-list-applyadd', key === 'then' ? '+ Then\u2026' : '+ Change'); addB.dataset.act = 'lapplyadd'; addB.dataset.ri = String(ri); addB.dataset.k = key; addB.disabled = list.length >= LIMITS.applyChanges; addB.title = addB.disabled ? 'At most ' + LIMITS.applyChanges + ' changes an action' : 'Another pool or number this button moves'; box.appendChild(addB);
 }
+// [systemcheck:blastbox-start]
+// 1.5.8 explosives: the Combat card's blast formulas (systemcore cleanBlastRules), each a box with one line under it saying what Save does with
+// it, the cleaner's own reading. Values and text nodes only
+var BLAST_BOXES = [
+    ['fall', 'Blast falloff', 'Each token\u2019s share of a blast. Names: BlastDamage, BlastDistance in yards, BlastDice, Direct and Centre, the blast\u2019s own cell. With none, every token takes the whole roll.', 'if(or(Direct, Centre), BlastDamage, if(BlastDistance > 2 * BlastDice, 0, floor(BlastDamage / (3 * BlastDistance))))'],
+    ['roll', 'Throw roll', 'The check a throw rolls first. ThrowSkill stands for the item\u2019s throw skill. RangeMod reads the distance to the aim. With none, a throw lands where it is aimed.', '3d6 <= ThrowSkill + RangeMod'],
+    ['scatter', 'Scatter on a miss', 'How many yards a miss lands from its aim. Names: Margin and ThrowDistance. With none, a yard a point missed, never more than half the distance thrown.', 'min(Margin, ThrowDistance / 2)'],
+    ['hand', 'In the hand', 'Whether a critical failure goes off in the thrower\u2019s hand. Name: Natural, its dice. With none, it drops at the thrower\u2019s feet.', 'Natural >= 18'],
+    ['max', 'Longest throw', 'How far a thing may be thrown, in yards. It reads the thrower\u2019s sheet and the item\u2019s row as Row. With none, any distance.', ''],
+    ['min', 'Shortest throw', 'How near a thing may be thrown, in yards. With none, any distance.', '']
+];
+function blastSays(k, v) {   // what Save does with one formula: '' where it keeps it
+    var SCb = window.wpSystemCore; if (!v || !SCb || typeof SCb.cleanBlastRules !== 'function') return '';
+    var o = {}; o[k] = v; var c = SCb.cleanBlastRules(o, F());
+    return c && c[k] ? '' : k === 'fall' ? 'Save drops it: it may read only BlastDamage, BlastDistance, BlastDice, Direct and Centre, with no dice.' : k === 'scatter' ? 'Save drops it: it may read only Margin and ThrowDistance.' : k === 'hand' ? 'Save drops it: it may read only Natural, with no dice.' : k === 'roll' ? 'Save drops it: it does not read as a formula.' : 'Save drops it: it does not read as a formula with no dice.';
+}
+function blastBox(box, cm) {
+    var bl = cm.blast && typeof cm.blast === 'object' && !Array.isArray(cm.blast) ? cm.blast : {};
+    box.appendChild(el('div', 'sys-combat-head', 'Blasts and throws'));
+    BLAST_BOXES.forEach(function(d) {
+        var l = el('label', 'sys-combat-item'); l.appendChild(el('span', 'sys-num-cap', d[1]));
+        var i = input('sys-combat-b' + d[0] + ' field', typeof bl[d[0]] === 'string' ? bl[d[0]] : '', d[2], d[3] ? 'e.g. ' + d[3] : 'A formula'); i.dataset.bk = d[0]; l.appendChild(i); box.appendChild(l);
+        lineUnder(box, d[2]);
+        var er = el('div', 'sys-blast-err'); er.dataset.bk = d[0]; er.textContent = blastSays(d[0], bl[d[0]]); box.appendChild(er);
+    });
+    box.appendChild(labeledSelect('sys-combat-bways', 'Ways a miss goes', [['6', 'Six, a d6 (the sides of a hex)'], ['8', 'Eight']], bl.ways === 8 ? '8' : '6', 'How many ways a miss may scatter from its aim, rolled as a die'));
+    box.appendChild(labeledSelect('sys-combat-bfuse', 'A thrown explosive goes off', [['', 'At once, where it lands'], ['turn', 'At the start of the next turn in a fight']], bl.fuse === 'turn' ? 'turn' : '', 'With a fight on its map, a fused explosive lies there until the next turn starts. Outside a fight it goes off at once'));
+}
+function onBlastChange(t) {   // the two lists of the Blasts and throws part
+    var c = t && t.className || ''; if (c.indexOf('sys-combat-bways') < 0 && c.indexOf('sys-combat-bfuse') < 0) return false;
+    var cm = draft.combat || (draft.combat = { blastAuto: 'full', blastRoller: 'owner', hpResource: '' }), bl = cm.blast && typeof cm.blast === 'object' && !Array.isArray(cm.blast) ? cm.blast : (cm.blast = {});
+    if (c.indexOf('sys-combat-bways') >= 0) { if (t.value === '8') bl.ways = 8; else delete bl.ways; } else { if (t.value === 'turn') bl.fuse = 'turn'; else delete bl.fuse; }
+    if (!Object.keys(bl).length) delete cm.blast;
+    markDirty(); return true;
+}
+function onBlastInput(t) {
+    var k = t && t.dataset ? t.dataset.bk : ''; if (!k || !/(^| )sys-combat-b(fall|roll|scatter|max|min|hand)( |$)/.test(t.className || '')) return false;
+    var cm = draft.combat || (draft.combat = { blastAuto: 'full', blastRoller: 'owner', hpResource: '' });
+    var bl = cm.blast && typeof cm.blast === 'object' && !Array.isArray(cm.blast) ? cm.blast : (cm.blast = {}), v = String(t.value || '').trim();
+    if (v) bl[k] = v.slice(0, 1200); else delete bl[k];
+    if (!Object.keys(bl).length) delete cm.blast;
+    var box = ui('sysCombatBox'), er = box ? Array.prototype.filter.call(box.querySelectorAll('.sys-blast-err'), function(x) { return x.dataset.bk === k; })[0] : null; if (er) er.textContent = blastSays(k, v);
+    markDirty(); return true;
+}
+// [systemcheck:blastbox-end]
 function renderCombat() {
     var box = ui('sysCombatBox'); if (!box) return; box.textContent = '';
     var cm = draft.combat || (draft.combat = { blastAuto: 'full', blastRoller: 'owner', hpResource: '' });
@@ -6100,6 +6153,7 @@ function renderCombat() {
     }
     box.appendChild(labeledSelect('sys-combat-checks', 'Roll outcomes', [['', 'Success or failure by the margin'], ['under3d6', '3d6 roll-under criticals']], cm.checks === 'under3d6' ? 'under3d6' : '', 'How a check reads. 3d6 roll-under (a roll of exactly 3d6 against a target): 3\u20134 are a critical success, 5 at a target of 15+, 6 at 16+; 17 fails (critically at 15 or less), 18 or failing by 10+ is a critical failure.'));   // Stage 6 F8
     lineUnder(box, 'How a check against a target reads its dice.');
+    if (typeof blastBox === 'function') blastBox(box, cm);   // 1.5.8 explosives: the falloff, the throw's roll, the scatter, the hand, how far and how near, the ways and the fuse
     rangeBox(box, cm);   // range penalties R1: the system's range rule, under cover
     heightBox(box, cm);   // item 19 H2: the system's height modifier, under range
     lightBox(box, cm);   // lighting L4: the system's light rules
@@ -7250,6 +7304,7 @@ function onInput(e) {
     if (onHeightInput(t)) return;   // item 19 H2
     if (onCalendarInput(t)) return;   // item 20 K1
     if (onDamageInput(t)) return;   // 1.5.6: the Taking damage box
+    if (typeof onBlastInput === 'function' && onBlastInput(t)) return;   // 1.5.8 explosives
     var fxd = fxOfRow(t);   // 5h: a library effect's text boxes
     if (fxd) {
         var fc = t.className || '';
@@ -7269,6 +7324,8 @@ function onInput(e) {
         if (ic.indexOf('sys-item-name') >= 0) it.name = t.value.slice(0, LIMITS.name);
         else if (ic.indexOf('sys-item-cat') >= 0) it.category = t.value.slice(0, LIMITS.category);
         else if (ic.indexOf('sys-item-ft') >= 0) { if (it.area) it.area.ft = t.value === '' ? 0 : Number(t.value); }
+        else if (ic.indexOf('sys-item-aad') >= 0) { if (it.area) { var adI = Number(t.value); if (t.value !== '' && isFinite(adI) && adI > 0) it.area.ad = adI; else delete it.area.ad; } }   // 1.5.8 explosives
+        else if (ic.indexOf('sys-item-atrig') >= 0) { if (it.area) { var tgv = Number(t.value); if (t.value !== '' && isFinite(tgv) && tgv > 0) it.area.trig = tgv; else delete it.area.trig; } }   // 1.5.8 explosives
         else if (ic.indexOf('sys-item-damage') >= 0) it.damage = t.value;
         else if (ic.indexOf('sys-item-cost') >= 0) it.cost = t.value;
         else if (ic.indexOf('sys-item-throw') >= 0) it.throwSkill = t.value.trim();
@@ -7417,6 +7474,7 @@ function onChange(e) {
     if (onDamageChange(t)) return;   // 1.5.6: the Taking damage box
     if (c.indexOf('sys-combat-auto') >= 0) { draft.combat.blastAuto = t.value; markDirty(); patchErrors(); return; }
     if (c.indexOf('sys-combat-roller') >= 0) { draft.combat.blastRoller = t.value; markDirty(); patchErrors(); return; }
+    if (typeof onBlastChange === 'function' && onBlastChange(t)) return;   // 1.5.8 explosives
     if (c.indexOf('sys-combat-checks') >= 0) { if (t.value === 'under3d6') draft.combat.checks = 'under3d6'; else delete draft.combat.checks; markDirty(); patchErrors(); return; }   // Stage 6 F8
     if (c.indexOf('sys-combat-hp') >= 0) { draft.combat.hpResource = t.value; markDirty(); patchErrors(); return; }
     if (c.indexOf('sys-combat-cover-on') >= 0) { if (!draft.combat.cover) draft.combat.cover = { on: false, style: 'graded' }; draft.combat.cover.on = t.value === 'on'; markDirty(); patchErrors(); renderCombat(); return; }
@@ -7445,6 +7503,9 @@ function onChange(e) {
         if (c.indexOf('sys-item-modson') >= 0) { if (t.checked) iit.modsOn = true; else delete iit.modsOn; markDirty(); patchErrors(); return; }
         if (c.indexOf('sys-item-rmmode') >= 0) { if (t.value === 'bound' || t.value === 'curse') iit.rm = t.value; else delete iit.rm; markDirty(); renderAll(); return; }   // Stage 6
         if (c.indexOf('sys-item-eqmode') >= 0) { if (t.value === 'bound' || t.value === 'curse') iit.eq = t.value; else delete iit.eq; markDirty(); renderAll(); return; }   // F4b
+        if (c.indexOf('sys-item-atype') >= 0) { if (iit.area) { if (t.value) iit.area.type = t.value; else delete iit.area.type; } markDirty(); patchErrors(); return; }   // 1.5.8 explosives
+        if (c.indexOf('sys-item-ause') >= 0) { if (iit.area) { if (t.checked) iit.area.use = true; else delete iit.area.use; } markDirty(); patchErrors(); return; }
+        if (c.indexOf('sys-item-aplace') >= 0) { if (iit.area) { if (t.checked) iit.area.place = true; else { delete iit.area.place; delete iit.area.trig; } } markDirty(); renderAll(); return; }
         if (c.indexOf('sys-item-shape') >= 0) { if (t.value === '') iit.area = null; else iit.area = { ft: iit.area ? iit.area.ft : 12, shape: 'circle', name: iit.area ? iit.area.name : '' }; markDirty(); renderAll(); return; }
         if (c.indexOf('sys-item-cat') >= 0) { var nsc = itemStatDefs(iit).map(function(s) { return s.key.toLowerCase(); }).join(','); if (nsc !== (t.dataset.scope || '')) { markDirty(); renderAll(); } return; }   // F4c1: a category that changes which lists it can be on redraws its stat boxes
         return;

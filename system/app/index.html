@@ -65,6 +65,7 @@
 <script type="module" src="scripts/charlist.js"></script>
 <script type="module" src="scripts/notices.js"></script>
 <script type="module" src="scripts/trade.js"></script>
+<script type="module" src="scripts/blastcore.js"></script>
 <script type="module" src="scripts/tutorial.js"></script>
 <script type="module" src="scripts/devconsole.js"></script>
 <script src="scripts/tooltips.js"></script>
@@ -1954,6 +1955,17 @@ Plain paragraphs are text: **bold**, *italic*, ~~strike~~, &lt;u&gt;underline&lt
                           </li>
                           <li>The removal setting is separate from <b>GM only</b>, which keeps an item secret. A GM-only item you give a player still reaches their sheet: its name and notes, never its formulas. If you delete an item from the library, every character carrying it keeps a copy, marked <b>not in library</b> on your sheet. <b>Make custom</b> turns that copy into the character&rsquo;s own item.</li>
                           <li>An item with a blast area gets a <b>&#128165; Throw</b> button: press it, then click the map. The blast lands attributed to the character and is <b>shared with everyone on that map</b>. The toolbar&rsquo;s Radius tool measures, and its circles are yours alone. The GM can set one off as an explosion with <b>Explode</b>. The radius beside an item reads in the ruler&rsquo;s unit on the map on screen. The item keeps it in feet.</li>
+                          <li><b>Explosives</b> follow the rules on the Combat card. Each part is a formula, and with none a blast works as before.
+                              <ul>
+                                  <li><b>Blast falloff</b> gives each token its share of the roll. The direct target and the blast&rsquo;s own cell take the whole roll. Each share then goes through the damage step, with its type, its armour divisor and the torso.</li>
+                                  <li>Click a token or a spot to aim a throw. <b>Throw roll</b> is rolled first, with the range to the aim. A success lands on the aim. A miss scatters from it along the line of the throw.</li>
+                                  <li><b>Longest throw</b> and <b>Shortest throw</b> refuse a throw past them and say why. A critical failure drops at the thrower&rsquo;s feet. <b>In the hand</b> says when it goes off there.</li>
+                                  <li>Set the fuse to the next turn and a throw in a fight goes off at the start of the next turn. Its picture shows on the map until then, and you are told.</li>
+                                  <li>A damage card from a blast has <b>Apply to all in the blast</b>. <b>Undo last throw</b> puts back every value the blast changed.</li>
+                                  <li>An item may have a damage type, an armour divisor and <b>Uses one up</b>, which takes one off its row when it goes off.</li>
+                                  <li>Tick <b>Placed, not thrown</b> for a mine. Its button places it, hidden from players. It never goes off as it is placed. It goes off when a character steps into its trigger radius, or with <b>Set off the mine</b> on your right-click menu.</li>
+                              </ul>
+                          </li>
                           <li><b>Combat settings</b> are at the top of the Items tab.
                               <ul>
                                   <li><b>Blast automation</b> has three settings. <b>Full auto</b> rolls the damage and applies it to every token in range. <b>Roll to chat</b> rolls but leaves applying to you. <b>Measure only</b> just shows the area.</li>

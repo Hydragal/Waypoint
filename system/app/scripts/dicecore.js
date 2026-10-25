@@ -308,6 +308,18 @@ function verdictOf(res, rule) {
     }
     return { kind: 'value', value: res.value, text: fmtNum(res.value) };
 }
+// 1.5.8 explosives: a check's outcome as a throw reads it: { pass, crit ('crit' | 'fumble' | ''), total, target, margin } (margin: how far it made or
+// missed, 0 or more); a 3d6 roll-under check by its own criticals, any other check by its top comparison; null for a roll that is no check
+function checkOf(res, rule) {
+    if (!res || !res.ok) return null;
+    var u = rule === 'under3d6' ? under3d6(res) : null;
+    if (u) return { pass: u.pass, crit: u.crit || '', total: u.total, target: u.target, margin: Math.abs(u.total - u.target) };
+    var top = null, checks = res.breakdown && Array.isArray(res.breakdown.checks) ? res.breakdown.checks : [];
+    for (var i = 0; i < checks.length; i++) if (checks[i] && checks[i].top) top = checks[i];
+    if (!top) return null;
+    var m = typeof top.margin === 'number' && isFinite(top.margin) ? Math.abs(top.margin) : 0;
+    return { pass: !!top.pass, crit: critOf(res, rule) || '', total: typeof top.left === 'number' ? top.left : null, target: typeof top.right === 'number' ? top.right : null, margin: m };
+}
 function fmtNum(v) {
     if (typeof v === 'boolean') return v ? 'true' : 'false';
     if (typeof v !== 'number' || !isFinite(v)) return String(v);
@@ -391,6 +403,6 @@ function RateLimit(cfg) {
 }
 function uid() { return 'r_' + Math.random().toString(36).slice(2, 10); }
 
-var API = { VERSION: VERSION, LIMITS: LIMITS, cleanExpr: cleanExpr, composeModifier: composeModifier, withAdvantage: withAdvantage, cleanFrom: cleanFrom, cleanRollReq: cleanRollReq, cleanRoll: cleanRoll, cleanApply: cleanApply, applyText: applyText, applyChanges: applyChanges, cleanDue: cleanDue, dueText: dueText, cleanDeny: cleanDeny, cleanRid: cleanRid, cleanLabel: cleanLabel, cleanNames: cleanNames, cleanMods: cleanMods, foldNames: foldNames, replay: replay, checkTableRoll: checkTableRoll, denyText: denyText, parseCommand: parseCommand, verdictOf: verdictOf, critOf: critOf, under3d6: under3d6, cardText: cardText, tagOf: tagOf, naturalOf: naturalOf, malfOf: malfOf, RateLimit: RateLimit, uid: uid, fmtNum: fmtNum, cardLook: cardLook, cleanCardLook: cleanCardLook };
+var API = { checkOf: checkOf, VERSION: VERSION, LIMITS: LIMITS, cleanExpr: cleanExpr, composeModifier: composeModifier, withAdvantage: withAdvantage, cleanFrom: cleanFrom, cleanRollReq: cleanRollReq, cleanRoll: cleanRoll, cleanApply: cleanApply, applyText: applyText, applyChanges: applyChanges, cleanDue: cleanDue, dueText: dueText, cleanDeny: cleanDeny, cleanRid: cleanRid, cleanLabel: cleanLabel, cleanNames: cleanNames, cleanMods: cleanMods, foldNames: foldNames, replay: replay, checkTableRoll: checkTableRoll, denyText: denyText, parseCommand: parseCommand, verdictOf: verdictOf, critOf: critOf, under3d6: under3d6, cardText: cardText, tagOf: tagOf, naturalOf: naturalOf, malfOf: malfOf, RateLimit: RateLimit, uid: uid, fmtNum: fmtNum, cardLook: cardLook, cleanCardLook: cleanCardLook };
 if (typeof window !== 'undefined') window.wpDiceCore = API;
-export { VERSION, LIMITS, cleanExpr, composeModifier, withAdvantage, cleanFrom, cleanRollReq, cleanRoll, cleanApply, applyText, applyChanges, cleanDue, dueText, cleanDeny, cleanRid, cleanLabel, cleanNames, cleanMods, foldNames, replay, checkTableRoll, denyText, parseCommand, verdictOf, critOf, under3d6, cardText, tagOf, RateLimit, uid, fmtNum, naturalOf, malfOf, cardLook, cleanCardLook };
+export { checkOf, VERSION, LIMITS, cleanExpr, composeModifier, withAdvantage, cleanFrom, cleanRollReq, cleanRoll, cleanApply, applyText, applyChanges, cleanDue, dueText, cleanDeny, cleanRid, cleanLabel, cleanNames, cleanMods, foldNames, replay, checkTableRoll, denyText, parseCommand, verdictOf, critOf, under3d6, cardText, tagOf, RateLimit, uid, fmtNum, naturalOf, malfOf, cardLook, cleanCardLook };

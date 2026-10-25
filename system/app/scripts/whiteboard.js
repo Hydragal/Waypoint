@@ -4004,13 +4004,14 @@ window.wpFitToGrid = fitToGrid;
       var elevOn = stanceOn('elevation');
       return (map.whiteboard || []).filter(function(t) { return t.isChar; }).map(function(t) {
           var c = tokenCentre(t);
-          var h = boardYards(b.x, b.y, c.x, c.y);
+          var h = yardsOn(map, b, c);   // 1.5.8: on that map's own grid (a mine may go off on a map that is not on screen)
           var v = elevOn ? tokenElevation(t, map, b.thrown === true) - (b.elev || 0) : 0;   // item 19b H5: on the ground it stands on (a thrown blast, shown to the table, never reads a hidden piece's)
           return { tok: t, h: h, v: v, d: Math.sqrt(h * h + v * v) };
       });
   }
   function blastSvg() {
-      var map = getActiveMap(); if (!map || !blasts.length) return '';
+      var map = getActiveMap(); if (!map) return '';
+      var mineH = mineIconsSvg(map); if (!blasts.length) return mineH;   // 1.5.8 explosives: a placed mine's mark at its spot, on the GM's screen
       var pxPerYd = mapMeasureConfig().cellPx / cellYards(), elevOn = stanceOn('elevation'), html = '', ru = rulerUnitNow(), ri = rulerImpNow();
       if (circleFollow(map)) { if (!circleKeptPicked && typeof circleRekept === 'function') circleRekept(); syncBlastMenu(); }   // a circle on a token stands where its token stands now; one lost or found: the options show what is on screen, and the next click places it
       blasts.forEach(function(b, i) {
@@ -4022,6 +4023,7 @@ window.wpFitToGrid = fitToGrid;
           if (kind === 'cone') html += '<path class="area" d="' + conePath(b.x, b.y, rPx, b.dir, b.deg) + '"></path>' + DOT + (own ? '<circle class="blast-aim" data-i="' + i + '" cx="' + svgNum(b.x + rPx * Math.cos(b.dir || 0)) + '" cy="' + svgNum(b.y + rPx * Math.sin(b.dir || 0)) + '" r="7"><title>Drag to turn the cone</title></circle>' : '');   // a path is numbers only (svgNum); a blast's cone has no handle: it went off as it was aimed
           else if (kind === 'ring' && innerYd(b) > 0) html += '<path class="area" fill-rule="evenodd" d="' + ringPath(b.x, b.y, rPx, innerYd(b) * pxPerYd) + '"></path>' + GRAB + DOT;
           else html += '<circle class="area" cx="' + b.x + '" cy="' + b.y + '" r="' + rPx + '"></circle>' + GRAB + DOT;
+          if (b.thrown) html += standInSvg('grenade', b.x, b.y, b.icon);   // 1.5.8 explosives: its icon at the centre of the blast, the item's own or the stand-in
           var lblName = blastName(b) ? esc(blastName(b)) + ' \u00b7 ' : '', lblSize = esc(blastSize(b, ru, ri));   // a shape of the tool's own and a thrown blast alike in the ruler's unit (1.5.4), the words blastWords says
           var lbl = lblName + '<tspan class="fog-cap">' + lblSize + '</tspan>' + (elevOn ? ' \u00b7 at ' + fmtElev(b.elev || 0) + ' ' + lenUnit() : '');   // item 19 H1: a height in the viewer's unit. Its size alone is drawn over the fog on a player's screen (fog.js measureCaps): a name and a height stay on the board
           html += '<text x="' + (b.x + 8) + '" y="' + (kind === 'cone' ? b.y - 12 : b.y - rPx - 8) + '">' + lbl + '</text>';   // a cone's words stand at its point: it has no top
@@ -4033,7 +4035,7 @@ window.wpFitToGrid = fitToGrid;
           });
           html += '</g>';
       });
-      return html;
+      return html + mineH;
   }
   function applyBlastHits() {   // a token inside a thrown blast is marked as hit, one inside circles of the Radius tool alone as measured
       var map = getActiveMap(), hit = Object.create(null);
@@ -4061,7 +4063,7 @@ window.wpFitToGrid = fitToGrid;
       if (_armedThrow) {   // a throw from a character sheet: one-shot, host-authoritative, shared to the map
           var ctx = _armedThrow; _armedThrow = null; document.body.classList.remove('placing');
           if (window.wpNet && window.wpNet.active && window.wpNet.role === 'client') { if (window.wpNet.throwReq) window.wpNet.throwReq(ctx.charId, ctx.fieldId, ctx.rowId, x, y, map.id); }
-          else placeThrownBlast({ x: x, y: y, ft: ctx.ft, name: ctx.name, by: ctx.by, charId: ctx.charId, damage: ctx.damage, gmOnly: ctx.gmOnly });
+          else placeThrownBlast({ x: x, y: y, ft: ctx.ft, name: ctx.name, by: ctx.by, charId: ctx.charId, fieldId: ctx.fieldId, rowId: ctx.rowId, damage: ctx.damage, gmOnly: ctx.gmOnly });   // 1.5.8 explosives: the row it is thrown from
           var mvB = document.getElementById('moveModeBtn'); if (mvB) mvB.click();
           return;
       }
@@ -4098,79 +4100,291 @@ window.wpFitToGrid = fitToGrid;
       if (a.fresh) { var m = getActiveMap(); if (m) circleSaid(a.b, m); }
       syncBlastMenu();
   }
-  // A blast thrown from a character sheet: placed on the host, shown to everyone on the map (never the personal quick-tool).
-  function placeThrownBlast(opts) {
-      var map = getActiveMap(); if (!map || !opts) return null;
+  // A blast thrown from a character sheet: placed on the host, shown to everyone on the map (never the personal quick-tool). opts: x, y (the
+  // point clicked), ft, name, by, charId, fieldId, rowId (the row it is thrown from), damage, gmOnly; and from this machine alone: goOff (a mine
+  // going off: no roll, no aim), direct (the token struck directly), dtype, notes, icon. mapIn: the map it goes off on (the map on screen else)
+  function placeThrownBlast(opts, mapIn) {
+      var map = mapIn || getActiveMap(); if (!map || !opts) return null;
+      var pre = typeof throwPrep === 'function' ? throwPrep(opts, map) : null;   // 1.5.8 explosives: its row, its aim, its roll and its scatter (a suite runs this function alone)
+      if (pre && pre.stop) { toast(pre.stop); return null; }
+      if (pre && pre.mine !== undefined) return pre.mine;
+      var amS = getActiveMap(), onScreen = !mapIn || !!(amS && amS.id === map.id), land = pre ? pre.land : { x: opts.x, y: opts.y };   // by its id: the map on screen
       var ft = Math.max(1, Math.min(3000, Math.round(opts.ft || 0))) || 12;
-      var b = { x: opts.x, y: opts.y, ft: ft, name: opts.name || '', elev: (opts.elev !== undefined ? opts.elev : 0), autoElev: opts.elev === undefined, thrown: true, by: opts.by || '' };
-      seatBlast(b);
+      var b = { x: land.x, y: land.y, ft: ft, name: opts.name || '', elev: (opts.elev !== undefined ? opts.elev : 0), autoElev: opts.elev === undefined, thrown: true, by: opts.by || '' };
+      if (pre) {   // 1.5.8: the blast's own id (its card's Apply to all), the damage it rolls, its type, the token struck directly, its notes and its icon
+          b.bid = 'b_' + Math.random().toString(36).slice(2, 12); b.dmgExpr = typeof opts.damage === 'string' ? opts.damage : ''; if (pre.direct) b.direct = pre.direct;
+          var dty = opts.goOff ? opts.dtype : pre.area && pre.area.type; if (typeof dty === 'string' && dty) b.dtype = dty;
+          var nts = opts.goOff ? opts.notes : pre.def && !opts.gmOnly ? pre.def.notes : ''; if (typeof nts === 'string' && nts.trim()) b.notes = nts.trim().slice(0, 800);
+          var ico = opts.goOff ? opts.icon : pre.def ? pre.def.icon : ''; if (typeof ico === 'string' && ico) b.icon = ico;
+          var adB = opts.goOff ? opts.ad : pre.area && pre.area.ad; if (typeof adB === 'number' && isFinite(adB) && adB > 0) b.ad = adB;
+      }
+      if (onScreen) seatBlast(b);
       var thrB = opts.charId ? (map.whiteboard || []).filter(function(w) { return w.charId === opts.charId; }).sort(function(p, q) { return (q.isChar ? 1 : 0) - (p.isChar ? 1 : 0); })[0] : null;   // cover follow-ups (owner, answer 5): the thrower's token on this map
       var seatB = window.wpFog && window.wpFog.blastSeat ? window.wpFog.blastSeat(map, b.x, b.y, thrB ? thrB.x + (thrB.w || 60) / 2 : opts.x, thrB ? thrB.y + (thrB.h || 52) / 2 : opts.y) : null;   // a blast can't go off inside a wall or a closed door: it goes off in front, on the thrower's side
       if (seatB) { b.x = seatB.x; b.y = seatB.y; if (b.autoElev) { var underB = tokenAtPoint(map, b.x, b.y, true); b.elev = underB ? tokenElevation(underB, map, true) : groundAt(map, b.x, b.y, true); } }
-      pushBlast(b); renderMeasures(); syncBlastMenu();
+      if (onScreen) { pushBlast(b); renderMeasures(); syncBlastMenu(); }
       if (window.wpNet && window.wpNet.active && window.wpNet.role === 'host' && window.wpNet.broadcastBlast) window.wpNet.broadcastBlast({ x: b.x, y: b.y, ft: b.ft, name: opts.gmOnly ? '' : b.name, elev: b.elev, by: b.by }, map.id);   // a GM-only item's blast reaches players unnamed
       var n = blastDistances(b, map).filter(function(r) { return r.d <= blastRadiusYd(b) + 1e-9; }).length;
       var rw = typeof blastSize === 'function' && typeof rulerUnitNow === 'function' ? blastSize({ ft: b.ft }, rulerUnitNow(), typeof rulerImpNow === 'function' ? rulerImpNow() : '') : 'Radius ' + b.ft + ' ft';   // in the ruler's unit, as its label (1.5.4): in metres as the sheet says a measure
-      toast((b.by ? b.by + ' throws ' : 'Thrown: ') + (b.name || 'a blast') + ', ' + rw.charAt(0).toLowerCase() + rw.slice(1) + '. ' + n + ' token' + (n === 1 ? '' : 's') + ' in range.' + (seatB ? ' It went off in front of the wall or door it hit.' : ''));
-      resolveThrow(b, opts, n);
+      toast((opts.goOff ? (b.name || 'A mine') + ' goes off' : (b.by ? b.by + ' throws ' : 'Thrown: ') + (b.name || 'a blast')) + ', ' + rw.charAt(0).toLowerCase() + rw.slice(1) + '. ' + n + ' token' + (n === 1 ? '' : 's') + ' in range.' + (pre ? pre.said : '') + (seatB ? ' It went off in front of the wall or door it hit.' : '') + (onScreen ? '' : ' It went off on ' + (map.title || 'another map') + '.'));
+      if (pre && pre.area && pre.area.use === true && pre.tr && typeof useOneUp === 'function') useOneUp(getActiveCampaign(), pre.tr);
+      if (pre && pre.fuse && typeof fuseSet === 'function') { fuseSet(map, b, opts, n); return b; }   // 1.5.8: it goes off at the start of the next turn
+      resolveThrow(b, opts, n, map);
       return b;
   }
   window.wpPlaceThrownBlast = placeThrownBlast;   // net.js calls this on the host after validating a player's throw-req
-  // The damage half of a throw (host/solo only): roll the item's damage, and in full-auto subtract it from every
-  // in-range token's health resource as one undoable transaction. blastAuto: full = roll+apply, roll = roll to chat, measure = neither.
-  function resolveThrow(b, opts, nInRange) {
+  // The damage half of a throw (host/solo only): roll the item's damage, and in full-auto apply it to every in-range token as one undoable
+  // transaction. blastAuto: full = roll+apply, roll = roll to chat (its card can apply it to all in the blast, once), measure = neither
+  function resolveThrow(b, opts, nInRange, mapIn) {
       var camp = getActiveCampaign(), sys = camp && camp.system; if (!sys || !opts || !opts.damage) return;
       var combat = sys.combat || {}, auto = combat.blastAuto || 'full';
       if (auto === 'measure') return;
       if (window.wpVtt && !window.wpVtt.on('dice')) return;
       if (!window.wpDice || !window.wpDice.rollFor) return;
-      var dr = window.wpDice.rollFor(opts.charId, opts.damage, (opts.name || 'Blast') + ' damage', { gmOnly: !!opts.gmOnly, dmg: true });   // a GM-only item's damage stays the GM's; chat cards: a damage card (an item's damage is damage by nature, as on his reference sheets)
+      var dr = window.wpDice.rollFor(opts.charId, opts.damage, (opts.name || 'Blast') + ' damage', { gmOnly: !!opts.gmOnly, dmg: true, blast: b && b.bid });   // a GM-only item's damage stays the GM's; chat cards: a damage card (an item's damage is damage by nature, as on his reference sheets)
       var total = dr && dr.ok && typeof dr.value === 'number' ? dr.value : null;
       if (auto !== 'full' || total === null) return;
-      applyBlastDamage(b, total, combat.hpResource);
+      applyBlastDamage(b, total, combat.hpResource, mapIn);
   }
   var _lastThrowTx = null;
-  function applyBlastDamage(b, total, hpId) {
-      var camp = getActiveCampaign(), sys = camp && camp.system, S = window.wpSystemCore, F = window.wpFormula, map = getActiveMap();
+  // [systemcheck:explosives-start]
+  // 1.5.8 explosives (the owner, 2026-10-25, by prompt: "Blast damage by the book", "Throw like the site"; and "once it starts using the site
+  // throws, it should automatically place an explosive in the area indicated in the throw, following rules on when it automatically detonates
+  // and causes damage", "Mines only activate when they are stepped on, as opposed to grenades that automatically detonate once deployed").
+  // The host's half: blastcore.js is the pure one. A throw knows what it aims at: the character token clicked, else the point clicked. Where the
+  // system's Combat card names a throw's roll (combat.blast.roll) and the item a throw skill, the host rolls it first, with the range to the aim:
+  // a success lands on the aim, a miss scatters from it along the line of the throw by the scatter's feet, a critical failure goes off in the
+  // thrower's hand. Where the card names how far and how near a thing may be thrown (max, min, in yards), a throw past them is refused in
+  // words. A thrown explosive goes off where it lands, at once. An item marked Placed, not thrown (a mine) is laid as a trigger zone hidden
+  // from players and goes off only when a character token steps into its trigger radius, or by the GM's own hand; never when it is placed.
+  // Going off uses one up where the item says so (its area's use). A blast's damage takes each token's share by the card's falloff
+  // (combat.blast.fall) and, where the system has the damage step, sends it through it: DR at the default location (the first row named
+  // Torso), the blast's damage type, the pool. With no falloff a blast is what it always was
+  function blastRules(sys) { var c = sys && sys.combat && typeof sys.combat === 'object' ? sys.combat : null; return c && c.blast && typeof c.blast === 'object' && !Array.isArray(c.blast) ? c.blast : null; }
+  function throwRowOf(camp, opts) {   // the carried row a throw names, on this machine's own copy: { ch, f, row, def } (def: its definition, the GM's view)
+      var S = window.wpSystemCore, sys = camp && camp.system; if (!S || !sys || !opts || typeof opts.charId !== 'string' || typeof opts.fieldId !== 'string' || typeof opts.rowId !== 'string') return null;
+      var ch = camp.chars && Object.prototype.hasOwnProperty.call(camp.chars, opts.charId) ? camp.chars[opts.charId] : null; if (!ch) return null;
+      var f = S.fieldById(sys, opts.fieldId); if (!f || f.kind !== 'item-list') return null;
+      var row = (ch.values && Array.isArray(ch.values[f.id]) ? ch.values[f.id] : []).filter(function(r) { return r && r.hid !== 1 && S.rowIdOf(r) === opts.rowId; })[0]; if (!row) return null;
+      var rd = S.rowDef(sys, row); return rd && rd.def ? { ch: ch, f: f, row: row, def: rd.def } : null;
+  }
+  function throwerOf(map, charId) { return charId ? (map.whiteboard || []).filter(function(w) { return w && w.charId === charId && !w.waiting; }).sort(function(p, q) { return (q.isChar ? 1 : 0) - (p.isChar ? 1 : 0); })[0] || null : null; }
+  function blastBid() { return 'b_' + Math.random().toString(36).slice(2, 12); }
+  function yardsOn(map, a, b) {   // yards between two board points on that map: the board's own reading on the map on screen, the map's own grid elsewhere
+      var amY = getActiveMap(); if (!map || (amY && amY.id === map.id)) return boardYards(a.x, a.y, b.x, b.y);
+      var S = window.wpSystemCore, camp = getActiveCampaign(), d = S && S.rangeDist ? S.rangeDist(camp && camp.system, map, a, b, 'yd') : null;
+      return typeof d === 'number' && isFinite(d) ? d : Math.hypot(b.x - a.x, b.y - a.y) / 50;
+  }
+  function blastFig(text, vars, dice) {   // a formula of the card's, worked out with these names; null where it gives no number
+      var F = window.wpFormula; if (!F || typeof text !== 'string' || !text) return null;
+      var o = { vars: vars }; if (!dice) o.random = function() { return NaN; };
+      var r = F.evaluate(text, o); if (!r || !r.ok) return null;
+      var v = typeof r.value === 'boolean' ? (r.value ? 1 : 0) : r.value; return typeof v === 'number' && isFinite(v) ? v : null;
+  }
+  function useOneUp(camp, tr) {   // going off (or being placed) uses one up: one less on the thrower's row, the row gone at none, as any row change
+      var S = window.wpSystemCore, F = window.wpFormula, sys = camp && camp.system; if (!S || !F || !sys || !tr) return false;
+      var q = (tr.row.qty | 0) > 1 ? { op: 'setQty', rowId: S.rowIdOf(tr.row), qty: (tr.row.qty | 0) - 1 } : { op: 'remove', rowId: S.rowIdOf(tr.row) };
+      var r = S.applyRowOp(sys, tr.ch, tr.f.id, q, F, {}); if (!r || !r.ok) return false;
+      tr.ch.values = tr.ch.values || {}; tr.ch.values[tr.f.id] = r.value; tr.ch.updated = Date.now();
+      if (window.wpNet && window.wpNet.active && window.wpNet.role === 'host' && window.wpNet.syncCharDelta) { var d = {}; d[tr.f.id] = r.value; window.wpNet.syncCharDelta(tr.ch.id, d); }
+      if (window.wpSheets && window.wpSheets.charChanged) window.wpSheets.charChanged(tr.ch.id);
+      return true;
+  }
+  // The throw's own half, before it lands: its row, its aim, how far it may go, its roll and where a miss scatters to. { stop } where it is not
+  // thrown at all (said in words); { mine } for a placed one; else { land, direct, said, tr, area, def }. The host's alone
+  function throwPrep(opts, map) {
+      var camp = getActiveCampaign(), sys = camp && camp.system, S = window.wpSystemCore, F = window.wpFormula, BC = window.wpBlastCore, rules = blastRules(sys), amP = getActiveMap(), onScreen = !!(amP && amP.id === map.id);
+      var tr = opts.goOff ? null : throwRowOf(camp, opts), def = tr ? tr.def : null, area = def && def.area && typeof def.area === 'object' ? def.area : null;
+      if (area && area.place === true) return { mine: placeMine(opts, tr, map) };   // a mine is placed, never thrown
+      var thrB = throwerOf(map, opts.charId), thrC = thrB ? tokenCentre(thrB) : null;
+      var aimT = opts.goOff ? null : tokenAtPoint(map, opts.x, opts.y, true), aim = aimT ? tokenCentre(aimT) : { x: opts.x, y: opts.y };   // the aim: the character token clicked, else the point
+      var out = { land: { x: aim.x, y: aim.y }, direct: opts.goOff ? (opts.direct || null) : aimT ? aimT.id : null, said: '', tr: tr, area: area, def: def };
+      var fz = !opts.goOff && rules && rules.fuse === 'turn' && window.wpNet && typeof window.wpNet.combatFor === 'function' ? window.wpNet.combatFor(map.id) : null; if (fz) out.fuse = true;   // a fuse: a fight on its map
+      if (opts.goOff || !rules || !thrC || !tr || !S || !F) return out;
+      var R = S.makeResolver(sys, tr.ch, F), rowR = R && typeof R.row === 'function' ? R.row(tr.f.id, opts.rowId) : null, dYd = yardsOn(map, thrC, aim);
+      var lenW = function(yd) { return typeof rulerLen === 'function' && typeof rulerUnitNow === 'function' ? rulerLen(yd, rulerUnitNow()) : Math.round(yd * 10) / 10 + ' yd'; };
+      var mx = rules.max && rowR ? blastFig(rules.max, rowR, false) : null, mn = rules.min && rowR ? blastFig(rules.min, rowR, false) : null;
+      if (mx !== null && dYd > mx + 1e-9) return { stop: 'Too far to throw: the aim is ' + lenW(dYd) + ' away, and ' + (opts.name || 'it') + ' can be thrown ' + lenW(Math.max(0, mx)) + ' at most.' };
+      if (mn !== null && dYd < mn - 1e-9) return { stop: 'Too near to throw: the aim is ' + lenW(dYd) + ' away, and ' + (opts.name || 'it') + ' must be thrown ' + lenW(Math.max(0, mn)) + ' at least.' };
+      if (!rules.roll || typeof def.throwSkill !== 'string' || !def.throwSkill || !window.wpDice || !window.wpDice.rollFor || !BC) return out;
+      var expr = rules.roll.replace(/\bThrowSkill\b/gi, '(' + def.throwSkill + ')');
+      var rc = S.rangeCtx ? S.rangeCtx(sys, map, thrB, { x: aim.x - 30, y: aim.y - 26, w: 60, h: 52 }, { F: F }) : null;
+      var tdr = window.wpDice.rollFor(opts.charId, expr, (opts.name || 'Blast') + ' throw', { gmOnly: !!opts.gmOnly, range: rc ? { mod: rc.mod, dist: rc.dist } : undefined });
+      if (!tdr || !tdr.ok) return { stop: 'The throw could not be rolled' + (tdr && tdr.error ? ': ' + tdr.error : '.') };
+      var oc = BC.throwOutcome(window.wpNet ? window.wpNet.rollCheck : null);   // the throw's pass, critical and margin, as net.diceRoll read them
+      if (oc.kind === 'fumble') {   // it drops at the thrower's feet; where the card's hand rule holds of its dice, it goes off in the hand, a direct hit on the thrower
+          var inHand = rules.hand && oc.natural !== null ? blastFig(rules.hand, function(n) { return String(n).toLowerCase() === 'natural' ? oc.natural : undefined; }, false) : null;
+          out.land = { x: thrC.x, y: thrC.y }; out.direct = inHand ? thrB.id : null; out.said = inHand ? ' A critical failure: it goes off in the thrower\u2019s hand.' : ' A critical failure: it drops at the thrower\u2019s feet.';
+      }
+      else if (oc.kind === 'miss') {
+          var syd = rules.scatter ? blastFig(rules.scatter, function(n) { var l = String(n).toLowerCase(); return l === 'margin' ? oc.margin : l === 'throwdistance' ? dYd : undefined; }, true) : BC.bookScatterYd(oc.margin, dYd);
+          syd = typeof syd === 'number' && isFinite(syd) ? Math.max(0, Math.min(1000, syd)) : BC.bookScatterYd(oc.margin, dYd);
+          var nWays = rules.ways === 8 ? 8 : 6, sp = BC.scatterPoint(aim, thrC, syd, Math.floor(Math.random() * nWays), onScreen ? mapMeasureConfig().cellPx / cellYards() : 50, nWays);   // the way rolled as a die of the ways' count
+          if (sp) { out.land = { x: Math.max(0, sp.x), y: Math.max(0, sp.y) }; out.direct = null; out.said = ' A miss by ' + oc.margin + ': it lands ' + lenW(syd) + ' ' + sp.words.toLowerCase() + ' of the aim.'; }
+      }
+      return out;
+  }
+  function torsoOf(sys, ch) {   // the damage step's default location: the first row of the location list named Torso, else one that holds the word, else the first
+      var S = window.wpSystemCore, d = sys && sys.combat && sys.combat.damage, lf = d && d.locs && S ? S.fieldById(sys, d.locs.list) : null; if (!lf) return '';
+      var rows = (ch.values && Array.isArray(ch.values[lf.id]) ? ch.values[lf.id] : []).filter(function(r) { return r && r.hid !== 1; }).map(function(r) { var rd = S.rowDef(sys, r); return { id: S.rowIdOf(r), name: rd && rd.def && typeof rd.def.name === 'string' ? rd.def.name : '' }; }).filter(function(x) { return x.id; });
+      var hit = rows.filter(function(x) { return /^torso$/i.test(x.name); })[0] || rows.filter(function(x) { return /torso/i.test(x.name); })[0] || rows[0];
+      return hit ? hit.id : '';
+  }
+  function applyBlastDamage(b, total, hpId, mapIn) {
+      var camp = getActiveCampaign(), sys = camp && camp.system, S = window.wpSystemCore, F = window.wpFormula, map = mapIn || getActiveMap();
       if (!sys || !S || !F || !map) return;
-      if (!hpId) { toast('Full auto is on, but no damage resource is set (System editor \u25b8 Items \u25b8 Damage subtracts from).'); return; }
-      var hits = [], applied = 0, halved = 0, shielded = 0;
+      var rules = typeof blastRules === 'function' ? blastRules(sys) : null, BC = window.wpBlastCore, fall = rules && rules.fall && BC ? rules.fall : '', step = !!(fall && sys.combat && sys.combat.damage && typeof S.damageStep === 'function');
+      if (!hpId && !step) { toast('Full auto is on, but no damage resource is set (System editor ▸ Items ▸ Damage subtracts from).'); return; }
+      var hits = [], applied = 0, halved = 0, shielded = 0, spared = 0, dice = fall ? BC.diceCount(b.dmgExpr || '') : 0, types = step && Array.isArray(sys.combat.damage.types) ? sys.combat.damage.types : [];
+      var typeOk = !!(b.dtype && types.some(function(y) { return y && typeof y.key === 'string' && y.key.toLowerCase() === String(b.dtype).toLowerCase(); }));
       blastDistances(b, map).forEach(function(r) {
           if (!shapeHolds(b, r) || !r.tok.charId) return;   // what a blast holds is asked in one place: its radius, a ring's inner distance, a cone's angle, and the token an explosion spares
           var ch = camp.chars && typeof r.tok.charId === 'string' && Object.prototype.hasOwnProperty.call(camp.chars, r.tok.charId) ? camp.chars[r.tok.charId] : null; if (!ch) return;   // own ids only: a token from a file naming '__proto__' writes no damage onto a prototype
-          var tierC = window.wpFog && window.wpFog.coverAt ? window.wpFog.coverAt(b.x, b.y, r.tok, map, stanceOn('elevation') ? (b.elev || 0) : 0, stanceOn('elevation') ? tokenElevation(r.tok, map, b.thrown === true) : 0) : null, ocC = S.coverOutcome ? S.coverOutcome(sys, tierC) : 'full', dmgC = S.coverDamage ? S.coverDamage(sys, tierC, total) : total;   // cover follow-ups (owner 2026-09-28): the system's outcome for the cover this token has from the blast (the host's own board)
-          if (ocC === 'none' && total > 0) { shielded++; return; }   // shielded: the system's outcome for this grade is none (a half that rounds to 0 took less)
-          var all = S.resolveAll(sys, ch, F), e = all[hpId]; if (!e) return;
-          var cur = typeof e.value === 'number' ? e.value : 0;
-          var res = S.applyEdit(sys, ch, hpId, { cur: cur - dmgC }, F, {}); if (!res.ok) return;
-          if (ocC === 'half' && dmgC < total) halved++;
-          var prev = ch.values && Object.prototype.hasOwnProperty.call(ch.values, hpId) ? JSON.parse(JSON.stringify(ch.values[hpId])) : undefined;
-          ch.values = ch.values || {}; ch.values[hpId] = res.value; ch.updated = Date.now();
-          hits.push({ charId: r.tok.charId, hpId: hpId, prev: prev });
-          if (window.wpNet && window.wpNet.active && window.wpNet.role === 'host' && window.wpNet.syncCharDelta) { var d = {}; d[hpId] = res.value; window.wpNet.syncCharDelta(r.tok.charId, d); }
+          var share = total;
+          if (fall) { share = BC.fallShare(F, fall, { dmg: total, dist: r.d, dice: dice, direct: !!b.direct && r.tok.id === b.direct, centre: typeof sameCellOn === 'function' && sameCellOn(map, b, tokenCentre(r.tok)) }); if (share === null) return; }   // 1.5.8: the token's share by the card's falloff
+          var tierC = window.wpFog && window.wpFog.coverAt ? window.wpFog.coverAt(b.x, b.y, r.tok, map, stanceOn('elevation') ? (b.elev || 0) : 0, stanceOn('elevation') ? tokenElevation(r.tok, map, b.thrown === true) : 0) : null, ocC = S.coverOutcome ? S.coverOutcome(sys, tierC) : 'full', dmgC = S.coverDamage ? S.coverDamage(sys, tierC, share) : share;   // cover follow-ups (owner 2026-09-28): the system's outcome for the cover this token has from the blast (the host's own board)
+          if (ocC === 'none' && share > 0) { shielded++; return; }   // shielded: the system's outcome for this grade is none (a half that rounds to 0 took less)
+          if (fall && !(dmgC > 0)) { spared++; return; }   // past the falloff's reach: nothing to apply
+          var vals = null, lines = null;
+          if (step) {   // through the damage step: DR at the default location, the blast's damage type, the pool
+              var q = { amt: Math.floor(dmgC) }, loc = typeof torsoOf === 'function' ? torsoOf(sys, ch) : ''; if (loc) q.loc = loc; if (typeOk) q.type = b.dtype; if (typeof b.ad === 'number' && b.ad > 0) q.ad = b.ad;
+              var st = S.damageStep(sys, ch, q, F); if (!st || !st.ok) return;
+              vals = st.values; lines = st.lines;
+          } else {
+              var all = S.resolveAll(sys, ch, F), e = all[hpId]; if (!e) return;
+              var cur = typeof e.value === 'number' ? e.value : 0;
+              var res = S.applyEdit(sys, ch, hpId, { cur: cur - dmgC }, F, {}); if (!res.ok) return;
+              vals = {}; vals[hpId] = res.value;
+          }
+          if (ocC === 'half' && dmgC < share) halved++;
+          var prevs = {}; Object.keys(vals).forEach(function(fid) { prevs[fid] = ch.values && Object.prototype.hasOwnProperty.call(ch.values, fid) ? JSON.parse(JSON.stringify(ch.values[fid])) : undefined; });
+          ch.values = ch.values || {}; Object.keys(vals).forEach(function(fid) { ch.values[fid] = vals[fid]; }); ch.updated = Date.now();
+          hits.push({ charId: r.tok.charId, prevs: prevs });
+          if (window.wpNet && window.wpNet.active && window.wpNet.role === 'host' && window.wpNet.syncCharDelta && Object.keys(vals).length) window.wpNet.syncCharDelta(r.tok.charId, vals);
           if (window.wpSheets && window.wpSheets.charChanged) window.wpSheets.charChanged(r.tok.charId);
+          if (lines && window.wpNet && typeof window.wpNet.damageCard === 'function') window.wpNet.damageCard(ch, (b.name ? [b.name + ':'] : []).concat(lines, b.notes ? ['Notes: ' + b.notes] : []));   // what it did, to the GM and the character's player
           applied++;
       });
-      var coverNote = (halved ? ' \u00b7 ' + halved + ' behind cover took less' : '') + (shielded ? ' \u00b7 ' + shielded + ' shielded by cover' : '');   // counts only: never a name (a hidden token counts too)
-      if (applied) { _lastThrowTx = { hits: hits }; save(); syncBlastMenu(); toast('\u2212' + total + ' to ' + applied + ' token' + (applied === 1 ? '' : 's') + coverNote + '. Undo last throw is in the Radius options.'); }
-      else if (shielded) toast('No damage: ' + shielded + ' token' + (shielded === 1 ? '' : 's') + ' shielded by cover.');
+      var coverNote = (halved ? ' · ' + halved + ' behind cover took less' : '') + (shielded ? ' · ' + shielded + ' shielded by cover' : '') + (spared ? ' · ' + spared + ' too far to be hurt' : '');   // counts only: never a name (a hidden token counts too)
+      if (applied) { _lastThrowTx = { hits: hits }; save(); syncBlastMenu(); if (b.notes) toast((b.name || 'The blast') + ': ' + b.notes); toast((fall ? 'Blast damage applied to ' + applied + ' token' + (applied === 1 ? '' : 's') + ' by distance' : '−' + total + ' to ' + applied + ' token' + (applied === 1 ? '' : 's')) + coverNote + '. Undo last throw is in the Radius options.'); }
+      else if (shielded && !spared) toast('No damage: ' + shielded + ' token' + (shielded === 1 ? '' : 's') + ' shielded by cover.');
+      else if (shielded || spared) toast('No damage:' + coverNote.replace(/^ ·/, '') + '.');
   }
-  // Undo the last full-auto throw's damage: restore every affected character's health, host-synced.
+  // The card's Apply to all in the blast (Roll to chat): the blast its damage was rolled for, still on the map on screen
+  window.wpBlastApply = function(bid, total) {
+      var camp = getActiveCampaign(), sys = camp && camp.system, b = blasts.filter(function(x) { return x && x.bid === bid; })[0];
+      if (!b) { toast('That blast is no longer on the map.'); return false; }
+      if (typeof total !== 'number' || !isFinite(total)) return false;
+      applyBlastDamage(b, total, sys && sys.combat ? sys.combat.hpResource : '');
+      return true;
+  };
+  // Undo the last full-auto throw's damage: restore every field the blast wrote on every character it hurt, host-synced.
   window.wpUndoThrow = function() {
       if (!_lastThrowTx || !_lastThrowTx.hits.length) { toast('Nothing to undo.'); return; }
       var camp = getActiveCampaign(); if (!camp) return;
       _lastThrowTx.hits.forEach(function(h) {
           var ch = camp.chars && typeof h.charId === 'string' && Object.prototype.hasOwnProperty.call(camp.chars, h.charId) ? camp.chars[h.charId] : null; if (!ch) return;
-          ch.values = ch.values || {};
-          if (h.prev === undefined) delete ch.values[h.hpId]; else ch.values[h.hpId] = h.prev;
+          ch.values = ch.values || {}; var d = {};
+          Object.keys(h.prevs || {}).forEach(function(fid) { var pv = h.prevs[fid]; if (pv === undefined) delete ch.values[fid]; else ch.values[fid] = pv; d[fid] = pv === undefined ? null : pv; });
           ch.updated = Date.now();
-          if (window.wpNet && window.wpNet.active && window.wpNet.role === 'host' && window.wpNet.syncCharDelta) { var d = {}; d[h.hpId] = h.prev === undefined ? null : h.prev; window.wpNet.syncCharDelta(h.charId, d); }
+          if (window.wpNet && window.wpNet.active && window.wpNet.role === 'host' && window.wpNet.syncCharDelta) window.wpNet.syncCharDelta(h.charId, d);
           if (window.wpSheets && window.wpSheets.charChanged) window.wpSheets.charChanged(h.charId);
       });
       var nn = _lastThrowTx.hits.length; _lastThrowTx = null; save(); syncBlastMenu();
       toast('Throw damage undone (' + nn + ' token' + (nn === 1 ? '' : 's') + ').');
   };
   window.wpHasThrowUndo = function() { return !!(_lastThrowTx && _lastThrowTx.hits.length); };
+  // A mine: placed where clicked as a trigger zone of its trigger radius, hidden from players (a hidden piece is sent to no one), carrying its
+  // blast. Where the card names a throw's roll and the item a throw skill (its placing skill), that roll is made first and a failure sets
+  // nothing. It never goes off as it is placed
+  function placeMine(opts, tr, map) {
+      var camp = getActiveCampaign(), sys = camp && camp.system, S = window.wpSystemCore, F = window.wpFormula, BC = window.wpBlastCore, rules = blastRules(sys), def = tr && tr.def, area = def && def.area;
+      if (!BC || !def || !area) return null;
+      if (rules && rules.roll && typeof def.throwSkill === 'string' && def.throwSkill && window.wpDice && window.wpDice.rollFor) {
+          var pr = window.wpDice.rollFor(opts.charId, rules.roll.replace(/\bThrowSkill\b/gi, '(' + def.throwSkill + ')'), (opts.name || 'Mine') + ' placed', { gmOnly: !!opts.gmOnly });
+          if (!pr || !pr.ok) { toast('Placing it could not be rolled' + (pr && pr.error ? ': ' + pr.error : '.')); return null; }
+          var pck = window.wpNet ? window.wpNet.rollCheck : null;
+          if (pck && !pck.pass && pck.crit === 'fumble') {   // the book: a critical failure sets it off in the planter's cell
+              var plT = throwerOf(map, opts.charId), plC = plT ? tokenCentre(plT) : { x: opts.x, y: opts.y };
+              if (area.use === true) useOneUp(camp, tr);
+              return placeThrownBlast({ goOff: true, x: plC.x, y: plC.y, ft: area.ft, name: opts.name || def.name, by: opts.by || '', charId: opts.charId, damage: def.damage || '', gmOnly: !!opts.gmOnly, dtype: area.type, ad: area.ad, notes: opts.gmOnly ? '' : def.notes, icon: def.icon }, map);
+          }
+          var unarmed = !!(pck && !pck.pass);   // the book: a failure leaves it unarmed, and the planter knows
+      }
+      var mine = BC.cleanMine({ ft: area.ft, name: opts.name || def.name, damage: def.damage || '', type: area.type, ad: area.ad, trig: area.trig, charId: opts.charId, fieldId: opts.fieldId, rowId: opts.rowId, by: opts.by, gmOnly: !!opts.gmOnly, notes: opts.gmOnly ? '' : def.notes, unarmed: typeof unarmed === 'boolean' ? unarmed : false });
+      if (!mine) return null;
+      var amM = getActiveMap(), pxYd = amM && amM.id === map.id ? mapMeasureConfig().cellPx / cellYards() : 50, r = Math.max(10, mine.trig * pxYd);
+      var z = { id: 'wb' + uid() + Math.random().toString(36).slice(2, 5), type: 'trigger', shape: 'circle', x: Math.round(opts.x - r), y: Math.round(opts.y - r), w: Math.round(r * 2), h: Math.round(r * 2), color: 'transparent', eventMessage: '', hidden: true, name: (mine.name || 'Mine') + ' (mine)', mine: mine };
+      if (typeof def.icon === 'string' && def.icon) z.mineIcon = def.icon.slice(0, 64);
+      map.whiteboard = map.whiteboard || []; map.whiteboard.push(z);
+      if (area.use === true) useOneUp(camp, tr);
+      save(); render();
+      toast(mine.unarmed ? (opts.by || 'The character') + ' places ' + (mine.name || 'a mine') + ' but fails to arm it: it lies there unarmed and goes off only from its right-click menu.' : (opts.by ? opts.by + ' places ' : 'Placed: ') + (mine.name || 'a mine') + '. It is hidden from your players and goes off when a character steps into it, or from its right-click menu.');
+      return z;
+  }
+  // A mine goes off: its zone is taken off the map and its blast goes off at the zone's centre, by the same path as a throw
+  function mineOff(map, zone, direct) {
+      if (!map || !zone || !zone.mine || !Array.isArray(map.whiteboard)) return null;
+      var at = map.whiteboard.indexOf(zone); if (at < 0) return null;
+      var m = zone.mine, cx = (Number(zone.x) || 0) + (Number(zone.w) || 0) / 2, cy = (Number(zone.y) || 0) + (Number(zone.h) || 0) / 2;
+      map.whiteboard.splice(at, 1); save(); render();
+      return placeThrownBlast({ goOff: true, x: cx, y: cy, ft: m.ft, name: m.name || 'Mine', by: m.by || '', charId: m.charId, damage: m.damage || '', gmOnly: !!m.gmOnly, direct: direct || null, dtype: m.type, ad: m.ad, notes: m.notes, icon: zone.mineIcon }, map);
+  }
+  // A character token that stepped in (the host's own map: the GM's drag, a player's drop): every mine whose trigger it stands in now and did
+  // not stand in where the gesture began goes off, the token struck directly. Never on a player's app or in the stream window
+  window.wpMineCheck = function(map, tok, from) {
+      var BC = window.wpBlastCore; if (!BC || !map || !tok || !tok.isChar || tok.waiting || window.wpStream) return 0;
+      if (window.wpNet && window.wpNet.active && window.wpNet.role === 'client') return 0;
+      var c = tokenCentre(tok), f0 = from && typeof from === 'object' && isFinite(Number(from.x)) && isFinite(Number(from.y)) ? { x: Number(from.x) + (tok.w || 60) / 2, y: Number(from.y) + (tok.h || 52) / 2 } : null, n = 0;
+      var yb = function(a, b2) { return yardsOn(map, a, b2); };
+      (map.whiteboard || []).filter(function(w) { return w && w.type === 'trigger' && w.mine && typeof w.mine === 'object' && w.mine.unarmed !== true; }).forEach(function(z) {   // an unarmed mine never goes off by a step
+          if (!BC.inTrigger(z, c, yb) || (f0 && BC.inTrigger(z, f0, yb))) return;
+          n++; toast((tok.charName || tok.name || 'A character') + ' steps on ' + (z.mine.name || 'a mine') + '.');
+          mineOff(map, z, tok.id);
+      });
+      return n;
+  };
+  // The fuse (the book, fix log (eo)): a thrown explosive goes off at the start of the next turn of the fight on its map, not at once. It lies
+  // there meanwhile, its icon on the map, and the GM is told. Kept in this machine's memory (a fuse outlives no reload)
+  var _fused = [];
+  function fuseSet(map, b, opts, n) {
+      b.fused = true; _fused.push({ mapId: map.id, b: b, opts: opts, n: n });
+      if (_fused.length > 64) _fused.splice(0, _fused.length - 64);
+      toast((b.name || 'It') + ' lands and goes off at the start of the next turn.');
+  }
+  window.wpFuseTick = function(mapId) {   // net.js turnStarted, at a turn first reached: every fused explosive on that map goes off
+      var camp = getActiveCampaign(), map = camp && camp.items && typeof mapId === 'string' && Object.prototype.hasOwnProperty.call(camp.items, mapId) ? camp.items[mapId] : null; if (!map) return 0;
+      var due = _fused.filter(function(f) { return f.mapId === mapId; }); if (!due.length) return 0;
+      _fused = _fused.filter(function(f) { return f.mapId !== mapId; });
+      due.forEach(function(f) { f.b.fused = false; toast((f.b.name || 'A blast') + ' goes off.'); resolveThrow(f.b, f.opts, f.n, map); });
+      renderMeasures(); return due.length;
+  };
+  // Whether a point stands in the blast's own cell: the same square or hex on a map with a grid, within half a cell on one with none
+  function sameCellOn(map, a, b) {
+      var S = window.wpSystemCore, g = S && S.mapGridOf ? S.mapGridOf(map) : state.gridType;
+      if (g === 'hex') { var ha = hexCellOf(a.x, a.y), hb = hexCellOf(b.x, b.y); return ha.q === hb.q && ha.r === hb.r; }
+      if (g === 'square') return Math.floor(a.x / 50) === Math.floor(b.x / 50) && Math.floor(a.y / 50) === Math.floor(b.y / 50);
+      return Math.hypot(a.x - b.x, a.y - b.y) < 25;
+  }
+  // The GM's row on a mine's right-click menu: set it off by hand. The GM's alone, never a player's app or the stream window; fixed words
+  function mineRow(items) {
+      var n = window.wpNet; if (window.wpStream || (n && (n.foreign || (n.active && n.role === 'client')))) return null;
+      var ms = (Array.isArray(items) ? items : []).filter(function(w) { return !!w && w.type === 'trigger' && w.mine && typeof w.mine === 'object'; });
+      return ms.length ? { items: ms, html: '<div class="menu-item cm-mine-off" title="It goes off at its centre now, as if someone stepped on it.">&#128165; Set off the mine' + (ms.length > 1 ? 's' : '') + '</div>' } : null;
+  }
+  // The stand-in drawings a thrown explosive and a placed mine wear at their centre (blastcore STAND_INS), else the item's own icon where it is
+  // a character (an emoji); a glyph of the bundled set takes the stand-in. Numbers through svgNum, words through esc
+  function standInSvg(kind, x, y, icon) {
+      var BC = window.wpBlastCore, S = window.wpSystemCore, ic = typeof icon === 'string' && icon && S && S.cleanIcon ? S.cleanIcon(icon) : '';
+      if (ic && !/^icon:/.test(ic)) return '<text class="blast-ico-t" x="' + svgNum(x) + '" y="' + svgNum(y) + '" text-anchor="middle" dominant-baseline="central">' + esc(ic) + '</text>';
+      var ps = BC && BC.STAND_INS && BC.STAND_INS[kind] ? BC.STAND_INS[kind] : null; if (!ps) return '';
+      return '<g class="blast-ico ' + (kind === 'mine' ? 'mine-ico' : 'grenade-ico') + '" transform="translate(' + svgNum(x - 12) + ' ' + svgNum(y - 12) + ')">' + ps.map(function(d) { return '<path d="' + d + '"></path>'; }).join('') + '</g>';
+  }
+  function mineIconsSvg(map) {   // the GM's own screen: each mine at its spot (a player's copy holds none)
+      var nM = window.wpNet; if (!map || window.wpStream || (nM && (nM.foreign || (nM.active && nM.role === 'client')))) return '';   // the GM's screen alone (playerScreen's own test)
+      return (map.whiteboard || []).filter(function(w) { return w && w.type === 'trigger' && w.mine && typeof w.mine === 'object'; }).map(function(z) { return standInSvg('mine', (Number(z.x) || 0) + (Number(z.w) || 0) / 2, (Number(z.y) || 0) + (Number(z.h) || 0) / 2, z.mineIcon); }).join('');
+  }
+  // [systemcheck:explosives-end]
   // [systemcheck:explode-start]
   // Explode (1.5.4, backlog 128; the owner by prompt: "Yes, type is a word", and of who may: "The GM is the only one who should be able to
   // make any blast effects"). The GM sets off the last shape of the Radius tool as an explosion: a circle, and since 128 (e) a ring or a cone
@@ -8882,6 +9096,8 @@ document.addEventListener('contextmenu', function(e) {
                     return it && !it.aboveGrid;
                 });
                 html += '<div class="menu-item cm-grid">' + (anyUnderGrid ? '&#9650; Show Above Grid' : '&#9660; Put Under Grid') + '</div>';
+                var mnRow = mineRow(selectedIds.map(function(sid) { return am.whiteboard.find(function(x) { return x.id === sid; }); }));   // 1.5.8 explosives: a placed mine set off by hand
+                if (mnRow) html += mnRow.html;
                 var ppRow = pagePinRow(selectedIds.map(function(sid) { return am.whiteboard.find(function(x) { return x.id === sid; }); }));   // 1.5.4: a pin's row, where the one piece selected opens a page
                 if (ppRow) html += ppRow.html;
                 var drRow = doorRows(selectedIds.map(function(sid) { return am.whiteboard.find(function(x) { return x.id === sid; }); }));   // a door's own rows: open or close it, lock it for players
@@ -9115,6 +9331,9 @@ document.addEventListener('contextmenu', function(e) {
                 } else if (action.includes('cm-open-page')) {   // 1.5.4 (pageshelf.js): a pin's page, opened by the one rule (over the map by a plain click)
                     var ppDo = pagePinRow(selectedIds.map(function(sid) { return am.whiteboard.find(function(x) { return x.id === sid; }); }));
                     if (ppDo && window.wpPageShelf) window.wpPageShelf.open(ppDo.id, window.wpPageShelf.wayNow(ce));
+                } else if (action.includes('cm-mine-off')) {   // 1.5.8 explosives: each selected mine goes off at its centre (it saves and draws itself)
+                    var mnDo = mineRow(selectedIds.map(function(sid) { return am.whiteboard.find(function(x) { return x.id === sid; }); }));
+                    if (mnDo) mnDo.items.forEach(function(z) { mineOff(am, z, null); });
                 } else if (action.includes('cm-portal-lock')) {   // a portal's own lock: the selected portals locked or unlocked together (saved and drawn again below, so the table gets it at once)
                     var wentPL = portalLockSet(selectedIds.map(function(sid) { return am.whiteboard.find(function(x) { return x.id === sid; }); }), am);
                     if (wentPL) toast(wentPL === 'locked' ? 'Portal locked for players.' : 'Portal unlocked.');

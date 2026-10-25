@@ -1003,6 +1003,10 @@
   #measureLayer g.blast circle.ring { fill: none; stroke: transparent; stroke-width: 14; stroke-dasharray: none; pointer-events: stroke; }
   #measureLayer g.blast circle.dot { fill: var(--red); pointer-events: auto; }
   #measureLayer g.blast text { fill: var(--red); pointer-events: auto; }
+  /* 1.5.8 explosives: the stand-in a thrown explosive wears at the centre of its blast, and a placed mine at its spot (the GM's screen alone), in the toolbar's line style; an item's own icon as its character */
+  #measureLayer g.blast-ico path { fill: none; stroke: var(--red); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+  #measureLayer g.mine-ico path { stroke: var(--gold); }
+  #measureLayer text.blast-ico-t { font-size: 20px; pointer-events: none; }
   #measureLayer g.blast text.hit { fill: var(--ink); font-size: 12px; pointer-events: none; }
   #measureLayer g.blast:hover circle.area { stroke: var(--gold); fill: rgba(224,165,79,0.14); }
   #measureLayer g.blast:hover circle.dot, #measureLayer g.blast:hover text { fill: var(--gold); }

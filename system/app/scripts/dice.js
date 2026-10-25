@@ -101,6 +101,11 @@ function renderCard(m) {
     wrap.appendChild(total);
     var dS = window.wpSheets, dv = res && typeof res.value === 'number' && isFinite(res.value) ? res.value : null;   // 1.5.6, the damage step: the GM takes a damage roll off its target in one press
     if (rec.dmg === 1 && dv !== null && !mf && rec.dmgUsed === 1) wrap.appendChild(el('div', 'chat-dmgdone', 'Applied'));   // 1.5.7: a hit is applied once
+    else if (rec.dmg === 1 && dv !== null && !mf && typeof rec.blast === 'string' && typeof window.wpBlastApply === 'function' && dS && typeof dS.damageOn === 'function' && dS.damageOn()) {   // 1.5.8 explosives: a blast's damage, to everyone in it, once
+        var bb = el('button', 'tool ghost chat-dmgapply', 'Apply to all in the blast'); bb.type = 'button'; bb.title = 'Take this damage off every character in the blast, each by its distance and through its DR, as the Combat card says. Once applied, the button goes.';
+        bb.addEventListener('click', function() { if (rec.dmgUsed === 1) return; if (window.wpBlastApply(rec.blast, dv)) { rec.dmgUsed = 1; if (bb.parentNode) bb.parentNode.replaceChild(el('div', 'chat-dmgdone', 'Applied'), bb); } });
+        wrap.appendChild(bb);
+    }
     else if (rec.dmg === 1 && dv !== null && !mf && dS && typeof dS.damageOn === 'function' && typeof dS.damageFromRoll === 'function' && dS.damageOn()) {
         var ab = el('button', 'tool ghost chat-dmgapply', 'Apply to target\u2026'); ab.type = 'button'; ab.title = 'Take this damage off the character its roller targets, through its DR. Its window opens first. Once applied, the button goes.';
         ab.addEventListener('click', function() { if (rec.dmgUsed === 1) return; dS.damageFromRoll(rec.from && rec.from.id, dv, function() { rec.dmgUsed = 1; if (ab.parentNode) ab.parentNode.replaceChild(el('div', 'chat-dmgdone', 'Applied'), ab); }, typeof rec.dtype === 'string' ? rec.dtype : undefined); });
@@ -203,9 +208,11 @@ function syncChars() {
     s.style.display = list.length && (!window.wpVtt || window.wpVtt.on('sheets')) ? '' : 'none';
 }
 // A roll from a sheet button (sheets.js) or the combat roster: the picker follows, the card carries the label and the character
+var _rollMore = null;   // 1.5.8 explosives: what rollFor hands the next roll beside its own words, taken once
 function rollFor(charId, expr, label, opts) {
     opts = opts || {};
     var s = ui('diceChar'); if (s && panelOpen()) { syncChars(); if (Array.prototype.some.call(s.options, function(o) { return o.value === charId; })) s.value = charId; }
+    _rollMore = opts.range || opts.blast ? { range: opts.range || undefined, blast: opts.blast || undefined } : null;   // 1.5.8 explosives: a throw's range to its aim, the blast a damage roll is for (this machine's own words)
     var r = roll(expr, { priv: !!opts.priv, gmOnly: !!opts.gmOnly, charId: charId, label: label, source: opts.source || 'sheet', row: opts.row || undefined, act: opts.act || undefined, mod: opts.mod || undefined, adv: opts.adv || undefined, dmg: opts.dmg === true ? true : undefined });   // row (F5b): a roll on a list's row; act/mod/adv (R1): a roll with consequences   // gmOnly: a roll made of GM-only data (net.diceRoll keeps it the host's)
     if (r.error) toast(r.error);
     return r;
@@ -268,11 +275,12 @@ function remember(expr) { var i = history.indexOf(expr); if (i >= 0) history.spl
 // roll(expr, { priv }) — the one entry point for the roller, the chat commands and the console's /table
 function roll(expr, opts) {
     opts = opts || {};
+    var more = typeof _rollMore !== 'undefined' ? _rollMore : null; if (more) _rollMore = null;   // taken at once: a roll refused below leaves nothing for the next (asked through typeof: a suite runs roll alone)
     var n = net(); if (!n || !n.diceRoll) return { error: 'Dice are not available.' };
     lastSource = opts.source || 'panel';
     var clean = cleanExpr(expr);
     if (!clean) return { error: 'Type a formula, for example 2d6 + 3 (up to ' + LIMITS.expr + ' characters).' };
-    var r = n.diceRoll(clean, { priv: !!opts.priv, gmOnly: !!opts.gmOnly, charId: opts.charId || undefined, label: opts.label || undefined, row: opts.row || undefined, act: opts.act || undefined, mod: opts.mod || undefined, adv: opts.adv || undefined, dmg: opts.dmg === true ? true : undefined });   // dmg: this machine's own word (a thrown item's damage); the wire never carries it
+    var r = n.diceRoll(clean, { priv: !!opts.priv, gmOnly: !!opts.gmOnly, charId: opts.charId || undefined, label: opts.label || undefined, row: opts.row || undefined, act: opts.act || undefined, mod: opts.mod || undefined, adv: opts.adv || undefined, dmg: opts.dmg === true ? true : undefined, range: more ? more.range : undefined, blast: more ? more.blast : undefined });   // dmg: this machine's own word (a thrown item's damage); the wire never carries it
     if (!r.error && !opts.row) remember(clean);   // Stage 6 F5b: a row roll is not remembered (its Row.* names need its row)
     return r;
 }

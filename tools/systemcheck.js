@@ -13654,6 +13654,70 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         check('1.5.8 Counted once: Help, the Lists key and both release notes say it', ixO.includes('<li><b>Counted once</b> treats rows whose <b>Group</b> stat reads the same figure, not 0, as one thing held two ways.') && ixO.includes('<b>Counted once</b><small>Rows of one group count as one thing. The higher applies.</small>')
             && wnO.includes('- Counted once: in the Lists tab, rows whose Group stat reads the same') && wnO2.includes('- Counted once: in the Lists tab, rows whose Group stat reads the same'));
     }
+    // [systemcheck:explosives-tests]
+    // 1.5.8 explosives (the owner, 2026-10-25, by prompt: "Blast damage by the book", "Throw like the site"; the book's ruling, fix log (eo)): the
+    // pure half (blastcore.js), the Combat card's blast rules and an item's blast extras through the cleaner in both views, and the host's damage
+    // (whiteboard.js applyBlastDamage, sliced and run for real with the real damage step) under the book's falloff; the stand-in drawn as text or
+    // paths only; a mine's data off every copy on the wire and the pos gate's mine check, pinned
+    {
+        const BC = await import(url('blastcore.js')), jj = JSON.stringify;
+        const BOOK = 'if(or(Direct, Centre), BlastDamage, if(BlastDistance > 2 * BlastDice, 0, floor(BlastDamage / (3 * max(1, BlastDistance)))))';
+        const fs1 = o => BC.fallShare(F, BOOK, o);
+        check('1.5.8 explosives, the pure half (blastcore.js): the dice a damage rolls; a token\'s share by the book\'s falloff (the direct target and the blast\'s own cell the whole roll, else the roll over 3 times the yards, nothing past twice the dice in yards, never more than was rolled, a die in the formula no share); where a throw lands (a success on its aim, a miss by its margin and at least 1, a critical failure with its dice); the book\'s scatter (a yard a point missed, at most half the distance); the six ways and the eight, turned from the line of the throw',
+            BC.diceCount('5d6+2') === 5 && BC.diceCount('d6') === 1 && BC.diceCount('2d6 + 1d4') === 3 && BC.diceCount('') === 0 && BC.diceCount(null) === 0
+            && fs1({ dmg: 12, dist: 2, dice: 2 }) === 2 && fs1({ dmg: 12, dist: 5, dice: 2 }) === 0 && fs1({ dmg: 12, dist: 3, dice: 2, direct: true }) === 12 && fs1({ dmg: 12, dist: 0.4, dice: 2, centre: true }) === 12 && fs1({ dmg: 12, dist: 1, dice: 2 }) === 4
+            && BC.fallShare(F, 'BlastDamage * 5', { dmg: 7 }) === 7 && BC.fallShare(F, '1d6', { dmg: 7 }) === null && BC.fallShare(F, 'Nonsense', { dmg: 7 }) === null && BC.fallShare(null, BOOK, { dmg: 7 }) === null
+            && jj(BC.throwOutcome({ pass: true, margin: 4 })) === jj({ kind: 'hit', margin: 0 }) && jj(BC.throwOutcome({ pass: false, margin: 3 })) === jj({ kind: 'miss', margin: 3 }) && BC.throwOutcome({ pass: false, margin: 0 }).margin === 1
+            && jj(BC.throwOutcome({ pass: false, crit: 'fumble', total: 18 })) === jj({ kind: 'fumble', margin: 0, natural: 18 }) && BC.throwOutcome(null).kind === 'hit'
+            && BC.bookScatterYd(5, 6) === 3 && BC.bookScatterYd(2, 10) === 2 && BC.bookScatterYd(0, 10) === 0
+            && jj(BC.scatterPoint({ x: 100, y: 0 }, { x: 0, y: 0 }, 2, 0, 10, 6)) === jj({ x: 120, y: 0, way: 0, words: 'Long' }) && BC.scatterPoint({ x: 100, y: 0 }, { x: 0, y: 0 }, 2, 3, 10, 6).words === 'Short' && BC.scatterPoint({ x: 100, y: 0 }, { x: 0, y: 0 }, 2, 3, 10, 6).x === 80
+            && jj(BC.scatterPoint({ x: 100, y: 0 }, { x: 0, y: 0 }, 2, 2, 10, 8)) === jj({ x: 100, y: 20, way: 2, words: 'Right' }) && BC.scatterPoint({ x: 0, y: 0 }, { x: 0, y: 0 }, 1, 0, 10, 6).y === -10 && BC.scatterPoint(null, null, 1, 0, 10) === null && BC.SCATTER_WAYS6.length === 6 && BC.SCATTER_WAYS.length === 8,
+            jj([fs1({ dmg: 12, dist: 2, dice: 2 }), BC.throwOutcome({ pass: false, margin: 0 }), BC.scatterPoint({ x: 100, y: 0 }, { x: 0, y: 0 }, 2, 2, 10, 8)]));
+        const zone = { x: 0, y: 0, w: 100, h: 100, mine: { trig: 1 } }, ydB = (a, b) => Math.hypot(b.x - a.x, b.y - a.y) / 50;
+        check('1.5.8 explosives, a mine (blastcore cleanMine and inTrigger): its blast, its trigger radius (2 yards with none, 0.5 to 100), who placed it, the row, an unarmed mark and an armour divisor kept as their kinds and nothing else; a token stands in its trigger by its centre within the radius of the zone\'s centre, by the map\'s own yards',
+            jj(BC.cleanMine({ ft: 12, name: ' Spike ', damage: '2d6', type: 'cr', trig: 0, charId: 'c_kael', fieldId: 'f_w', rowId: 'w_1', by: 'Kael', gmOnly: true, notes: 'Loud.', unarmed: true, ad: 2, evil: '<x>' }))
+                === jj({ ft: 12, name: 'Spike', damage: '2d6', type: 'cr', trig: 2, charId: 'c_kael', fieldId: 'f_w', rowId: 'w_1', by: 'Kael', gmOnly: true, unarmed: true, ad: 2, notes: 'Loud.' })
+            && BC.cleanMine({ ft: 0 }) === null && BC.cleanMine('x') === null && BC.cleanMine({ ft: 9, ad: 1, unarmed: 'yes', type: '1x', charId: '__proto__' }).ad === undefined && BC.cleanMine({ ft: 9, trig: 500 }).trig === 100
+            && BC.inTrigger(zone, { x: 90, y: 50 }, ydB) === true && BC.inTrigger(zone, { x: 111, y: 50 }, ydB) === false && BC.inTrigger({ x: 0, y: 0, w: 100, h: 100 }, { x: 50, y: 50 }, ydB) === false,
+            jj(BC.cleanMine({ ft: 12, trig: 0 })));
+        const sysB = (blast, items, gmView) => cleanSystem({ v: 1, name: 'BL', fields: [{ id: 'f_st', key: 'ST', kind: 'number', def: 10, vis: 'all' }], rolls: [], items: items || [], combat: { blastAuto: 'full', blast: blast } }, { F, gmView: gmView !== false });
+        const goodB = { fall: BOOK, roll: '3d6 <= ThrowSkill + RangeMod', scatter: 'min(Margin, ThrowDistance / 2)', max: 'ST * 2', min: '1', hand: 'Natural >= 18', ways: 6, fuse: 'turn' };
+        const gB = sysB(goodB).combat.blast, pB = sysB(goodB, null, false).combat.blast, badB = sysB({ fall: 'BlastDamage + 1d6', scatter: 'Margin + Kael', hand: 'Natural + 1d6', ways: 7, fuse: 'later', max: '(' }).combat.blast;
+        const itB = sysB(null, [{ id: 'i_frag', name: 'Spike', vis: 'all', area: { ft: 12, shape: 'circle', name: 'Spike', type: 'cr', use: true, place: true, trig: 3, ad: 2 } }, { id: 'i_two', name: 'Two', vis: 'all', area: { ft: 6, type: '1x', trig: 3, ad: 1, use: 'yes' } }]).items;
+        check('1.5.8 explosives, the Combat card\'s blast rules and an item\'s blast extras through the cleaner (both views): a falloff of its five names and no dice, a throw roll, a scatter of Margin and ThrowDistance, the longest and shortest throw, the hand rule of Natural, six or eight ways and a fuse at the next turn kept as written in the GM\'s view and none of it in the players\' (the host throws); every part that does not clean dropped alone, and a system with none holding no key; an item\'s damage type, its use, its being placed with its trigger radius and its armour divisor kept beside its radius, a trigger with no placing, a divisor of 1 and a type that is no key dropped',
+            jj(gB) === jj(goodB) && pB === undefined && badB === undefined && sysB({}).combat.blast === undefined && sysB({ fall: 'BlastDamage', ways: 8 }).combat.blast.ways === 8
+            && jj(itB[0].area) === jj({ ft: 12, shape: 'circle', name: 'Spike', type: 'cr', use: true, ad: 2, place: true, trig: 3 }) && jj(itB[1].area) === jj({ ft: 6, shape: 'circle', name: '' })
+            && S.cleanBlastRules({ fall: 'BlastDamage / Kael' }, F) === null && jj(S.cleanBlastRules({ scatter: 'Margin d6', roll: 'Kael' }, F)) === jj({ roll: 'Kael' }),
+            jj([gB, pB, badB, itB.map(i => i.area)]));
+        // the host's damage, run for real: the book's falloff through the real damage step (its pool, its type), the whole roll with none
+        const wbX = fs.readFileSync(path.join(app, 'scripts', 'whiteboard.js'), 'utf8').replace(/\r\n/g, '\n'), abX = wbX.slice(wbX.indexOf('  var _lastThrowTx = null;'), wbX.indexOf('  // Undo the last full-auto throw'));
+        const sysX = fall => cleanSystem({ v: 1, name: 'BX', rolls: [], fields: [{ id: 'f_hp', key: 'HP', label: 'HP', kind: 'resource', vis: 'all', maxFormula: '20' }], combat: { blastAuto: 'full', hpResource: 'f_hp', damage: { pool: 'f_hp', types: [{ key: 'cr', label: 'Crushing', mult: 1 }, { key: 'cut', label: 'Cutting', mult: 1.5 }] }, blast: fall ? { fall: BOOK } : undefined } }, { F, gmView: true });
+        const runX = (fall, dtype) => { const out = { toasts: [], saves: 0, cards: [] }, camp = { system: sysX(fall), chars: { c_a: { id: 'c_a', values: { f_hp: { cur: 20 } } }, c_b: { id: 'c_b', values: { f_hp: { cur: 20 } } }, c_c: { id: 'c_c', values: { f_hp: { cur: 20 } } } } };
+            const toks = [{ id: 't_a', isChar: true, charId: 'c_a', x: 0, y: 0 }, { id: 't_b', isChar: true, charId: 'c_b', x: 100, y: 0 }, { id: 't_c', isChar: true, charId: 'c_c', x: 250, y: 0 }], mp = { whiteboard: toks }, dd = { t_a: 0, t_b: 2, t_c: 5 };
+            const win = { wpSystemCore: S, wpFormula: F, wpBlastCore: BC, wpFog: { coverAt: () => null }, wpNet: { damageCard: (c, lines) => out.cards.push([c.id, lines.join(' | ')]) } };
+            let api = null; try { api = new Function('getActiveCampaign', 'getActiveMap', 'blastRadiusYd', 'blastDistances', 'save', 'syncBlastMenu', 'toast', 'window', 'stanceOn', 'tokenElevation', 'shapeHolds', 'tokenCentre', 'state', 'hexCellOf', "'use strict';\n" + abX + '\nreturn { apply: applyBlastDamage, last: function() { return _lastThrowTx; } };')(
+                () => camp, () => mp, () => 5, () => toks.map(t => ({ tok: t, d: dd[t.id] })), () => { out.saves++; }, () => {}, t => out.toasts.push(t), win, () => false, () => 0, () => true, t => ({ x: t.x + 30, y: t.y + 26 }), { gridType: 'square' }, () => ({ q: 0, r: 0 })); } catch (e) { return { err: String(e) }; }
+            api.apply({ x: 30, y: 26, bid: 'b_x', dmgExpr: '2d6', direct: 't_a', dtype: dtype, name: 'Spike' }, 12, 'f_hp');
+            out.hp = Object.keys(camp.chars).map(k => camp.chars[k].values.f_hp.cur); out.tx = api.last(); return out; };
+        const xBook = runX(true, 'cr'), xCut = runX(true, 'cut'), xFlat = runX(false, 'cr');
+        check('1.5.8 explosives, the host\'s blast damage by the book (whiteboard.js applyBlastDamage, run for real with the real damage step): the direct target takes the whole roll, one 2 yards off the roll over 6, one past twice the dice in yards nothing; each share through the damage step by the blast\'s type (Cutting\'s multiplier), its words to the GM and the character\'s player; the Undo keeps every field the step wrote; with no falloff every token takes the whole roll off the pool as before',
+            !xBook.err && jj(xBook.hp) === jj([8, 18, 20]) && /^Blast damage applied to 2 tokens by distance · 1 too far to be hurt\. Undo last throw/.test(xBook.toasts[0]) && xBook.tx && xBook.tx.hits.length === 2 && xBook.tx.hits.every(h => h.prevs && h.prevs.f_hp && h.prevs.f_hp.cur === 20)
+            && xBook.cards.length === 2 && /^Spike: \| Crushing 12: 12 through, 12 HP/.test(xBook.cards[0][1]) && jj(xCut.hp) === jj([2, 17, 20]) && jj(xFlat.hp) === jj([8, 8, 8]) && /^−12 to 3 tokens\. Undo/.test(xFlat.toasts[0]),
+            jj([xBook.err, xBook.hp, xBook.toasts, xBook.cards, xCut.hp, xFlat.hp, xFlat.toasts]));
+        // the stand-in: an item's own character as escaped text, a glyph or nothing the app's own paths
+        const exA = wbX.indexOf('  // [systemcheck:explosives-start]'), exZ = wbX.indexOf('  // [systemcheck:explosives-end]'), exSrcX = exA >= 0 && exZ > exA ? wbX.slice(exA, exZ) : '';
+        let SV = null; try { SV = new Function('window', 'esc', 'svgNum', 'getActiveCampaign', 'getActiveMap', "'use strict';\n" + exSrcX + '\nreturn standInSvg;')({ wpBlastCore: BC, wpSystemCore: S }, s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'), v => Math.round(Number(v) * 100) / 100, () => null, () => null); } catch (e) { SV = null; }
+        const svG = SV ? SV('grenade', 50, 60, '') : '', svM = SV ? SV('mine', 50, 60, 'icon:bomb') : '', svT = SV ? SV('grenade', 50, 60, '<img src=x onerror=alert(1)>') : '';
+        check('1.5.8 explosives, the stand-in on the map (whiteboard.js standInSvg, run for real): with no icon or a glyph of the bundled set the app\'s own drawing as paths, at the centre, a mine in its own drawing; an item\'s own icon as escaped text and never markup',
+            !!SV && /^<g class="blast-ico grenade-ico" transform="translate\(38 48\)">(<path d="[0-9A-Za-z .-]+"><\/path>){4}<\/g>$/.test(svG) && /^<g class="blast-ico mine-ico"/.test(svM) && !/<img/.test(svT) && /^<text class="blast-ico-t"/.test(svT),
+            jj([svG, svM, svT]));
+        const netX = fs.readFileSync(path.join(app, 'scripts', 'net.js'), 'latin1').replace(/\r\n/g, '\n');
+        check('1.5.8 explosives on the wire (net.js, pinned): a placed mine\'s data leaves no copy of a map (wireWbItem) and no host\'s copy is kept by a player\'s app (cleanHostWbItem); the pos gate asks the board\'s mine check after a trigger zone\'s message, at a final drop, through typeof; the throw request names the row it is thrown from; a damage roll carries its blast only as the host\'s own word, after its type; diceRoll\'s answer as it was, its verdict beside it',
+            netX.split("if (w.mine !== undefined) delete w.mine;").length === 3 && /if \(typeof triggerFire === 'function'\) triggerFire\(conn, map, w, frW\);[^\n]*\n\s*if \(w\.isChar && typeof window !== 'undefined' && typeof window\.wpMineCheck === 'function'\)/.test(netX)
+            && netX.includes('charId: msg.charId, fieldId: fT.id, rowId: msg.rowId, damage: defT.damage') && netX.includes("    return { ok: true, value: res.value, priv: !!rec.priv };\n") && netX.includes('net.rollCheck = D.checkOf ? D.checkOf(res, ruleR) : null;')
+            && netX.indexOf('rec.blast = o.blast') > netX.indexOf('if (dtR) rec.dtype = dtR;'));
+    }
+    // [systemcheck:explosives-tests-end]
     summed = true;
     console.log(NL + pass + ' passed, ' + fail + ' failed.');
     if (fail) process.exit(1);
