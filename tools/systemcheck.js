@@ -14812,6 +14812,52 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             clOk && pureOk && runOk && notSeen === 0 && fresh.out.rolls.length === 0 && offs.every(x => x[0] === 0 && x[1] === 0) && nOff.out.rolls.length === 0 && J(nOff.out.dues) === J([['c_a', 'r_dc', 'cross', false]]),
             J([clOk, pureOk, seeded, seededAgain, [r1, r2, r3, r4, r5, r6], w.out, notSeen, offs, nOff.out]));
     }
+    // The review of folds 4a and 6b (1.5.9): a load seeds what the posture rule last saw, as it seeds the crossings, so the first change after it
+    // lays a token down; the crossings' seed reads a value in its token's context as crossFollow does; and a time rule's run and a round's or a
+    // turn's action, which store outside the two funnels, ask ruleFollow, so a bleed past minus HP owes its death check then and not at a later change
+    {
+        const J = JSON.stringify, NLr = '\n';
+        const shV = fs.readFileSync(path.join(app, 'scripts', 'sheets.js'), 'utf8').replace(/\r\n/g, NLr), cutV = (a, b) => { const x = shV.indexOf(a), y = shV.indexOf(b, x + 1); if (x < 0 || y < 0) throw new Error('review slice: ' + a); return shV.slice(x, y); };
+        const crossSrc = cutV('// [systemcheck:cross-start]', '// [systemcheck:cross-end]'), postSrc = cutV('// [systemcheck:fxposture-start]', '// [systemcheck:fxposture-end]');
+        const base = { v: 1, name: 'R', fields: [{ id: 'f_hp', key: 'HP', label: 'HP', kind: 'resource', maxFormula: '10', def: 'max', min: -40 }, { id: 'f_sp', key: 'SP', label: 'SP', kind: 'resource', maxFormula: '10 + CombatRound', def: 'max' }, { id: 'f_fx', key: 'FX', label: 'Effects', kind: 'effects' }],
+            effects: [{ id: 'e_down', name: 'Down', auto: 'HP <= 0', posture: 'lying-prone' }],
+            rolls: [{ id: 'r_dc', label: 'Death check', formula: '3d6 <= 10', cross: { f: 'f_hp', dir: 'down', at: '-HP.max', step: 'HP.max', count: 2 } }, { id: 'r_sp', label: 'Surge', formula: '1d6', cross: { f: 'f_sp', dir: 'up', at: '12' } },
+                { id: 'r_bleed', label: 'Bleed', apply: [{ f: 'f_hp', formula: '1' }], every: { n: 1, u: 'hour' } }] };
+        const gm = S.cleanSystem(base, { F, gmView: true });
+        const mk = o => { o = o || {};
+            const out = { rolls: [], saves: [], sent: [], toasts: [] }, tok = { id: 't1', isChar: true, charId: 'c_a' }, c = { id: 'c_a', name: 'Ana', ownerId: 'u_a', values: { f_hp: { cur: 5 } } };
+            const camp = { id: 'k', system: o.sys || gm, chars: { c_a: c }, items: { m1: { id: 'm1', type: 'map', whiteboard: [tok] } } }, n = { active: true, role: 'host', applyingRemote: false, broadcastItemFiltered: (cid, mid) => out.sent.push([cid, mid]), postDue: () => {} };
+            const api = new Function('isClient', 'canWrite', 'F', 'crossings', 'makeResolver', 'getActiveCampaign', 'fieldById', 'tokenCtxFor', 'charById', 'net', 'toast', 'applyAction', 'save', 'postureFx', 'window',
+                crossSrc + NLr + postSrc + NLr + 'return { crossFollow: crossFollow, crossSeed: crossSeed, ruleFollow: ruleFollow, postureFollow: postureFollow, postureSeed: postureSeed };')(
+                () => !!o.client, () => true, () => F, S.crossings, S.makeResolver, () => camp, (sy, id) => sy.fields.filter(f => f.id === id)[0] || null, () => (o.round ? { combat: { round: o.round } } : null), (id, k) => k.chars[id] || null, () => n, t => out.toasts.push(t), () => {},
+                () => out.saves.push(n.applyingRemote), S.postureFx, { wpDice: { rollFor: (id, f, lb, op) => out.rolls.push([id, lb]) }, wpVtt: { on: () => true }, wpSystemCore: S });
+            return { out, tok, c, camp, n, api };
+        };
+        // the posture's seed: noted at the load's redraw, the first change that brings Down on lays the token prone
+        const p = mk(), pSeed = p.api.postureSeed(p.camp), pAgain = p.api.postureSeed(p.camp); p.c.values.f_hp = { cur: 0 }; const pMaps = p.api.postureFollow(p.c, p.camp);
+        const pn = mk({ sys: S.cleanSystem({ v: 1, name: 'N', fields: base.fields, effects: [{ id: 'e_x', name: 'X' }] }, { F, gmView: true }) }), pNone = pn.api.postureSeed(pn.camp), pCl = mk({ client: true }), pClN = pCl.api.postureSeed(pCl.camp);
+        const seedOk = pSeed === 1 && pAgain === 0 && J(pMaps) === J(['m1']) && p.tok.posture === 'lying-prone' && pNone === 0 && pClN === 0;
+        // the crossings' seed in the token's context: a value that reads it does not cross at the first change
+        const x = mk({ round: 3 }); x.api.crossSeed(); const xRuns = x.api.crossFollow(x.c, x.camp);
+        const ctxOk = xRuns === 0 && x.out.rolls.length === 0;
+        // ruleFollow: a bleed past minus HP owes its death check; an effect it brings on lays the token down, saved outside the GM's undo and sent
+        const r = mk(); r.c.values.f_hp = { cur: -9 }; r.api.crossSeed(); r.api.postureSeed(r.camp); r.c.values.f_hp = { cur: -10 }; const rRuns = r.api.ruleFollow(r.c, r.camp);
+        const q = mk(); q.api.crossSeed(); q.api.postureSeed(q.camp); q.c.values.f_hp = { cur: 0 }; const qRuns = q.api.ruleFollow(q.c, q.camp);
+        const followOk = rRuns === 1 && J(r.out.rolls) === J([['c_a', 'Death check']]) && r.out.saves.length === 0 && qRuns === 0 && q.tok.posture === 'lying-prone' && J(q.out.saves) === J([true]) && q.n.applyingRemote === false && J(q.out.sent) === J([['k', 'm1']]);
+        // runTimeRules (its timerules slice run for real) asks ruleFollow once a character's run is stored, with what it wrote, after its summary
+        const trSrcV = cutV('// [sinkcheck:timerules-start]', '// [sinkcheck:timerules-end]'), seq = [];
+        const campT = { id: 'k', system: gm, chars: { c_a: { id: 'c_a', name: 'Ana', ownerId: 'u_a', values: { f_hp: { cur: -9 } } }, c_b: { id: 'c_b', name: 'Bo', values: { f_hp: { cur: 5 } } } } };
+        const netT = { active: true, role: 'host', syncCharDelta: () => {}, timeCard: ch => seq.push(['card', ch.id]) };
+        new Function('getActiveCampaign', 'systemOf', 'net', 'F', 'charById', 'timeRuleRun', 'gmOnlyNames', 'applyScope', 'renderViews', 'save', 'window', 'makeResolver', 'hasDice', 'figText', 'ruleRunCtx', 'chainsShallow', 'ruleFollow', "'use strict';" + NLr + trSrcV + NLr + 'return runTimeRules;')(
+            () => campT, k => k.system, () => netT, () => F, (id, k) => (Object.prototype.hasOwnProperty.call(k.chars, id) ? k.chars[id] : null), S.timeRuleRun, S.gmOnlyNames, S.applyScope, () => {}, () => {}, { appRender: () => {} }, S.makeResolver, S.hasDice, S.figText, S.ruleRunCtx, S.chainsShallow,
+            (ch, k) => seq.push(['follow', ch.id, J(ch.values.f_hp), k === campT]))([{ c: 'c_a', r: 'r_bleed', n: 1 }, { c: 'c_b', r: 'r_nothing', n: 1 }], '1 hour');
+        const trOk = J(seq) === J([['card', 'c_a'], ['follow', 'c_a', J({ cur: -10 }), true]]);
+        // timedHook: a round's or a turn's action stored, then ruleFollow
+        const thSrc = cutV('function timedHook(', '// [sinkcheck:timerules-start]');
+        const thOk = /renderViews\(c\.id\); done\+\+;\n        if \(typeof ruleFollow === 'function'\) ruleFollow\(c, camp\);/.test(thSrc);
+        check('the review of folds 4a and 6b (1.5.9): postureSeed notes at the load\'s redraw what the posture rule last saw, once a character, never on a player\'s app nor in a system with no effect that sets a posture, so the first change after a load that brings Down on lays the token prone; crossSeed reads a value in its token\'s context as crossFollow does, so a pool whose most reads CombatRound crosses nothing at its first look; ruleFollow runs a death check for a bleed from -9 to -10 and lays a token down for an effect it brought on, saved outside the GM\'s undo with its map sent; runTimeRules asks it once a character\'s run is stored, after its summary, and never for a character it wrote nothing for; timedHook asks it after a round\'s or a turn\'s action is stored',
+            seedOk && ctxOk && followOk && trOk && thOk, J([seedOk, pSeed, pAgain, pMaps, p.tok, pNone, pClN, ctxOk, xRuns, x.out, followOk, rRuns, r.out, qRuns, q.tok, q.out, trOk, seq, thOk]));
+    }
     summed = true;
     console.log(NL + pass + ' passed, ' + fail + ' failed.');
     if (fail) process.exit(1);

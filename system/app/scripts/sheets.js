@@ -396,10 +396,10 @@ function crossSeed() {
     var rules = crossRules(sys), n = 0; if (!rules.length) return 0;
     Object.keys(camp.chars || {}).forEach(function(id) {
         var c = camp.chars[id], vars = null; if (!c || typeof c !== 'object') return;
-        rules.forEach(function(r) { var k = (camp.id || '') + '|' + id + '|' + r.id; if (Object.prototype.hasOwnProperty.call(_crossSeen, k)) return; vars = vars || makeResolver(sys, c, F(), null); var v = crossValue(sys, c, r, vars); if (v !== null) { _crossSeen[k] = v; n++; } });
+        rules.forEach(function(r) { var k = (camp.id || '') + '|' + id + '|' + r.id; if (Object.prototype.hasOwnProperty.call(_crossSeen, k)) return; vars = vars || makeResolver(sys, c, F(), tokenCtxFor(id, camp)); var v = crossValue(sys, c, r, vars); if (v !== null) { _crossSeen[k] = v; n++; } });
     });
     return n;
-}
+}   // the review of fold 4a: the value is read in its token's context, as crossFollow reads it, so a value that reads its token never crosses at its first change
 function crossFollow(c, camp) {
     if (!c || typeof c.id !== 'string' || !camp || !camp.system || !crossOk() || typeof crossings !== 'function' || typeof makeResolver !== 'function') return 0;
     var sys = camp.system, rules = crossRules(sys); if (!rules.length) return 0;
@@ -426,6 +426,15 @@ function crossFollow(c, camp) {
     } finally { _crossDepth--; }
     return runs.length;
 }
+// The review of folds 4a and 6b: a time rule's run (runTimeRules) and a round's or a turn's action (timedHook) store what they write outside the
+// two funnels, so each asks here what the funnels ask once a change is stored: an effect that came on lays its token down, saved outside the
+// GM's undo with its maps sent to the table, and a value that crossed a step runs its rules, so a bleed past minus HP owes its death check then
+function ruleFollow(c, camp) {
+    if (!c || typeof c.id !== 'string' || !camp) return 0;
+    var mp = typeof postureFollow === 'function' ? postureFollow(c, camp) : [];
+    if (mp.length) { var n = net(), was = n ? n.applyingRemote : false; if (n) n.applyingRemote = true; try { save(true); } finally { if (n) n.applyingRemote = was; } if (n && n.active && n.role === 'host' && n.broadcastItemFiltered) mp.forEach(function(mid) { n.broadcastItemFiltered(camp.id, mid); }); }
+    return typeof crossFollow === 'function' ? crossFollow(c, camp) : 0;
+}
 // [systemcheck:cross-end]
 // [systemcheck:fxposture-start]
 // 1.5.9 (docs/BOOK_ES_ET_PLAN.md; the owner's O6: "An effect can set posture", so Down lays its token prone the moment it applies; the book (eu):
@@ -433,7 +442,9 @@ function crossFollow(c, camp) {
 // and have just come on lay each token of the character down in it, on every map of the campaign, as the stance menu sets a posture; one that has
 // just ended and is ticked to put it back gives a token the posture it had before, only where it still stands as the effect set it (a posture
 // changed since, by hand or by another effect, stays). What was on is kept in this machine's memory alone; the first look at a character only
-// notes it, so a load, a reload or a campaign opened moves nobody. With Token posture off nothing moves. Answers the ids of the maps it changed
+// notes it, so a load, a reload or a campaign opened moves nobody. With Token posture off nothing moves. Answers the ids of the maps it changed.
+// postureSeed (the review of fold 6b), asked by the board's every redraw as crossSeed is, takes that first look at every character not seen yet,
+// so the first change after a load that brings Down on lays its token down; a system with no effect that sets a posture notes nothing
 var _postOn = Object.create(null), _postWas = Object.create(null);
 function postureFollow(c, camp) {
     if (!c || typeof c.id !== 'string' || !camp || !camp.system || isClient() || !canWrite() || !F() || typeof postureFx !== 'function') return [];
@@ -452,6 +463,12 @@ function postureFollow(c, camp) {
         if (did) maps.push(mid);
     });
     return maps;
+}
+function postureSeed(camp) {
+    if (!camp || !camp.system || !camp.chars || typeof camp.chars !== 'object' || isClient() || !canWrite() || !F() || typeof postureFx !== 'function') return 0;
+    var sys = camp.system; if (!Array.isArray(sys.effects) || !sys.effects.some(function(d) { return !!d && typeof d.posture === 'string' && d.posture !== ''; })) return 0;
+    var n = 0; Object.keys(camp.chars).forEach(function(id) { var c = camp.chars[id]; if (!c || typeof c !== 'object' || typeof c.id !== 'string') return; var key = (camp.id || '') + '|' + c.id; if (Object.prototype.hasOwnProperty.call(_postOn, key)) return; _postOn[key] = postureFx(sys, c, F()); n++; });
+    return n;
 }
 // [systemcheck:fxposture-end]
 // [systemcheck:sheetdelete-start]
@@ -3883,6 +3900,7 @@ function timedHook(mapId, combat, kind) {
         c.values = c.values || {}; ids.forEach(function(fid) { c.values[fid] = res.values[fid]; }); c.updated = Date.now();
         if (n.active) n.syncCharDelta(c.id, res.values);
         renderViews(c.id); done++;
+        if (typeof ruleFollow === 'function') ruleFollow(c, camp);   // the review of folds 4a and 6b: what the funnels ask after a change
     });
     if (done) { save(true); if (window.appRender) window.appRender(); }
     return done;
@@ -3968,6 +3986,7 @@ function runTimeRules(fires, words, at, back) {
         });
         if (Object.keys(all).length) { c.updated = Date.now(); if (n && n.active && n.role === 'host' && n.syncCharDelta) n.syncCharDelta(c.id, all); renderViews(c.id); changed++; }   // what was written is stored, sent and saved, said or not
         if (parts.length && n && n.timeCard) n.timeCard(c, (words ? words + ' \u2014 ' : '') + (c.name || 'A character') + ': ' + parts.join('; '), gm);   // the flood fix: no part left, no summary
+        if (Object.keys(all).length && typeof ruleFollow === 'function') ruleFollow(c, camp);   // the review of folds 4a and 6b: a bleed past minus HP owes its death check now, and an effect it brought on lays its token down
     });
     if (changed) { save(true); if (window.appRender) window.appRender(); }
     return changed;
@@ -8401,7 +8420,7 @@ function damageFromRoll(fromId, total, done, type) {   // 1.5.7: done, called on
 }
 function damageOn() { var sys = systemOf(); return !!dmgRules(sys) && !isClient() && canWrite(); }   // the cards' Apply to target: the GM's own machine
 // [systemcheck:dmgwin-end]
-window.wpSheets = { bellNote: bellNote, crossSeed: crossSeed, runTimeRules: runTimeRules, startMaking: startMaking, inviteMaking: inviteMaking, applyTokenFace: applyTokenFace, open: open, close: close, playerSystem: playerSystem, readablePages: readablePages, openPage: openPage, sheetRefsChanged: sheetRefsChanged, systemOf: systemOf, save: saveDraft, startFrom: startFrom, sync: sync, roundHook: roundHook, turnHook: turnHook, runDue: runDue, draft: function() { return draft; },
+window.wpSheets = { bellNote: bellNote, crossSeed: crossSeed, postureSeed: function() { return postureSeed(getActiveCampaign()); }, runTimeRules: runTimeRules, startMaking: startMaking, inviteMaking: inviteMaking, applyTokenFace: applyTokenFace, open: open, close: close, playerSystem: playerSystem, readablePages: readablePages, openPage: openPage, sheetRefsChanged: sheetRefsChanged, systemOf: systemOf, save: saveDraft, startFrom: startFrom, sync: sync, roundHook: roundHook, turnHook: turnHook, runDue: runDue, draft: function() { return draft; },
     gmFinder: gmFinder, uploadsChanged: uploadsChanged, approveNote: approveNote, openReview: openReview, readersChanged: readersChanged, emojiSet: EMOJI_SET, applyCharFace: applyCharFace, applyCharFrame: applyCharFrame, applyTokenFrame: applyTokenFrame,
     charsOf: charsOf, charList: charList, charById: charById, newCharacter: newCharacter, addCharacter: addCharacter, askDeleteSheet: askDeleteSheet, deleteCharacter: deleteCharacter, linkToken: linkToken, newFromToken: newFromToken, syncOwners: syncOwners, giveCharacter: giveCharacter, unbindName: unbindName, ownerFromToken: ownerFromToken,
     charSelectHtml: charSelectHtml, wireCharSelect: wireCharSelect, hoverLinesForToken: hoverLinesForToken, hoverLinesForTokenId: hoverLinesForTokenId, tokenFx: tokenFx, tokenFxModel: tokenFxModel, tokenFxCharOp: tokenFxCharOp,
