@@ -151,6 +151,7 @@ function renderApply(m) {
         var s = el('span', 'apply-line'); s.appendChild(el('span', 'apply-n', l.n + ' '));
         s.appendChild(el('span', 'apply-d ' + (l.d < 0 ? 'apply-sub' : 'apply-add'), (l.d < 0 ? '\u2212' : '+') + fmtNum(Math.abs(l.d))));
         s.appendChild(document.createTextNode(' \u2192 ')); s.appendChild(el('b', null, fmtNum(l.v)));
+        if (typeof l.roll === 'string' && l.roll) s.appendChild(el('span', 'apply-roll', ' ' + l.roll));   // 1.5.9: the dice a Rolled amount drew, as text
         ls.appendChild(s);
     });
     wrap.appendChild(ls);

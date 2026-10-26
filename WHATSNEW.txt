@@ -25,6 +25,9 @@ Character sheets
   opens the modifier popover for that roll: add a bonus or a penalty, or
   roll twice and keep the better or worse. Shift-click on the roll still
   does the same.
+- A change a roll or an action makes can be Rolled. Its amount may then
+  roll dice, such as 1d6 for a heal, and the host rolls it each time. The
+  card in chat shows the dice it drew.
 
 Launchers and rounds
 - A list in the System editor can have Chambers from: a row of it holds

@@ -523,6 +523,7 @@ function cleanApplyChanges(list, withWhen, withCounters) {   // withWhen (R1): a
         if ((f || ck) && seen[sk]) return; if (f || ck) seen[sk] = 1;
         var o = ck ? { c: ck, formula: cleanFormulaText(c.formula) || '' } : { f: f, formula: cleanFormulaText(c.formula) || '' }; if (c.set === true) o.set = true; else if (c.add === true) o.add = true;   // Stage 6 HUD R1: Set to (the amount is the new value)
         if (wh) o.when = wh;
+        if (c.roll === true && (f || ck) && o.formula) o.roll = true;   // 1.5.9 (book es/et plan, section 0): Rolled, its amount may roll dice, which only the host rolls (applyAct's D); only as true, only with a target and an amount
         out.push(o);
     });
     return out;
@@ -2613,7 +2614,11 @@ function cleanCharEdits(msg) {
 // [{ name, value }] } — lines: the label, the amount (signed), the new value — or { ok: false, reason: field|value|none|error, message? }.
 // same (1.5.5, true only): vars is char's own resolver in tctx, in a system chainsShallow passes, so it reads a pool's current value and its
 // most in place of a new resolver while no change is made yet (any resolver of one state answers alike there)
-function applyAct(sys, char, act, vars, F, tctx, rowCtx, same) {   // rowCtx (R2b): { f: the list, r: the row } — a change may move one of that row's counters
+// D (1.5.9, book es/et plan, section 0): the host's dice core. A change ticked Rolled (roll: true) may then roll dice in its amount, drawn from
+// D.random where it has one and else from the formula engine's own source, as the host's rolls are; its line carries what it drew (roll: "1d6: 4"),
+// and the answer says drew: true. With no D an amount with dice is refused in the same words as ever, so nothing but the host rolls one
+function rollWords(res) { var b = res && res.ok && res.breakdown && Array.isArray(res.breakdown.dice) ? res.breakdown.dice : []; return b.filter(function(d) { return isObj(d) && typeof d.count === 'number' && d.count > 0 && typeof d.total === 'number' && fin(d.total); }).map(function(d) { return String(d.text || 'dice').replace(CTRL_RE_G, ' ') + ': ' + String(Math.round(d.total * 1000) / 1000); }).join(', ').slice(0, 60); }
+function applyAct(sys, char, act, vars, F, tctx, rowCtx, same, D) {   // rowCtx (R2b): { f: the list, r: the row } — a change may move one of that row's counters
     if (!sys || !Array.isArray(sys.fields) || !char || !isObj(act) || !Array.isArray(act.apply) || !act.apply.length || typeof vars !== 'function' || !F) return { ok: false, reason: 'field' };
     if (!rollNeedsOk(act, vars, F)) return { ok: false, reason: 'error', message: rollNeedsSays(act) };   // 1.5.4: what it needs, read with the same names its amounts read (a list's action has none)
     var amts = [], names = [], seenN = map();
@@ -2623,14 +2628,15 @@ function applyAct(sys, char, act, vars, F, tctx, rowCtx, same) {   // rowCtx (R2
         if (isObj(c) && typeof c.c === 'string') { lfC = rowCtx && typeof rowCtx.f === 'string' ? fieldById(sys, rowCtx.f) : null; (lfC && isObj(lfC.list) && Array.isArray(lfC.list.counters) ? lfC.list.counters : []).forEach(function(t) { if (!ctr && isObj(t) && lower(t.key) === lower(c.c)) ctr = t; }); if (!ctr) return { ok: false, reason: 'field' }; }   // R2b
         if ((!ctr && (!f || APPLY_KINDS[f.kind] !== 1)) || typeof c.formula !== 'string' || !c.formula) return { ok: false, reason: 'field' };
         var p = F.parse(c.formula); if (!p.ok) return { ok: false, reason: 'error', message: p.error.message };
-        if (hasDice(p.ast.body)) return { ok: false, reason: 'error', message: 'An amount cannot roll dice.' };
-        var res = F.evaluate(c.formula, { vars: vars });
+        var rolled = c.roll === true && !!D && (typeof D === 'object' || typeof D === 'function'), rnd = rolled && typeof D.random === 'function' ? D.random : null;   // 1.5.9: Rolled, on the host
+        if (!rolled && hasDice(p.ast.body)) return { ok: false, reason: 'error', message: 'An amount cannot roll dice.' };
+        var res = F.evaluate(c.formula, rnd ? { vars: vars, random: rnd } : { vars: vars });
         if (!res.ok) return { ok: false, reason: 'error', message: res.error.message };
         var v = typeof res.value === 'boolean' ? (res.value ? 1 : 0) : res.value;
         if (typeof v !== 'number' || !fin(v)) return { ok: false, reason: 'error', message: 'That amount is not a number.' };
         ((res.breakdown && Array.isArray(res.breakdown.names)) ? res.breakdown.names : []).forEach(function(n) { if (n && typeof n.name === 'string' && !seenN[lower(n.name)]) { seenN[lower(n.name)] = 1; names.push(n); } });
         if (ctr || f.kind === 'resource') v = Math.round(v);
-        amts.push({ f: f, ctr: ctr, lf: lfC, amt: c.set === true ? v : (v > 0 ? v : 0), add: c.add === true, set: c.set === true });   // R1: Set to takes the amount as it is
+        amts.push({ f: f, ctr: ctr, lf: lfC, amt: c.set === true ? v : (v > 0 ? v : 0), add: c.add === true, set: c.set === true, roll: rolled && res.diceRolled > 0 ? rollWords(res) : '' });   // R1: Set to takes the amount as it is; 1.5.9: what a Rolled amount drew
     }
     if (!amts.some(function(a) { return a.fire || a.set || a.amt > 0; })) return { ok: false, reason: 'none' };
     var work = Object.assign({}, char, { values: JSON.parse(JSON.stringify(char.values || {})) }), out = {}, lines = [], asIs = same === true, fired = null;   // asIs: work still as char stands
@@ -2655,7 +2661,7 @@ function applyAct(sys, char, act, vars, F, tctx, rowCtx, same) {   // rowCtx (R2
             var curC = rowCt(rwC, a.ctr), nxC = Math.max(0, Math.min(1e6, Math.round(a.set ? a.amt : a.add ? curC + a.amt : curC - a.amt))), mxC = makeResolver(sys, work, F, tctx || null).ctMax(a.lf, rwC, a.ctr.key);
             if (typeof mxC === 'number') nxC = Math.min(nxC, mxC);
             rwC.ct = Object.assign({}, isObj(rwC.ct) ? rwC.ct : {}); rwC.ct[a.ctr.key] = nxC; out[a.lf.id] = rowsC;
-            lines.push({ f: a.lf.id, n: a.ctr.label || a.ctr.key, d: a.set ? nxC - curC : a.add ? a.amt : -a.amt, v: nxC });
+            var lnC = { f: a.lf.id, n: a.ctr.label || a.ctr.key, d: a.set ? nxC - curC : a.add ? a.amt : -a.amt, v: nxC }; if (a.roll) lnC.roll = a.roll; lines.push(lnC);   // 1.5.9: and what a Rolled amount drew
             continue;
         }
         var cur = 0;
@@ -2667,10 +2673,11 @@ function applyAct(sys, char, act, vars, F, tctx, rowCtx, same) {   // rowCtx (R2
         if (!ed.ok) return { ok: false, reason: ed.reason };
         work.values[a.f.id] = ed.value; out[a.f.id] = ed.value; asIs = false;
         var nv = a.f.kind === 'resource' ? ed.value.cur : a.f.kind === 'toggle' ? (ed.value ? 1 : 0) : ed.value;
-        lines.push({ f: a.f.id, n: a.f.label || a.f.key, d: a.set ? nv - cur : a.add ? a.amt : -a.amt, v: nv });   // a Set's line says what it moved
+        var lnF = { f: a.f.id, n: a.f.label || a.f.key, d: a.set ? nv - cur : a.add ? a.amt : -a.amt, v: nv }; if (a.roll) lnF.roll = a.roll; lines.push(lnF);   // a Set's line says what it moved; 1.5.9: and what a Rolled amount drew
     }
     if (!lines.length) return { ok: false, reason: 'none' };   // 1.5.9: a Then that only fires, with nothing chambered
     var doneA = { ok: true, values: out, lines: lines, names: names }; if (fired) doneA.fired = fired;   // 1.5.9: the round it fired, for the blast it places
+    if (lines.some(function(l) { return !!l.roll; })) doneA.drew = true;   // 1.5.9: a Rolled amount drew dice, so its card says so and a time rule's run counts as rolled
     return doneA;
 }
 // Stage 6 HUD G10 (his reference turn sweep, module/combat.mjs: when a combat's round changes, every combatant's Turn follows it and the sweep
@@ -2694,12 +2701,12 @@ function combatChars(mp, combat, chars) {
 // every Each round action on one character, in the System's order, each worked out on the values the one before left (varsFor(work): the
 // resolver of that working copy; a Set to reads the round just begun through tctx: Turn := CombatRound). One that cannot run (nothing to move,
 // an amount that fails) is passed over, as his sweep carries on. { values: { fieldId: value }, ran: n }
-function applyRound(sys, char, varsFor, F, tctx, kind) {   // kind (T2b): 'round' (the default) or 'turn'
+function applyRound(sys, char, varsFor, F, tctx, kind, D) {   // kind (T2b): 'round' (the default) or 'turn'; D (1.5.9): the host's dice, for a Rolled amount
     var out = { values: {}, ran: 0 }; if (!sys || !isObj(char) || typeof varsFor !== 'function' || !F) return out;
     var work = Object.assign({}, char, { values: Object.assign({}, isObj(char.values) ? char.values : {}) });
     roundActs(sys, kind).forEach(function(act) {
         var vv = varsFor(work); if (typeof vv !== 'function') return;
-        var res = applyAct(sys, work, act, vv, F, tctx || null, null); if (!res.ok) return;
+        var res = applyAct(sys, work, act, vv, F, tctx || null, null, undefined, D); if (!res.ok) return;
         Object.keys(res.values).forEach(function(k) { work.values[k] = res.values[k]; out.values[k] = res.values[k]; }); out.ran++;
     });
     return out;
@@ -2721,6 +2728,7 @@ function applyRound(sys, char, varsFor, F, tctx, kind) {   // kind (T2b): 'round
 // ticked Only while its needs hold with the timed effects its character had where that run came due (fx: { effects field id: list }; dueFx), its
 // needs judged and its changes worked out so; a part with no fx, or a run past what due names, is made as the character stands. With due, opt.flat
 // (chainsShallow passes) works out only the names each run reads. What a run writes is never an effects list, so nothing of fx is ever stored
+// 1.5.9 (book es/et plan, section 0): D also rolls a change ticked Rolled, and out.drew, where it is there, counts the runs whose Rolled amount drew dice
 function ruleRunCtx(at) { return isObj(at) && fin(at.round) ? { combat: { round: Math.max(0, Math.min(9999, Math.floor(at.round))) } } : null; }
 function timeRuleRun(sys, char, rule, n, F, D, at, opt) {
     var out = { values: {}, lines: [], rolls: { made: 0, pass: 0, fail: 0 }, ran: 0 }; if (!isObj(sys) || !isObj(char) || !isObj(rule) || !F) return out;
@@ -2742,7 +2750,8 @@ function timeRuleRun(sys, char, rule, n, F, D, at, opt) {
         }
         if (!act) break;
         act.apply.forEach(function(c) { if (isObj(c) && typeof c.f === 'string' && init[c.f] === undefined) { var fd = fieldById(sys, c.f), iv = fd ? vars(fd.key) : null; init[c.f] = typeof iv === 'number' && fin(iv) ? iv : 0; } });   // where each field began, for how far it really moved
-        var r = applyAct(sys, wk, act, vars, F, tctx, null, lazy); if (!r.ok) continue;
+        var r = applyAct(sys, wk, act, vars, F, tctx, null, lazy, D); if (!r.ok) continue;   // 1.5.9: D rolls a Rolled amount
+        if (r.drew) out.drew = (out.drew || 0) + 1;   // and a run that drew dice says so (the flood rule counts it as rolled)
         Object.keys(r.values).forEach(function(k) { work.values[k] = r.values[k]; out.values[k] = r.values[k]; });
         r.lines.forEach(function(l) { if (!tot[l.f]) { tot[l.f] = { f: l.f, n: l.n, v: l.v }; order.push(l.f); } tot[l.f].v = l.v; });
         out.ran++;
@@ -5088,6 +5097,7 @@ function validateSystem(sys, F) {
     }
     function listT(n) { var t = listTarget(n, null); return t && !t.rowOutside ? t : null; }   // captions and labels: never inside a column
     function isRollProp(p) { return p === 'roll' || p === 'rollFormula' || (typeof p === 'string' && p.indexOf('list.roll.') === 0); }   // F5b: a list's roll is a roll
+    function rolledWarn(id, prop, c) { if (!isObj(c) || c.roll !== true || typeof c.formula !== 'string' || !c.formula) return; var rp = F.parse(c.formula); if (rp.ok && !hasDice(rp.ast.body)) warnings.push({ id: id, prop: prop, message: 'Rolled, but this amount rolls no dice, so nothing is rolled.' }); }   // 1.5.9 (book es/et plan, section 0)
     function isApplyProp(p) { return typeof p === 'string' && (p.indexOf('apply.') === 0 || p.indexOf('list.apply.') === 0 || p.indexOf('then.') === 0 || p.indexOf('list.then.') === 0); }   // R2b: a list roll's consequence too   // R1: a roll's consequence too   // Stage 6 HUD H7: an apply action's amount (no dice, no loop edge: nothing reads an action)
     function checkFormula(owner, prop, text, allowDice, vis, rowList) {   // rowList (F5a1): the list whose column this is (Row.* is known there)
         if (text === null) return;
@@ -5152,7 +5162,7 @@ function validateSystem(sys, F) {
                     if (!tf0 || APPLY_KINDS[tf0.kind] !== 1) errors.push({ id: r.id, prop: tp, message: 'Pick the pool or number this changes.' });
                     else if (r.vis === 'all' && (tf0.vis === 'gm' || gmP[tf0.id] === 1)) warnings.push({ id: r.id, prop: tp, message: '"' + tf0.key + '" is GM only: players\u2019 rolls will not change it.' });
                     if (c.when && !tests && !((c.when === 'crit' || c.when === 'fumble') && !crits)) warnings.push({ id: r.id, prop: tp, message: 'This roll tests nothing (no comparison, like 3d6 <= Skill), so ' + (THEN_WHEN[c.when] || 'On failure') + ' never happens.' });
-                    checkFormula({ id: r.id, key: r.id }, tp, c.formula, false, r.vis);
+                    checkFormula({ id: r.id, key: r.id }, tp, c.formula, c.roll === true, r.vis); rolledWarn(r.id, tp, c);   // 1.5.9: a Rolled amount may roll dice
                 });
             }
             return;
@@ -5162,7 +5172,7 @@ function validateSystem(sys, F) {
             var pr = 'apply.' + i, tf = c.f ? fieldById(sys, c.f) : null;
             if (!tf || APPLY_KINDS[tf.kind] !== 1) errors.push({ id: r.id, prop: pr, message: 'Pick the pool or number this changes.' });
             else if (r.vis === 'all' && (tf.vis === 'gm' || gmP[tf.id] === 1)) warnings.push({ id: r.id, prop: pr, message: '"' + tf.key + '" is GM only: players will not get this action.' });
-            checkFormula({ id: r.id, key: r.id }, pr, c.formula, false, r.vis);
+            checkFormula({ id: r.id, key: r.id }, pr, c.formula, c.roll === true, r.vis); rolledWarn(r.id, pr, c);   // 1.5.9: a Rolled amount may roll dice
         });
     });
     // Stage 6 F5a1: each list's columns (no dice; Row.* known there), and field keys that would hide a list's names
@@ -5193,7 +5203,7 @@ function validateSystem(sys, F) {
                         if (!c.c && (!tf2 || APPLY_KINDS[tf2.kind] !== 1)) errors.push({ id: f.id, prop: tp2, message: 'Pick the pool, number or counter this changes.' });
                         else if (tf2 && f.vis === 'all' && (tf2.vis === 'gm' || gmP[tf2.id] === 1)) warnings.push({ id: f.id, prop: tp2, message: '"' + tf2.key + '" is GM only: players\u2019 rolls will not change it.' });
                         if (c.when && !tests2 && !((c.when === 'crit' || c.when === 'fumble') && !crits)) warnings.push({ id: f.id, prop: tp2, message: 'This roll tests nothing (no comparison, like 3d6 <= Row.Skill), so ' + (THEN_WHEN[c.when] || 'On failure') + ' never happens.' });
-                        checkFormula({ id: f.id, key: 'l#' + lower(f.key) + '#then' }, tp2, c.formula, false, f.vis, f);
+                        checkFormula({ id: f.id, key: 'l#' + lower(f.key) + '#then' }, tp2, c.formula, c.roll === true, f.vis, f); rolledWarn(f.id, tp2, c);   // 1.5.9
                     });
                 }
                 return;
@@ -5204,7 +5214,7 @@ function validateSystem(sys, F) {
                 var cp = 'list.apply.' + i + '.' + k + '.' + al, tf = c.f ? fieldById(sys, c.f) : null;
                 if (!c.c && (!tf || APPLY_KINDS[tf.kind] !== 1)) errors.push({ id: f.id, prop: cp, message: 'Pick the pool, number or counter this changes.' });   // R2b: or one of the row's counters
                 else if (tf && f.vis === 'all' && (tf.vis === 'gm' || gmP[tf.id] === 1)) warnings.push({ id: f.id, prop: cp, message: '"' + tf.key + '" is GM only: players will not get this action.' });
-                checkFormula({ id: f.id, key: 'l#' + lower(f.key) + '#apply' }, cp, c.formula, false, f.vis, f);
+                checkFormula({ id: f.id, key: 'l#' + lower(f.key) + '#apply' }, cp, c.formula, c.roll === true, f.vis, f); rolledWarn(f.id, cp, c);   // 1.5.9
             });
         });
     });

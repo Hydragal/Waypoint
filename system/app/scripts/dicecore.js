@@ -192,7 +192,7 @@ function cleanRoll(rec) {
     var as = cleanLabel(rec.as); if (as === null) return null; if (as) out.as = as;
     return out;
 }
-// Stage 6 HUD H7: the host's card for an apply action — { type: 'apply', id, from, as?, label?, lines: [{ n, d, v }] (1 to LIMITS.applyLines), ts, priv? }:
+// Stage 6 HUD H7: the host's card for an apply action — { type: 'apply', id, from, as?, label?, lines: [{ n, d, v, roll? }] (1 to LIMITS.applyLines), ts, priv? }:
 // each change as text and numbers only (a field's label, the amount signed, the new value); null when anything is malformed
 function cleanApply(rec) {
     if (!rec || typeof rec !== 'object') return null;
@@ -204,7 +204,9 @@ function cleanApply(rec) {
         var l = rec.lines[i]; if (!l || typeof l !== 'object') return null;
         var n = cleanLabel(l.n); if (!n) return null;
         if (typeof l.d !== 'number' || !isFinite(l.d) || Math.abs(l.d) > 1e15 || typeof l.v !== 'number' || !isFinite(l.v) || Math.abs(l.v) > 1e15) return null;
-        lines.push({ n: n, d: l.d, v: l.v });
+        var ln = { n: n, d: l.d, v: l.v };
+        if (l.roll !== undefined) { if (typeof l.roll !== 'string') return null; var rt = l.roll.replace(new RegExp(CTRL_RE.source, 'g'), ' ').trim().slice(0, 60).trim(); if (rt) ln.roll = rt; }   // 1.5.9: the dice a Rolled amount drew, as text, cut to 60
+        lines.push(ln);
     }
     var out = { id: rec.id, from: from, lines: lines, ts: typeof rec.ts === 'number' && isFinite(rec.ts) ? rec.ts : 0 };
     if (rec.priv !== undefined) { if (rec.priv !== 'gm') return null; out.priv = 'gm'; }
@@ -234,7 +236,7 @@ function applyText(rec) {
     return who + (rec.priv === 'gm' ? ' (private)' : '') + as + ' applied ' + (rec.label || 'an action') + ': ' + applyChanges(rec);
 }
 // the changes alone, "HP \u22123 \u2192 7, FP +2 \u2192 5" (the HUD's bell)
-function applyChanges(rec) { return !rec || !Array.isArray(rec.lines) ? '' : rec.lines.map(function(l) { return l.n + ' ' + (l.d < 0 ? '\u2212' : '+') + fmtNum(Math.abs(l.d)) + ' \u2192 ' + fmtNum(l.v); }).join(', '); }
+function applyChanges(rec) { return !rec || !Array.isArray(rec.lines) ? '' : rec.lines.map(function(l) { return l.n + ' ' + (l.d < 0 ? '\u2212' : '+') + fmtNum(Math.abs(l.d)) + ' \u2192 ' + fmtNum(l.v) + (typeof l.roll === 'string' && l.roll ? ' (' + l.roll + ')' : ''); }).join(', '); }   // 1.5.9: a Rolled amount's dice after it
 // The host's refusal: { type: 'roll-deny', rid, reason, message?, pos?, len? } — pos/len clamped to the expr the client sent
 function cleanDeny(msg, exprLen) {
     if (!msg || typeof msg !== 'object') return null;

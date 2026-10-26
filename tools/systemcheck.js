@@ -14081,6 +14081,103 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             && netX.indexOf('rec.blast = o.blast') > netX.indexOf('if (dtR) rec.dtype = dtR;'));
     }
     // [systemcheck:explosives-tests-end]
+    // [systemcheck:rolled-tests-start]
+    /* ---- 1.5.9 (docs/BOOK_ES_ET_PLAN.md section 0; the owner: "it should operate in a way that enables the handbook rules to be expressed accurately"): a change
+       ticked Rolled may roll dice in its amount, which only the host rolls (applyAct's D), and its line says what it drew ---- */
+    {
+        const DCr = await import(url('dicecore.js')), jr = JSON.stringify;
+        const rawR = { v: 1, name: 'Rl', fields: [
+            { id: 'f_hp', key: 'HP', label: 'Hit points', kind: 'resource', maxFormula: '20', def: 'max', min: -20, hover: true },
+            { id: 'f_wk', key: 'WakeIn', kind: 'number', def: 0, min: 0, max: 60 },
+            { id: 'f_gear', key: 'Gear', kind: 'item-list', list: { counters: [{ key: 'Uses', label: 'Uses', def: 5 }], rolls: [
+                { label: 'Patch', formula: '3d6 <= 30', then: [{ f: 'f_hp', formula: '1d6', add: true, roll: true, when: 'hit' }, { c: 'Uses', formula: '1', roll: true }] },
+                { label: 'Mend', apply: [{ f: 'f_hp', formula: '2d6', add: true, roll: true }, { c: 'Uses', formula: '1d3', roll: true }] },
+                { label: 'Bad', apply: [{ f: 'f_hp', formula: '1d6', add: true }] }] } }],
+            items: [{ id: 'i_kit', name: 'Spark Kit' }],
+            rolls: [
+                { id: 'r_med', label: 'Medpac', apply: [{ f: 'f_hp', formula: '1d6', add: true, roll: true }] },
+                { id: 'r_nod', label: 'No dice', apply: [{ f: 'f_hp', formula: '1d6', add: true }] },
+                { id: 'r_flat', label: 'Flat', apply: [{ f: 'f_hp', formula: '2', add: true, roll: true }] },
+                { id: 'r_wake', label: 'Stabilise', formula: '3d6 <= 30', then: [{ f: 'f_wk', formula: '1d6', set: true, roll: true, when: 'hit' }] },
+                { id: 'r_junk', label: 'Junk', apply: [{ f: 'f_hp', formula: '1d6', add: true, roll: 'yes' }, { f: '', formula: '1d6', roll: true }, { f: 'f_wk', formula: '', roll: true }] },
+                { id: 'r_tick', label: 'Tick', apply: [{ f: 'f_hp', formula: '1d6', add: true, roll: true }], every: { n: 1, u: 'hour' } },
+                { id: 'r_full', label: 'Top', apply: [{ f: 'f_hp', formula: '1', add: true }], every: { n: 1, u: 'hour' } },
+                { id: 'r_rnd', label: 'Round', apply: [{ f: 'f_wk', formula: '1d3', add: true, roll: true }], each: 'round' }],
+            sheet: { sections: [] } };
+        const strip = o => JSON.parse(jr(o), (k, v) => (k === 'roll' && v !== undefined && typeof v !== 'object') ? undefined : v);
+        const gmR = cleanSystem(rawR, { F, gmView: true }), plR = cleanSystem(rawR, { F, gmView: false }), rR = id => gmR.rolls.find(r => r.id === id), lR = gmR.fields[2].list.rolls;
+        check('1.5.9 Rolled, the cleaner (both views): a change keeps roll only as true and only beside a field or a counter and an amount (a list\'s Then and action too, a counter\'s too), written after its When; a word that is no true, a change with no field or no amount drops it; the players\' view keeps it as the GM\'s does; each view is a fixed point; a system that ticks none cleans exactly as it did with the ticks taken out',
+            jr(rR('r_med').apply) === jr([{ f: 'f_hp', formula: '1d6', add: true, roll: true }]) && jr(rR('r_wake').then) === jr([{ f: 'f_wk', formula: '1d6', set: true, when: 'hit', roll: true }])
+            && jr(rR('r_junk').apply) === jr([{ f: 'f_hp', formula: '1d6', add: true }, { f: '', formula: '1d6' }, { f: 'f_wk', formula: '' }])
+            && jr(lR[0].then) === jr([{ f: 'f_hp', formula: '1d6', add: true, when: 'hit', roll: true }, { c: 'Uses', formula: '1', roll: true }]) && jr(lR[1].apply) === jr([{ f: 'f_hp', formula: '2d6', add: true, roll: true }, { c: 'Uses', formula: '1d3', roll: true }])
+            && jr(plR.rolls.find(r => r.id === 'r_med').apply) === jr(rR('r_med').apply) && jr(plR.fields[2].list.rolls) === jr(lR)
+            && jr(cleanSystem(gmR, { F, gmView: true })) === jr(gmR) && jr(cleanSystem(plR, { F, gmView: false })) === jr(plR)
+            && jr(cleanSystem(strip(rawR), { F, gmView: true })) === jr(strip(gmR)) && jr(cleanSystem(strip(rawR), { F, gmView: false })) === jr(strip(plR)) && !/"roll"/.test(jr(cleanSystem(strip(rawR), { F, gmView: true }))),
+            jr([rR('r_med'), rR('r_junk'), lR]));
+        const vR = validateSystem(gmR, F), eR = id => vR.errors.filter(e => e.id === id).map(e => e.prop + ' ' + e.message), wR = id => vR.warnings.filter(e => e.id === id).map(e => e.prop + ' ' + e.message);
+        check('1.5.9 Rolled, what the editor says (validateSystem, which refreshErrors shows under each row): an amount with dice is an error where it is not Rolled, in the words of ever, and nothing where it is; a Rolled amount that rolls no dice is warned of; a list\'s Then and action alike',
+            jr(eR('r_nod')) === jr(['apply.0 An amount cannot roll dice: roll first, and let the amount read the field the result goes in.']) && !eR('r_med').length && !wR('r_med').length && !eR('r_wake').length && !wR('r_wake').length
+            && jr(wR('r_flat')) === jr(['apply.0 Rolled, but this amount rolls no dice, so nothing is rolled.']) && !eR('r_flat').length
+            && jr(eR('f_gear')) === jr(['list Apply “Bad”, change 1: An amount cannot roll dice: roll first, and let the amount read the field the result goes in.']) && jr(wR('f_gear')) === jr(['list Roll “Patch”, then 2: Rolled, but this amount rolls no dice, so nothing is rolled.']),
+            jr([vR.errors, vR.warnings]));
+        const seqR = a => ({ random: f => { const v = a.shift(); if (!(v >= 1 && v <= f)) throw new Error('rolled ' + v + ' on ' + f); return v; } });
+        const chR = { id: 'c_k', name: 'Kael', ownerId: 'u_k', values: { f_hp: { cur: 10 }, f_gear: [{ id: 'w_1', defId: 'i_kit' }] } }, before = jr(chR);
+        const aOn = S.applyAct(gmR, chR, rR('r_med'), makeResolver(gmR, chR, F), F, null, null, undefined, seqR([4])), aNoD = S.applyAct(gmR, chR, rR('r_med'), makeResolver(gmR, chR, F), F);
+        const aNod = S.applyAct(gmR, chR, rR('r_nod'), makeResolver(gmR, chR, F), F, null, null, undefined, seqR([4])), aFlat = S.applyAct(gmR, chR, rR('r_flat'), makeResolver(gmR, chR, F), F, null, null, undefined, seqR([]));
+        const aFlat0 = S.applyAct(gmR, chR, rR('r_flat'), makeResolver(gmR, chR, F), F), aOwn = S.applyAct(gmR, chR, rR('r_med'), makeResolver(gmR, chR, F), F, null, null, undefined, DCr);
+        const rowV = makeResolver(gmR, chR, F).row('f_gear', 'w_1'), aRow = S.applyAct(gmR, chR, lR[1], rowV, F, null, { f: 'f_gear', r: 'w_1' }, undefined, seqR([3, 5, 2]));
+        check('1.5.9 Rolled, applyAct: with the host\'s dice core handed in (D) a Rolled amount rolls, from D.random where it has one (1d6 drew 4: HP 10 + 4), its line saying what it drew ("1d6: 4") and the answer drew: true; a list\'s action rolls each Rolled change, a counter\'s too ("2d6: 8", "1d3: 2"); with no D it is refused in the words of ever, so nothing but the host rolls one; an amount with dice that is not Rolled is refused with D too; a Rolled amount with no dice reads as it did and says nothing of dice; a D with no random of its own rolls through the formula engine\'s own source; the character is untouched',
+            jr(aOn) === jr({ ok: true, values: { f_hp: { cur: 14 } }, lines: [{ f: 'f_hp', n: 'Hit points', d: 4, v: 14, roll: '1d6: 4' }], names: [], drew: true })
+            && jr(aNoD) === jr({ ok: false, reason: 'error', message: 'An amount cannot roll dice.' }) && jr(aNod) === jr(aNoD)
+            && jr(aFlat) === jr(aFlat0) && jr(aFlat) === jr({ ok: true, values: { f_hp: { cur: 12 } }, lines: [{ f: 'f_hp', n: 'Hit points', d: 2, v: 12 }], names: [] })
+            && aOwn.ok && aOwn.drew === true && /^1d6: [1-6]$/.test(aOwn.lines[0].roll) && aOwn.lines[0].d === Number(aOwn.lines[0].roll.slice(5))
+            && jr(aRow) === jr({ ok: true, values: { f_hp: { cur: 18 }, f_gear: [{ id: 'w_1', defId: 'i_kit', ct: { Uses: 3 } }] }, lines: [{ f: 'f_hp', n: 'Hit points', d: 8, v: 18, roll: '2d6: 8' }, { f: 'f_gear', n: 'Uses', d: -2, v: 3, roll: '1d3: 2' }], names: [], drew: true })
+            && jr(chR) === before, jr([aOn, aNoD, aNod, aFlat, aOwn, aRow]));
+        // a seeded run: the same seed, the same dice, through a time rule and the round hook's applyRound
+        const seedR = s => { let x = s >>> 0; return { random: f => { x = (Math.imul(x, 1103515245) + 12345) >>> 0; return 1 + Math.floor(x / 4294967296 * f); } }; };
+        const tA = S.timeRuleRun(gmR, { id: 'c_t', values: { f_hp: { cur: 5 } } }, rR('r_tick'), 3, F, seedR(11)), tB = S.timeRuleRun(gmR, { id: 'c_t', values: { f_hp: { cur: 5 } } }, rR('r_tick'), 3, F, seedR(11)), tN = S.timeRuleRun(gmR, { id: 'c_t', values: { f_hp: { cur: 5 } } }, rR('r_tick'), 3, F, null);
+        const xs = seedR(11), want = 5 + xs.random(6) + xs.random(6) + xs.random(6);
+        const rdA = S.applyRound(gmR, { id: 'c_r', values: {} }, w => makeResolver(gmR, w, F), F, null, 'round', seedR(5)), rdN = S.applyRound(gmR, { id: 'c_r', values: {} }, w => makeResolver(gmR, w, F), F, null, 'round');
+        const ys = seedR(5), wantR = ys.random(3);
+        check('1.5.9 Rolled by the host on its own: a time rule\'s three runs roll its Rolled amount each time from the dice core handed in, the same seed giving the same dice and the same figure (HP 5 and three d6), and say drew: 3; with no dice core they run nothing; the round hook\'s applyRound hands its D on alike, and with none moves nothing',
+            jr(tA) === jr(tB) && tA.ran === 3 && tA.drew === 3 && tA.values.f_hp.cur === Math.min(20, want) && tN.ran === 0 && !('drew' in tN) && jr(tN.values) === '{}'
+            && rdA.ran === 1 && rdA.values.f_wk === wantR && rdN.ran === 0 && jr(rdN.values) === '{}', jr([tA, tN, rdA, rdN, want, wantR]));
+        // runTimeRules (sheets.js, its timerules slice run for real): a run whose Rolled amount drew dice rolled them, so the flood rule says it
+        const shRl = fs.readFileSync(path.join(app, 'scripts', 'sheets.js'), 'utf8').replace(/\r\n/g, NL), cutRl = (a, b) => { const i = shRl.indexOf(a), k = shRl.indexOf(b, i + 1); if (i < 0 || k < 0) throw new Error('rolled slice: ' + a); return shRl.slice(i, k); };
+        const trSrcR = cutRl('// [sinkcheck:timerules-start]', '// [sinkcheck:timerules-end]');
+        const runRl = (fires, D) => { const camp = { system: gmR, chars: { c_a: { id: 'c_a', name: 'Kael', ownerId: 'u_k', values: { f_hp: { cur: 20 } } } } }, out = { cards: [], deltas: [], saves: 0 };
+            const netR = { active: true, role: 'host', syncCharDelta: (id, v) => out.deltas.push([id, JSON.parse(jr(v))]), timeCard: (ch, text, gm) => out.cards.push([ch.id, text, gm]) };
+            out.n = new Function('getActiveCampaign', 'systemOf', 'net', 'F', 'charById', 'timeRuleRun', 'gmOnlyNames', 'applyScope', 'renderViews', 'save', 'window', 'makeResolver', 'hasDice', 'figText', 'ruleRunCtx', 'chainsShallow', "'use strict';" + NL + trSrcR + NL + 'return runTimeRules;')(
+                () => camp, c => c.system, () => netR, () => F, (id, c) => (Object.prototype.hasOwnProperty.call(c.chars, id) ? c.chars[id] : null), S.timeRuleRun, S.gmOnlyNames, S.applyScope, () => {}, () => out.saves++, { wpDiceCore: D, appRender: () => {} }, S.makeResolver, S.hasDice, S.figText, S.ruleRunCtx, trFlat('rolled'))(fires, '1 hour of activity');
+            out.hp = camp.chars.c_a.values.f_hp; return out; };
+        const fR = runRl([{ c: 'c_a', r: 'r_tick', n: 1 }], Object.assign({}, DCr, seedR(3))), fP = runRl([{ c: 'c_a', r: 'r_full', n: 1 }], Object.assign({}, DCr, seedR(3)));
+        trTwin('rolled', trSrcR, { system: gmR, chars: { c_a: { id: 'c_a', name: 'Kael', ownerId: 'u_k', values: { f_hp: { cur: 15 } } } } }, [{ c: 'c_a', r: 'r_tick', n: 2 }], '2 hours', undefined, DCr);
+        check('1.5.9 Rolled, the flood rule (sheets.js runTimeRules, run for real): an hour of a Rolled heal on a pool already full moved nothing yet drew its dice, so it posts its summary, as a roll of dice that moved nothing does; the same hour of a heal that is not Rolled says nothing; and the run is alike with ruleRunCtx and chainsShallow handed in and without',
+            fR.cards.length === 1 && /^1 hour of activity — Kael: Tick ×1: no change$/.test(fR.cards[0][1]) && jr(fR.hp) === jr({ cur: 20 }) && fP.cards.length === 0 && trSeen.filter(x => x[0] === 'rolled:twin').every(x => x[1] === true),
+            jr([fR.cards, fP.cards, fR.hp, trSeen.filter(x => /^rolled/.test(x[0]))]));
+        // the System editor's Rolled ticks (sheets.js applyEditor and listCard, sliced and run for real on a page of plain objects) and their handlers
+        const feR = (tag, cls, text) => ({ tag, className: cls || '', textContent: text === undefined || text === null ? '' : String(text), children: [], title: '', type: '', value: '', checked: false, disabled: false, dataset: {}, style: {}, classList: { add() {} }, on: {}, get childNodes() { return this.children; }, get lastChild() { return this.children[this.children.length - 1] || null; }, appendChild(x) { this.children.push(x); return x; }, insertBefore(x) { this.children.unshift(x); return x; }, addEventListener(k, f) { this.on[k] = f; } });
+        const walkR = (n, p, acc) => { if (p(n)) acc.push(n); (n.children || []).forEach(k => walkR(k, p, acc)); return acc; }, findR = (n, c) => walkR(n, x => (' ' + x.className + ' ').indexOf(' ' + c + ' ') >= 0, []);
+        const inpR = (cls, v, t, ph) => { const i = feR('input', cls); i.type = 'text'; i.value = v == null ? '' : String(v); i.title = t || ''; i.placeholder = ph || ''; return i; };
+        const apER = new Function('el', 'draft', 'APPLY_KINDS', 'select', 'input', 'LIMITS', cutRl('function applyEditor(', 'function applyChangeOf(') + NL + 'return applyEditor;')(feR, { fields: gmR.fields }, S.APPLY_KINDS, cls => feR('select', cls), inpR, S.LIMITS);
+        const rN = new Function('el', cutRl('function numInput(', 'function select(') + NL + 'return { numInput: numInput, numField: numField };')(feR);
+        const LCR = new Function('el', 'input', 'numField', 'document', 'LIMITS', cutRl('function listCard(', 'function renderCombat(') + NL + 'return listCard;')(feR, inpR, rN.numField, { createTextNode: t => ({ tag: '#text', className: '', textContent: t, children: [] }) }, S.LIMITS);
+        const boxA = apER(rR('r_med'), 'apply'), boxT = apER({ then: [{ f: 'f_wk', formula: '1d6', when: 'hit' }] }, 'then'), cardR = LCR(gmR.fields[2], [], gmR.fields.filter(f => S.APPLY_KINDS[f.kind] === 1), []);
+        const tickOf = (n, c) => findR(n, c).map(x => [x.type, x.checked, findR(n, c).length]), lblOf = (n, c) => { const lb = walkR(n, x => x.tag === 'label' && x.children.some(k => (' ' + k.className + ' ').indexOf(' ' + c + ' ') >= 0), [])[0]; return lb ? [lb.className, lb.children.map(k => k.textContent).join(''), lb.title] : null; };
+        const onCh = shRl.slice(shRl.indexOf('function onChange(e) {'), shRl.indexOf('function onClick(e) {'));
+        check('1.5.9 Rolled in the System editor (sheets.js applyEditor and listCard, run for real): a Rolled tick, styled as the editor\'s other ticks, on each change of a roll\'s Then or an action, the Rolls tab\'s and a list\'s, ticked only for true, with its words and its tooltip; the change dispatcher writes it only as true and takes it off unticked, for a system roll and for a list\'s; the amount\'s tooltip says no dice unless Rolled is ticked, the Rolls tab\'s and a list\'s',
+            jr(tickOf(boxA, 'sys-apply-rolled')) === jr([['checkbox', true, 1]]) && jr(tickOf(boxT, 'sys-apply-rolled')) === jr([['checkbox', false, 1]]) && jr(lblOf(boxA, 'sys-apply-rolled')) === jr(['sys-hover', ' Rolled', 'Rolled: the amount may roll dice, such as 1d6. The host rolls it each time, and the card shows the dice'])
+            && jr(findR(cardR, 'sys-list-applyrolled').map(x => x.checked)) === jr([true, true, true, true, false]) && jr(lblOf(cardR, 'sys-list-applyrolled').slice(0, 2)) === jr(['sys-hover', ' Rolled'])
+            && /else if \(c\.indexOf\('sys-apply-rolled'\) >= 0\) \{ var chRl = applyChangeOf\(t, r\); if \(!chRl\) return; if \(t\.checked\) chRl\.roll = true; else delete chRl\.roll; \}/.test(onCh)
+            && /else if \(c\.indexOf\('sys-list-applyrolled'\) >= 0\) \{[^\n]*if \(t\.checked\) arC\.roll = true; else delete arC\.roll; \}/.test(onCh)
+            && findR(boxA, 'sys-apply-formula')[0].title.indexOf('no dice unless Rolled is ticked') > 0 && findR(cardR, 'sys-list-applyformula')[0].title.indexOf('no dice unless Rolled is ticked') > 0,
+            jr([tickOf(boxA, 'sys-apply-rolled'), lblOf(boxA, 'sys-apply-rolled'), findR(cardR, 'sys-list-applyrolled').map(x => x.checked)]));
+        // the host's own presses and hooks hand their dice on (pinned): the GM's press, the round and turn hook, a time rule's flood line
+        check('1.5.9 Rolled, the host\'s own paths (sheets.js, pinned): the GM\'s press of an apply action hands applyAct this machine\'s dice core, the round and turn hook hands applyRound the same, and a time rule\'s run that drew dice counts as rolled for the flood rule',
+            shRl.includes("var res = applyAct(sys, c, act, vv, F(), tc, row ? { f: row.f, r: row.r } : null, undefined, window.wpDiceCore || null);") && shRl.includes("F(), tc, kind, window.wpDiceCore || null), ids = Object.keys(res.values);")
+            && shRl.includes("!(res.rolls.made && ruleDice(rule)) && !(res.drew > 0)) return;"));
+    }
+    // [systemcheck:rolled-tests-end]
     summed = true;
     console.log(NL + pass + ' passed, ' + fail + ' failed.');
     if (fail) process.exit(1);

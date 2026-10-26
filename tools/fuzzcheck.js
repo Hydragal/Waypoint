@@ -987,7 +987,7 @@ function mutations(tpl) {
             'pos': { type: 'pos', campId: 'c1', itemId: 'm_open', wbId: 'tok_p1', x: 150, y: 160, rot: 0, front: 0, final: true, a: 3 },
             'char-edit': { type: 'char-edit', rid: 'r1', charId: 'c_p1', fieldId: 'f_str', value: 12 },
             'char-edits': { type: 'char-edits', rid: 'r2', charId: 'c_p1', values: [{ fieldId: 'f_str', value: 13 }, { fieldId: 'f_dex', value: 11 }] },
-            'char-apply': { type: 'char-apply', rid: 'r3', charId: 'c_p1', act: 'r_heal' },
+            'char-apply': { type: 'char-apply', rid: 'r3', charId: 'c_p1', act: 'r_heal', roll: true, amount: '1d6', apply: [{ f: 'f_hp', formula: '1d6', add: true, roll: true }] },   // 1.5.9: a Rolled tick, an amount or changes a player names are no word of the host's: its mutations reach nothing
             'turn-hold': { type: 'turn-hold', mapId: 'm_open', row: 'row_p1' },
             'turn-act': { type: 'turn-act', mapId: 'm_open', row: 'row_p1' },
             'turn-end': { type: 'turn-end', mapId: 'm_open', row: 'row_p1' },
@@ -1177,7 +1177,7 @@ function mutations(tpl) {
         'pos': o => tokH('tok_p1').x === 150 && tokH('tok_p1').y === 160 && o.p2.some(m => m.type === 'pos' && m.x === 150),
         'char-edit': o => campH().chars.c_p1.values.f_str === 12 && o.p1.some(m => m.type === 'char-ack'),
         'char-edits': () => campH().chars.c_p1.values.f_str === 13 && campH().chars.c_p1.values.f_dex === 11,
-        'char-apply': o => o.p1.some(m => m.type === 'char-ack') && o.p1.some(m => m.type === 'apply'),
+        'char-apply': o => o.p1.some(m => m.type === 'char-ack') && o.p1.some(m => m.type === 'apply' && Array.isArray(m.lines) && m.lines.every(l => !('roll' in l))),   // 1.5.9: the system's own amount, with no dice of the message's
         'turn-hold': () => net.combats.f_open0001.turn === 1 && net.combats.f_open0001.rows.some(r => r.id === 'row_p1' && r.held === 1) && net.combats.f_open0002.turn === 0,   // fold 2: the fight found by the row, the other left as it was
         'turn-end': () => net.combats.f_open0001.turn === 1 && net.combats.f_open0002.turn === 0,
         'char-upload': o => o.p1.some(m => m.type === 'char-upload-ans' && typeof m.n === 'number') && (campH().uploads || []).some(u => u.charId === 'c_p1' && u.reader === 'fuzz'),   // read by the suite's own reader (FUZZ_READER): the proposal waits for the GM with the reader's id, and the answer counts it

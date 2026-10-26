@@ -3154,6 +3154,87 @@ pendingChecks.push((async () => {
         j([gWin.vals, gWin.deltas, gOff.vals, gNo.vals]));
 })());
 
+// 1.5.9 (docs/BOOK_ES_ET_PLAN.md section 0): a change ticked Rolled rolls its amount on the host, with the host's own dice, never from a player's
+// word. char-apply, the roll-req branch's Then and the GM's own net.diceRoll, each sliced and run for real: the amount drawn by the host's dice, the
+// card's line saying the dice, a Then that drew dice saying them on an apply card of its own kept as private as the roll, and a player's message that
+// names dice or a Rolled tick changing nothing the system does not say
+pendingChecks.push((async () => {
+    const url = f => 'file:///' + path.resolve(path.join(__dirname, '..', 'system', 'app', 'scripts', f)).split(String.fromCharCode(92)).join('/');
+    const Sx = await import(url('systemcore.js')), Fx = await import(url('formula.js')), Dx = await import(url('dicecore.js'));
+    const srcR = fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', 'net.js'), 'utf8').replace(/\r\n/g, '\n');
+    const line = k => { const i = srcR.indexOf(k); if (i < 0) throw new Error('netcheck: ' + k + ' not found'); return srcR.slice(i, srcR.indexOf('\n', i)); };
+    const helpers = ['function own(', 'function peerProfileId(', 'function fxLib(', 'function itemLib(', 'function diceFrom('].map(line).join('\n') + '\n';
+    const apSrc = (ordersSrc + '\n' + between('// [netcheck:charapply-start]', '// [netcheck:charapply-end]', 'charapply')), paSrc = between('// [netcheck:postapply-start]', '// [netcheck:postapply-end]', 'postapply'), dlSrc = between('// [netcheck:chardelta-start]', '// [netcheck:chardelta-end]', 'chardelta');
+    const rqSrc = (ordersSrc + '\n' + between('// [netcheck:rollreq-start]', '// [netcheck:rollreq-end]', 'rollreq')), drSrc = between('// [netcheck:diceroll-start]', '// [netcheck:diceroll-end]', 'diceroll');
+    const sysR = Sx.cleanSystem({ v: 1, name: 'R', fields: [
+        { id: 'f_hp', key: 'HP', label: 'HP', kind: 'resource', maxFormula: '20', def: 'max', min: -20, edit: 'gm', hover: true },
+        { id: 'f_wk', key: 'WakeIn', kind: 'number', def: 0, min: 0, max: 60, edit: 'gm', hover: true }],
+        rolls: [
+            { id: 'r_med', label: 'Medpac', apply: [{ f: 'f_hp', formula: '1d6', add: true, roll: true }] },
+            { id: 'r_raw', label: 'Raw', apply: [{ f: 'f_hp', formula: '1d6', add: true }] },
+            { id: 'r_aid', label: 'First Aid', formula: '3d6 <= 30', then: [{ f: 'f_hp', formula: '1d6', add: true, roll: true, when: 'hit' }, { f: 'f_wk', formula: '1d6', set: true, roll: true, when: 'hit' }] },
+            { id: 'r_bare', label: 'Bare', formula: '3d6 <= 30', then: [{ f: 'f_hp', formula: '1d6', add: true, when: 'hit' }] },
+            { id: 'r_flat', label: 'Flat', formula: '3d6 <= 30', then: [{ f: 'f_hp', formula: '2', add: true, when: 'hit' }] }] }, { F: Fx, gmView: true });
+    const START = { f_hp: { cur: 10 } };
+    const fixedF = v => Object.assign({}, Fx, { evaluate: (t, o) => Fx.evaluate(t, o && o.random ? o : Object.assign({}, o, { random: () => v })) });   // the host's own dice, fixed at v
+    // char-apply (the owner's press of an apply action): the host's dice core is window.wpDiceCore
+    const hostA = (msg, D) => {
+        const camp = { id: 'k', system: sysR, items: {}, chars: { c_1: { id: 'c_1', name: 'Kael', ownerId: 'u_a', npc: false, values: JSON.parse(JSON.stringify(START)) } } };
+        const out = { owner: [], mate: [], chat: [], saves: 0 }, box = b => m => { packCheck(m); b.push(JSON.parse(JSON.stringify(m))); };
+        const conns = [{ peer: 'pA', open: true, send: box(out.owner) }, { peer: 'pB', open: true, send: box(out.mate) }];
+        const net = { active: true, role: 'host', paused: false, combats: {}, conns, roster: { pA: { id: 'u_a', name: 'Pebbles' }, pB: { id: 'u_b', name: 'Bo' } }, syncCharDelta() {} };
+        const win = { wpFormula: Fx, wpVtt: { on: () => true }, wpSheets: { playerSystem: c => Sx.cleanSystem(c.system, { F: Fx, gmView: false }), charChanged() {} }, wpDiceCore: D };
+        new Function('msg', 'conn', 'net', 'SC', 'window', 'peerPaused', 'getActiveCampaign', 'saveRemoteSoon', 'sendFailed', 'peerProfileId', 'lim', 'own', 'diceFrom', 'sendTable', 'pushChat', 'logEvent', 'applyLine',
+            'var charLimit = lim, _charSlowSaid = {}, _charPending = {}, _charHost = {}, _rowGrace = {};\n' + dlSrc + '\n' + paSrc + '\n' + apSrc)(
+            msg, conns[0], net, () => Sx, win, () => false, () => camp, () => { out.saves++; }, e => { throw e; }, c => (net.roster[c.peer] ? net.roster[c.peer].id : null), { allow: () => true },
+            (ob, k) => !!ob && Object.prototype.hasOwnProperty.call(ob, k), (p, gm) => ({ id: p.id, name: p.name, gm: !!gm }), (m, ex) => conns.forEach(c => { if (c !== ex && c.open && net.roster[c.peer]) c.send(m); }), m => out.chat.push(JSON.parse(JSON.stringify(m))), () => {}, r => Dx.applyText(r));
+        out.vals = camp.chars.c_1.values; return out; };
+    const D5 = Object.assign({}, Dx, { random: () => 5 });
+    const aR = hostA({ type: 'char-apply', rid: 'a1', charId: 'c_1', act: 'r_med' }, D5), aCard = aR.mate.find(m => m.type === 'apply') || {};
+    const aLie = hostA({ type: 'char-apply', rid: 'a2', charId: 'c_1', act: 'r_raw', roll: true, amount: 6, lines: [{ n: 'HP', d: 6, v: 16 }], apply: [{ f: 'f_hp', formula: '6', add: true, roll: true }] }, D5);
+    const aNoD = hostA({ type: 'char-apply', rid: 'a3', charId: 'c_1', act: 'r_med' }, null);
+    check('1.5.9 Rolled on the wire, char-apply (run for real): the owner\'s press of an action whose change is Rolled is rolled by the host\'s own dice (1d6 drew 5: HP 10 + 5), acked, and its card, to the table as HP is on hover, says the dice ("1d6: 5"); a message that names a roll, an amount, lines or changes of its own changes nothing the system does not say (an amount with dice that is not Rolled is refused in the words of ever); with no dice core on the host a Rolled amount is refused alike',
+        j(aR.vals) === j({ f_hp: { cur: 15 } }) && aR.owner.some(m => m.type === 'char-ack') && j(aCard.lines) === j([{ n: 'HP', d: 5, v: 15, roll: '1d6: 5' }]) && j(Dx.cleanApply(aCard).lines) === j(aCard.lines)
+        && j(aLie.vals) === j(START) && aLie.owner.length === 1 && aLie.owner[0].type === 'char-deny' && aLie.owner[0].reason === 'error' && aLie.owner[0].msg === 'An amount cannot roll dice.' && aLie.saves === 0 && !aLie.mate.length
+        && j(aNoD.vals) === j(START) && aNoD.owner[0].type === 'char-deny' && aNoD.owner[0].msg === 'An amount cannot roll dice.',
+        j([aR.vals, aR.owner, aCard, aLie.owner, aNoD.owner]));
+    // the roll-req branch's Then: the host rolls the roll and then a Rolled amount, both with its own dice
+    const runQ = (msg, fv) => { const out = { table: [], sent: [], deltas: [], saves: 0, chat: [] };
+        const camp = { id: 'k', activeItemId: 'm1', system: sysR, chars: { c_a: { id: 'c_a', name: 'Kael', ownerId: 'u_a', npc: false, values: JSON.parse(JSON.stringify(START)) } }, items: { m1: { type: 'map', whiteboard: [] } } };
+        const conn = { peer: 'pA', open: true, send(m) { packCheck(m); out.sent.push(JSON.parse(JSON.stringify(m))); } };
+        const net = { active: true, role: 'host', paused: false, conns: [conn], roster: { pA: { id: 'u_a', name: 'Pebbles', location: 'm1' } }, combats: {}, syncCharDelta: (id, d) => out.deltas.push([id, JSON.parse(JSON.stringify(d))]) };
+        const win = { wpFormula: fixedF(fv), wpSheets: { playerSystem: c => Sx.cleanSystem(c.system, { F: Fx, gmView: false }), charChanged() {} }, wpVtt: { on: () => true, rulesOn: () => true } };
+        new Function('msg', 'conn', 'net', 'DC', 'SC', 'window', 'getActiveCampaign', 'peerPaused', 'sendFailed', 'sendTable', 'pushRoll', 'logEvent', 'saveRemoteSoon', 'pushChat', 'applyLine', 'var diceLimit = null, _diceSlowSaid = {};\n' + helpers + paSrc + '\n' + rqSrc)(
+            Object.assign({ type: 'roll-req', rid: 'q1', charId: 'c_a' }, msg), conn, net, () => Dx, () => Sx, win, () => camp, () => false, e => { throw e; }, rec => { packCheck(rec); out.table.push(JSON.parse(JSON.stringify(rec))); }, () => {}, () => {}, () => { out.saves++; }, m => out.chat.push(m), r => Dx.applyText(r));
+        out.vals = camp.chars.c_a.values; return out; };
+    const qA = runQ({ act: 'r_aid', expr: '3d6 <= 30' }, 4), qP = runQ({ act: 'r_aid', expr: '3d6 <= 30', priv: 'gm' }, 4), qB = runQ({ act: 'r_bare', expr: '3d6 <= 30', roll: true }, 4), qF = runQ({ act: 'r_flat', expr: '3d6 <= 30' }, 4);
+    const qCard = qA.table.find(m => m.type === 'apply') || {}, qPCard = qP.sent.find(m => m.type === 'apply') || {};
+    check('1.5.9 Rolled on the wire, a player\'s roll with a Rolled Then (roll-req, run for real): the host rolls the roll and then each Rolled amount with its own dice (3d6 of 4s hits; HP + 1d6 of 4, WakeIn set to 1d6 of 4), one delta and a save; the Then\'s dice are said on an apply card of its own after the roll, to the table where the roll went there, and to the roller and the GM alone where the roll was private; a Then that is not Rolled is refused its dice whatever the message says (nothing moves) and a Then with no dice posts no card, as before',
+        qA.table.length === 2 && qA.table[0].type === 'roll' && j(qA.vals) === j({ f_hp: { cur: 14 }, f_wk: 4 }) && j(qA.deltas) === j([['c_a', { f_hp: { cur: 14 }, f_wk: 4 }]]) && qA.saves === 1
+        && qCard.label === 'First Aid' && qCard.as === 'Kael' && j(qCard.from) === j({ id: 'u_a', name: 'Pebbles', gm: false }) && j(qCard.lines) === j([{ n: 'HP', d: 4, v: 14, roll: '1d6: 4' }, { n: 'WakeIn', d: 4, v: 4, roll: '1d6: 4' }]) && Dx.cleanApply(qCard) !== null
+        && qP.table.length === 0 && qPCard.priv === 'gm' && j(qPCard.lines) === j(qCard.lines) && qP.sent.filter(m => m.type === 'roll').length === 1
+        && j(qB.vals) === j(START) && qB.deltas.length === 0 && qB.table.length === 1 && j(qF.vals) === j({ f_hp: { cur: 12 } }) && qF.table.length === 1,
+        j([qA.table, qA.vals, qP.sent.map(m => m.type + ':' + (m.priv || '')), qB.vals, qF.table.map(m => m.type)]));
+    // the GM's own roll: net.diceRoll's Then rolls a Rolled amount with this machine's dice and posts its card through net.postApplyCard
+    const runG = (expr, o, fv) => { const out = { deltas: [], saves: 0, cards: [] };
+        const camp = { id: 'k', system: sysR, chars: { c_a: { id: 'c_a', name: 'Kael', ownerId: 'u_a', npc: false, values: JSON.parse(JSON.stringify(START)) } } };
+        const net = { active: true, role: 'host', stream: false, conns: [], roster: {}, syncCharDelta: (id, d) => out.deltas.push([id, JSON.parse(JSON.stringify(d))]), postApplyCard: (ch, label, lines, scope) => out.cards.push([ch.id, label, JSON.parse(JSON.stringify(lines)), scope]) };
+        const win = { wpFormula: fixedF(fv), wpVtt: { on: () => true }, wpSheets: { tokenCtxFor: () => null, charChanged() {} } };
+        const dr = new Function('net', 'DC', 'SC', 'window', 'getActiveCampaign', 'getProfile', 'toast', 'ui', 'sendFailed', 'sendTable', 'pushRoll', 'logEvent', 'save', 'var _dicePending = null;\n' + helpers + drSrc + '\nreturn net.diceRoll;')(
+            net, () => Dx, () => Sx, win, () => camp, () => ({ id: 'u_gm', name: 'GM' }), () => {}, () => null, e => { throw e; }, () => {}, () => {}, () => {}, () => { out.saves++; });
+        out.ret = dr(expr, Object.assign({ charId: 'c_a' }, o || {})); out.vals = camp.chars.c_a.values; return out; };
+    const gA = runG('3d6 <= 30', { act: 'r_aid', label: 'First Aid' }, 3), gF = runG('3d6 <= 30', { act: 'r_flat' }, 3), gB = runG('3d6 <= 30', { act: 'r_bare' }, 3);
+    check('1.5.9 Rolled, the GM\'s own roll (net.diceRoll, run for real): its Rolled Then rolls with this machine\'s dice (HP + 3, WakeIn 3), one delta and a save, and posts its dice through net.postApplyCard, to the table where every value it moves is shown on hover and else the owner and the GM; a Then with no dice posts no card; one with dice that is not Rolled moves nothing',
+        gA.ret.ok && j(gA.vals) === j({ f_hp: { cur: 13 }, f_wk: 3 }) && j(gA.deltas) === j([['c_a', { f_hp: { cur: 13 }, f_wk: 3 }]]) && gA.saves === 1
+        && j(gA.cards) === j([['c_a', 'First Aid', [{ f: 'f_hp', n: 'HP', d: 3, v: 13, roll: '1d6: 3' }, { f: 'f_wk', n: 'WakeIn', d: 3, v: 3, roll: '1d6: 3' }], 'table']])
+        && gF.cards.length === 0 && j(gF.vals) === j({ f_hp: { cur: 12 } }) && gB.cards.length === 0 && j(gB.vals) === j(START),
+        j([gA.ret, gA.vals, gA.cards, gF.cards, gB.vals]));
+    // applyLines, the card's own lines (sliced and run for real): the dice as text, cut to 60; a line with none as before
+    const apL = new Function(line('function applyLines(lines)') + '\nreturn applyLines;')();
+    check('1.5.9 Rolled, net.js applyLines (run for real): a line\'s dice as text cut to 60 beside its label and two numbers, and nothing for a line with none or with a roll that is no text',
+        j(apL([{ f: 'f_hp', n: 'HP', d: 4, v: 14, roll: '1d6: 4' }, { n: 'EP', d: -1, v: 2 }, { n: 'X', d: 1, v: 1, roll: 7 }, { n: 'Y', d: 1, v: 1, roll: 'z'.repeat(70) }])) === j([{ n: 'HP', d: 4, v: 14, roll: '1d6: 4' }, { n: 'EP', d: -1, v: 2 }, { n: 'X', d: 1, v: 1 }, { n: 'Y', d: 1, v: 1, roll: 'z'.repeat(60) }]));
+})());
+
 // Stage 6 HUD R2b: a list roll with consequences or needs on the wire — the host finds the list's roll in the player's view by its index, rebuilds its
 // formula, refuses it while its needs fail, and moves the row's counters after it lands (sliced roll-req and diceroll, run for real)
 pendingChecks.push((async () => {

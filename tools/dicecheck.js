@@ -116,6 +116,24 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             D.applyText(c) === 'Ana P as Ana applied Apply costs: Fatigue −3 → 0, EP +2 → 5.5'
             && D.applyText(Object.assign({}, c, { priv: 'gm', from: { id: 'g', name: 'Alex', gm: true } })) === 'GM (private) as Ana applied Apply costs: Fatigue −3 → 0, EP +2 → 5.5'
             && D.applyText(Object.assign({}, c, { label: undefined })).indexOf(' applied an action: ') > 0, D.applyText(c));
+        // 1.5.9 (docs/BOOK_ES_ET_PLAN.md section 0): a line whose Rolled amount drew dice carries them as text
+        const rl = l => D.cleanApply(w({ lines: [Object.assign({ n: 'Hit points', d: 4, v: 14 }, l)] })), ctlR = String.fromCharCode(7);
+        check('1.5.9 cleanApply keeps a line\'s roll, the dice a Rolled amount drew, as text: control characters made spaces, trimmed and cut to 60; an empty one leaves no key; one that is no text refuses the card whole; a line with none is as before; applyText says the dice after the change',
+            J(rl({ roll: '1d6: 4' }).lines) === J([{ n: 'Hit points', d: 4, v: 14, roll: '1d6: 4' }]) && rl({ roll: ' 1d6:' + ctlR + '4 ' }).lines[0].roll === '1d6: 4' && rl({ roll: 'x'.repeat(80) }).lines[0].roll === 'x'.repeat(60)
+            && !('roll' in rl({ roll: '  ' }).lines[0]) && [5, null, {}, ['1d6']].every(v => rl({ roll: v }) === null) && J(rl({}).lines) === J([{ n: 'Hit points', d: 4, v: 14 }])
+            && D.applyText(rl({ roll: '1d6: 4' })) === 'Ana P as Ana applied Apply costs: Hit points +4 → 14 (1d6: 4)' && D.applyText(c) === 'Ana P as Ana applied Apply costs: Fatigue −3 → 0, EP +2 → 5.5',
+            J([rl({ roll: '1d6: 4' }), rl({ roll: ' 1d6:' + ctlR + '4 ' })]));
+        {   // the apply card (dice.js renderApply, run for real on a page of plain objects): the dice as a text node of their own
+            const djA = require('fs').readFileSync(require('path').join(__dirname, '..', 'system', 'app', 'scripts', 'dice.js'), 'utf8').replace(/\r\n/g, '\n');
+            const raSrc = djA.slice(djA.indexOf('function renderApply(m) {'), djA.indexOf('// one line for toasts'));
+            const feA = (tag, cls, text) => ({ tag, className: cls || '', textContent: text === undefined ? '' : String(text), children: [], style: {}, appendChild(x) { this.children.push(x); return x; } });
+            const ra = new Function('el', 'net', 'playerHue', 'chatTime', 'fmtNum', 'document', "'use strict';\n" + raSrc + '\nreturn renderApply;')(feA, () => ({ active: false }), () => 0, () => '12:00', D.fmtNum, { createTextNode: t => ({ tag: '#text', textContent: t, children: [] }) });
+            const all = (n, acc) => { acc.push(n); (n.children || []).forEach(k => all(k, acc)); return acc; };
+            const cR = ra({ apply: rl({ roll: '<b>1d6: 4</b>' }) }), cP = ra({ apply: c }), rollsR = all(cR, []).filter(n => n.className === 'apply-roll'), rollsP = all(cP, []).filter(n => n.className === 'apply-roll');
+            check('1.5.9 the apply card (dice.js renderApply, run for real): a line\'s roll is drawn after its new value as one span of its own, apply-roll, holding the text as text and no element; a card with none draws none, as before',
+                rollsR.length === 1 && rollsR[0].textContent === ' <b>1d6: 4</b>' && rollsR[0].children.length === 0 && rollsP.length === 0 && /if \(typeof l\.roll === 'string' && l\.roll\) s\.appendChild\(el\('span', 'apply-roll', ' ' \+ l\.roll\)\);/.test(raSrc),
+                J(rollsR.map(n => n.textContent)));
+        }
     }
 
     /* ---- Stage 6 HUD R1: a roll with consequences names its entry; its modifier and advantage travel as data ---- */
