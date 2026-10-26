@@ -96,9 +96,10 @@ function validPageId(id) { return typeof id === 'string' && PAGE_ID.test(id) && 
 var FIELD_ID = /^f_[A-Za-z0-9_]{1,24}$/, ROLL_ID = /^r_[A-Za-z0-9_]{1,24}$/, SECTION_ID = /^s_[A-Za-z0-9_]{1,24}$/, TAB_ID = /^t_[A-Za-z0-9_]{1,24}$/, CHAR_ID = /^c_[A-Za-z0-9_]{1,24}$/, ITEM_ID = /^i_[A-Za-z0-9_]{1,24}$/, RID_RE = /^[A-Za-z0-9_-]{1,24}$/;
 var SHAPES = Object.freeze({ circle: 1 }), BLAST_AUTO = Object.freeze({ full: 1, roll: 1, measure: 1 });
 // Stage 6 F4a: a carried row's id (w_…; a legacy {defId, qty} row's is derived from its item) and the row ops a change may carry
-var ROW_ID = /^w_[A-Za-z0-9_]{1,24}$/, ROW_OPS = Object.freeze({ add: 1, remove: 1, setQty: 1, keep: 1, undo: 1, set: 1, ov: 1, custom: 1, load: 1, restore: 1 });   // restore (1.5.8): a removed row put back whole at its place (its Undo)   // undo (Stage 6): a pickup taken back; set (F4b): a row's facts; ov (F4c2): a copy's own values; custom (F4c3): a character's own row, made or changed
+var ROW_ID = /^w_[A-Za-z0-9_]{1,24}$/, ROW_OPS = Object.freeze({ add: 1, remove: 1, setQty: 1, keep: 1, undo: 1, set: 1, ov: 1, custom: 1, load: 1, restore: 1, chamber: 1, unchamber: 1 });   // 1.5.9 Chambers from: chamber, one unit of a round into a row's chamber; unchamber, the last one in back to its list
+var CHAMBER_CAP = 8;   // 1.5.9 Chambers from: the most rounds a chamber holds   // restore (1.5.8): a removed row put back whole at its place (its Undo)   // undo (Stage 6): a pickup taken back; set (F4b): a row's facts; ov (F4c2): a copy's own values; custom (F4c3): a character's own row, made or changed
 // Stage 6 F4b: an item's key in formulas (F5a: Skills.<Key>.lvl) — never a row word, which a row's own names use
-var ITEM_KEY = /^[A-Za-z][A-Za-z0-9_]{0,39}$/, ROW_WORDS = Object.freeze({ count: 1, qty: 1, on: 1, has: 1, lvl: 1, paid: 1, row: 1, opened: 1, loaded: 1, loadmax: 1, once: 1, oncecost: 1, oncefree: 1 });   // 1.5.8 Loads from: loaded, a row that holds a loaded copy; loadmax, that copy's full level   // 1.5.8: opened, a row another row opens (openSync)   // 1.5.8 Counted once: once, oncecost, oncefree
+var ITEM_KEY = /^[A-Za-z][A-Za-z0-9_]{0,39}$/, ROW_WORDS = Object.freeze({ count: 1, qty: 1, on: 1, has: 1, lvl: 1, paid: 1, row: 1, opened: 1, loaded: 1, loadmax: 1, once: 1, oncecost: 1, oncefree: 1, chambered: 1 });   // 1.5.9 Chambers from: chambered, how many rounds a row holds   // 1.5.8 Loads from: loaded, a row that holds a loaded copy; loadmax, that copy's full level   // 1.5.8: opened, a row another row opens (openSync)   // 1.5.8 Counted once: once, oncecost, oncefree
 // 1.5.4: the words a list's names put between the list and what they read — List.on.Wt (the rows switched on), List.max.Parry and List.min.Wt
 // (the highest and the lowest one row gives), List.on.max.Parry — so never an item's key or a stat's: List.<word>.<name> never reads a row by its key.
 // max and min were refused as keys already (a reserved suffix, a function's name); they are named here so that stays so whatever those lists hold
@@ -517,6 +518,7 @@ function cleanApplyChanges(list, withWhen, withCounters) {   // withWhen (R1): a
     var out = [], seen = map();
     (Array.isArray(list) ? list : []).forEach(function(c) {
         if (out.length >= LIMITS.applyChanges || !isObj(c)) return;
+        if (c.fire === true && withWhen && withCounters) { var fw = c.when === 'hit' || c.when === 'miss' || c.when === 'malf' || c.when === 'crit' || c.when === 'fumble' ? c.when : '', fk = 'fire|' + fw; if (seen[fk]) return; seen[fk] = 1; var fo = { fire: true }; if (fw) fo.when = fw; out.push(fo); return; }   // 1.5.9 Chambers from: a list roll's Then may fire the first chambered round (once per when)
         var ck = withCounters && typeof c.c === 'string' && STAT_KEY.test(c.c) ? c.c : '', f = !ck && typeof c.f === 'string' && FIELD_ID.test(c.f) ? c.f : '', wh = withWhen && (c.when === 'hit' || c.when === 'miss' || c.when === 'malf' || c.when === 'crit' || c.when === 'fumble') ? c.when : '',   /* R3: on malfunction; 1.5.8: on a critical success or failure */ sk = (ck ? 'c:' + lower(ck) : f) + '|' + wh;
         if ((f || ck) && seen[sk]) return; if (f || ck) seen[sk] = 1;
         var o = ck ? { c: ck, formula: cleanFormulaText(c.formula) || '' } : { f: f, formula: cleanFormulaText(c.formula) || '' }; if (c.set === true) o.set = true; else if (c.add === true) o.add = true;   // Stage 6 HUD R1: Set to (the amount is the new value)
@@ -566,7 +568,7 @@ function fightRuleInto(out, r, gmView) {
 function applyTargets(out, fieldIds, gmView) {
     var keep = function(r, spec) {   // spec (R2b): the list's options, for a change that moves one of its counters
         var fix = function(c) { var tC = null; if (c.c && spec && Array.isArray(spec.counters)) spec.counters.forEach(function(t) { if (!tC && isObj(t) && lower(t.key) === lower(c.c)) tC = t; }); if (tC) c.c = tC.key; var ok = c.c ? !!tC : (!c.f || APPLY_KINDS[fieldIds[c.f]] === 1); if (ok) return c; var o = { f: '', formula: c.formula }; if (c.set) o.set = true; else if (c.add) o.add = true; if (c.when) o.when = c.when; return o; };
-        var dn = function(c) { return (!!c.f || !!c.c) && !!c.formula; };
+        var dn = function(c) { return c.fire === true || ((!!c.f || !!c.c) && !!c.formula); };   // 1.5.9: fire has no amount
         if (r.then) { r.then = r.then.map(fix); if (!gmView && !r.then.every(dn)) delete r.then; }   // R1: a roll's consequences, the same rules (players' view: all of them or none)
         if (!r.apply) return true;
         r.apply = r.apply.map(fix);
@@ -1376,9 +1378,9 @@ function tradeApply(sys, a, b, offA, offB, whoA, whoB, into) {   // into { a: { 
             if (err) return; var f = fieldById(sys, m.fid), spec = isObj(f && f.list) ? f.list : {}, list = listOf(s[1], s[2], m.fid), live = function(r) { return isObj(r) && r.hid !== 1 && r.keptOn !== 1; };
             if (m.row) {
                 var mv = m.row, j = -1;
-                if (typeof mv.defId === 'string' && !isObj(mv.ov)) for (var k = 0; k < list.length; k++) { var r = list[k]; if (live(r) && r.defId === mv.defId && !isObj(r.ov) && !(isObj(spec.on) && rowOn(spec, r)) && (r.lvl === mv.lvl) && !isObj(r.ct) && !isObj(r.ld)) { j = k; break; } }   // 1.5.8: never onto a row that holds a loaded copy
+                if (typeof mv.defId === 'string' && !isObj(mv.ov)) for (var k = 0; k < list.length; k++) { var r = list[k]; if (live(r) && r.defId === mv.defId && !isObj(r.ov) && !(isObj(spec.on) && rowOn(spec, r)) && (r.lvl === mv.lvl) && !isObj(r.ct) && !isObj(r.ld) && !Array.isArray(r.rd) && !isObj(r.fd)) { j = k; break; } }   // 1.5.8: never onto a row that holds a loaded copy
                 if (j >= 0 && spec.noQty) { err = 'one'; return; }
-                if (j >= 0 && !isObj(mv.ct) && !isObj(mv.ld)) { list[j].qty = clampNum((list[j].qty | 0) + mv.qty, 1, LIMITS.maxQty); return; }
+                if (j >= 0 && !isObj(mv.ct) && !isObj(mv.ld) && !Array.isArray(mv.rd) && !isObj(mv.fd)) { list[j].qty = clampNum((list[j].qty | 0) + mv.qty, 1, LIMITS.maxQty); return; }
                 if (spec.noQty && list.some(function(r) { return live(r) && tradeEntry(r, mv); })) { err = 'one'; return; }
                 if (list.filter(live).length >= LIMITS.carried) { err = 'full'; return; }
                 if (!mv.id || at(list, mv.id) >= 0) { var nid = tradeNewId(list); if (!nid) { err = 'full'; return; } mv.id = nid; }
@@ -1394,7 +1396,7 @@ function tradeApply(sys, a, b, offA, offB, whoA, whoB, into) {   // into { a: { 
                 if (want !== '+') { pick(function(r) { return tradeEntry(r, m.like) && !rowOn(spec, r); }); pick(function(r) { return tradeEntry(r, m.like); }); if (isL) pick(function(r) { return !rowOn(spec, r); }); }   // a level (a chip's money) may land on another chip of the list; a stat only on the same entry, else a row of its own
                 if (tgt < 0) {
                     if (list.filter(live).length >= LIMITS.carried) { err = 'full'; return; }
-                    var nr = JSON.parse(JSON.stringify(m.like)); delete nr.keptOn; delete nr.hid; delete nr.ct; delete nr.ld; delete nr.note; nr.qty = 1; nr.id = tradeNewId(list); if (!nr.id) { err = 'full'; return; } if (isObj(spec.on)) nr.on = false;
+                    var nr = JSON.parse(JSON.stringify(m.like)); delete nr.keptOn; delete nr.hid; delete nr.ct; delete nr.ld; delete nr.rd; delete nr.fd; delete nr.note; nr.qty = 1; nr.id = tradeNewId(list); if (!nr.id) { err = 'full'; return; } if (isObj(spec.on)) nr.on = false;
                     if (isL) nr.lvl = 0; else if (typeof nr.defId === 'string') { nr.ov = isObj(nr.ov) ? nr.ov : {}; nr.ov.stats = isObj(nr.ov.stats) ? nr.ov.stats : {}; nr.ov.stats[m.key] = 0; } else { nr.def.stats = isObj(nr.def.stats) ? nr.def.stats : {}; nr.def.stats[m.key] = 0; }
                     list.push(nr); tgt = list.length - 1;
                 }
@@ -1900,6 +1902,18 @@ function cleanListSpec(v, gmView, F) {   // F (F4c1): the engine, for a stat key
             out.load = ldo;
         }
     }
+    if (isObj(v.chamber)) {   // 1.5.9 Chambers from: a row of this list chambers rounds, one unit at a time, from an item list (from, a field id: another list or this one; cleanSystem keeps it only where that list is in the view). cap, how many it holds (1 to CHAMBER_CAP); label, its button's word; by and to, Matched by, as a load's; cats, the categories it takes. The same in both views
+        var chF = typeof v.chamber.from === 'string' && FIELD_ID.test(v.chamber.from) ? v.chamber.from : '';
+        if (chF) {
+            var chN = typeof v.chamber.cap === 'number' && fin(v.chamber.cap) ? Math.round(v.chamber.cap) : 1, cho = { from: chF, cap: Math.max(1, Math.min(CHAMBER_CAP, chN)) };
+            var chBy = typeof v.chamber.by === 'string' ? statKey(v.chamber.by.trim(), F) : '', chTo = typeof v.chamber.to === 'string' ? statKey(v.chamber.to.trim(), F) : '', chByS = '';
+            (out.stats || []).forEach(function(s) { if (!chByS && chBy && lower(s.key) === lower(chBy)) chByS = s.key; });
+            if (chByS && chTo) { cho.by = chByS; cho.to = chTo; }
+            var chLb = cutText(v.chamber.label, LIMITS.label); if (chLb) cho.label = chLb;
+            if (Array.isArray(v.chamber.cats)) { var chc = [], seenCh = map(); v.chamber.cats.forEach(function(c) { var ct2 = cutText(c, LIMITS.category); if (!ct2 || seenCh[lower(ct2)] || chc.length >= LIMITS.listCats) return; seenCh[lower(ct2)] = 1; chc.push(ct2); }); if (chc.length || (!gmView && v.chamber.cats.length === 0)) cho.cats = chc; }
+            out.chamber = cho;
+        }
+    }
     if (isObj(v.once)) {   // 1.5.8 Counted once: rows whose group stat reads the same figure, not 0, are one thing held two ways (onceOf). by and free a number stat, rank the level or a number stat, cost a number stat or a column, each as the list spells it. The same in both views: none of them is a secret
         var onum = function(k) { if (typeof k !== 'string') return ''; var lk = lower(k.trim()); for (var oi = 0; lk && out.stats && oi < out.stats.length; oi++) if (out.stats[oi].kind !== 'pick' && lower(out.stats[oi].key) === lk) return out.stats[oi].key; return ''; };
         var ocol = function(k) { if (typeof k !== 'string') return ''; var lk = lower(k.trim()); for (var oj = 0; lk && out.cols && oj < out.cols.length; oj++) if (lower(out.cols[oj].key) === lk) return out.cols[oj].key; return ''; };
@@ -2296,6 +2310,8 @@ function cleanSystem(sys, opts) {
     }
     var ldLv = map(); out.fields.forEach(function(f) { if (f.kind === 'item-list' && isObj(f.list) && isObj(f.list.lvl)) ldLv[f.id] = 1; });   // 1.5.8 Loads from: another item list of this view, with a level (the players' view: a GM-only list is not there, so its load goes)
     out.fields.forEach(function(f) { if (f.kind === 'item-list' && isObj(f.list) && isObj(f.list.load) && (f.list.load.from === f.id || ldLv[f.list.load.from] !== 1)) delete f.list.load; });
+    var chIl = map(); out.fields.forEach(function(f) { if (f.kind === 'item-list') chIl[f.id] = 1; });   // 1.5.9 Chambers from: an item list of this view, this very list too (the players' view: a GM-only list is not there, so its chamber goes)
+    out.fields.forEach(function(f) { if (f.kind === 'item-list' && isObj(f.list) && isObj(f.list.chamber) && chIl[f.list.chamber.from] !== 1) delete f.list.chamber; });
     if (gmView) oneSpelling(out.fields);   // Stage 6 F4c1 (critic 2): one spelling per stat key, the first list's in field order
     var seenR = map();
     (Array.isArray(sys.rolls) ? sys.rolls : []).forEach(function(r) { if (out.rolls.length >= LIMITS.rolls) return; var c = cleanRollDef(r, gmView); if (!c || seenR[c.id]) return; seenR[c.id] = 1; out.rolls.push(c); });
@@ -2351,7 +2367,7 @@ function cleanSystem(sys, opts) {
             (Array.isArray(sys.items) ? sys.items : []).concat(Array.isArray(sys.core) ? sys.core : []).forEach(function(it) { if (isObj(it) && it.vis === 'gm') catL([it.category], gmCat); });
         }
         placeCatOk = function(c) { return visCat[lower(c)] === 1 || (gmCat !== null && gmCat[lower(c)] !== 1); };
-        out.fields.forEach(function(f) { if (f.list && Array.isArray(f.list.cats)) f.list.cats = f.list.cats.filter(placeCatOk); if (f.list && isObj(f.list.load) && Array.isArray(f.list.load.cats)) f.list.load.cats = f.list.load.cats.filter(placeCatOk); });   // 1.5.8: a load's categories too (one left with none takes none)
+        out.fields.forEach(function(f) { if (f.list && Array.isArray(f.list.cats)) f.list.cats = f.list.cats.filter(placeCatOk); if (f.list && isObj(f.list.load) && Array.isArray(f.list.load.cats)) f.list.load.cats = f.list.load.cats.filter(placeCatOk); if (f.list && isObj(f.list.chamber) && Array.isArray(f.list.chamber.cats)) f.list.chamber.cats = f.list.chamber.cats.filter(placeCatOk); });   // 1.5.9: a chamber's alike   // 1.5.8: a load's categories too (one left with none takes none)
     }
     var seenFx = map(), effs = [];   // 5h: the status-effect library, after the fields (its changes are checked against them); absent when empty
     (Array.isArray(sys.effects) ? sys.effects : []).forEach(function(d) { if (effs.length >= LIMITS.effects) return; var c = cleanEffectDef(d, fieldIds, gmView, F); if (!c || seenFx[c.id]) return; seenFx[c.id] = 1; effs.push(c); });
@@ -2461,7 +2477,7 @@ function cleanValue(field, v, opts) {
         if (!Array.isArray(v)) return undefined;
         var items = (opts && opts.items) || map(), seenD = map(), seenR = map(), list = [], nVis = 0, nHid = 0;
         for (var i = 0; i < v.length && i < LIMITS.carried * 4 && (nVis < LIMITS.carried || nHid < LIMITS.carried); i++) {   // Stage 6: visible rows and kept curses counted apart (a kept row never pushes out, or blocks, a visible one)
-            var rw = cleanRow(v[i], items, field.list, isObj(field.list) && isObj(field.list.load) && opts && opts.specs ? opts.specs[field.list.load.from] : undefined); if (!rw) continue;   // 1.5.8: the source list's options, for a loaded copy
+            var rw = cleanRow(v[i], items, field.list, isObj(field.list) && isObj(field.list.load) && opts && opts.specs ? opts.specs[field.list.load.from] : undefined, isObj(field.list) && isObj(field.list.chamber) && opts && opts.specs ? opts.specs[field.list.chamber.from] : undefined); if (!rw) continue;   // 1.5.9: and the chamber's list, for its rounds   // 1.5.8: the source list's options, for a loaded copy
             var rk = rowIdOf(rw); if (!rk || seenR[rk] || (!rw.id && rw.defId && seenD[rw.defId])) continue;
             if (rw.hid === 1 ? nHid >= LIMITS.carried : nVis >= LIMITS.carried) continue;
             seenR[rk] = 1; if (rw.defId && rw.hid !== 1) seenD[rw.defId] = 1; if (rw.hid === 1) nHid++; else nVis++; list.push(rw);
@@ -2601,6 +2617,7 @@ function applyAct(sys, char, act, vars, F, tctx, rowCtx, same) {   // rowCtx (R2
     var amts = [], names = [], seenN = map();
     for (var i = 0; i < act.apply.length; i++) {
         var c = act.apply[i], f = isObj(c) && typeof c.f === 'string' ? fieldById(sys, c.f) : null, ctr = null, lfC = null;
+        if (isObj(c) && c.fire === true) { amts.push({ fire: true, lf: rowCtx && typeof rowCtx.f === 'string' ? fieldById(sys, rowCtx.f) : null }); continue; }   // 1.5.9 Chambers from: fire, no amount (a list with no chamber fires nothing)
         if (isObj(c) && typeof c.c === 'string') { lfC = rowCtx && typeof rowCtx.f === 'string' ? fieldById(sys, rowCtx.f) : null; (lfC && isObj(lfC.list) && Array.isArray(lfC.list.counters) ? lfC.list.counters : []).forEach(function(t) { if (!ctr && isObj(t) && lower(t.key) === lower(c.c)) ctr = t; }); if (!ctr) return { ok: false, reason: 'field' }; }   // R2b
         if ((!ctr && (!f || APPLY_KINDS[f.kind] !== 1)) || typeof c.formula !== 'string' || !c.formula) return { ok: false, reason: 'field' };
         var p = F.parse(c.formula); if (!p.ok) return { ok: false, reason: 'error', message: p.error.message };
@@ -2613,10 +2630,22 @@ function applyAct(sys, char, act, vars, F, tctx, rowCtx, same) {   // rowCtx (R2
         if (ctr || f.kind === 'resource') v = Math.round(v);
         amts.push({ f: f, ctr: ctr, lf: lfC, amt: c.set === true ? v : (v > 0 ? v : 0), add: c.add === true, set: c.set === true });   // R1: Set to takes the amount as it is
     }
-    if (!amts.some(function(a) { return a.set || a.amt > 0; })) return { ok: false, reason: 'none' };
-    var work = Object.assign({}, char, { values: JSON.parse(JSON.stringify(char.values || {})) }), out = {}, lines = [], asIs = same === true;   // asIs: work still as char stands
+    if (!amts.some(function(a) { return a.fire || a.set || a.amt > 0; })) return { ok: false, reason: 'none' };
+    var work = Object.assign({}, char, { values: JSON.parse(JSON.stringify(char.values || {})) }), out = {}, lines = [], asIs = same === true, fired = null;   // asIs: work still as char stands
     for (var j = 0; j < amts.length; j++) {
-        var a = amts[j]; if (!a.set && !(a.amt > 0)) continue;
+        var a = amts[j]; if (!a.fire && !a.set && !(a.amt > 0)) continue;
+        if (a.fire) {   // 1.5.9 Chambers from: the first chambered round leaves the chamber and is kept on the row as the round last fired (one copy, replaced at each shot). Nothing chambered: nothing fires
+            if (!a.lf || !isObj(a.lf.list) || !isObj(a.lf.list.chamber) || !rowCtx || typeof rowCtx.r !== 'string') continue;
+            var rowsF = JSON.parse(JSON.stringify(Array.isArray(work.values[a.lf.id]) ? work.values[a.lf.id] : [])), rwF = null;
+            rowsF.forEach(function(r) { if (!rwF && isObj(r) && rowIdOf(r) === rowCtx.r) rwF = r; }); if (!rwF || rwF.hid === 1) return { ok: false, reason: 'missing' };
+            if (!Array.isArray(rwF.rd) || !rwF.rd.length) continue;
+            var shot = rwF.rd[0]; rwF.rd = rwF.rd.slice(1); if (!rwF.rd.length) delete rwF.rd; rwF.fd = shot;
+            work.values[a.lf.id] = rowsF; out[a.lf.id] = rowsF; asIs = false;
+            var shD = rowDef(sys, shot), shN = (shD && shD.def && shD.def.name) || 'A round', left = Array.isArray(rwF.rd) ? rwF.rd.length : 0;
+            fired = { f: a.lf.id, r: rowCtx.r, name: shN };
+            lines.push({ f: a.lf.id, n: shN + ' fired, chambered', d: -1, v: left });
+            continue;
+        }
         if (a.ctr) {   // Stage 6 HUD R2b: one of the row's counters — from 0 to the row's own most, on the working copy of its list
             asIs = false;
             var rowsC = work.values[a.lf.id] = JSON.parse(JSON.stringify(Array.isArray(work.values[a.lf.id]) ? work.values[a.lf.id] : [])), rwC = null;
@@ -2638,7 +2667,9 @@ function applyAct(sys, char, act, vars, F, tctx, rowCtx, same) {   // rowCtx (R2
         var nv = a.f.kind === 'resource' ? ed.value.cur : a.f.kind === 'toggle' ? (ed.value ? 1 : 0) : ed.value;
         lines.push({ f: a.f.id, n: a.f.label || a.f.key, d: a.set ? nv - cur : a.add ? a.amt : -a.amt, v: nv });   // a Set's line says what it moved
     }
-    return { ok: true, values: out, lines: lines, names: names };
+    if (!lines.length) return { ok: false, reason: 'none' };   // 1.5.9: a Then that only fires, with nothing chambered
+    var doneA = { ok: true, values: out, lines: lines, names: names }; if (fired) doneA.fired = fired;   // 1.5.9: the round it fired, for the blast it places
+    return doneA;
 }
 // Stage 6 HUD G10 (his reference turn sweep, module/combat.mjs: when a combat's round changes, every combatant's Turn follows it and the sweep
 // resets its tallies): the apply actions ticked Each round, which the host runs by itself on every character in a combat each time its round
@@ -2800,7 +2831,8 @@ function chainsWalk(sys, F) {
         (spec && Array.isArray(spec.stats) ? spec.stats : []).forEach(function(x) { if (isObj(x) && typeof x.key === 'string') st[lower(x.key)] = x; });
         (spec && Array.isArray(spec.cols) ? spec.cols : []).forEach(function(x) { if (isObj(x) && typeof x.key === 'string') cl[lower(x.key)] = x; });
         (spec && Array.isArray(spec.counters) ? spec.counters : []).forEach(function(x) { if (isObj(x) && typeof x.key === 'string') ct[lower(x.key)] = x; });
-        return (lists[lk] = { k: lk, st: st, cl: cl, ct: ct });
+        var chs = spec && isObj(spec.chamber) ? chamberSrc(sys, spec) : null;   // 1.5.9: the list its chambered rounds come from (Row.round.*, Row.fired.*)
+        return (lists[lk] = { k: lk, st: st, cl: cl, ct: ct, chs: chs });
     };
     var defNode = function(f, sfx) {   // a field's name: its definition worked out (a formula, a skill's base, a pool's most), '' for one read as stored
         var t = DEF_PROP[f.kind] ? f[DEF_PROP[f.kind]] : null; if (typeof t !== 'string' || !t) return '';   // none, GM only or missing: answered with nothing on the chain
@@ -2831,7 +2863,7 @@ function chainsWalk(sys, F) {
     };
     var nodeOf = function(name, L) {   // the resolver's own lookup (fn, and a column's rowVars): the node a name is worked out under, or ''
         var l = lower(name);
-        if (L && l.slice(0, 4) === 'row.') { var w = l.slice(4); return w.indexOf('.') < 0 ? rowNode(L, w) : ''; }
+        if (L && l.slice(0, 4) === 'row.') { var w = l.slice(4), cw = w.split('.'); return w.indexOf('.') < 0 ? rowNode(L, w) : cw.length === 2 && (cw[0] === 'round' || cw[0] === 'fired') && L.chs ? rowNode(listOf(L.chs), cw[1]) : ''; }   // 1.5.9: a round's stat or column, on its own list
         if (ix[l]) return defNode(ix[l], '');
         if (l.indexOf('.') > 0) { var ln = listNode(l); if (ln !== undefined) return ln; }
         var dot = l.lastIndexOf('.'); if (dot > 0 && RESERVED_SUFFIX[l.slice(dot + 1)] && ix[l.slice(0, dot)]) return defNode(ix[l.slice(0, dot)], l.slice(dot + 1));
@@ -2967,6 +2999,8 @@ function cleanCharItem(msg) {
     if (msg.op === 'add' && msg.pay !== undefined) { if (typeof msg.pay !== 'number' || !fin(msg.pay) || msg.pay < 0 || msg.pay > LIMITS.statAbs) return null; out.pay = moneyR(msg.pay); }   // 1.5.6: what a purchase paid, in total
     if ((msg.op === 'remove' || msg.op === 'setQty') && msg.get !== undefined) { if (typeof msg.get !== 'number' || !fin(msg.get) || msg.get < 0 || msg.get > LIMITS.statAbs) return null; out.get = moneyR(msg.get); }   // ... and what a sale is paid
     if (msg.op === 'load') { if (msg.from === null || msg.from === undefined) out.from = null; else if (typeof msg.from === 'string' && ROW_ID.test(msg.from)) out.from = msg.from; else return null; if (msg.back !== undefined) { if (typeof msg.back !== 'string' || !ROW_ID.test(msg.back)) return null; out.back = msg.back; } }   // 1.5.8 Loads from: the source row (null: unload), and a fresh id for a copy coming out as a row of its own
+    if (msg.op === 'chamber') { if (typeof msg.from !== 'string' || !ROW_ID.test(msg.from)) return null; out.from = msg.from; }   // 1.5.9 Chambers from: the source row a round comes off
+    if (msg.op === 'unchamber' && msg.back !== undefined) { if (typeof msg.back !== 'string' || !ROW_ID.test(msg.back)) return null; out.back = msg.back; }   // ... and a fresh id for a round coming back as a row of its own
     if (msg.op === 'custom') { var dfp = cleanDefPatch(msg.def); if (!dfp) return null; out.def = dfp; }   // F4c3: a patch (an object; {} is a new blank row), the GM's keys kept so that a player sending one hears "field"
     return out;
 }
@@ -3056,7 +3090,7 @@ function cleanRowDef(d, gmView) {   // an item's definition carried on a row, by
 // 1.5.8 Loads from: a loaded copy — one unit of a source row as it was taken, as a row of that list with no id, quantity, level, switch or counters
 // (what it holds is the host row's counter). Cleaned on the source list's terms (srcSpec) with a stand-in id. Only on a row of quantity 1 of a
 // list with a load, never on a kept curse
-var LD_DROP = Object.freeze({ id: 1, qty: 1, lvl: 1, on: 1, ct: 1, hid: 1, keptOn: 1, opn: 1, ld: 1 });
+var LD_DROP = Object.freeze({ id: 1, qty: 1, lvl: 1, on: 1, ct: 1, hid: 1, keptOn: 1, opn: 1, ld: 1, rd: 1, fd: 1 });   // 1.5.9: nor a chamber
 function cleanLd(e, items, srcSpec) {
     if (!isObj(e)) return null;
     var x = {}; Object.keys(e).forEach(function(k) { if (LD_DROP[k] !== 1 && !(k in Object.prototype)) x[k] = e[k]; }); x.id = 'w_ld'; x.qty = 1;
@@ -3064,19 +3098,37 @@ function cleanLd(e, items, srcSpec) {
     delete r.id; delete r.qty; delete r.lvl; delete r.on; delete r.ct; delete r.hid; delete r.keptOn; return r;
 }
 function withLd(o, e, items, spec, srcSpec) { if (!isObj(spec) || !isObj(spec.load) || !isObj(e.ld) || o.qty !== 1 || o.hid === 1) return o; var ld = cleanLd(e.ld, items, srcSpec); if (ld) o.ld = ld; return o; }
-function cleanRow(e, items, spec, srcSpec) {   // spec (F4b): the list's options (f.list), for the level; srcSpec (1.5.8): the list a loaded copy came from
+// 1.5.9 Chambers from: a chambered round, and the round last fired — one unit of a source row as it was taken, as a row of that list with no id,
+// quantity, switch or counters (its level kept: what it holds). Cleaned on the source list's terms (chSpec) with a stand-in id. Only on a row of
+// quantity 1 of a list with a chamber, never on a kept curse; at most its cap of chambered rounds, in the order they go in (the first fires first)
+var RD_DROP = Object.freeze({ id: 1, qty: 1, on: 1, ct: 1, hid: 1, keptOn: 1, opn: 1, ld: 1, rd: 1, fd: 1 });
+function cleanRd(e, items, chSpec) {
+    if (!isObj(e)) return null;
+    var x = {}; Object.keys(e).forEach(function(k) { if (RD_DROP[k] !== 1 && !(k in Object.prototype)) x[k] = e[k]; }); x.id = 'w_rd'; x.qty = 1;
+    var r = cleanRow(x, items, isObj(chSpec) ? chSpec : null); if (!r) return null;
+    delete r.id; delete r.qty; delete r.on; delete r.ct; delete r.hid; delete r.keptOn; return r;
+}
+function chamberCap(spec) { var c = isObj(spec) && isObj(spec.chamber) ? spec.chamber.cap : 1; return typeof c === 'number' && fin(c) ? Math.max(1, Math.min(CHAMBER_CAP, Math.round(c))) : 1; }
+function withRd(o, e, items, spec, chSpec) {
+    if (!isObj(spec) || !isObj(spec.chamber) || o.qty !== 1 || o.hid === 1) return o;
+    var cap = chamberCap(spec), rd = []; (Array.isArray(e.rd) ? e.rd : []).forEach(function(x) { if (rd.length >= cap) return; var c = cleanRd(x, items, chSpec); if (c) rd.push(c); });
+    if (rd.length) o.rd = rd;
+    var fd = isObj(e.fd) ? cleanRd(e.fd, items, chSpec) : null; if (fd) o.fd = fd;
+    return o;
+}
+function cleanRow(e, items, spec, srcSpec, chSpec) {   // spec (F4b): the list's options (f.list), for the level; srcSpec (1.5.8): the list a loaded copy came from; chSpec (1.5.9): the list a chambered round came from
     if (!isObj(e)) return null;
     var id = typeof e.id === 'string' && ROW_ID.test(e.id) ? e.id : null, qty = clampNum(cleanNum(e.qty, 1) | 0, 1, LIMITS.maxQty);
     if (typeof e.defId === 'string' && ITEM_ID.test(e.defId)) {
         var known = items[e.defId] === 1, snap = !known && isObj(e.snap) ? cleanRowDef(e.snap, true) : null;   // a copy of a deleted entry keeps its snapshot; once the entry is back the row reads the library again
         if (!known && !snap) return null;   // an unknown item with no copy is dropped (the rule before Stage 6)
-        var o = {}; if (id) o.id = id; o.defId = e.defId; o.qty = qty; rowFacts(o, e, spec); var ov = cleanOv(e.ov, spec); if (ov) o.ov = ov; if (snap) o.snap = snap; if (id && e.hid === 1) o.hid = 1; if (e.keptOn === 1 && o.on === true) o.keptOn = 1; return withLd(o, e, items, spec, srcSpec);   // F4c2: its own values (a custom row never has any: its definition is its own)
+        var o = {}; if (id) o.id = id; o.defId = e.defId; o.qty = qty; rowFacts(o, e, spec); var ov = cleanOv(e.ov, spec); if (ov) o.ov = ov; if (snap) o.snap = snap; if (id && e.hid === 1) o.hid = 1; if (e.keptOn === 1 && o.on === true) o.keptOn = 1; return withRd(withLd(o, e, items, spec, srcSpec), e, items, spec, chSpec);   // F4c2: its own values (a custom row never has any: its definition is its own)
     }
     if (!id || !isObj(e.def)) return null;
     var d = cleanRowDef(e.def, e.lnk !== 1); if (!d) return null;
     var cs = rowStats(e.def.stats, spec); if (cs) d.stats = cs; else delete d.stats;   // F4c1: a custom or inline copy carries its list's stats only
     if (e.lnk === 1) rowText(d, e.def); else ownLong(d, e.def);   // 1.5.4: an owner's inline copy keeps the entry's long text, cleaned again (the host sends it for an entry players may see); 1.5.5 (155): a row of the character's own keeps its own
-    var c = { id: id, qty: qty }; rowFacts(c, e, spec); c.def = d; if (e.lnk === 1) { c.lnk = 1; if (typeof e.src === 'string' && ITEM_ID.test(e.src)) { c.src = e.src; var cnR = cleanNeeds(e.needs, true); if (cnR) c.needs = cnR; var crR = cleanFormulaText(e.needsIf); if (crR) { c.needsIf = crR; var cfR = typeof e.needsFrom === 'number' ? lvlNum(e.needsFrom) : undefined; if (cfR !== undefined) c.needsFrom = cfR; } } } else { if (e.own === 1) c.own = 1; if (e.hid === 1) c.hid = 1; if (e.keptOn === 1 && c.on === true) c.keptOn = 1; } return withLd(c, e, items, spec, srcSpec);   // F4c3: own (a row its owner made), never on an inline copy
+    var c = { id: id, qty: qty }; rowFacts(c, e, spec); c.def = d; if (e.lnk === 1) { c.lnk = 1; if (typeof e.src === 'string' && ITEM_ID.test(e.src)) { c.src = e.src; var cnR = cleanNeeds(e.needs, true); if (cnR) c.needs = cnR; var crR = cleanFormulaText(e.needsIf); if (crR) { c.needsIf = crR; var cfR = typeof e.needsFrom === 'number' ? lvlNum(e.needsFrom) : undefined; if (cfR !== undefined) c.needsFrom = cfR; } } } else { if (e.own === 1) c.own = 1; if (e.hid === 1) c.hid = 1; if (e.keptOn === 1 && c.on === true) c.keptOn = 1; } return withRd(withLd(c, e, items, spec, srcSpec), e, items, spec, chSpec);   // F4c3: own (a row its owner made), never on an inline copy
 }
 // Stage 6 F4b: a row's facts, after its quantity — the level on the list's terms (as stored while the list has none), the switch, the note.
 // keptOn (after them, the GM's machine only): the owner switched a curse-on-contact item off and the GM keeps it on
@@ -3335,7 +3387,9 @@ function projFacts(o, r) { if (isObj(r.ct)) o.ct = JSON.parse(JSON.stringify(r.c
 function ownStats(pd, src, spec) { if (spec === true) return; var st = isObj(src) ? rowStats(src.stats, spec) : null; if (st) pd.stats = st; else delete pd.stats; }
 function projectRows(rows, view, lib, spec, ruleShown) {   // ruleShown (126b): the host's judge of whether a player's own app could work an entry's rule out; none: no rule travels
     if (!Array.isArray(rows)) return undefined;
-    var ldP = function(o, r) { if (!isObj(spec) || !isObj(spec.load) || !isObj(r.ld)) return o; var pl = projectRows([Object.assign({}, r.ld, { id: 'w_ld', qty: 1 })], view, lib, null, ruleShown); if (pl && pl.length) { var x = pl[0]; delete x.id; delete x.qty; o.ld = x; } return o; };   // 1.5.8 Loads from: a loaded copy, as a row of its own list goes (a GM-only entry's inline, its players' fields only)
+    var chP1 = function(x) { var pl = projectRows([Object.assign({}, x, { id: 'w_rd', qty: 1 })], view, lib, null, ruleShown); if (!pl || !pl.length) return null; var y = pl[0]; delete y.id; delete y.qty; return y; };   // 1.5.9 Chambers from: a chambered round and the round last fired, as a row of their own list goes
+    var chP = function(o, r) { if (!isObj(spec) || !isObj(spec.chamber)) return; var rr = (Array.isArray(r.rd) ? r.rd : []).map(chP1).filter(Boolean); if (rr.length) o.rd = rr; var ff = isObj(r.fd) ? chP1(r.fd) : null; if (ff) o.fd = ff; };
+    var ldP = function(o, r) { chP(o, r); if (!isObj(spec) || !isObj(spec.load) || !isObj(r.ld)) return o; var pl = projectRows([Object.assign({}, r.ld, { id: 'w_ld', qty: 1 })], view, lib, null, ruleShown); if (pl && pl.length) { var x = pl[0]; delete x.id; delete x.qty; o.ld = x; } return o; };   // 1.5.8 Loads from: a loaded copy, as a row of its own list goes (a GM-only entry's inline, its players' fields only)
     var vis = map(); (view && Array.isArray(view.items) ? view.items : []).forEach(function(it) { if (isObj(it) && typeof it.id === 'string') vis[it.id] = 1; });
     var out = [], room = LIMITS.rowsText, ownRoom = LIMITS.ownText;   // 1.5.4: the long text this list's rows may carry in all (rows past it go without); 1.5.5 (155): the rows of the character's own, a room of their own
     rows.forEach(function(r) {
@@ -3384,6 +3438,7 @@ function applyRowOp(sys, char, fieldId, q, F, opts) {
     var at = function(rid) { for (var i = 0; i < list.length; i++) if (rowIdOf(list[i]) === rid) return i; return -1; };
     if (q.op !== 'add' && typeof q.rowId === 'string') { var oxA = at(q.rowId); if (oxA >= 0 && isObj(list[oxA]) && typeof list[oxA].opn === 'string' && (opts.player || q.op !== 'remove')) return { ok: false, reason: 'opened' }; }   // 1.5.8: an opened row comes and goes with what opens it (openSync); only the GM may take one off, and it comes back while it is opened
     if (q.op === 'load') return rowLoad(sys, char, f, list, spec, q, opts, at, vo, F);   // 1.5.8 Loads from
+    if (q.op === 'chamber' || q.op === 'unchamber') return rowChamber(sys, char, f, list, spec, q, opts, at, vo);   // 1.5.9 Chambers from
     if (q.op === 'add') {
         if (typeof q.defId !== 'string' || !ITEM_ID.test(q.defId)) return { ok: false, reason: 'value' };
         var ent = itemDef(sys, q.defId), fromLib = false;
@@ -3398,7 +3453,7 @@ function applyRowOp(sys, char, fieldId, q, F, opts) {
             if (!nmR.ok) return { ok: false, reason: 'needs', msg: needsSays(ent, missR, function(id) { var d2 = itemDef(sys, id); if (d2) return valueOpts(opts.view || null).items[id] === 1 ? d2.name : null; var l2 = typeof opts.lib === 'function' ? opts.lib(id) : null; return isObj(l2) && l2.vis !== 'gm' ? l2.name : null; }) };
         }
         var n = spec && spec.noQty ? 1 : clampNum((q.qty | 0) || 1, 1, LIMITS.maxQty), have = -1;
-        if (!(spec && spec.multi && q.rowId !== undefined)) for (var j = 0; j < list.length; j++) if (isObj(list[j]) && list[j].defId === q.defId && (fromLib || !list[j].snap) && list[j].hid !== 1 && typeof list[j].opn !== 'string') { have = j; break; }   // never into a kept curse; F4b: a list that takes the same item more than once makes a new row
+        if (!(spec && spec.multi && q.rowId !== undefined)) for (var j = 0; j < list.length; j++) if (isObj(list[j]) && list[j].defId === q.defId && (fromLib || !list[j].snap) && list[j].hid !== 1 && typeof list[j].opn !== 'string' && !isObj(list[j].ld) && !Array.isArray(list[j].rd) && !isObj(list[j].fd)) { have = j; break; }   // never into a kept curse; F4b: a list that takes the same item more than once makes a new row
         if (have >= 0 && spec && spec.noQty) return { ok: false, reason: 'value' };   // F4b: no quantity — once each
         if (have >= 0) { extra.base = list[have].qty | 0; list[have].qty = clampNum(extra.base + n, 1, LIMITS.maxQty); extra.row = rowIdOf(list[have]); extra.qty = list[have].qty; extra.added = extra.qty - extra.base; }   // the same item again raises its quantity
         else {
@@ -3614,7 +3669,7 @@ function applyOv(rw, base, pq, spec, F, player, aspec, note) {   // aspec (F5a2)
 // null unloads. A player needs the right to change both lists. Answers the host list as value and the source list in also
 var LD_SAME = ['defId', 'def', 'lnk', 'src', 'snap', 'ov', 'note', 'paid', 'own'];
 function loadSame(sys, sl, a, b) {
-    if (!isObj(a) || a.hid === 1 || typeof a.opn === 'string' || a.keptOn === 1 || isObj(a.ld)) return false;
+    if (!isObj(a) || a.hid === 1 || typeof a.opn === 'string' || a.keptOn === 1 || isObj(a.ld) || Array.isArray(a.rd) || isObj(a.fd)) return false;   // 1.5.9: never a row that holds a chamber
     for (var i = 0; i < LD_SAME.length; i++) if (JSON.stringify(a[LD_SAME[i]]) !== JSON.stringify(b[LD_SAME[i]])) return false;
     var da = rowDef(sys, a), db = rowDef(sys, b);
     return rowLvl(sl, a, da && da.def) === rowLvl(sl, b, db && db.def) && rowOn(sl, a) === rowOn(sl, b);
@@ -3663,6 +3718,60 @@ function rowLoad(sys, char, f, list, spec, q, opts, at, vo, F) {
     return { ok: true, value: list, also: also, row: q.rowId, qty: 1, name: name, from: sf.id };
 }
 // [systemcheck:load-end]
+// [systemcheck:chamber-start]
+// 1.5.9 Chambers from (the owner, by prompt on 2026-10-25: "A cell and a round", after a sheet website's own grenade launchers). A row of a list with
+// spec.chamber holds rounds in a chamber of its own (rd, copies in the order they went in, at most its cap): chamber takes ONE unit off a row of
+// the chamber's list (another list, or this very one: rounds may stand beside the weapons) that the chamber takes (chamberTakes: its categories and
+// its Matched by), and unchamber gives the last one in back, onto a stack only where it is the same thing in the same state (loadSame), else as a
+// row of its own under q.back. A roll's Then with fire takes the first one out and keeps it as the round last fired (fd; applyAct). A player needs
+// the right to change both lists. Answers the host list as value and, where the round list is another, that list in also
+function chamberSrc(sys, spec) { var ch = isObj(spec) && isObj(spec.chamber) ? spec.chamber : null, sf = ch && isObj(sys) && Array.isArray(sys.fields) ? fieldById(sys, ch.from) : null; return sf && sf.kind === 'item-list' ? sf : null; }
+// Matched by (spec.chamber.by, a stat of the host list; to, a stat of the round list): a round fits a host row only where the two read the same figure
+function chamberFits(sys, spec, h, sl, s) { var ch = isObj(spec) && isObj(spec.chamber) ? spec.chamber : null; if (!ch || !ch.by || !ch.to) return true; var hd = rowDef(sys, h), sd = rowDef(sys, s); return rowStat(spec, hd ? hd.def : null, ch.by) === rowStat(sl, sd ? sd.def : null, ch.to); }
+// a row the chamber may take a unit of: live, no launcher itself (it holds no chamber, no fired round, nothing loaded), of a category it takes, a match
+function chamberTakes(sys, spec, h, sl, s) {
+    var ch = isObj(spec) && isObj(spec.chamber) ? spec.chamber : null; if (!ch || !isObj(s) || s === h) return false;
+    if (s.hid === 1 || typeof s.opn === 'string' || s.keptOn === 1 || isObj(s.ld) || Array.isArray(s.rd) || isObj(s.fd)) return false;
+    var sd = rowDef(sys, s); if (!sd || !isObj(sd.def)) return false;
+    if (Array.isArray(ch.cats) && !catIn(ch.cats, sd.def.category)) return false;
+    return chamberFits(sys, spec, h, sl, s);
+}
+function rowChamber(sys, char, f, list, spec, q, opts, at, vo) {
+    var ch = isObj(spec) && isObj(spec.chamber) ? spec.chamber : null, sf = chamberSrc(sys, spec), same = !!(sf && sf.id === f.id);
+    if (!ch || !sf) return { ok: false, reason: 'field' };
+    if (opts.player && !same && ((sf.edit !== 'owner' && !openChar(char)) || sf.vis !== 'all')) return { ok: false, reason: 'field' };
+    if (typeof q.rowId !== 'string' || !ROW_ID.test(q.rowId)) return { ok: false, reason: 'value' };
+    var hi = at(q.rowId); if (hi < 0 || !isObj(list[hi]) || list[hi].hid === 1) return { ok: false, reason: 'missing' };
+    var h = list[hi]; if ((h.qty | 0) !== 1) return { ok: false, reason: 'value' };   // a stack of them is not one
+    var sl = isObj(sf.list) ? sf.list : null, sList = same ? list : JSON.parse(JSON.stringify(isObj(char) && isObj(char.values) && Array.isArray(char.values[sf.id]) ? char.values[sf.id] : []));
+    var cap = chamberCap(spec), rd = Array.isArray(h.rd) ? h.rd.slice() : [], name = '';
+    if (q.op === 'chamber') {
+        if (rd.length >= cap) return { ok: false, reason: 'value', msg: 'It is full: it holds ' + cap + ' at most.' };
+        var from = typeof q.from === 'string' ? q.from : '', si = -1; for (var k = 0; k < sList.length; k++) if (rowIdOf(sList[k]) === from) { si = k; break; }
+        var s = si >= 0 ? sList[si] : null, sd = s ? rowDef(sys, s) : null;
+        if (!s || s === h || !sd || !isObj(sd.def) || s.hid === 1 || typeof s.opn === 'string' || s.keptOn === 1) return { ok: false, reason: 'missing' };
+        if (!chamberTakes(sys, spec, h, sl, s)) return { ok: false, reason: 'value', msg: 'That does not fit it.' };   // its categories, its Matched by, or a launcher itself
+        var cp = cleanRd(s, vo.items, sl); if (!cp) return { ok: false, reason: 'value' };
+        if ((s.qty | 0) > 1) s.qty = (s.qty | 0) - 1; else sList.splice(si, 1);
+        rd.push(cp); h.rd = rd; name = sd.def.name || 'Item';
+    } else {   // unchamber: the last one in comes out
+        if (!rd.length) return { ok: false, reason: 'value', msg: 'Nothing is chambered.' };
+        var bk = JSON.parse(JSON.stringify(rd[rd.length - 1])); bk.qty = 1; if (isObj(sl) && isObj(sl.on)) bk.on = sl.on.def === true; else delete bk.on;
+        var sj = -1; if (!(sl && sl.noQty)) for (var j = 0; j < sList.length; j++) if (sList[j] !== h && loadSame(sys, sl, sList[j], bk)) { sj = j; break; }
+        if (sj >= 0) sList[sj].qty = clampNum((sList[sj].qty | 0 || 1) + 1, 1, LIMITS.maxQty);
+        else {
+            if (!rowIdFree(sList, q.back, knownItems(sys, opts))) return { ok: false, reason: 'value' };
+            if (sList.filter(function(r) { return !(isObj(r) && r.hid === 1); }).length >= LIMITS.carried) return { ok: false, reason: 'field' };
+            var nr = { id: q.back }; Object.keys(bk).forEach(function(kk) { if (!(kk in Object.prototype)) nr[kk] = bk[kk]; }); var cr = cleanRow(nr, vo.items, sl); if (!cr) return { ok: false, reason: 'value' }; sList.push(cr);
+        }
+        rd.pop(); if (rd.length) h.rd = rd; else delete h.rd;
+        var bd = rowDef(sys, bk); name = (bd && bd.def && bd.def.name) || 'Item';
+    }
+    var res = { ok: true, value: list, row: q.rowId, qty: 1, name: name, from: sf.id };
+    if (!same) { var also = {}; also[sf.id] = sList; res.also = also; }
+    return res;
+}
+// [systemcheck:chamber-end]
 function rowIdFree(list, rid, known) { return typeof rid === 'string' && ROW_ID.test(rid) && !list.some(function(r) { return rowIdOf(r) === rid; }) && !known.some(function(it) { return isObj(it) && typeof it.id === 'string' && 'w_' + it.id.slice(2) === rid; }); }
 function knownItems(sys, opts) { return opts.player ? (opts.view && Array.isArray(opts.view.items) ? opts.view.items : []) : (Array.isArray(sys.items) ? sys.items : []); }
 // F4c3 (D2): whether a key is taken in a list — by another row's definition (rowDef: a library copy, a deleted item's copy, a custom row) or by
@@ -4479,6 +4588,7 @@ function makeResolver(sys, char, F, ropts) {   // ropts.noFx: the values with no
         if (w === 'opened') return !x.virt && isObj(x.r) && typeof x.r.opn === 'string' ? 1 : 0;   // 1.5.8: a row another row opens, 1 (openSync)
         if (w === 'loaded') return !x.virt && isObj(x.r) && isObj(x.r.ld) ? 1 : 0;   // 1.5.8 Loads from: a row that holds a loaded copy, 1
         if (w === 'loadmax') return x.virt ? 0 : loadMax(sys, L.spec, x.r);   // ... and that copy's full level (0 with none)
+        if (w === 'chambered') return !x.virt && isObj(x.r) && Array.isArray(x.r.rd) ? x.r.rd.length : 0;   // 1.5.9 Chambers from: how many rounds it holds
         if (w === 'once' || w === 'oncecost' || w === 'oncefree') return onceWord(L, x, w);   // 1.5.8 Counted once
         if (L.st[w]) { if (L.st[w].kind !== 'pick') return rowStat(L.spec, x.d, L.st[w].key); var lb = rowStat(L.spec, x.d, L.st[w].key), op = null; (L.st[w].opts || []).forEach(function(o) { if (!op && lower(o.label) === lower(lb)) op = o; }); if (!op) return 0; var pk = lower(L.f.key) + '#' + x.id + '.' + w; if (chain.indexOf(pk) >= 0) return loopError(pk); pretty[pk] = pretty[pk] || (L.f.key + '[' + ((x.d && typeof x.d.name === 'string' && x.d.name) || x.id) + '].' + L.st[w].key); chain.push(pk); var ov = fn(op.name); chain.pop(); if (!detail[pk]) { var pv0 = viaOf([{ name: op.name }]); if (pv0) detail[pk] = { base: 0, mods: [], via: pv0 }; } return ov === undefined ? { error: { message: 'Unknown name "' + op.name + '"', pos: 0, len: 0 } } : ov; }   // F5a2: a choice reads its option's value (ST); none chosen: 0
         if (L.cl[w]) return colVal(L, x, L.cl[w]);
@@ -4495,8 +4605,18 @@ function makeResolver(sys, char, F, ropts) {   // ropts.noFx: the values with no
         var best = null; for (var mi = 0; mi < gi.mem.length; mi++) { var v = one(L.rows[gi.mem[mi]]); if (isObj(v) && v.error) return v; if (typeof v === 'number' && isFinite(v) && (best === null || v > best)) best = v; }
         return best === null ? 0 : best;
     }
+    // 1.5.9 Chambers from: Row.round.<w>, a stat or a column of the next round to fire, and Row.fired.<w>, of the round last fired, else the next
+    // (a website's launchedPayload: lastFired ?? loaded); 0 with none. Worked out on the round's own list, its copy a row of that list
+    function roundVal(L, x, w) {
+        var sg = w.split('.'); if (sg.length !== 2 || (sg[0] !== 'round' && sg[0] !== 'fired') || !L.spec || !isObj(L.spec.chamber)) return undefined;
+        var sf = chamberSrc(sys, L.spec); if (!sf) return undefined;
+        var SL = listCtx(sf); if (!SL.st[sg[1]] && !SL.cl[sg[1]]) return undefined;
+        var rd = !x.virt && isObj(x.r) && Array.isArray(x.r.rd) ? x.r.rd : [], cp = sg[0] === 'fired' && !x.virt && isObj(x.r) && isObj(x.r.fd) ? x.r.fd : rd[0];
+        if (!isObj(cp)) return 0;
+        var cd = rowDef(sys, cp); return rowVal(SL, { r: Object.assign({}, cp, { qty: 1 }), d: cd ? cd.def : null, id: (x.id || '') + '~' + sg[0] }, sg[1]);
+    }
     function rowVars(L, x) {   // a column's names: Row.* reads this row, every other name the resolver (one cache)
-        var v = function(name) { var l = lower(name); if (l.slice(0, 4) === 'row.') { var w = l.slice(4); return w.indexOf('.') < 0 ? rowVal(L, x, w) : undefined; } return fn(name); };
+        var v = function(name) { var l = lower(name); if (l.slice(0, 4) === 'row.') { var w = l.slice(4); return w.indexOf('.') < 0 ? rowVal(L, x, w) : roundVal(L, x, w); } return fn(name); };
         v.detail = function(name) { var l = lower(name); if (l.slice(0, 4) === 'row.' && l.indexOf('.', 4) < 0) return detail[lower(L.f.key) + '#' + x.id + '.' + l.slice(4)] || null; return detail[l] || null; };   // 1.5.8: a row's own column under its own key
         return v;
     }
@@ -4910,7 +5030,8 @@ function validateSystem(sys, F) {
         if (w[word] === 'pick') return total ? { pickTotal: true, list: lf } : { id: '', key: node + '.' + word, kind: 'number', vis: lf.vis, list: lf };   // F5a2: a choice reads its option's value; it has no total; a node of the loop graph (owed review F5a2#5)
         if (w[word] === 'stat' || word === 'qty' || word === 'paid' || (total ? word === 'count' : word === 'lvl')) return { id: '', key: node, kind: 'number', vis: lf.vis, list: lf, noEdge: true };
         if (!total && (word === 'on' || word === 'has')) return { id: '', key: node, kind: 'toggle', vis: lf.vis, list: lf, noEdge: true };
-        if (!total && (word === 'opened' || word === 'loaded' || word === 'loadmax')) return { id: '', key: node, kind: 'number', vis: lf.vis, list: lf, noEdge: true };   // 1.5.8: Row.opened; Row.loaded and Row.loadmax (Loads from)
+        if (!total && (word === 'opened' || word === 'loaded' || word === 'loadmax')) return { id: '', key: node, kind: 'number', vis: lf.vis, list: lf, noEdge: true };
+        if (!total && word === 'chambered' && isObj(lf.list) && isObj(lf.list.chamber)) return { id: '', key: node, kind: 'number', vis: lf.vis, list: lf, noEdge: true };   // 1.5.9 Chambers from: Row.chambered   // 1.5.8: Row.opened; Row.loaded and Row.loadmax (Loads from)
         if (!total && (word === 'once' || word === 'oncefree')) return { id: '', key: node, kind: 'number', vis: lf.vis, list: lf, noEdge: true };   // 1.5.8 Counted once
         if (!total && word === 'oncecost') { var ocK = isObj(lf.list) && isObj(lf.list.once) && typeof lf.list.once.cost === 'string' ? lower(lf.list.once.cost) : ''; return ocK && w[ocK] === 'col' ? { id: '', key: node + '.' + ocK, kind: 'number', vis: lf.vis, list: lf } : { id: '', key: node, kind: 'number', vis: lf.vis, list: lf, noEdge: true }; }
         return null;
@@ -4926,6 +5047,11 @@ function validateSystem(sys, F) {
     function listTarget(n, rowList) {
         var sg = lower(n).split('.');
         if (sg[0] === 'row' && sg.length === 2 && !ix.row) return rowList ? wordTarget(rowList, sg[1], false) : { rowOutside: true };
+        if (sg[0] === 'row' && sg.length === 3 && (sg[1] === 'round' || sg[1] === 'fired') && !ix.row) {   // 1.5.9 Chambers from: Row.round.<w>, Row.fired.<w> — a stat or a column of the chamber's list, on a list with a chamber
+            if (!rowList) return { rowOutside: true };
+            var chV = isObj(rowList.list) && isObj(rowList.list.chamber) ? chamberSrc(sys, rowList.list) : null; if (!chV) return { noChamber: true, list: rowList };
+            var cwV = listWords(chV)[sg[2]]; return cwV === 'stat' || cwV === 'col' || cwV === 'pick' ? { id: '', key: 'l#' + lower(chV.key), kind: 'number', vis: chV.vis, noEdge: true } : null;
+        }
         var lf = lsts[sg[0]]; if (!lf || sg.length < 2 || sg.length > 4) return null;
         if (sg.length === 2) return wordTarget(lf, sg[1], true);
         var on4 = sg.length === 4 && sg[1] === 'on', ex = on4 ? sg[2] : sg[1];   // 1.5.4: L.max.<w>, L.min.<w>, L.on.max.<w>, L.on.min.<w> (the resolver's listName)
@@ -4950,6 +5076,7 @@ function validateSystem(sys, F) {
             if (!target && l === 'rollcrit' && /(^|\.)then\./.test(prop)) target = { id: '', key: 'RollCrit', kind: 'number', vis: 'all', noEdge: true };   // 1.5.8: a roll's consequence reads its critical
             if (!target && l === 'rollmargin' && /(^|\.)then\./.test(prop)) target = { id: '', key: 'RollMargin', kind: 'number', vis: 'all', noEdge: true };   // 1.5.8: and how far it beat its target
             if (!target) { var lt = listTarget(n, rowList); if (lt && lt.rowOutside) { errors.push({ id: owner.id, prop: prop, message: '"' + n + '" names a row, so it is known only in a list\u2019s own columns.', pos: Math.max(0, lower(text).indexOf(l)), len: n.length }); return; } target = lt; }   // F5a1
+            if (target && target.noChamber) { errors.push({ id: owner.id, prop: prop, message: '"' + n + '" reads a chambered round, but ' + (target.list.label || target.list.key) + ' has no Chambers from.', pos: Math.max(0, lower(text).indexOf(l)), len: n.length }); return; }   // 1.5.9
             if (target && target.ctrTotal) { errors.push({ id: owner.id, prop: prop, message: '"' + n + '" is a counter, so it has no ' + (target.ext ? 'highest or lowest' : 'total') + ': read one row (' + target.list.key + '.<key>.' + n.split('.').pop() + ').', pos: Math.max(0, lower(text).indexOf(l)), len: n.length }); return; }   // R2
             if (target && target.pickTotal) { errors.push({ id: owner.id, prop: prop, message: '"' + n + '" is a choice, so it has no ' + (target.ext ? 'highest or lowest' : 'total') + ': read one row (' + target.list.key + '.<key>.' + n.split('.').pop() + ').', pos: Math.max(0, lower(text).indexOf(l)), len: n.length }); return; }   // F5a2
             if (target && target.extWord) { errors.push({ id: owner.id, prop: prop, message: '"' + n + '": the highest and the lowest read a number stat or a column of ' + (target.list.label || target.list.key) + ', not ' + n.split('.').pop() + '.', pos: Math.max(0, lower(text).indexOf(l)), len: n.length }); return; }   // 1.5.4
@@ -5037,6 +5164,7 @@ function validateSystem(sys, F) {
                     var rp2 = F.parse(r.formula || ''), tests2 = !!(rp2.ok && rp2.ast && rp2.ast.body && rp2.ast.body.t === 'cmp');
                     r.then.forEach(function(c, k) {
                         var tp2 = 'list.then.' + i + '.' + k + '.' + rl2, tf2 = c.f ? fieldById(sys, c.f) : null;
+                        if (c.fire === true) { if (!isObj(f.list.chamber)) errors.push({ id: f.id, prop: tp2, message: 'Fire takes a round out of the chamber, but this list has no Chambers from.' }); else if (c.when && !tests2 && !((c.when === 'crit' || c.when === 'fumble') && !crits)) warnings.push({ id: f.id, prop: tp2, message: 'This roll tests nothing (no comparison, like 3d6 <= Row.Skill), so ' + (THEN_WHEN[c.when] || 'On failure') + ' never happens.' }); return; }   // 1.5.9: fire has no amount
                         if (!c.c && (!tf2 || APPLY_KINDS[tf2.kind] !== 1)) errors.push({ id: f.id, prop: tp2, message: 'Pick the pool, number or counter this changes.' });
                         else if (tf2 && f.vis === 'all' && (tf2.vis === 'gm' || gmP[tf2.id] === 1)) warnings.push({ id: f.id, prop: tp2, message: '"' + tf2.key + '" is GM only: players\u2019 rolls will not change it.' });
                         if (c.when && !tests2 && !((c.when === 'crit' || c.when === 'fumble') && !crits)) warnings.push({ id: f.id, prop: tp2, message: 'This roll tests nothing (no comparison, like 3d6 <= Row.Skill), so ' + (THEN_WHEN[c.when] || 'On failure') + ' never happens.' });
@@ -5614,6 +5742,11 @@ function rowRollNames(sys, char, fieldId, rowId, names, F) {
             var nm = typeof n === 'string' ? n : (n && n.name); if (typeof nm !== 'string') return;
             var l = lower(nm); if (l.slice(0, 4) !== 'row.') { push(nm); return; }
             var w = l.slice(4), c = null, st = null;
+            if (/^(round|fired)\.[^.]+$/.test(w)) {   // 1.5.9 Chambers from: a round's names — a GM-only round, or a round list only the GM sees, keeps the roll the GM's
+                var chS = isObj(spec.chamber) ? chamberSrc(sys, spec) : null, rdN = row && Array.isArray(row.rd) ? row.rd : [], cpN = w.indexOf('fired.') === 0 && row && isObj(row.fd) ? row.fd : rdN[0], cdN = cpN ? rowDef(sys, cpN) : null;
+                if (!chS || chS.vis === 'gm' || (cdN && cdN.def && cdN.def.vis === 'gm')) gm = true;
+                return;
+            }
             (Array.isArray(spec.cols) ? spec.cols : []).forEach(function(x) { if (!c && isObj(x) && lower(x.key) === w) c = x; });
             (Array.isArray(spec.stats) ? spec.stats : []).forEach(function(x) { if (!st && isObj(x) && lower(x.key) === w) st = x; });
             if (c) { push(f.key + '.' + c.key); if (!done[lower(c.key)] && typeof c.formula === 'string' && c.formula && F && F.names) { done[lower(c.key)] = 1; expand(F.names(c.formula)); } }   // each column once, however deep (owed review F5b#1: a list has up to LIMITS.listCols)
@@ -5817,6 +5950,6 @@ function orderBySide(rows, isPc, first) {
     var a = [], b = []; list.forEach(function(r) { (!!isPc(r) === (first === 'pc') ? a : b).push(r); });
     return a.concat(b);
 }
-var API = { VERSION: VERSION, loadFits: loadFits, DIE_NAMES: DIE_NAMES, cleanDie: cleanDie, dieOf: dieOf, rollDie: rollDie, tradeOfferable: tradeOfferable, tradeInto: tradeInto, moneyBoxes: moneyBoxes, moneyHeld: moneyHeld, moneyMove: moneyMove, rowOpMoney: rowOpMoney, cleanTradeOffer: cleanTradeOffer, tradeApply: tradeApply, TRADE_LINES: TRADE_LINES, cleanDamageRules: cleanDamageRules, damageStep: damageStep, cleanCharDamage: cleanCharDamage, DMG_CONDS: DMG_CONDS, cleanPlaceCats: cleanPlaceCats, catSplits: catSplits, catHome: catHome, catPlace: catPlace, cleanFieldUnit: cleanFieldUnit, metricOf: metricOf, unitTail: unitTail, readMeasure: readMeasure, heightWords: heightWords, MEASURES: MEASURES, measureWords: measureWords, unitWords: unitWords, unitHead: unitHead, listFig: listFig, listWords: listWords, unitOf: unitOf, figText: figText, figFmt: figFmt, weightWords: weightWords, textWords: textWords, measureStore: measureStore, rollNeedsOk: rollNeedsOk, rollNeedsSays: rollNeedsSays, onGroup: onGroup, onlyOne: onlyOne, onHeld: onHeld, cleanNeeds: cleanNeeds, hideNeeds: hideNeeds, needsMet: needsMet, needsSays: needsSays, needRule: needRule, ruleTrue: ruleTrue, setRuleJudge: setRuleJudge, cleanBudgets: cleanBudgets, budgetsOf: budgetsOf, budgetWatch: budgetWatch, budgetSays: budgetSays, cleanDesc: cleanDesc, cleanLvls: cleanLvls, EVERY_UNITS: EVERY_UNITS, cleanEvery: cleanEvery, FIGHT_UNITS: FIGHT_UNITS, cleanInFight: cleanInFight, timeRuleRun: timeRuleRun, ruleRunCtx: ruleRunCtx, needsHeld: needsHeld, chainsShallow: chainsShallow, cleanFace: cleanFace, charForView: charForView, mapGridOf: mapGridOf, tokenCell: tokenCell, shapeStandIn: shapeStandIn, cleanFrame: cleanFrame, openChar: openChar, newCharRules: newCharRules, charClash: charClash, coreOf: coreOf, setLibraryFind: setLibraryFind, statKeys: statKeys, statPicks: statPicks, cleanIcon: cleanIcon, droppedCounts: droppedCounts, parseLasts: parseLasts, lastsSecs: lastsSecs, roundSecs: roundSecs, fxLeftNow: fxLeftNow, fxTick: fxTick, mapCellScale: mapCellScale, moveAllowCells: moveAllowCells, dueActs: dueActs, gridCells: gridCells, cleanTurn: cleanTurn, TURN_UNITS: TURN_UNITS, TIME_WORDS: TIME_WORDS, roundActs: roundActs, combatChars: combatChars, applyRound: applyRound, thenChanges: thenChanges, thenCrit: thenCrit, withRollCrit: withRollCrit, THEN_WHEN: THEN_WHEN, dmgTypeOf: dmgTypeOf, rollMods: rollMods, openSync: openSync, cleanOpens: cleanOpens, showsIf: showsIf, rowRollNames: rowRollNames, applyAct: applyAct, applyScope: applyScope, cleanCharApply: cleanCharApply, APPLY_KINDS: APPLY_KINDS, hudView: hudView, hudHasContent: hudHasContent, pinTargetsAll: pinTargetsAll, TONES: TONES, valueTone: valueTone, cleanTones: cleanTones, playableChars: playableChars, activeCharOf: activeCharOf, activeChars: activeChars, ownedTokenPlan: ownedTokenPlan, applyOwnerOps: applyOwnerOps, migrateBindings: migrateBindings, tokenSourceFor: tokenSourceFor, playsAs: playsAs, cleanNewPlayers: cleanNewPlayers, newPlayerRules: newPlayerRules, waitingTokensOf: waitingTokensOf, waitingNeed: waitingNeed, stackZ: stackZ, LIMITS: LIMITS, PALETTE_KEYS: PALETTE_KEYS, headerEdits: headerEdits, pinTargets: pinTargets, pruneGroups: pruneGroups, GROUP_ID: GROUP_ID, GLYPHS: GLYPHS, glyphPath: glyphPath, ROLL_TONES: ROLL_TONES, KINDS: KINDS, STORED: STORED, DEF_PROP: DEF_PROP, LAYOUT: LAYOUT, validPageId: validPageId, BAND_KINDS: BAND_KINDS, IDENTITY_KINDS: IDENTITY_KINDS, LEDGER_KINDS: LEDGER_KINDS, headerEntry: headerEntry, captionParts: captionParts, capExpr: capExpr, labelNames: labelNames, labelGmNames: labelGmNames, valueOpts: valueOpts, rowIdOf: rowIdOf, cleanRowDef: cleanRowDef, rowDef: rowDef, projectRows: projectRows, cleanListSpec: cleanListSpec, STAT_KEY: STAT_KEY, statKey: statKey, cleanEntryStats: cleanEntryStats, rowStats: rowStats, rowStat: rowStat, plusText: plusText, rowPaid: rowPaid, cleanListRules: cleanListRules, cleanOv: cleanOv, mergeOv: mergeOv, itemReach: itemReach, OV_LOCK: OV_LOCK, lvlClamp: lvlClamp, rowLvl: rowLvl, rowOn: rowOn, cleanItemKey: cleanItemKey, ROW_WORDS: ROW_WORDS, applyRowOp: applyRowOp, orphanRows: orphanRows, stampRows: stampRows, libSnaps: libSnaps, carriedBy: carriedBy, cleanItemMods: cleanItemMods, fieldKinds: fieldKinds, unseenMods: unseenMods, cleanItemMsg: cleanItemMsg, RM_MODES: RM_MODES, applyEffectOp: applyEffectOp, cleanCharEffect: cleanCharEffect, gmEffectNames: gmEffectNames, fxText: fxText, activeEffects: activeEffects, tokenEffects: tokenEffects, autoEffectsOn: autoEffectsOn, tokenOwnEffects: tokenOwnEffects, projectEffects: projectEffects, FACING_NAMES: FACING_NAMES, TOKEN_NAMES: TOKEN_NAMES, POSTURE_IDS: POSTURE_IDS, POSTURE_NAMES: POSTURE_NAMES, DEFAULT_POSTURES: DEFAULT_POSTURES, cleanPostures: cleanPostures, postureList: postureList, ownPostures: ownPostures, postureAt: postureAt, postureSeven: postureSeven, stanceCtx: stanceCtx, tokenCtx: tokenCtx, setAimSource: setAimSource, bearingTo: bearingTo, aimsOf: aimsOf, facingNow: facingNow, withRound: withRound, rangeCtx: rangeCtx, withRange: withRange, sideOf: sideOf, threatArc: threatArc, cleanThreats: cleanThreats, facingCtx: facingCtx, charTokenOn: charTokenOn, cycleThreat: cycleThreat, RESERVED_SUFFIX: RESERVED_SUFFIX, emptySystem: emptySystem, uid: uid, validKey: validKey, cleanFormulaText: cleanFormulaText, hasDice: hasDice, cleanField: cleanField, cleanRollDef: cleanRollDef, cleanItemDef: cleanItemDef, cleanCombat: cleanCombat, cleanCover: cleanCover, cleanLightRules: cleanLightRules, lightName: lightName, lightPresets: lightPresets, LIGHT_UNITS: LIGHT_UNITS, cleanRangeRules: cleanRangeRules, rangeModOf: rangeModOf, rangeDist: rangeDist, rangeOf: rangeOf, RANGE_UNITS: RANGE_UNITS, cleanSenses: cleanSenses, secretFieldIds: secretFieldIds, gmViewFields: gmViewFields, coverTier: coverTier, coverOutcome: coverOutcome, coverDamage: coverDamage, cleanSystem: cleanSystem, cleanValue: cleanValue, cleanChar: cleanChar, cleanCharEdit: cleanCharEdit, cleanCharEdits: cleanCharEdits, resetTargets: resetTargets, cleanCharItem: cleanCharItem, cleanDenyReason: cleanDenyReason, cleanSheetStyle: cleanSheetStyle, fieldById: fieldById, itemDef: itemDef, keyIndex: keyIndex, makeResolver: makeResolver, resolveAll: resolveAll, hoverLines: hoverLines, gmOnlyNames: gmOnlyNames, gmDerivedNames: gmDerivedNames, gmPools: gmPools, initRoll: initRoll, orderByInit: orderByInit, cleanInitRules: cleanInitRules, cleanHeightRules: cleanHeightRules, heightModOf: heightModOf, heightOf: heightOf, HEIGHT_UNITS: HEIGHT_UNITS, initTie: initTie, sideFirst: sideFirst, orderBySide: orderBySide, validateSystem: validateSystem, charFor: charFor, applyEdit: applyEdit, autoLayout: autoLayout, cleanCharUpload: cleanCharUpload, cleanUploads: cleanUploads, fillMaking: fillMaking, applyProposal: applyProposal, statAsk: statAsk, readerKit: readerKit, registerReader: registerReader, dropReader: dropReader, readers: readers, readerById: readerById, readerFor: readerFor, fmtNum: fmtNum, suggest: suggest, lookRule: lookRule, cleanLooks: cleanLooks, applyStyle: applyStyle, cleanCharStyle: cleanCharStyle, lookOf: lookOf, lookFor: lookFor, loadSame: loadSame, loadMax: loadMax, cleanLd: cleanLd, thenMargin: thenMargin, onceOf: onceOf, cleanBlastRules: cleanBlastRules, BLAST_FALL: BLAST_FALL };
+var API = { VERSION: VERSION, loadFits: loadFits, DIE_NAMES: DIE_NAMES, cleanDie: cleanDie, dieOf: dieOf, rollDie: rollDie, tradeOfferable: tradeOfferable, tradeInto: tradeInto, moneyBoxes: moneyBoxes, moneyHeld: moneyHeld, moneyMove: moneyMove, rowOpMoney: rowOpMoney, cleanTradeOffer: cleanTradeOffer, tradeApply: tradeApply, TRADE_LINES: TRADE_LINES, cleanDamageRules: cleanDamageRules, damageStep: damageStep, cleanCharDamage: cleanCharDamage, DMG_CONDS: DMG_CONDS, cleanPlaceCats: cleanPlaceCats, catSplits: catSplits, catHome: catHome, catPlace: catPlace, cleanFieldUnit: cleanFieldUnit, metricOf: metricOf, unitTail: unitTail, readMeasure: readMeasure, heightWords: heightWords, MEASURES: MEASURES, measureWords: measureWords, unitWords: unitWords, unitHead: unitHead, listFig: listFig, listWords: listWords, unitOf: unitOf, figText: figText, figFmt: figFmt, weightWords: weightWords, textWords: textWords, measureStore: measureStore, rollNeedsOk: rollNeedsOk, rollNeedsSays: rollNeedsSays, onGroup: onGroup, onlyOne: onlyOne, onHeld: onHeld, cleanNeeds: cleanNeeds, hideNeeds: hideNeeds, needsMet: needsMet, needsSays: needsSays, needRule: needRule, ruleTrue: ruleTrue, setRuleJudge: setRuleJudge, cleanBudgets: cleanBudgets, budgetsOf: budgetsOf, budgetWatch: budgetWatch, budgetSays: budgetSays, cleanDesc: cleanDesc, cleanLvls: cleanLvls, EVERY_UNITS: EVERY_UNITS, cleanEvery: cleanEvery, FIGHT_UNITS: FIGHT_UNITS, cleanInFight: cleanInFight, timeRuleRun: timeRuleRun, ruleRunCtx: ruleRunCtx, needsHeld: needsHeld, chainsShallow: chainsShallow, cleanFace: cleanFace, charForView: charForView, mapGridOf: mapGridOf, tokenCell: tokenCell, shapeStandIn: shapeStandIn, cleanFrame: cleanFrame, openChar: openChar, newCharRules: newCharRules, charClash: charClash, coreOf: coreOf, setLibraryFind: setLibraryFind, statKeys: statKeys, statPicks: statPicks, cleanIcon: cleanIcon, droppedCounts: droppedCounts, parseLasts: parseLasts, lastsSecs: lastsSecs, roundSecs: roundSecs, fxLeftNow: fxLeftNow, fxTick: fxTick, mapCellScale: mapCellScale, moveAllowCells: moveAllowCells, dueActs: dueActs, gridCells: gridCells, cleanTurn: cleanTurn, TURN_UNITS: TURN_UNITS, TIME_WORDS: TIME_WORDS, roundActs: roundActs, combatChars: combatChars, applyRound: applyRound, thenChanges: thenChanges, thenCrit: thenCrit, withRollCrit: withRollCrit, THEN_WHEN: THEN_WHEN, dmgTypeOf: dmgTypeOf, rollMods: rollMods, openSync: openSync, cleanOpens: cleanOpens, showsIf: showsIf, rowRollNames: rowRollNames, applyAct: applyAct, applyScope: applyScope, cleanCharApply: cleanCharApply, APPLY_KINDS: APPLY_KINDS, hudView: hudView, hudHasContent: hudHasContent, pinTargetsAll: pinTargetsAll, TONES: TONES, valueTone: valueTone, cleanTones: cleanTones, playableChars: playableChars, activeCharOf: activeCharOf, activeChars: activeChars, ownedTokenPlan: ownedTokenPlan, applyOwnerOps: applyOwnerOps, migrateBindings: migrateBindings, tokenSourceFor: tokenSourceFor, playsAs: playsAs, cleanNewPlayers: cleanNewPlayers, newPlayerRules: newPlayerRules, waitingTokensOf: waitingTokensOf, waitingNeed: waitingNeed, stackZ: stackZ, LIMITS: LIMITS, PALETTE_KEYS: PALETTE_KEYS, headerEdits: headerEdits, pinTargets: pinTargets, pruneGroups: pruneGroups, GROUP_ID: GROUP_ID, GLYPHS: GLYPHS, glyphPath: glyphPath, ROLL_TONES: ROLL_TONES, KINDS: KINDS, STORED: STORED, DEF_PROP: DEF_PROP, LAYOUT: LAYOUT, validPageId: validPageId, BAND_KINDS: BAND_KINDS, IDENTITY_KINDS: IDENTITY_KINDS, LEDGER_KINDS: LEDGER_KINDS, headerEntry: headerEntry, captionParts: captionParts, capExpr: capExpr, labelNames: labelNames, labelGmNames: labelGmNames, valueOpts: valueOpts, rowIdOf: rowIdOf, cleanRowDef: cleanRowDef, rowDef: rowDef, projectRows: projectRows, cleanListSpec: cleanListSpec, STAT_KEY: STAT_KEY, statKey: statKey, cleanEntryStats: cleanEntryStats, rowStats: rowStats, rowStat: rowStat, plusText: plusText, rowPaid: rowPaid, cleanListRules: cleanListRules, cleanOv: cleanOv, mergeOv: mergeOv, itemReach: itemReach, OV_LOCK: OV_LOCK, lvlClamp: lvlClamp, rowLvl: rowLvl, rowOn: rowOn, cleanItemKey: cleanItemKey, ROW_WORDS: ROW_WORDS, applyRowOp: applyRowOp, orphanRows: orphanRows, stampRows: stampRows, libSnaps: libSnaps, carriedBy: carriedBy, cleanItemMods: cleanItemMods, fieldKinds: fieldKinds, unseenMods: unseenMods, cleanItemMsg: cleanItemMsg, RM_MODES: RM_MODES, applyEffectOp: applyEffectOp, cleanCharEffect: cleanCharEffect, gmEffectNames: gmEffectNames, fxText: fxText, activeEffects: activeEffects, tokenEffects: tokenEffects, autoEffectsOn: autoEffectsOn, tokenOwnEffects: tokenOwnEffects, projectEffects: projectEffects, FACING_NAMES: FACING_NAMES, TOKEN_NAMES: TOKEN_NAMES, POSTURE_IDS: POSTURE_IDS, POSTURE_NAMES: POSTURE_NAMES, DEFAULT_POSTURES: DEFAULT_POSTURES, cleanPostures: cleanPostures, postureList: postureList, ownPostures: ownPostures, postureAt: postureAt, postureSeven: postureSeven, stanceCtx: stanceCtx, tokenCtx: tokenCtx, setAimSource: setAimSource, bearingTo: bearingTo, aimsOf: aimsOf, facingNow: facingNow, withRound: withRound, rangeCtx: rangeCtx, withRange: withRange, sideOf: sideOf, threatArc: threatArc, cleanThreats: cleanThreats, facingCtx: facingCtx, charTokenOn: charTokenOn, cycleThreat: cycleThreat, RESERVED_SUFFIX: RESERVED_SUFFIX, emptySystem: emptySystem, uid: uid, validKey: validKey, cleanFormulaText: cleanFormulaText, hasDice: hasDice, cleanField: cleanField, cleanRollDef: cleanRollDef, cleanItemDef: cleanItemDef, cleanCombat: cleanCombat, cleanCover: cleanCover, cleanLightRules: cleanLightRules, lightName: lightName, lightPresets: lightPresets, LIGHT_UNITS: LIGHT_UNITS, cleanRangeRules: cleanRangeRules, rangeModOf: rangeModOf, rangeDist: rangeDist, rangeOf: rangeOf, RANGE_UNITS: RANGE_UNITS, cleanSenses: cleanSenses, secretFieldIds: secretFieldIds, gmViewFields: gmViewFields, coverTier: coverTier, coverOutcome: coverOutcome, coverDamage: coverDamage, cleanSystem: cleanSystem, cleanValue: cleanValue, cleanChar: cleanChar, cleanCharEdit: cleanCharEdit, cleanCharEdits: cleanCharEdits, resetTargets: resetTargets, cleanCharItem: cleanCharItem, cleanDenyReason: cleanDenyReason, cleanSheetStyle: cleanSheetStyle, fieldById: fieldById, itemDef: itemDef, keyIndex: keyIndex, makeResolver: makeResolver, resolveAll: resolveAll, hoverLines: hoverLines, gmOnlyNames: gmOnlyNames, gmDerivedNames: gmDerivedNames, gmPools: gmPools, initRoll: initRoll, orderByInit: orderByInit, cleanInitRules: cleanInitRules, cleanHeightRules: cleanHeightRules, heightModOf: heightModOf, heightOf: heightOf, HEIGHT_UNITS: HEIGHT_UNITS, initTie: initTie, sideFirst: sideFirst, orderBySide: orderBySide, validateSystem: validateSystem, charFor: charFor, applyEdit: applyEdit, autoLayout: autoLayout, cleanCharUpload: cleanCharUpload, cleanUploads: cleanUploads, fillMaking: fillMaking, applyProposal: applyProposal, statAsk: statAsk, readerKit: readerKit, registerReader: registerReader, dropReader: dropReader, readers: readers, readerById: readerById, readerFor: readerFor, fmtNum: fmtNum, suggest: suggest, lookRule: lookRule, cleanLooks: cleanLooks, applyStyle: applyStyle, cleanCharStyle: cleanCharStyle, lookOf: lookOf, lookFor: lookFor, loadSame: loadSame, loadMax: loadMax, cleanLd: cleanLd, chamberTakes: chamberTakes, chamberFits: chamberFits, chamberCap: chamberCap, cleanRd: cleanRd, CHAMBER_CAP: CHAMBER_CAP, thenMargin: thenMargin, onceOf: onceOf, cleanBlastRules: cleanBlastRules, BLAST_FALL: BLAST_FALL };
 if (typeof window !== 'undefined') window.wpSystemCore = API;
-export { VERSION, loadFits, DIE_NAMES, cleanDie, dieOf, rollDie, tradeOfferable, tradeInto, moneyBoxes, moneyHeld, moneyMove, rowOpMoney, cleanTradeOffer, tradeApply, TRADE_LINES, cleanDamageRules, damageStep, cleanCharDamage, DMG_CONDS, cleanPlaceCats, catSplits, catHome, catPlace, cleanFieldUnit, metricOf, unitTail, readMeasure, heightWords, MEASURES, measureWords, unitWords, unitHead, listFig, listWords, unitOf, figText, figFmt, weightWords, textWords, measureStore, rollNeedsOk, rollNeedsSays, onGroup, onlyOne, onHeld, cleanNeeds, hideNeeds, needsMet, needsSays, needRule, ruleTrue, setRuleJudge, cleanBudgets, budgetsOf, budgetWatch, budgetSays, cleanDesc, cleanLvls, EVERY_UNITS, cleanEvery, FIGHT_UNITS, cleanInFight, timeRuleRun, ruleRunCtx, needsHeld, chainsShallow, cleanFace, charForView, mapGridOf, tokenCell, shapeStandIn, cleanFrame, openChar, newCharRules, charClash, coreOf, setLibraryFind, statKeys, statPicks, cleanIcon, droppedCounts, parseLasts, lastsSecs, roundSecs, fxLeftNow, fxTick, mapCellScale, moveAllowCells, dueActs, gridCells, cleanTurn, TURN_UNITS, TIME_WORDS, roundActs, combatChars, applyRound, thenChanges, thenCrit, withRollCrit, THEN_WHEN, dmgTypeOf, rollMods, openSync, cleanOpens, showsIf, rowRollNames, applyAct, applyScope, cleanCharApply, APPLY_KINDS, hudView, hudHasContent, pinTargetsAll, TONES, valueTone, cleanTones, playableChars, activeCharOf, activeChars, ownedTokenPlan, applyOwnerOps, migrateBindings, tokenSourceFor, playsAs, cleanNewPlayers, newPlayerRules, waitingTokensOf, waitingNeed, stackZ, LIMITS, PALETTE_KEYS, headerEdits, pinTargets, pruneGroups, GROUP_ID, GLYPHS, glyphPath, ROLL_TONES, KINDS, STORED, DEF_PROP, LAYOUT, validPageId, BAND_KINDS, IDENTITY_KINDS, LEDGER_KINDS, headerEntry, captionParts, capExpr, labelNames, labelGmNames, valueOpts, rowIdOf, cleanRowDef, rowDef, projectRows, cleanListSpec, STAT_KEY, statKey, cleanEntryStats, rowStats, rowStat, plusText, rowPaid, cleanListRules, cleanOv, mergeOv, itemReach, OV_LOCK, lvlClamp, rowLvl, rowOn, cleanItemKey, ROW_WORDS, applyRowOp, orphanRows, stampRows, libSnaps, carriedBy, cleanItemMods, fieldKinds, unseenMods, cleanItemMsg, RM_MODES, applyEffectOp, cleanCharEffect, gmEffectNames, fxText, activeEffects, tokenEffects, autoEffectsOn, tokenOwnEffects, projectEffects, FACING_NAMES, TOKEN_NAMES, POSTURE_IDS, POSTURE_NAMES, DEFAULT_POSTURES, cleanPostures, postureList, ownPostures, postureAt, postureSeven, stanceCtx, tokenCtx, setAimSource, bearingTo, aimsOf, facingNow, withRound, rangeCtx, withRange, sideOf, threatArc, cleanThreats, facingCtx, charTokenOn, cycleThreat, RESERVED_SUFFIX, emptySystem, uid, validKey, cleanFormulaText, hasDice, cleanField, cleanRollDef, cleanItemDef, cleanCombat, cleanCover, cleanLightRules, lightName, lightPresets, LIGHT_UNITS, cleanRangeRules, rangeModOf, rangeDist, rangeOf, RANGE_UNITS, cleanSenses, secretFieldIds, gmViewFields, coverTier, coverOutcome, coverDamage, cleanSystem, cleanValue, cleanChar, cleanCharEdit, cleanCharEdits, resetTargets, cleanCharItem, cleanDenyReason, cleanSheetStyle, fieldById, itemDef, keyIndex, makeResolver, resolveAll, hoverLines, gmOnlyNames, gmDerivedNames, gmPools, initRoll, orderByInit, cleanInitRules, cleanHeightRules, heightModOf, heightOf, HEIGHT_UNITS, initTie, sideFirst, orderBySide, validateSystem, charFor, applyEdit, autoLayout, cleanCharUpload, cleanUploads, fillMaking, applyProposal, statAsk, readerKit, registerReader, dropReader, readers, readerById, readerFor, fmtNum, suggest, lookRule, cleanLooks, applyStyle, cleanCharStyle, lookOf, lookFor, loadSame, loadMax, cleanLd, thenMargin, onceOf, cleanBlastRules, BLAST_FALL };
+export { VERSION, loadFits, DIE_NAMES, cleanDie, dieOf, rollDie, tradeOfferable, tradeInto, moneyBoxes, moneyHeld, moneyMove, rowOpMoney, cleanTradeOffer, tradeApply, TRADE_LINES, cleanDamageRules, damageStep, cleanCharDamage, DMG_CONDS, cleanPlaceCats, catSplits, catHome, catPlace, cleanFieldUnit, metricOf, unitTail, readMeasure, heightWords, MEASURES, measureWords, unitWords, unitHead, listFig, listWords, unitOf, figText, figFmt, weightWords, textWords, measureStore, rollNeedsOk, rollNeedsSays, onGroup, onlyOne, onHeld, cleanNeeds, hideNeeds, needsMet, needsSays, needRule, ruleTrue, setRuleJudge, cleanBudgets, budgetsOf, budgetWatch, budgetSays, cleanDesc, cleanLvls, EVERY_UNITS, cleanEvery, FIGHT_UNITS, cleanInFight, timeRuleRun, ruleRunCtx, needsHeld, chainsShallow, cleanFace, charForView, mapGridOf, tokenCell, shapeStandIn, cleanFrame, openChar, newCharRules, charClash, coreOf, setLibraryFind, statKeys, statPicks, cleanIcon, droppedCounts, parseLasts, lastsSecs, roundSecs, fxLeftNow, fxTick, mapCellScale, moveAllowCells, dueActs, gridCells, cleanTurn, TURN_UNITS, TIME_WORDS, roundActs, combatChars, applyRound, thenChanges, thenCrit, withRollCrit, THEN_WHEN, dmgTypeOf, rollMods, openSync, cleanOpens, showsIf, rowRollNames, applyAct, applyScope, cleanCharApply, APPLY_KINDS, hudView, hudHasContent, pinTargetsAll, TONES, valueTone, cleanTones, playableChars, activeCharOf, activeChars, ownedTokenPlan, applyOwnerOps, migrateBindings, tokenSourceFor, playsAs, cleanNewPlayers, newPlayerRules, waitingTokensOf, waitingNeed, stackZ, LIMITS, PALETTE_KEYS, headerEdits, pinTargets, pruneGroups, GROUP_ID, GLYPHS, glyphPath, ROLL_TONES, KINDS, STORED, DEF_PROP, LAYOUT, validPageId, BAND_KINDS, IDENTITY_KINDS, LEDGER_KINDS, headerEntry, captionParts, capExpr, labelNames, labelGmNames, valueOpts, rowIdOf, cleanRowDef, rowDef, projectRows, cleanListSpec, STAT_KEY, statKey, cleanEntryStats, rowStats, rowStat, plusText, rowPaid, cleanListRules, cleanOv, mergeOv, itemReach, OV_LOCK, lvlClamp, rowLvl, rowOn, cleanItemKey, ROW_WORDS, applyRowOp, orphanRows, stampRows, libSnaps, carriedBy, cleanItemMods, fieldKinds, unseenMods, cleanItemMsg, RM_MODES, applyEffectOp, cleanCharEffect, gmEffectNames, fxText, activeEffects, tokenEffects, autoEffectsOn, tokenOwnEffects, projectEffects, FACING_NAMES, TOKEN_NAMES, POSTURE_IDS, POSTURE_NAMES, DEFAULT_POSTURES, cleanPostures, postureList, ownPostures, postureAt, postureSeven, stanceCtx, tokenCtx, setAimSource, bearingTo, aimsOf, facingNow, withRound, rangeCtx, withRange, sideOf, threatArc, cleanThreats, facingCtx, charTokenOn, cycleThreat, RESERVED_SUFFIX, emptySystem, uid, validKey, cleanFormulaText, hasDice, cleanField, cleanRollDef, cleanItemDef, cleanCombat, cleanCover, cleanLightRules, lightName, lightPresets, LIGHT_UNITS, cleanRangeRules, rangeModOf, rangeDist, rangeOf, RANGE_UNITS, cleanSenses, secretFieldIds, gmViewFields, coverTier, coverOutcome, coverDamage, cleanSystem, cleanValue, cleanChar, cleanCharEdit, cleanCharEdits, resetTargets, cleanCharItem, cleanDenyReason, cleanSheetStyle, fieldById, itemDef, keyIndex, makeResolver, resolveAll, hoverLines, gmOnlyNames, gmDerivedNames, gmPools, initRoll, orderByInit, cleanInitRules, cleanHeightRules, heightModOf, heightOf, HEIGHT_UNITS, initTie, sideFirst, orderBySide, validateSystem, charFor, applyEdit, autoLayout, cleanCharUpload, cleanUploads, fillMaking, applyProposal, statAsk, readerKit, registerReader, dropReader, readers, readerById, readerFor, fmtNum, suggest, lookRule, cleanLooks, applyStyle, cleanCharStyle, lookOf, lookFor, loadSame, loadMax, cleanLd, chamberTakes, chamberFits, chamberCap, cleanRd, CHAMBER_CAP, thenMargin, onceOf, cleanBlastRules, BLAST_FALL };

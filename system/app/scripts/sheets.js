@@ -8,7 +8,7 @@ import { getActiveCampaign } from './models.js';
 import { save, toast, toastAction } from './io.js';
 import { picRef } from './safecore.js';
 import { showConfirm, showPrompt } from './dialogs.js';
-import { cleanDamageRules, loadFits, openSync, moneyBoxes, moneyHeld, rowOpMoney, onceOf, catHome, catPlace, cleanPlaceCats, catSplits, cleanFieldUnit, unitTail, heightWords, measureWords, unitWords, unitHead, listWords, unitOf, textWords, measureStore, rollNeedsOk, rollNeedsSays, timeRuleRun, ruleRunCtx, chainsShallow, makeResolver, hasDice, figText, cleanEvery, cleanInFight, droppedCounts, validPageId, LIMITS, KINDS, showsIf, rowRollNames, gmOnlyNames, applyAct, applyScope, applyRound, dueActs, combatChars, roundSecs, fxLeftNow, lastsSecs, APPLY_KINDS, TURN_UNITS, LIGHT_UNITS, RANGE_UNITS, HEIGHT_UNITS, TIME_WORDS, STORED, DEF_PROP, BAND_KINDS, IDENTITY_KINDS, LEDGER_KINDS, headerEntry, captionParts, emptySystem, uid, validKey, cleanSystem, cleanChar, validateSystem, resolveAll, hoverLines, autoLayout, applyEdit, applyStyle, cleanLooks, lookOf, lookFor, lookRule, applyEffectOp, fxText, fmtNum, budgetsOf, budgetWatch, budgetSays, needsMet, needsSays, initRoll, applyProposal, cleanUploads, sideOf, threatArc, facingCtx, facingNow, setAimSource, stanceCtx, tokenCtx, POSTURE_IDS, POSTURE_NAMES, DEFAULT_POSTURES, postureList, postureAt, autoEffectsOn, initTie, charTokenOn, cycleThreat, valueTone, TONES, activeCharOf, playableChars, ownedTokenPlan, applyOwnerOps, migrateBindings, capExpr, cleanValue, fieldById, valueOpts, applyRowOp, rowIdOf, rowDef, orphanRows, stampRows, cleanRowDef, projectRows, STAT_KEY, PALETTE_KEYS, GLYPHS, glyphPath, headerEdits, pinTargets, pinTargetsAll, hudView, hudHasContent, resetTargets, cleanListSpec, statKey, rowStat, plusText, rowPaid, itemReach, gmDerivedNames, labelGmNames, gmEffectNames, labelNames, withRound, rangeCtx, withRange, rowLvl, rowOn, cleanItemKey, charForView, secretFieldIds, gmViewFields } from './systemcore.js';
+import { cleanDamageRules, loadFits, chamberTakes, chamberCap, CHAMBER_CAP, openSync, moneyBoxes, moneyHeld, rowOpMoney, onceOf, catHome, catPlace, cleanPlaceCats, catSplits, cleanFieldUnit, unitTail, heightWords, measureWords, unitWords, unitHead, listWords, unitOf, textWords, measureStore, rollNeedsOk, rollNeedsSays, timeRuleRun, ruleRunCtx, chainsShallow, makeResolver, hasDice, figText, cleanEvery, cleanInFight, droppedCounts, validPageId, LIMITS, KINDS, showsIf, rowRollNames, gmOnlyNames, applyAct, applyScope, applyRound, dueActs, combatChars, roundSecs, fxLeftNow, lastsSecs, APPLY_KINDS, TURN_UNITS, LIGHT_UNITS, RANGE_UNITS, HEIGHT_UNITS, TIME_WORDS, STORED, DEF_PROP, BAND_KINDS, IDENTITY_KINDS, LEDGER_KINDS, headerEntry, captionParts, emptySystem, uid, validKey, cleanSystem, cleanChar, validateSystem, resolveAll, hoverLines, autoLayout, applyEdit, applyStyle, cleanLooks, lookOf, lookFor, lookRule, applyEffectOp, fxText, fmtNum, budgetsOf, budgetWatch, budgetSays, needsMet, needsSays, initRoll, applyProposal, cleanUploads, sideOf, threatArc, facingCtx, facingNow, setAimSource, stanceCtx, tokenCtx, POSTURE_IDS, POSTURE_NAMES, DEFAULT_POSTURES, postureList, postureAt, autoEffectsOn, initTie, charTokenOn, cycleThreat, valueTone, TONES, activeCharOf, playableChars, ownedTokenPlan, applyOwnerOps, migrateBindings, capExpr, cleanValue, fieldById, valueOpts, applyRowOp, rowIdOf, rowDef, orphanRows, stampRows, cleanRowDef, projectRows, STAT_KEY, PALETTE_KEYS, GLYPHS, glyphPath, headerEdits, pinTargets, pinTargetsAll, hudView, hudHasContent, resetTargets, cleanListSpec, statKey, rowStat, plusText, rowPaid, itemReach, gmDerivedNames, labelGmNames, gmEffectNames, labelNames, withRound, rangeCtx, withRange, rowLvl, rowOn, cleanItemKey, charForView, secretFieldIds, gmViewFields } from './systemcore.js';
 import { fileBase, charToJson, charFromJson, sheetToMarkdown, isCharFile } from './sheetexport.js';
 import { lvlsFromBox, lvlsToText } from './librarycore.js';
 import { dieNode, DIE_LABELS } from './dieicons.js';   // 1.5.8, backlog 149: the dice drawings (pure)
@@ -2654,7 +2654,7 @@ function itemListInto(wrap, f, c, carried, sysI, canThrow, editable, gm, empty, 
         lostBits(line, rd, entry, c, f, gm, chg); needBits(line, sysI, c, entry, rd, gm); gmItemBits(line, def, entry, gm, !!(spec && spec.on)); keyShareChip(line, entry, rd, unseenL); modsBits(line, def, entry, spec, sysI);
         if (typeof onceBits === 'function') onceBits(line, sysI, c, f, carried, entry);   // 1.5.8 Counted once
         var noteLn = null;
-        if (spec) { statChips(line, def, spec, ovc); colChips(line, spec, res && res.cells ? res.cells[rid] : null); ctCtl(line, entry, c, f, spec, editable, res && res.cts ? res.cts[rid] : null); if (typeof loadCtl === 'function') loadCtl(line, entry, c, f, spec, editable, sysI, res && res.ldOk ? res.ldOk[rid] : undefined); var lc = lvlCtl(entry, def, c, f, spec, chg && !opnR); if (lc) line.appendChild(lc); var oc = onCtl(entry, c, f, spec, editable, true, res && res.onOk ? res.onOk[rid] : undefined); if (oc) line.appendChild(oc); var pcL = paidCtl(entry, def, c, f, spec, chg, gm, true); if (pcL) line.appendChild(pcL); noteLn = hudRow ? null : noteBits(entry, def, c, f, chg, ovc); }   // F4c1: the stats shown On the row, what one cost
+        if (spec) { statChips(line, def, spec, ovc); colChips(line, spec, res && res.cells ? res.cells[rid] : null); ctCtl(line, entry, c, f, spec, editable, res && res.cts ? res.cts[rid] : null); if (typeof loadCtl === 'function') loadCtl(line, entry, c, f, spec, editable, sysI, res && res.ldOk ? res.ldOk[rid] : undefined); if (typeof chamberCtl === 'function') chamberCtl(line, entry, c, f, spec, editable, sysI, gm, canThrow); var lc = lvlCtl(entry, def, c, f, spec, chg && !opnR); if (lc) line.appendChild(lc); var oc = onCtl(entry, c, f, spec, editable, true, res && res.onOk ? res.onOk[rid] : undefined); if (oc) line.appendChild(oc); var pcL = paidCtl(entry, def, c, f, spec, chg, gm, true); if (pcL) line.appendChild(pcL); noteLn = hudRow ? null : noteBits(entry, def, c, f, chg, ovc); }   // F4c1: the stats shown On the row, what one cost
         if (def.area && canThrow && (gm || def.vis !== 'gm') && entry.hid !== 1) line.appendChild(itemThrowBtn(def, c, f, rid));   // a GM-only item: the GM's throw only (a player's copy never carries its area)
         rowRollBtns(line, spec, entry, def, c, f, res);   // F5b: the list's rolls on this row
         if (noteLn) line.appendChild(noteToggle(noteLn, entry, c, f));
@@ -2775,6 +2775,59 @@ function openLoadMenu(anchor, c, f, entry, sf, spec, sys) {
     var first = pop.querySelector('.sheet-dl-item'); try { if (first) first.focus(); } catch (er) {}
 }
 // [sinkcheck:loadctl-end]
+// [sinkcheck:chamberctl-start]
+// 1.5.9 Chambers from (the owner, by prompt on 2026-10-25: "A cell and a round"): what a row's chamber holds ("2 of 4 chambered"), its button
+// that opens a menu of the rounds that fit, and Unchamber. A play control, as Load is (a locked sheet and the HUD chamber too). Every name from a
+// campaign as text. The GM's Launch places the blast of the round last fired, else the next one, with no throw roll and no scatter
+function chamberCtl(host, entry, c, f, spec, editable, sysI, gm, canThrow) {
+    if (!spec || !spec.chamber || typeof spec.chamber !== 'object' || !entry || entry.hid === 1) return;
+    var sys = sysI || systemOf(getActiveCampaign()), sf = sys ? fieldById(sys, spec.chamber.from) : null; if (!sf || sf.kind !== 'item-list') return;
+    var rd = Array.isArray(entry.rd) ? entry.rd : [], cap = typeof chamberCap === 'function' ? chamberCap(spec) : 1, lb = spec.chamber.label || 'Chamber', ln = sf.label || sf.key || 'its list';
+    var nx = rd[0] ? rowDef(sys, rd[0]) : null, nxN = nx && nx.def && nx.def.name ? nx.def.name : 'A round';
+    var w = el('span', 'sheet-chip sheet-item-load sheet-item-chamber' + (rd.length ? '' : ' sheet-item-load-none')); w.title = rd.length ? 'Next to fire: ' + nxN : 'Nothing chambered from ' + ln;
+    w.appendChild(el('span', 'sheet-item-ctl', rd.length + ' of ' + cap + ' chambered'));
+    if (editable && (entry.qty | 0) === 1) {
+        if (rd.length < cap) { var b = el('button', 'tool ghost sheet-item-ctb sheet-item-chamberb', lb); b.type = 'button'; b.title = lb + ': one from ' + ln + ' goes into the chamber. The first one in fires first'; b.addEventListener('click', function(e) { e.preventDefault(); e.stopPropagation(); openChamberMenu(b, c, f, entry, sf, spec, sys); }); w.appendChild(b); }
+        if (rd.length) { var u = el('button', 'tool ghost sheet-item-ctb sheet-item-unchamberb', 'Unchamber'); u.type = 'button'; u.title = 'The last one in goes back to ' + ln; u.addEventListener('click', function(e) { e.preventDefault(); e.stopPropagation(); commitItem(c, f, { op: 'unchamber', rowId: rowIdOf(entry), back: uid('w_') }); }); w.appendChild(u); }
+    }
+    host.appendChild(w);
+    var fc = entry.fd && typeof entry.fd === 'object' ? entry.fd : rd[0], fr = gm && canThrow && fc ? rowDef(sys, fc) : null, fdef = fr && fr.def && fr.def.area && typeof fr.def.area === 'object' ? fr.def : null;
+    if (fdef) {   // the GM's alone: a round that hits goes off at the target by itself, and one that misses is the GM's to place
+        var lB = el('button', 'tool ghost sheet-item-throw sheet-item-launch', '\ud83d\udca5 Launch'); lB.type = 'button';
+        lB.title = 'Place the blast of ' + (fdef.name || 'the round') + ': then click the target or a place on the map. No throw roll and no scatter';
+        lB.addEventListener('click', function() { if (window.wpArmLaunch) { window.wpArmLaunch({ charId: c.id, fieldId: f.id, rowId: rowIdOf(entry), name: (fdef.area && fdef.area.name) || fdef.name || '' }); var hp = lB.closest ? lB.closest('.hud-panel') : null; if (hp) closeHud(hp.dataset.cid); else closeSheet(); } });
+        host.appendChild(lB);
+    }
+}
+function chamberChoices(sys, c, sf, spec, host) {   // the rows the chamber takes a round of: as the host judges it (chamberTakes), by name
+    var sl = sf.list, out = [];
+    (c && c.values && Array.isArray(c.values[sf.id]) ? c.values[sf.id] : []).forEach(function(s) {
+        if (!s || typeof s !== 'object' || s === host || typeof chamberTakes !== 'function' || !chamberTakes(sys, spec, host, sl, s)) return;
+        var sd = rowDef(sys, s), d = sd ? sd.def : null; if (!d) return;
+        out.push({ id: rowIdOf(s), name: d.name || 'Item', qty: s.qty | 0 || 1 });
+    });
+    return out;
+}
+function openChamberMenu(anchor, c, f, entry, sf, spec, sys) {   // on the page, as the Load menu is (its class, its Escape, its arrow keys)
+    if (_ldPop) { closeLoadMenu(); return; }
+    var rid = rowIdOf(entry), pop = el('div', 'sheet-dl-pop sheet-load-pop'); pop.setAttribute('role', 'menu'); pop._anchor = anchor;
+    chamberChoices(sys, c, sf, spec, entry).forEach(function(x) {
+        var b = el('button', 'sheet-dl-item'); b.type = 'button'; b.setAttribute('role', 'menuitem');
+        b.appendChild(el('span', 'sheet-dl-t', x.name + (x.qty > 1 ? ' \u00d7' + x.qty : ''))); b.appendChild(el('span', 'sheet-dl-s', 'One goes into the chamber'));
+        b.addEventListener('click', function(e) { e.preventDefault(); closeLoadMenu(); commitItem(c, f, { op: 'chamber', rowId: rid, from: x.id }); }); pop.appendChild(b);
+    });
+    if (!pop.children.length) pop.appendChild(el('div', 'sheet-dl-note', 'Nothing in ' + (sf.label || sf.key || 'that list') + ' fits it.'));
+    pop.addEventListener('mousedown', function(e) { e.stopPropagation(); });
+    pop.addEventListener('keydown', function(e) {
+        e.stopPropagation(); if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+        e.preventDefault(); var its = Array.prototype.slice.call(pop.querySelectorAll('.sheet-dl-item')), at = its.indexOf(document.activeElement), nx = its[(at + (e.key === 'ArrowDown' ? 1 : its.length - 1) + its.length) % its.length]; try { if (nx) nx.focus(); } catch (er) {}
+    });
+    document.body.appendChild(pop); _ldPop = pop;
+    var r = anchor.getBoundingClientRect(), n = pop.children.length; pop.style.left = Math.max(8, Math.min(window.innerWidth - 288, r.left)) + 'px'; pop.style.top = Math.max(8, Math.min(window.innerHeight - (24 + 52 * n), r.bottom + 6)) + 'px';
+    document.addEventListener('mousedown', ldOutside, true); document.addEventListener('keydown', ldKey, true);
+    var first = pop.querySelector('.sheet-dl-item'); try { if (first) first.focus(); } catch (er) {}
+}
+// [sinkcheck:chamberctl-end]
 // Stage 6 F5a1: the columns shown on a row — a chip each, its label small ("Cost 11 pts"); an error reads "\u2014" with the message on hover
 function colChips(host, spec, cells) {
     if (!cells || !Array.isArray(spec.cols)) return;
@@ -2851,6 +2904,7 @@ function itemTableInto(wrap, f, c, carried, sysI, canThrow, editable, gm, empty,
             }
             ctCtl(actTd, entry, c, f, spec, editable, res && res.cts ? res.cts[rowIdOf(entry)] : null);   // Stage 6 HUD R2: its counters
             if (typeof loadCtl === 'function') loadCtl(actTd, entry, c, f, spec, editable, sysI);   // 1.5.8 Loads from
+            if (typeof chamberCtl === 'function') chamberCtl(actTd, entry, c, f, spec, editable, sysI, gm, canThrow);   // 1.5.9 Chambers from
             rowRollBtns(actTd, spec, entry, def, c, f, res);   // F5b: the list's rolls
             if (rrT) actTd.appendChild(editBtn(entry, c, f, rrT, rd.src === 'custom'));   // F4c2: ✎
             if (editable) { var ubT = undoBtn(entry, c, f); if (ubT) actTd.appendChild(ubT); if (chg) actTd.appendChild(itemRmBtn(entry, def, c, f)); }
@@ -4240,7 +4294,7 @@ function commitItem(c, f, q) {   // Stage 6 F4a: a row op q = { op: add|remove|s
     }
     if (!canWrite()) return;
     var res = applyRowOp(sys, c, f.id, q, F(), {});
-    if (!res.ok) { toast(res.why === 'formula' ? 'Not a formula this sheet can roll.' : res.why === 'key' ? 'That key is already used in this list.' : res.why === 'badkey' ? 'Not a usable key: a letter, then letters, digits and _ (up to 40).' : res.reason === 'field' ? 'That list cannot be changed that way.' : res.reason === 'long' ? 'This list\u2019s own rows hold all the long text they may.' : res.reason === 'missing' ? 'That item is gone.' : 'That change is not allowed.'); renderViews(c.id); return; }   // why (F4c2, F4c3 key / badkey): the GM's own, never on the wire
+    if (!res.ok) { toast(res.why === 'formula' ? 'Not a formula this sheet can roll.' : res.why === 'key' ? 'That key is already used in this list.' : res.why === 'badkey' ? 'Not a usable key: a letter, then letters, digits and _ (up to 40).' : res.reason === 'field' ? 'That list cannot be changed that way.' : res.reason === 'long' ? 'This list\u2019s own rows hold all the long text they may.' : res.reason === 'missing' ? 'That item is gone.' : res.reason === 'value' && res.msg ? res.msg : 'That change is not allowed.'); renderViews(c.id); return; }   // why (F4c2, F4c3 key / badkey): the GM's own, never on the wire
     var mvG = typeof rowOpMoney === 'function' ? rowOpMoney(sys, c, f.id, q, res) : null;   // 1.5.6: what a purchase paid, or a sale was paid, moves the money with the row
     if (mvG && !mvG.ok) { toast(mvG.msg || 'Not enough money for that.'); return; }
     undoFollow(res);
@@ -5005,7 +5059,7 @@ function ownerFromToken(w) {
     giveCharacter(w.ownerId || '', c.id, { keep: w.id });   // a same-owner pick on a kept character's token makes it the one in play, with its token placed where they stand
 }
 function charGone(id) { var shown = false; if (sheetOpen === id) { closeSheet(); shown = true; } if (typeof id === 'string' && huds[id]) { closeHud(id); shown = true; } if (shown) toast('That character is no longer shared with you.'); if (window.appRender) window.appRender(); }
-function editResult(rid, ok, reason, msg, op) { if (!ok) toast(reason === 'none' ? 'Nothing to apply.' : reason === 'error' ? (msg || 'That amount could not be worked out.') : op === 'apply' && reason === 'field' ? 'That action is not on your sheet now.' : op === 'apply' && reason === 'timeout' ? 'No answer from the GM.' : reason === 'budget' ? (msg || 'That would take the character over a point budget.') : reason === 'money' || reason === 'change' || reason === 'max' ? (msg || 'Not enough money for that.') : reason === 'needs' ? (msg || 'Your character does not meet what that needs.') : reason === 'stays' ? (msg || (op === 'set' ? 'It stays on.' : 'You can\u2019t get rid of it.')) : reason === 'field' && op === 'custom' ? 'Only the GM changes that row now.' : reason === 'field' && op === 'ov' ? 'Only the GM changes this copy’s stats now.' : reason === 'long' ? 'This list\u2019s own rows hold all the long text they may.' : reason === 'off' ? 'Character sheets are off here.' : reason === 'owner' ? 'That sheet is not yours.' : reason === 'field' ? 'That field cannot be edited.' : reason === 'slow' ? 'Slow down a little.' : reason === 'missing' || (reason === 'stale' && op === 'restore') ? (op === 'restore' ? 'That cannot come back now: the list changed since, or the moment passed.' : 'That is no longer there.') : reason === 'timeout' ? 'No answer from the GM; the change was undone.' : reason === 'making' ? 'Finish the character first (press Done on its sheet).' : reason === 'paused' ? 'The table is paused.' : 'That value was not accepted.'); renderViews(null); }
+function editResult(rid, ok, reason, msg, op) { if (!ok) toast(reason === 'none' ? 'Nothing to apply.' : reason === 'error' ? (msg || 'That amount could not be worked out.') : op === 'apply' && reason === 'field' ? 'That action is not on your sheet now.' : op === 'apply' && reason === 'timeout' ? 'No answer from the GM.' : reason === 'budget' ? (msg || 'That would take the character over a point budget.') : reason === 'money' || reason === 'change' || reason === 'max' ? (msg || 'Not enough money for that.') : reason === 'needs' ? (msg || 'Your character does not meet what that needs.') : reason === 'stays' ? (msg || (op === 'set' ? 'It stays on.' : 'You can\u2019t get rid of it.')) : reason === 'field' && op === 'custom' ? 'Only the GM changes that row now.' : reason === 'field' && op === 'ov' ? 'Only the GM changes this copy’s stats now.' : reason === 'long' ? 'This list\u2019s own rows hold all the long text they may.' : reason === 'off' ? 'Character sheets are off here.' : reason === 'owner' ? 'That sheet is not yours.' : reason === 'field' ? 'That field cannot be edited.' : reason === 'slow' ? 'Slow down a little.' : reason === 'missing' || (reason === 'stale' && op === 'restore') ? (op === 'restore' ? 'That cannot come back now: the list changed since, or the moment passed.' : 'That is no longer there.') : reason === 'timeout' ? 'No answer from the GM; the change was undone.' : reason === 'making' ? 'Finish the character first (press Done on its sheet).' : reason === 'paused' ? 'The table is paused.' : reason === 'value' && msg ? msg : 'That value was not accepted.'); renderViews(null); }
 
 /* ---------- the editor: fields, rolls, characters ---------- */
 var draft = null, dirty = false, tab = 'fields', errorsById = {}, warningsById = {}, layoutView = 'sheet';   // layoutView (HUD frame HF1): 'sheet' | 'hud'
@@ -5191,6 +5245,16 @@ function refreshErrors() {
             else if (!ldK || !ctsE.some(function(x) { return x && typeof x.key === 'string' && x.key.toLowerCase() === ldK; })) errs.push({ message: 'Loads from needs one of this list\u2019s counters to hold what is loaded. Save drops it.' });
             else if (ldSrc.vis === 'gm' && f.vis !== 'gm') (warningsById['list:' + f.id] = warningsById['list:' + f.id] || []).push({ message: 'Loads from a GM-only list: players see no Load on their sheet.' });
             if (Array.isArray(ldr.cats) && ldr.cats.length > LIMITS.listCats) errs.push({ message: 'Loads from takes at most ' + LIMITS.listCats + ' categories. Save keeps the first ' + LIMITS.listCats + '.' });
+        }
+        if (sp.chamber && typeof sp.chamber === 'object') {   // 1.5.9 Chambers from, as the cleaner reads it
+            var chr = sp.chamber, chSrc = null, stsC = Array.isArray(sp.stats) ? sp.stats : [];
+            draft.fields.forEach(function(x) { if (!chSrc && x && x.id === chr.from) chSrc = x; });
+            if (!chSrc || chSrc.kind !== 'item-list') errs.push({ message: 'Chambers from names no item list. Save drops it.' });
+            else if (chSrc.vis === 'gm' && f.vis !== 'gm') (warningsById['list:' + f.id] = warningsById['list:' + f.id] || []).push({ message: 'Chambers from a GM-only list: players see no Chamber on their sheet.' });
+            var cBy = typeof chr.by === 'string' ? chr.by.trim().toLowerCase() : '', cTo = typeof chr.to === 'string' ? chr.to.trim() : '';
+            if ((cBy && !cTo) || (!cBy && cTo)) errs.push({ message: 'Matched by needs a stat of this list and a stat of the round\u2019s list. Save drops it.' });
+            else if (cBy && !stsC.some(function(x) { return x && typeof x.key === 'string' && x.key.toLowerCase() === cBy; })) errs.push({ message: 'Matched by names no stat of this list. Save drops it.' });
+            if (Array.isArray(chr.cats) && chr.cats.length > LIMITS.listCats) errs.push({ message: 'Chambers from takes at most ' + LIMITS.listCats + ' categories. Save keeps the first ' + LIMITS.listCats + '.' });
         }
         keptBy[f.id] = mine;
         if (errs.length) errorsById['list:' + f.id] = errs;
@@ -5988,6 +6052,25 @@ function listCard(f, allCats, targets, acts) {   // acts (turn-based combat T1):
         }
         cb2.appendChild(lrw);
     }
+    {   // 1.5.9 Chambers from: a row of this list holds rounds in a chamber, one unit at a time, from an item list (this one too); a roll's Then fires them
+        var chS = sp.chamber && typeof sp.chamber === 'object' ? sp.chamber : null, crw = el('div', 'sys-flags sys-list-chamber'), csl = el('select', 'sys-list-chamberfrom');
+        crw.appendChild(el('span', 'sys-num-cap', 'Chambers from'));
+        csl.title = 'A row of this list holds rounds in a chamber, one unit at a time, from an item list, this one too, as a launcher holds its grenades. A roll\u2019s Then can fire the next one. Row.chambered counts them, Row.round.<stat> reads the next and Row.fired.<stat> the one last fired';
+        var cso = el('option', null, 'Nothing'); cso.value = ''; csl.appendChild(cso);
+        (typeof draft !== 'undefined' && draft && Array.isArray(draft.fields) ? draft.fields : []).forEach(function(x) { if (!x || x.kind !== 'item-list') return; var o = el('option', null, (x.label || x.key || x.id) + (x.id === f.id ? ' (this list)' : '')); o.value = x.id; if (chS && chS.from === x.id) o.selected = true; csl.appendChild(o); });
+        crw.appendChild(csl);
+        if (chS) {
+            var hsl = el('select', 'sys-list-chambercap'); hsl.title = 'How many rounds a row holds at once';
+            var capC = typeof chS.cap === 'number' && isFinite(chS.cap) ? Math.max(1, Math.min(CHAMBER_CAP || 8, Math.round(chS.cap))) : 1;
+            for (var hc = 1; hc <= (CHAMBER_CAP || 8); hc++) { var ho = el('option', null, 'Holds ' + hc); ho.value = String(hc); if (capC === hc) ho.selected = true; hsl.appendChild(ho); }
+            crw.appendChild(hsl);
+            crw.appendChild(input('sys-list-chambercats field', Array.isArray(chS.cats) ? chS.cats.join(', ') : '', 'The categories of that list a row may chamber, separated by commas. Blank: any of its rows', 'Categories it takes (blank: any)'));
+            crw.appendChild(input('sys-list-chamberby field', typeof chS.by === 'string' ? chS.by : '', 'A stat of this list. A row chambers only what reads the same figure in the stat below, as a launcher takes only its own kind of round. Blank: anything the categories take', 'Matched by: this list\u2019s stat'));
+            crw.appendChild(input('sys-list-chamberto field', typeof chS.to === 'string' ? chS.to : '', 'The stat of the round\u2019s list that must read the same figure', 'and that list\u2019s stat'));
+            crw.appendChild(input('sys-list-chamberlabel field', typeof chS.label === 'string' ? chS.label : '', 'The word on the button that chambers a round. Blank: Chamber', 'Button word (blank: Chamber)'));
+        }
+        cb2.appendChild(crw);
+    }
     if (typeof onceBox === 'function') onceBox(cb2, sp);   // 1.5.8 Counted once
     // Stage 6 F5b: the list's rolls — a button on each row, the formula rolled with the row's names (dice allowed), LIMITS.rowRolls at most
     var rls = Array.isArray(sp.rolls) ? sp.rolls : [];
@@ -6096,9 +6179,12 @@ function listApplyEditor(box, rr, ri, key, sp, targets) {   // key (R2b): 'apply
         var ch = ch0 && typeof ch0 === 'object' ? ch0 : {}, rw = el('div', 'sys-flags sys-list-applyrow'); rw.dataset.ri = String(ri); rw.dataset.ai = String(ai); rw.dataset.k = key;
         if (key === 'then') rw.appendChild(sel('sys-list-applywhen', [['', 'Always'], ['hit', 'On success'], ['crit', 'On a critical success'], ['miss', 'On failure'], ['fumble', 'On a critical failure'], ['malf', 'On malfunction']], ch.when || '', 'When the roll makes this change: always, or only when its test succeeds or fails. A critical success is a success too, and a critical failure a failure'));
         var opts = [['', 'Pick a pool, number or counter\u2026']].concat(targets.map(function(f) { return [f.id, (f.label || f.key || f.id) + (f.kind === 'resource' ? ' (pool)' : '')]; }), ctrs.map(function(t) { return ['c:' + t.key, 'Counter: ' + (t.label || t.key)]; })); if (ch.f && !targets.some(function(f) { return f.id === ch.f; })) opts.push([ch.f, 'A field that is gone']); if (ch.c && !ctrs.some(function(t) { return t.key === ch.c; })) opts.push(['c:' + ch.c, 'A counter that is gone']);
-        rw.appendChild(sel('sys-list-applytarget', opts, ch.c ? 'c:' + ch.c : (ch.f || ''), 'What this change moves: a pool\u2019s current value, a number, or one of the row\u2019s counters'));
+        if (key === 'then' && ((sp && sp.chamber && typeof sp.chamber === 'object') || ch.fire === true)) opts.push(['fire', sp && sp.chamber ? 'Fire the next chambered round' : 'Fire, but this list has no Chambers from']);   // 1.5.9 Chambers from
+        rw.appendChild(sel('sys-list-applytarget', opts, ch.fire === true ? 'fire' : ch.c ? 'c:' + ch.c : (ch.f || ''), 'What this change moves: a pool\u2019s current value, a number, or one of the row\u2019s counters. Fire takes the next chambered round out, as the round last fired'));
+        if (ch.fire !== true) {
         rw.appendChild(sel('sys-list-applyop', [['sub', 'Subtract'], ['add', 'Add'], ['set', 'Set to']], ch.set ? 'set' : ch.add ? 'add' : 'sub', 'Subtract (a cost) or add; never past the field\u2019s min and max'));
         var fm = input('sys-list-applyformula field', typeof ch.formula === 'string' ? ch.formula : '', 'The amount for the row: no dice; Row.lvl, Row.<stat>, Row.<column> read the row (Row.FPCost)', 'Amount (Row.FPCost)'); fm.maxLength = LIMITS.formula; rw.appendChild(fm);
+        }
         [['lapplyup', '\u25b2', 'Move up'], ['lapplydown', '\u25bc', 'Move down'], ['lapplydel', '\u00d7', 'Remove this change']].forEach(function(bd) { var bb = el('button', 'tool ghost sys-btn', bd[1]); bb.dataset.act = bd[0]; bb.title = bd[2]; rw.appendChild(bb); });
         box.appendChild(rw);
     });
@@ -7380,6 +7466,8 @@ function onInput(e) {
             if (lcc.indexOf('sys-list-needstext') >= 0) { if (t.value.trim()) nR.needsText = t.value.slice(0, LIMITS.label); else delete nR.needsText; }
             else { if (t.value.trim()) nR.needs = t.value.slice(0, LIMITS.formula); else delete nR.needs; }
         }
+        else if (lcc.indexOf('sys-list-chambercats') >= 0) { if (!lsp.chamber || typeof lsp.chamber !== 'object') return; var ccv = t.value.split(',').map(function(s) { return s.trim(); }).filter(Boolean); if (ccv.length) lsp.chamber.cats = ccv; else delete lsp.chamber.cats; }   // 1.5.9 Chambers from (Save cleans them)
+        else if (lcc.indexOf('sys-list-chamberby') >= 0 || lcc.indexOf('sys-list-chamberto') >= 0 || lcc.indexOf('sys-list-chamberlabel') >= 0) { if (!lsp.chamber || typeof lsp.chamber !== 'object') return; var cKy = lcc.indexOf('sys-list-chamberby') >= 0 ? 'by' : lcc.indexOf('sys-list-chamberto') >= 0 ? 'to' : 'label'; if (t.value.trim()) lsp.chamber[cKy] = cKy === 'label' ? t.value.slice(0, LIMITS.label) : t.value.trim(); else delete lsp.chamber[cKy]; }
         else if (lcc.indexOf('sys-list-loadby') >= 0) { if (!lsp.load || typeof lsp.load !== 'object') return; if (t.value.trim()) lsp.load.by = t.value.trim(); else delete lsp.load.by; }   // 1.5.8 Matched by (Save keeps the pair only where both name a stat)
         else if (lcc.indexOf('sys-list-loadto') >= 0) { if (!lsp.load || typeof lsp.load !== 'object') return; if (t.value.trim()) lsp.load.to = t.value.trim(); else delete lsp.load.to; }
         else if (lcc.indexOf('sys-list-loadneedstext') >= 0) { if (!lsp.load || typeof lsp.load !== 'object') return; if (t.value.trim()) lsp.load.needsText = t.value; else delete lsp.load.needsText; }   // 1.5.8 Loads only where's words
@@ -7552,9 +7640,11 @@ function onChange(e) {
         else if (c.indexOf('sys-list-rolldie') >= 0) { var rir = t.closest('.sys-list-roll'), riD = rir && Array.isArray(lsc.rolls) ? lsc.rolls[+rir.dataset.ri] : null; if (!riD || typeof riD !== 'object') return; if (t.value) riD.die = t.value; else delete riD.die; }   // 1.5.8: the die a list roll's button wears
         else if (c.indexOf('sys-list-rollcost') >= 0) { var rcr = t.closest('.sys-list-roll'), rcD = rcr && Array.isArray(lsc.rolls) ? lsc.rolls[+rcr.dataset.ri] : null; if (!rcD || typeof rcD !== 'object') return; if (t.value) rcD.cost = t.value; else delete rcD.cost; }   // turn-based combat T1
         else if (c.indexOf('sys-list-rollkind') >= 0) { var rkr = t.closest('.sys-list-roll'), rkD = rkr && Array.isArray(lsc.rolls) ? lsc.rolls[+rkr.dataset.ri] : null; if (!rkD || typeof rkD !== 'object') return; if (t.value === 'apply') { if (!Array.isArray(rkD.apply)) rkD.apply = [{ f: '', formula: '' }]; } else delete rkD.apply; }   // Stage 6 HUD H7b: Roll | Apply (a formula typed before stays in the draft)
-        else if (c.indexOf('sys-list-applytarget') >= 0 || c.indexOf('sys-list-applyop') >= 0 || c.indexOf('sys-list-applywhen') >= 0) { var atr = t.closest('.sys-list-applyrow'), atR = atr && Array.isArray(lsc.rolls) ? lsc.rolls[+atr.dataset.ri] : null, atK = atr && atr.dataset.k === 'then' ? 'then' : 'apply', atC = atR && Array.isArray(atR[atK]) ? atR[atK][+atr.dataset.ai] : null; if (!atC || typeof atC !== 'object') return; if (c.indexOf('sys-list-applytarget') >= 0) { if (t.value.indexOf('c:') === 0) { atC.c = t.value.slice(2); delete atC.f; } else { atC.f = t.value; delete atC.c; } } else if (c.indexOf('sys-list-applywhen') >= 0) { if (t.value === 'hit' || t.value === 'miss' || t.value === 'malf' || t.value === 'crit' || t.value === 'fumble') atC.when = t.value; else delete atC.when; } else { delete atC.add; delete atC.set; if (t.value === 'add') atC.add = true; else if (t.value === 'set') atC.set = true; } }   // R2b: a counter, a consequence's When
+        else if (c.indexOf('sys-list-applytarget') >= 0 || c.indexOf('sys-list-applyop') >= 0 || c.indexOf('sys-list-applywhen') >= 0) { var atr = t.closest('.sys-list-applyrow'), atR = atr && Array.isArray(lsc.rolls) ? lsc.rolls[+atr.dataset.ri] : null, atK = atr && atr.dataset.k === 'then' ? 'then' : 'apply', atC = atR && Array.isArray(atR[atK]) ? atR[atK][+atr.dataset.ai] : null; if (!atC || typeof atC !== 'object') return; if (c.indexOf('sys-list-applytarget') >= 0) { if (t.value === 'fire') { atC.fire = true; delete atC.f; delete atC.c; } else if (t.value.indexOf('c:') === 0) { atC.c = t.value.slice(2); delete atC.f; } else { atC.f = t.value; delete atC.c; } if (t.value !== 'fire') delete atC.fire; } else if (c.indexOf('sys-list-applywhen') >= 0) { if (t.value === 'hit' || t.value === 'miss' || t.value === 'malf' || t.value === 'crit' || t.value === 'fumble') atC.when = t.value; else delete atC.when; } else { delete atC.add; delete atC.set; if (t.value === 'add') atC.add = true; else if (t.value === 'set') atC.set = true; } }   // R2b: a counter, a consequence's When
         else if (c.indexOf('sys-list-colmetric') >= 0 || c.indexOf('sys-list-statmetric') >= 0) { var mcol = c.indexOf('sys-list-colmetric') >= 0, mrw = t.closest(mcol ? '.sys-list-col' : '.sys-list-stat'), mLs = mcol ? lsc.cols : lsc.stats, mD = mrw && Array.isArray(mLs) ? mLs[+(mcol ? mrw.dataset.ci : mrw.dataset.si)] : null; if (!mD || typeof mD !== 'object') return; if (t.value === 'swap' || t.value === 'bare') mD.unitShow = t.value; else delete mD.unitShow; }   // 1.5.4: how a measure reads under Metric
         else if (c.indexOf('sys-list-loadfrom') >= 0) { if (t.value) { var ld0 = lsc.load && typeof lsc.load === 'object' ? lsc.load : {}, ct0 = Array.isArray(lsc.counters) && lsc.counters[0] && typeof lsc.counters[0].key === 'string' ? lsc.counters[0].key : ''; lsc.load = { from: t.value, ct: typeof ld0.ct === 'string' && ld0.ct ? ld0.ct : ct0 }; if (Array.isArray(ld0.cats)) lsc.load.cats = ld0.cats; } else delete lsc.load; }   // 1.5.8 Loads from
+        else if (c.indexOf('sys-list-chamberfrom') >= 0) { if (t.value) { var ch0 = lsc.chamber && typeof lsc.chamber === 'object' ? lsc.chamber : {}; lsc.chamber = Object.assign({}, ch0, { from: t.value }); if (typeof lsc.chamber.cap !== 'number') lsc.chamber.cap = 1; } else delete lsc.chamber; }   // 1.5.9 Chambers from
+        else if (c.indexOf('sys-list-chambercap') >= 0) { if (lsc.chamber && typeof lsc.chamber === 'object') lsc.chamber.cap = Math.max(1, Math.min(CHAMBER_CAP || 8, parseInt(t.value, 10) || 1)); }
         else if (c.indexOf('sys-list-loadct') >= 0) { if (lsc.load && typeof lsc.load === 'object') { if (t.value) lsc.load.ct = t.value; else delete lsc.load.ct; } }
         else if (c.indexOf('sys-list-once') >= 0) {   // 1.5.8 Counted once (Save keeps it only with a group stat and a Higher by, each of this list)
             var oKey = c.indexOf('sys-list-onceby') >= 0 ? 'by' : c.indexOf('sys-list-oncerank') >= 0 ? 'rank' : c.indexOf('sys-list-oncecost') >= 0 ? 'cost' : c.indexOf('sys-list-oncefree') >= 0 ? 'free' : ''; if (!oKey) return;

@@ -12841,6 +12841,55 @@ pendingChecks.push((async () => {
     }
 })());
 pendingChecks.push((async () => {
+    /* ---- 1.5.9 Chambers from: a player's chamber and unchamber through the host's real row branch, and their own app waiting for its word ---- */
+    {
+        const url = f => 'file:///' + path.resolve(path.join(__dirname, '..', 'system', 'app', 'scripts', f)).split(String.fromCharCode(92)).join('/');
+        const Sx = await import(url('systemcore.js')), Fx = await import(url('formula.js'));
+        const ciSrc = between('// [netcheck:charitem-start]', '// [netcheck:charitem-end]', 'charitem'), dlSrc = between('// [netcheck:chardelta-start]', '// [netcheck:chardelta-end]', 'chardelta');
+        const ntSrc = (() => { const i = src.indexOf('function itemNotice('), k = src.indexOf('net.syncChars = function', i); return src.slice(i, k); })();
+        const raw = { v: 1, name: 'C', rolls: [], fields: [
+            { id: 'f_gear', key: 'Gear', label: 'Gear', kind: 'item-list', edit: 'owner', vis: 'all', list: { multi: true, stats: [{ key: 'ammo', label: 'Ammo' }, { key: 'kind', label: 'Kind' }], chamber: { from: 'f_gear', cats: ['Round'], by: 'ammo', to: 'kind', cap: 1 } } },
+            { id: 'f_bag', key: 'Bag', label: 'Bag', kind: 'item-list', edit: 'owner', vis: 'all', list: { multi: true } }],
+            items: [{ id: 'i_tube', name: 'Spark Tube', category: 'Launcher', stats: { ammo: 4 } }, { id: 'i_fizz', name: 'Fizz Charge', category: 'Round', stats: { kind: 4 } }, { id: 'i_dud', name: 'Dud Charge', category: 'Round', stats: { kind: 9 } }] };
+        const sysC = Sx.cleanSystem(raw, { F: Fx, gmView: true });
+        const camp = { id: 'k', system: sysC, chars: { c_1: { id: 'c_1', name: 'Kael', ownerId: 'u_k', npc: false, values: { f_gear: [{ id: 'w_t1', defId: 'i_tube', qty: 1 }, { id: 'w_f1', defId: 'i_fizz', qty: 2 }, { id: 'w_d1', defId: 'i_dud', qty: 1 }], f_bag: [{ id: 'w_b1', defId: 'i_tube', qty: 1 }, { id: 'w_bf', defId: 'i_fizz', qty: 1 }] } } } };
+        const out = { answer: [], owner: [], saves: 0 }, conn = { peer: 'pK', send: m => { packCheck(m); out.answer.push(JSON.parse(JSON.stringify(m))); } };
+        const netH = { active: true, role: 'host', paused: false, conns: [{ peer: 'pK', open: true, send: m => { packCheck(m); out.owner.push(JSON.parse(JSON.stringify(m))); } }], roster: { pK: { id: 'u_k' } } };
+        const win = { wpFormula: Fx, wpVtt: { on: () => true }, wpSheets: { playerSystem: c => Sx.cleanSystem(c.system, { F: Fx, gmView: false }), charChanged() {} }, wpDiceCore: null, wpLibrary: null };
+        const H = new Function('net', 'SC', 'window', 'peerPaused', 'getActiveCampaign', 'saveRemoteSoon', 'sendFailed', 'peerProfileId', 'lim', 'toast', 'logEvent',
+            'var charLimit = lim, _charSlowSaid = {}, _charPending = {}, _charHost = {}, _rowGrace = {};\n' + dlSrc + '\n' + ntSrc + '\nreturn function(msg, conn) {\n' + ciSrc + '\n};')(
+            netH, () => Sx, win, () => false, () => camp, () => { out.saves++; }, e => { throw e; }, c => (netH.roster[c.peer] ? netH.roster[c.peer].id : null), { allow: () => true }, () => {}, () => {});
+        const SEND = msg => { out.answer.length = 0; out.owner.length = 0; const s0 = out.saves; H(Object.assign({ type: 'char-item', charId: 'c_1', fieldId: 'f_gear', rowId: 'w_t1' }, msg), conn); return { answer: out.answer.slice(), owner: out.owner.slice(), saved: out.saves - s0 }; };
+        const gear = () => j(camp.chars.c_1.values.f_gear);
+        const a1 = SEND({ rid: 'c1', op: 'chamber', from: 'w_f1' }), g1 = gear();
+        const a2 = SEND({ rid: 'c2', op: 'chamber', from: 'w_f1' }), g2 = gear();
+        const a3 = SEND({ rid: 'c3', op: 'unchamber', back: 'w_bk' }), g3 = gear();
+        const a4 = SEND({ rid: 'c4', op: 'chamber', from: 'w_d1' }), g4 = gear();
+        const a5 = SEND({ rid: 'c5', op: 'chamber', fieldId: 'f_bag', rowId: 'w_b1', from: 'w_bf' });
+        const a6 = SEND({ rid: 'c6', op: 'chamber', from: 5 });
+        check('1.5.9 Chambers from on the host (the real row branch with the real core): a player\'s chamber takes one unit off the stack into the launcher\'s chamber, stored, saved once, acked and sent to its owner; a second refused in words while the chamber is full; unchamber gives it back onto its stack; a round that does not fit refused in words; a list with no chamber answered field; a message of the wrong shape answered nothing; nothing moves on a refusal; every message packs',
+            j(a1.answer) === j([{ type: 'char-ack', rid: 'c1' }]) && a1.saved === 1 && g1 === j([{ id: 'w_t1', defId: 'i_tube', qty: 1, rd: [{ defId: 'i_fizz' }] }, { id: 'w_f1', defId: 'i_fizz', qty: 1 }, { id: 'w_d1', defId: 'i_dud', qty: 1 }]) && a1.owner.some(m => m.values && m.values.f_gear)
+            && a2.answer.length === 1 && a2.answer[0].type === 'char-deny' && /full/.test(a2.answer[0].msg || '') && a2.saved === 0 && a2.owner.length === 0 && g2 === g1
+            && j(a3.answer) === j([{ type: 'char-ack', rid: 'c3' }]) && g3 === j([{ id: 'w_t1', defId: 'i_tube', qty: 1 }, { id: 'w_f1', defId: 'i_fizz', qty: 2 }, { id: 'w_d1', defId: 'i_dud', qty: 1 }])
+            && a4.answer.length === 1 && a4.answer[0].type === 'char-deny' && a4.answer[0].reason === 'value' && /does not fit/.test(a4.answer[0].msg || '') && g4 === g3
+            && a5.answer.length === 1 && a5.answer[0].type === 'char-deny' && a5.answer[0].reason === 'field' && a6.answer.length === 0,
+            j([a1, g1, a2.answer, a3.answer, g3, a4.answer, a5.answer, a6.answer]));
+        const cA = src.indexOf('net.charItem = function('), cZ = src.indexOf('\n};\n', cA) + 3, sent = [], pend = {};
+        const campP = { id: 'k', system: Sx.cleanSystem(raw, { F: Fx, gmView: false }), chars: { c_1: { id: 'c_1', name: 'Kael', ownerId: 'u_k', npc: false, values: { f_gear: [{ id: 'w_t1', defId: 'i_tube', qty: 1 }, { id: 'w_f1', defId: 'i_fizz', qty: 2 }] } } } };
+        const before = j(campP.chars.c_1.values);
+        const netP = { active: true, role: 'client', stream: false, foreign: true, syncedPeer: 'h', myId: 'u_k', libEntry: () => null, conns: [{ peer: 'h', open: true, send: m => { packCheck(m); sent.push(JSON.parse(JSON.stringify(m))); } }] };
+        new Function('net', 'SC', 'getActiveCampaign', 'window', '_charPending', 'charPendingDone', 'setTimeout', src.slice(cA, cZ))(netP, () => Sx, () => campP, { wpFormula: Fx, wpVtt: { on: () => true } }, pend, () => {}, () => 0);
+        const p1 = netP.charItem('c_1', 'f_gear', { op: 'chamber', rowId: 'w_t1', from: 'w_f1' }), p2 = netP.charItem('c_1', 'f_gear', { op: 'unchamber', rowId: 'w_t1', back: 'w_b2' });
+        check('1.5.9 Chambers from on a player\'s own app (the real net.charItem): a chamber and an unchamber are each sent with their from and back and wait for the host\'s word, their copy left as it was until it comes',
+            p1.ok && p1.pending && p2.ok && p2.pending && j(campP.chars.c_1.values) === before && j(sent.map(m => [m.type, m.op, m.rowId, m.from, m.back])) === j([['char-item', 'chamber', 'w_t1', 'w_f1', undefined], ['char-item', 'unchamber', 'w_t1', undefined, 'w_b2']]) && Object.keys(pend).length === 2,
+            j([p1, p2, sent]));
+        const rq = between('// [netcheck:rollreq-start]', '// [netcheck:rollreq-end]', 'rollreq'), dr = between('// [netcheck:diceroll-start]', '// [netcheck:diceroll-end]', 'diceroll');
+        check('1.5.9 Chambers from, a launched round (net.js, pinned): after a roll\'s Then is applied, a round it fired on a hit, not a jam, goes off at the roller\'s target through the board\'s wpLaunchHit, asked through typeof, in the host\'s roll branch and the GM\'s own roll; a miss places nothing',
+            rq.includes("if (taQ && taQ.ok && taQ.fired && !mfHitQ && vdQ && vdQ.kind === 'check' && vdQ.pass === true && tcQ && tcQ.range && typeof tcQ.range.tid === 'string' && typeof window.wpLaunchHit === 'function') window.wpLaunchHit({ charId: q.charId, fieldId: taQ.fired.f, rowId: taQ.fired.r, tid: tcQ.range.tid, mapId: tcQ.range.mapId });")
+            && dr.includes("if (taR && taR.ok && taR.fired && !mfHitR && vdR && vdR.kind === 'check' && vdR.pass === true && tcR && tcR.range && typeof tcR.range.tid === 'string' && typeof window.wpLaunchHit === 'function') window.wpLaunchHit({ charId: chR.id, fieldId: taR.fired.f, rowId: taR.fired.r, tid: tcR.range.tid, mapId: tcR.range.mapId });"));
+    }
+})());
+pendingChecks.push((async () => {
     /* ---- 126b: only a player's own app believes a src; the host judges by its own rows ---- */
     {
         const url = f => 'file:///' + path.resolve(path.join(__dirname, '..', 'system', 'app', 'scripts', f)).split(String.fromCharCode(92)).join('/');

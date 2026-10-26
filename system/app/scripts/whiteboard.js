@@ -4081,6 +4081,7 @@ window.wpFitToGrid = fitToGrid;
       var y = (e.clientY - box.top + wbWrap.scrollTop) / state.zoomLevel;
       if (_armedThrow) {   // a throw from a character sheet: one-shot, host-authoritative, shared to the map
           var ctx = _armedThrow; _armedThrow = null; document.body.classList.remove('placing');
+          if (ctx.launch) { if (typeof launchAt === 'function') launchAt({ x: x, y: y, charId: ctx.charId, fieldId: ctx.fieldId, rowId: ctx.rowId }, map); var mvL = document.getElementById('moveModeBtn'); if (mvL) mvL.click(); return; }   // 1.5.9 Chambers from: the GM's Launch, a round's blast with no throw
           if (window.wpNet && window.wpNet.active && window.wpNet.role === 'client') { if (window.wpNet.throwReq) window.wpNet.throwReq(ctx.charId, ctx.fieldId, ctx.rowId, x, y, map.id); }
           else placeThrownBlast({ x: x, y: y, ft: ctx.ft, name: ctx.name, by: ctx.by, charId: ctx.charId, fieldId: ctx.fieldId, rowId: ctx.rowId, damage: ctx.damage, gmOnly: ctx.gmOnly });   // 1.5.8 explosives: the row it is thrown from
           var mvB = document.getElementById('moveModeBtn'); if (mvB) mvB.click();
@@ -4404,6 +4405,46 @@ window.wpFitToGrid = fitToGrid;
       return (map.whiteboard || []).filter(function(w) { return w && w.type === 'trigger' && w.mine && typeof w.mine === 'object'; }).map(function(z) { return standInSvg('mine', (Number(z.x) || 0) + (Number(z.w) || 0) / 2, (Number(z.y) || 0) + (Number(z.h) || 0) / 2, z.mineIcon); }).join('');
   }
   // [systemcheck:explosives-end]
+  // [systemcheck:launch-start]
+  // 1.5.9 Chambers from (the owner, by prompt on 2026-10-25: "A cell and a round", after a sheet website's grenade launchers): a launched round is
+  // no throw. Its blast goes off where it is put, with none of a throw's outcomes: no throw roll, no scatter, no drop at the feet, nothing going
+  // off in the hand. It is the round last fired, else the next one (Row.fired), and its damage, type, armour divisor, notes and icon are the
+  // round's own. On a hit the host puts it on the roller's target (net.js, wpLaunchHit); the GM's Launch puts it where the GM clicks (wpArmLaunch),
+  // as for a round that misses: where a missed launched round lands is not ruled yet. The host's alone, never on a player's app
+  function launchRowOf(camp, opts) {   // the launcher's row on this machine's own copy and the round it puts down: { ch, f, row, def, area }
+      var S = window.wpSystemCore, sys = camp && camp.system; if (!S || !sys || !opts || typeof opts.charId !== 'string' || typeof opts.fieldId !== 'string' || typeof opts.rowId !== 'string') return null;
+      var ch = camp.chars && Object.prototype.hasOwnProperty.call(camp.chars, opts.charId) ? camp.chars[opts.charId] : null; if (!ch) return null;
+      var f = S.fieldById(sys, opts.fieldId); if (!f || f.kind !== 'item-list' || !f.list || !f.list.chamber) return null;
+      var row = (ch.values && Array.isArray(ch.values[f.id]) ? ch.values[f.id] : []).filter(function(r) { return r && r.hid !== 1 && S.rowIdOf(r) === opts.rowId; })[0]; if (!row) return null;
+      var cp = row.fd && typeof row.fd === 'object' ? row.fd : Array.isArray(row.rd) && row.rd[0] && typeof row.rd[0] === 'object' ? row.rd[0] : null; if (!cp) return null;
+      var rd = S.rowDef(sys, cp), def = rd && rd.def; if (!def || !def.area || typeof def.area !== 'object') return null;
+      return { ch: ch, f: f, row: row, def: def, area: def.area };
+  }
+  function launchAt(opts, mapIn) {
+      if (window.wpNet && window.wpNet.active && window.wpNet.role === 'client') return null;
+      var camp = getActiveCampaign(), map = mapIn || getActiveMap(); if (!camp || !map || !opts) return null;
+      var x = Number(opts.x), y = Number(opts.y); if (!isFinite(x) || !isFinite(y)) return null;
+      var lr = launchRowOf(camp, opts); if (!lr) { toast('Nothing to put down there: no round fired or chambered on that row has a blast.'); return null; }
+      var aimT = tokenAtPoint(map, x, y, true), aim = aimT ? tokenCentre(aimT) : { x: x, y: y }, d = lr.def, a = lr.area, gm = d.vis === 'gm' || lr.f.vis === 'gm';   // the character token clicked, else the point
+      return placeThrownBlast({ goOff: true, launched: true, x: aim.x, y: aim.y, ft: a.ft, name: a.name || d.name || '', by: lr.ch.name || '', charId: opts.charId, fieldId: lr.f.id, rowId: opts.rowId, damage: d.damage || '', gmOnly: gm, direct: aimT ? aimT.id : null, dtype: a.type, ad: a.ad, notes: gm ? '' : d.notes, icon: d.icon }, map);
+  }
+  window.wpLaunchAt = launchAt;
+  window.wpArmLaunch = function(ctx) {   // the sheet's Launch (the GM's): the next click on the map puts the round's blast there
+      if (!ctx || typeof ctx !== 'object') return;
+      var nm = typeof ctx.name === 'string' ? ctx.name.slice(0, 60) : '';
+      _armedThrow = { launch: true, charId: ctx.charId, fieldId: ctx.fieldId, rowId: ctx.rowId, name: nm };
+      window.isDrawingMode = false; window.isEraserMode = false; window.isFogMode = false;
+      window.isMeasureMode = true; window.wpMeasureKind = 'blast';
+      if (wbWrap) wbWrap.style.cursor = 'crosshair'; document.body.classList.add('placing');
+      toast('Click the target or a place on the map for ' + (nm ? 'the ' + nm : 'the blast') + '. Esc cancels.');
+  };
+  window.wpLaunchHit = function(o) {   // net.js on the host: a hit puts the round it fired on the roller's target, on the target's own map
+      var camp = getActiveCampaign(); if (!camp || !o || typeof o.mapId !== 'string' || typeof o.tid !== 'string') return null;
+      var map = camp.items && Object.prototype.hasOwnProperty.call(camp.items, o.mapId) ? camp.items[o.mapId] : null; if (!map || !Array.isArray(map.whiteboard)) return null;
+      var t = map.whiteboard.filter(function(w) { return w && w.id === o.tid && !w.hidden; })[0]; if (!t) return null;
+      var c = tokenCentre(t); return launchAt({ charId: o.charId, fieldId: o.fieldId, rowId: o.rowId, x: c.x, y: c.y }, map);
+  };
+  // [systemcheck:launch-end]
   // [systemcheck:explode-start]
   // Explode (1.5.4, backlog 128; the owner by prompt: "Yes, type is a word", and of who may: "The GM is the only one who should be able to
   // make any blast effects"). The GM sets off the last shape of the Radius tool as an explosion: a circle, and since 128 (e) a ring or a cone

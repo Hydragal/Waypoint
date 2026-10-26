@@ -5326,6 +5326,38 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         const escD = fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', 'esckey.js'), 'utf8');
         check('1.5.8 Loads from, the menu\'s Escape: the Load menu wears the Download menu\'s class, which Escape\'s router leaves to the menu\'s own listener', escD.includes('.sheet-dl-pop') && ldS.includes("'sheet-dl-pop sheet-load-pop'"));
     }
+    {   // 1.5.9 Chambers from: a row's chamber chip, its Chamber menu and the GM's Launch (sheets.js chamberCtl, chamberChoices and openChamberMenu, sliced by their chamberctl markers beside the load menu's own, run on a page of plain objects that refuses markup, with the real core)
+        const SYc = await import(modUrl('systemcore.js')), shC = fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', 'sheets.js'), 'utf8').replace(/\r\n/g, '\n');
+        const ldC = shC.slice(shC.indexOf('// [sinkcheck:loadctl-start]'), shC.indexOf('// [sinkcheck:loadctl-end]')), chC = shC.slice(shC.indexOf('// [sinkcheck:chamberctl-start]'), shC.indexOf('// [sinkcheck:chamberctl-end]'));
+        const made = [], node = tag => { const n = { tag, children: [], className: '', title: '', style: {}, listeners: {}, attrs: {}, parent: null, appendChild(c) { this.children.push(c); c.parent = this; return c; }, setAttribute(k, v) { this.attrs[k] = String(v); }, addEventListener(k, f) { this.listeners[k] = f; }, remove() { if (this.parent) this.parent.children.splice(this.parent.children.indexOf(this), 1); }, contains(x) { for (let y = x; y; y = y.parent) if (y === this) return true; return false; }, getBoundingClientRect() { return { left: 40, right: 90, top: 10, bottom: 30 }; }, focus() { docC.activeElement = this; }, closest() { return null; },
+            querySelector(sel) { const want = sel.replace(/^\./, ''); const walk = x => { for (const c of x.children) { if ((' ' + c.className + ' ').includes(' ' + want + ' ')) return c; const r = walk(c); if (r) return r; } return null; }; return walk(this); }, querySelectorAll(sel) { const want = sel.replace(/^\./, ''), out = []; const walk = x => { x.children.forEach(c => { if ((' ' + c.className + ' ').includes(' ' + want + ' ')) out.push(c); walk(c); }); }; walk(this); return out; } };
+            Object.defineProperty(n, 'innerHTML', { set() { throw new Error('markup written'); } }); made.push(n); return n; };
+        const docC = { body: node('body'), activeElement: null, listen: {}, addEventListener(k, f) { this.listen[k] = f; }, removeEventListener(k) { delete this.listen[k]; } };
+        const el = (tag, cls, text) => { const e = node(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
+        const hostile = '<img src=x onerror=alert(1)>', armedC = [], closedC = [];
+        const sys = SYc.cleanSystem({ fields: [{ id: 'f_gear', key: 'Gear', label: hostile, kind: 'item-list', vis: 'all', edit: 'owner', list: { multi: true, chamber: { from: 'f_gear', cats: ['Round'], cap: 2, label: '<b>Feed</b>' } } }],
+            items: [{ id: 'i_tube', name: 'Spark Tube', category: 'Launcher', vis: 'all' }, { id: 'i_fizz', name: hostile, category: 'Round', vis: 'all', area: { ft: 6 }, damage: '3d6' }] }, { F: await import(modUrl('formula.js')), gmView: true });
+        const c = SYc.cleanChar({ id: 'c_kael', name: 'Kael', values: { f_gear: [{ id: 'w_t1', defId: 'i_tube', qty: 1, rd: [{ defId: 'i_fizz' }] }, { id: 'w_t2', defId: 'i_tube', qty: 1 }, { id: 'w_f1', defId: 'i_fizz', qty: 3 }] } }, sys);
+        const sent = [], win = { innerWidth: 1200, innerHeight: 800, wpArmLaunch: o => armedC.push(o) };
+        const CH = new Function('el', 'document', 'window', 'systemOf', 'getActiveCampaign', 'fieldById', 'rowDef', 'rowIdOf', 'rowLvl', 'fmtNum', 'uid', 'commitItem', 'chamberTakes', 'chamberCap', 'closeHud', 'closeSheet', 'loadFits', ldC + '\n' + chC + '\nreturn { chamberCtl: chamberCtl, closeLoadMenu: closeLoadMenu };')(
+            el, docC, win, () => sys, () => ({}), SYc.fieldById, SYc.rowDef, SYc.rowIdOf, SYc.rowLvl, n => String(n), p => p + 'new', (cc, ff, q) => sent.push(q), SYc.chamberTakes, SYc.chamberCap, () => closedC.push('hud'), () => closedC.push('sheet'), SYc.loadFits);
+        const f = sys.fields[0], h1 = node('div'), h2 = node('div'), h3 = node('div'), h4 = node('div');
+        CH.chamberCtl(h1, c.values.f_gear[0], c, f, f.list, true, sys, true, true); CH.chamberCtl(h2, c.values.f_gear[1], c, f, f.list, false, sys, false, true); CH.chamberCtl(h3, c.values.f_gear[0], c, f, null, true, sys, true, true); CH.chamberCtl(h4, c.values.f_gear[0], c, f, f.list, true, sys, false, true);
+        const chip = h1.children[0], chB = chip && chip.children[1], unB = chip && chip.children[2], launch = h1.children[1];
+        if (chB) chB.listeners.click({ preventDefault() {}, stopPropagation() {} });
+        const pop = docC.body.children[0], rows = pop ? pop.querySelectorAll('.sheet-dl-item') : [];
+        if (rows[0]) rows[0].listeners.click({ preventDefault() {} });
+        const popGone = docC.body.children.length === 0;
+        if (unB) unB.listeners.click({ preventDefault() {}, stopPropagation() {} });
+        if (launch) launch.listeners.click({});
+        check('1.5.9 Chambers from, the sheet (chamberCtl and openChamberMenu, run for real on a page that refuses markup): the chip says how many of its cap are chambered and names the next round in its tooltip, its button wears the list\'s own word and Unchamber shows while one is in; a row that may not be used has a chip and no button, a list with no chamber draws nothing; the menu lists only the rows that fit, never a launcher, each name a text node, and a row sends one chamber op naming its row; Unchamber sends a fresh back id; the GM alone gets Launch for a round with a blast, which arms the board and closes the sheet',
+            chip && chip.children[0].textContent === '1 of 2 chambered' && chip.title === 'Next to fire: ' + hostile && chB.textContent === '<b>Feed</b>' && unB.textContent === 'Unchamber'
+            && h2.children.length === 1 && h2.children[0].children[0].textContent === '0 of 2 chambered' && h2.children[0].children.length === 1 && h3.children.length === 0 && h4.children.length === 1
+            && rows.length === 1 && rows[0].children[0].textContent === hostile + ' \u00d73' && popGone && JSON.stringify(sent) === JSON.stringify([{ op: 'chamber', rowId: 'w_t1', from: 'w_f1' }, { op: 'unchamber', rowId: 'w_t1', back: 'w_new' }])
+            && launch && /Launch/.test(launch.textContent) && launch.title.indexOf(hostile) > 0 && JSON.stringify(armedC) === JSON.stringify([{ charId: 'c_kael', fieldId: 'f_gear', rowId: 'w_t1', name: hostile }]) && closedC[0] === 'sheet'
+            && !/innerHTML|insertAdjacentHTML|outerHTML/.test(chC),
+            JSON.stringify([chip && chip.title, rows.length, sent, armedC, h4.children.length]));
+    }
     {   // 1.5.8 Counted once: a row's name from a campaign file reaches the chip as text alone, and the editor's box names a hostile stat as an option's text
         const SYO = await import(modUrl('systemcore.js')), shO = fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', 'sheets.js'), 'utf8').replace(/\r\n/g, '\n');
         const made = [], mkEl = (tag, cls, text) => { const e = { tag, className: cls || '', textContent: text === undefined ? '' : text, kids: [], title: '', value: '', selected: false, appendChild(x) { this.kids.push(x); return x; } }; Object.defineProperty(e, 'innerHTML', { set() { made.push('innerHTML'); }, get() { return ''; } }); made.push(tag); return e; };
