@@ -463,7 +463,7 @@ function onKeyDown(e) {
         if (e.code !== 'Escape') { prefs.bind = cleanBind(e.code); savePrefs(); }
         render(true); return;
     }
-    if (e.code === 'KeyM' && e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey) {   // quick mute, Discord's own keys: anywhere, a text box too
+    if (e.code === 'KeyM' && e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey) {   // quick mute: anywhere, a text box too
         if (me.on && !e.repeat) { e.preventDefault(); setMuted(!me.muted); }
         return;
     }
@@ -501,6 +501,9 @@ function tick(label, checked, title, fn) {   // one of the popover's rows: a che
 }
 function popOpen() { var p = ui('voicePop'); return !!p && p.style.display !== 'none'; }
 function popShut() { var p = ui('voicePop'); if (p) p.style.display = 'none'; if (binding) binding = false; }
+// Escape, as esckey.js (the app's one router for the key) hands it on while the popover is up: a key being picked for push to talk is let
+// go first and the popover stays; otherwise the popover is put away
+function escape() { if (binding) { binding = false; render(true); return; } popShut(); }
 function members() {   // who is listed: every voice this machine plays, then (the host) players still connecting
     var out = [];
     Object.keys(voices).forEach(function(pid) { var v = voices[pid]; out.push({ key: pid, pid: pid, name: v.name + (v.gm && v.name.indexOf('(GM)') < 0 ? ' (GM)' : '') }); });
@@ -622,5 +625,5 @@ setInterval(function() {
     render(false);
 }, 1000);
 
-window.wpVoice = { fromHost: fromHost, fromPlayer: fromPlayer, connGone: connGone, tableReady: tableReady, tableLeft: tableLeft, join: join, leave: leave, open: function() { var b = ui('voiceInd'); if (b && !popOpen()) b.click(); } };
+window.wpVoice = { fromHost: fromHost, fromPlayer: fromPlayer, connGone: connGone, tableReady: tableReady, tableLeft: tableLeft, join: join, leave: leave, escape: escape, open: function() { var b = ui('voiceInd'); if (b && !popOpen()) b.click(); } };
 render(true);

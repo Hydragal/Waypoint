@@ -165,7 +165,7 @@
   #moreMenu #saveAsMenu button.menu-item:hover, #moreMenu #saveAsMenu button.menu-item:focus-visible { background: var(--edge); color: var(--ink); outline: none; }
   body.net-client #moreFiles { display: none !important; }   /* a player exports and imports nothing of the GM's: the part goes with its rule */
   body:not(.row-narrow) #moreFold { display: none; }
-  body.row-narrow header #soundInd, body.row-narrow header #musicInd, body.row-narrow header #handoutsBtn, body.row-narrow header #journalBtn, body.row-narrow header #helpBtn { display: none !important; }
+  body.row-narrow header #soundInd, body.row-narrow header #musicInd, body.row-narrow header #voiceInd, body.row-narrow header #handoutsBtn, body.row-narrow header #journalBtn, body.row-narrow header #helpBtn { display: none !important; }
   #moreMenuBtn.marked::after { content: ''; display: none; position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; border-radius: 50%; background: var(--gold); }   /* a folded control has something to say */
   body.row-narrow #moreMenuBtn.marked::after { display: block; }
   .tool.icon{
@@ -2513,6 +2513,7 @@
   @keyframes vcwave { 0% { opacity: .35; } 25% { opacity: 1; } 100% { opacity: .35; } }
   #voiceInd.mic-off .vc-w { opacity: .3; animation: none; }
   #voiceInd.mic-off::after { content: ''; position: absolute; left: 4px; right: 4px; top: 50%; height: 2px; margin-top: -1px; background: var(--red); border-radius: 1px; transform: rotate(-45deg); pointer-events: none; }   /* struck through, as a sound off for you is */
+  #moreFold .vc-w { display: none; }   /* More's row for the microphone, while the row is folded: the mic alone, as the icon is out of voice */
   #voicePop { position: fixed; z-index: 100001; width: 260px; background: var(--panel2); border: 1px solid var(--gold); border-radius: 8px; box-shadow: var(--shadow); padding: 8px 10px; font-size: 12px; color: var(--ink); }
   #voicePop .voice-join { width: 100%; margin: 2px 0; }
   #voicePop .voice-bind { margin-left: auto; padding: 0 8px; font-size: 11px; }

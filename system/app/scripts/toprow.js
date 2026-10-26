@@ -9,7 +9,7 @@
    everything else that hangs on that event, runs as before.
 
    The MORE menu opens from the three dots at the row's right end. It holds Export As, with its kinds in a list beside it, Import, Refresh,
-   About and the way back to the welcome screen. In a narrow window Sound, Music, Handouts, Journal and Help leave the row: each has a row in
+   About and the way back to the welcome screen. In a narrow window Sound, Music, Voice, Handouts, Journal and Help leave the row: each has a row in
    More that presses the control itself, which stays in the page with its id and its handler, only out of sight.
 
    A list could be worked from the keyboard, so a menu can be too, with the keys the page's Outline menu has: Down on its button opens it, the
@@ -91,10 +91,10 @@ function campPick(id) {
 }
 // The row's controls do not fit on one line: the header grew past one row
 function rowWraps() { var h = document.querySelector('header'); return !!h && h.offsetHeight > ONE_ROW; }
-// The row is fitted to the window. Sound, Music, Handouts, Journal and Help fold into More only while that is what keeps the row on one
+// The row is fitted to the window. Sound, Music, Voice, Handouts, Journal and Help fold into More only while that is what keeps the row on one
 // line: it is asked with the fold taken off, then with it on, and nothing is drawn in between. A row that wraps even folded is left whole, on
-// its two lines, since folding would hide five controls and win nothing. The page's body carries the answer as one word, and the style sheet
-// folds the five by it. While the tour's card is up nothing folds, so that a step finds the control it points at. true: folded
+// its two lines, since folding would hide six controls and win nothing. The page's body carries the answer as one word, and the style sheet
+// folds the six by it. While the tour's card is up nothing folds, so that a step finds the control it points at. true: folded
 function foldFit() {
     var cl = document.body.classList, was = cl.contains('row-narrow'), want = false;
     if (was) cl.remove('row-narrow');

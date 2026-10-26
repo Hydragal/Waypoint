@@ -5361,6 +5361,24 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             && !!hostile && j(hostile.area) === j({ ft: 6, shape: 'circle', name: '', use: true, place: true }) && !!huge && j(huge.area) === j({ ft: 6, shape: 'circle', name: '', ad: 0.1, place: true, trig: 100 }),
             j([opts, inp.map(x => x.value), made, hostile && hostile.area, huge && huge.area]));
     }
+    {   // voice chat (1.5.9, pull request #1 by Hydragal): a player's name from the roster and a name a hostile host puts in the offer's map reach the
+        // voice popover as text alone (voice.js loaded whole on tools/voicedom.js's page of plain objects, which counts every write of markup)
+        const VC = await import(modUrl('voicecore.js')), DC = await import(modUrl('dicecore.js')), { loadVoice } = require('./voicedom.js'), j = JSON.stringify;
+        const BADN = '"><img src=x onerror=alert(1)><script>x</script>', tickV = async () => { for (let i = 0; i < 30; i++) await Promise.resolve(); await new Promise(r => setImmediate(r)); };
+        const Hv = loadVoice(VC, { role: 'host', dice: DC }), cA = Hv.conn('peerA', 'u_a', BADN);
+        Hv.api.join(); await tickV(); Hv.api.fromPlayer({ type: 'voice-up', act: 'join' }, cA); await tickV();
+        const pcV = Hv.world.pcs[0]; pcV.ontrack({ transceiver: pcV.tx[0], track: { kind: 'audio', id: 'a' } }); await tickV();
+        Hv.els.voiceInd.click(); await tickV();
+        const want = VC.cleanName(BADN), nmH = Hv.els.voiceBody.querySelectorAll('.voice-name'), volH = Hv.els.voiceBody.querySelectorAll('voice-vol'), muteH = Hv.els.voiceBody.querySelectorAll('voice-pmute');
+        const Pv = loadVoice(VC, { role: 'client', net: { role: 'client' } }), gmc = Pv.conn('gm-peer');
+        Pv.api.join(); await tickV(); Pv.api.fromHost({ type: 'voice', act: 'offer', id: '0123456789abcdef', sdp: 'v=0\r\nlines=2\r\n', who: { 1: { pid: 'u_x', name: BADN, gm: true } } }); await tickV();
+        Pv.els.voiceInd.click(); await tickV();
+        const nmP = Pv.els.voiceBody.querySelectorAll('.voice-name');
+        check('voice chat\'s popover from a hostile name (1.5.9, pull request #1; voice.js run whole on a page of plain objects that counts every write of markup): a player\'s name from the table\'s roster, and a name a hostile host puts in its offer\'s map of who each line is, reach the popover as the very text they are, cleaned and cut to 40, in an element made by name, and in the tooltips of that person\'s volume and mute as text; no markup is written and no element the name names is made',
+            nmH.length === 1 && nmH[0].textContent === want && nmH[0].title === want && want === BADN.slice(0, 40) && volH.length === 1 && volH[0].title === want + '\u2019s volume, for you' && muteH.length === 1 && muteH[0].title === 'Mute ' + want + ' for you'
+            && nmP.length === 1 && nmP[0].textContent === want + ' (GM)' && Hv.world.markup === 0 && Pv.world.markup === 0 && !Hv.world.made.concat(Pv.world.made).some(e => /^(IMG|SCRIPT)$/.test(e.tag)) && gmc.sent.some(m => m.act === 'answer'),
+            j([nmH.map(e => e.textContent), nmP.map(e => e.textContent), Hv.world.markup, Pv.world.markup]));
+    }
     summed = true;
     console.log('\n' + pass + ' passed, ' + fail + ' failed.');
     if (fail) process.exit(1);

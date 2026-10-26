@@ -8,7 +8,8 @@
      creator, the three generators, Save Map as Picture), the Image Library's preview and a video filling the window keep their own rules:
      the key is left to them, and nothing else hears it as free (aside);
    - else a right-click menu is put away (close);
-   - else an open menu: of the top row, of a toolbar, the party's, the library's categories, a section's actions, the colour of a selection.
+   - else an open menu: of the top row, of a toolbar, the party's, the voice popover, the library's categories, a section's actions, the colour
+     of a selection. The voice popover lets go of a key being picked for push to talk first, and stays up for that press.
      A tool's own options are such a menu (the owner, 2026-10-17, by prompt: "Close the options first (Recommended)"): the first Escape
      closes them and the tool stays in hand, and the next, with nothing open, puts the tool away. A menu whose bar stood back under the
      floating boxes (whiteboard.js BAR_BACK) is under the box that holds the focus, which goes first. A menu with keys of its own (the
@@ -81,11 +82,12 @@ function escTop(list, win) {
     return best;
 }
 function escPress(doc, id) { var b = id ? doc.getElementById(id) : null; if (b && typeof b.click === 'function') { b.click(); return true; } return false; }
-// The open menus Escape puts away itself: first the small ones that open over everything (the party's, the library's categories, a
-// section's actions, a selection's colours), then the top row's, then a toolbar's
+// The open menus Escape puts away itself: first the small ones that open over everything (the party's, the voice popover, the library's
+// categories, a section's actions, a selection's colours), then the top row's, then a toolbar's
 function escMenus(doc, win) {
     var out = [];
     var pm = doc.getElementById('partyMenu'); if (pm && pm.classList.contains('show') && escShown(pm)) out.push({ el: pm, close: function() { pm.classList.remove('show'); } });
+    var vp = doc.getElementById('voicePop'); if (escShown(vp)) out.push({ el: vp, close: function() { if (win.wpVoice && typeof win.wpVoice.escape === 'function') win.wpVoice.escape(); else vp.style.display = 'none'; } });   // voice.js: a push-to-talk key being picked is let go first
     var ic = doc.getElementById('imgCatMenu'); if (escShown(ic)) out.push({ el: ic, close: function() { ic.classList.remove('show'); ic.style.display = 'none'; } });
     escEach(doc.querySelectorAll('.section-actions.show'), function(a) { if (escShown(a)) out.push({ el: a, close: function() { a.classList.remove('show'); a.style.left = ''; a.style.top = ''; } }); });
     escEach(doc.querySelectorAll('#selToolbar .st-color-pop'), function(p) { if (p.hidden !== true && escShown(p)) out.push({ el: p, close: function() { p.hidden = true; } }); });

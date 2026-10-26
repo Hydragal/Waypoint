@@ -7655,14 +7655,18 @@ function handleMessage(msg, conn) {
         videoUp(msg, conn);
         // [netcheck:videoup-end]
     } else if (msg.type === 'voice' && net.role === 'client') {
+        // [netcheck:voice-start]
         // voice chat: the GM's word about this player's voice link (an offer, a candidate, a bye) — from the synced host only, after the
         // snapshot, never in the stream window; voice.js cleans what it carries. A host has no branch for it.
         if (!net.foreign || conn.peer !== net.syncedPeer || net.stream || !window.wpVoice) return;
         window.wpVoice.fromHost(msg);
+        // [netcheck:voice-end]
     } else if (msg.type === 'voice-up' && net.role === 'host') {
+        // [netcheck:voiceup-start]
         // voice chat: a player's word about their voice link (join, leave, answer, ice): admitted (the gate above); voice.js reads nothing else from it
         if (!window.wpVoice) return;
         window.wpVoice.fromPlayer(msg, conn);
+        // [netcheck:voiceup-end]
     } else if (msg.type === 'blast' && net.role === 'client') {
         // a thrown blast's shared template from the synced host, for the player's current map (item library, 1.5.0)
         if (!net.foreign || conn.peer !== net.syncedPeer || net.stream || !window.wpRenderSharedBlast || !msg.blast) return;

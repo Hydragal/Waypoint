@@ -297,7 +297,7 @@ async function drain() { for (let i = 0; i < 6; i++) await new Promise(r => proc
 
 /* ---------- the stub page: every sink recorded ---------- */
 const allConfirms = [];
-const rec = { html: [], attr: [], text: [], style: [], toasts: [], confirms: [], saves: [], fetches: [], loads: 0, renders: 0, opens: [], warns: [], journal: [], blasts: 0, pics: [], gives: [], combatsOpened: [], reads: 0, cancels: 0 };   // reads / cancels: the stub server's bodies read whole, and cancelled unread
+const rec = { html: [], attr: [], text: [], style: [], toasts: [], confirms: [], saves: [], fetches: [], loads: 0, renders: 0, opens: [], warns: [], journal: [], blasts: 0, pics: [], gives: [], combatsOpened: [], reads: 0, cancels: 0, voice: [] };   // voice: what net.js handed voice.js (1.5.9)   // reads / cancels: the stub server's bodies read whole, and cancelled unread
 function resetRec() { Object.keys(rec).forEach(k => { if (Array.isArray(rec[k])) rec[k].length = 0; else rec[k] = 0; }); }
 function mkEl(tag, id) {
     const el = { tagName: String(tag || 'div').toUpperCase(), id: id || '', children: [], _attrs: {}, _h: {}, dataset: {}, _text: '', _html: '', value: '', checked: false, disabled: false, scrollTop: 0, scrollHeight: 0, offsetParent: null, offsetWidth: 100, offsetHeight: 20, parentNode: null, nodeType: 1, nodeName: String(tag || 'div').toUpperCase(), className: '', hidden: false };
@@ -871,6 +871,7 @@ function mutations(tpl) {
     function installStubs() {
         Object.assign(window, {
             wpSheets: sheetsStub(), wpFog: mkFogStub(), wpVideo: { audienceChanged() {}, tableLeft() {}, onStream() {}, onStop() {}, onLost() {} },
+            wpVoice: { fromHost(m) { rec.voice.push('host:' + (m && m.act)); }, fromPlayer(m, c) { rec.voice.push('player:' + (m && m.act) + ':' + (c && c.peer)); }, connGone() {}, tableReady() {}, tableLeft() {} },   // voice chat (1.5.9): a recorder in voice.js's place
             wpFx: { tableLeft() {}, onSnapshot() {}, receive() {}, foreign() {}, runningSet: () => [] },
             wpSound: { tableLeft() {}, onSnapshot() {}, onList() {}, onCue() {}, foreign() {}, listMessage: () => (window.wpNet && window.wpNet.role === 'host' ? { type: 'sounds', campId: 'c1', list: [{ id: 's1', name: 'Song', path: '/saves/images/audio/song.mp3', size: 4 }] } : null) },   // the hosted campaign's one sound, sent to each player as they are admitted: the reference the audio asset request names
             wpMusic: { tableLeft() {}, onSnapshot() {}, onList() {}, onControl() {}, controlSnapshot: () => null, listMessage: () => null, idSets: () => null },
@@ -1011,6 +1012,7 @@ function mutations(tpl) {
             'tok-light': { type: 'tok-light', rid: 'r15', mapId: 'm_open', wbId: 'tok_p1', on: true, preset: 0, name: 'Torch' },
             'my-look': { type: 'my-look', face: '🙂' },
             'video-up': { type: 'video-up', act: 'ask', id: '0123456789abcdef', sdp: 'v=0\r\n', cand: { candidate: 'candidate:1 1 udp 1 1.2.3.4 5 typ host', sdpMid: '0', sdpMLineIndex: 0 } },
+            'voice-up': { type: 'voice-up', act: 'join', id: '0123456789abcdef', sdp: 'v=0\r\n', cand: { candidate: 'candidate:1 1 udp 1 1.2.3.4 5 typ host', sdpMid: '0', sdpMLineIndex: 0 } },   // voice chat (1.5.9): a player's word about their voice link
             'roll-req': { type: 'roll-req', rid: 'r16', expr: '1d20 + 3', label: 'Attack' },
             'roll-req-char': { type: 'roll-req', rid: 'r17', expr: 'd20 + STRmod + Prof', charId: 'c_p1', act: 'r_atk', mod: 0 },
             'asset-req': { type: 'asset-req', path: '/saves/images/pic.png' },
@@ -1027,7 +1029,8 @@ function mutations(tpl) {
             'itemDelta@host': { type: 'itemDelta', campId: 'c1', itemId: 'm_open', whiteboard: { set: [{ id: 'tok_npc', x: 0, y: 0 }], del: ['tok_p2'] } },
             'char@host': { type: 'char', campId: 'c1', char: { id: 'c_p2', name: 'Stolen', ownerId: 'u_p1', values: {} } },
             'handout@host': { type: 'handout', kind: 'text', text: 'x', title: 'T' },
-            'fogDiff@host': { type: 'fogDiff', campId: 'c1', itemId: 'm_fog', drop: ['tok_far'] }
+            'fogDiff@host': { type: 'fogDiff', campId: 'c1', itemId: 'm_fog', drop: ['tok_far'] },
+            'voice@host': { type: 'voice', act: 'offer', id: '0123456789abcdef', sdp: 'v=0\r\n', who: { 0: { pid: 'u_p1', name: 'Ayla' } } }
         }
     };
     // two fights on m_open (fold 2 of backlog 152: fights by their own ids, a map may hold two) so the turn-* branches have rows to find, each in its own fight
@@ -1199,7 +1202,8 @@ function mutations(tpl) {
         'roll-req-char': o => o.p2.some(m => m.type === 'roll' && m.as === 'Ayla'),
         'asset-req': o => rec.fetches.length === 1 && o.p1.some(m => m.type === 'asset' && m.path === '/saves/images/pic.png'),
         'asset-req-audio': o => o.p1.some(m => m.type === 'asset-part'),
-        'chat': o => o.p2.some(m => m.type === 'chat' && m.text === 'hello table' && m.from.id === 'u_p1' && !m.from.gm) && !o.p1.some(m => m.type === 'chat')
+        'chat': o => o.p2.some(m => m.type === 'chat' && m.text === 'hello table' && m.from.id === 'u_p1' && !m.from.gm) && !o.p1.some(m => m.type === 'chat'),
+        'voice-up': () => rec.voice.length === 1 && rec.voice[0] === 'player:join:peer_p1'
     };
     /* ---------- generic fuzz over every host type from each sender ---------- */
     console.log('# host world: ' + Object.keys(host.tpl).length + ' message kinds × mutations × senders');
@@ -1233,6 +1237,15 @@ function mutations(tpl) {
         console.log((bad ? 'FAIL      ' : 'ok        ') + 'host: ' + kind + ' — ' + muts.length + ' mutations × p1, 14 × waiting, 14 × stranger, p2, a flood of 500');
     }
 
+    {   // voice chat (1.5.9, pull request #1 by Hydragal): a player's word about their voice link reaches voice.js only from an admitted connection, with that very connection; the waiting peer's and a stranger's are closed by the gate before any branch reads them
+        await resetWorld();
+        await fireHost('p1', 'voice-up', 'well-formed', cloneMsg(host.tpl['voice-up'])); const v1 = rec.voice.slice();
+        await fireHost('w', 'voice-up', 'from the waiting peer', cloneMsg(host.tpl['voice-up'])); const v2 = rec.voice.slice();
+        if (!conns.w.open) { conns.w = connect('peer_w'); hello(conns.w, { id: 'u_w', name: 'Waiting' }); }
+        await fireHost('s', 'voice-up', 'from a stranger', cloneMsg(host.tpl['voice-up'])); const v3 = rec.voice.slice();
+        await fireHost('p1', 'voice@host', 'the GM\'s own word sent at the GM', cloneMsg(host.tpl['voice@host'])); const v4 = rec.voice.slice();
+        check('host: voice chat\'s voice-up reaches voice.js from an admitted player alone, with the connection it came on; the waiting peer\'s and a stranger\'s reach nothing, and a voice word sent at the host has no branch', JSON.stringify([v1, v2, v3, v4]) === JSON.stringify([['player:join:peer_p1'], [], [], []]), [v1, v2, v3, v4]);
+    }
     /* ---------- ordered scenarios on the host ---------- */
     function drainDialogs() { for (let n = 0; n < 60; n++) { const d = allConfirms.find(x => !x.answered); if (!d) return; d.answered = true; d.cb(false); flushTimers(); } }
     await resetWorld();
@@ -2806,6 +2819,8 @@ function mutations(tpl) {
         'music': { type: 'music', campId: 'c1', music: {} }, 'music-ctl': { type: 'music-ctl', act: 'play', id: 't1' },
         'fx': { type: 'fx', kind: 'flash', look: 'gold', mapId: 'm_open' },
         'video': { type: 'video', act: 'offer', id: '0123456789abcdef', name: 'Clip', sdp: 'v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\n' },
+        'voice': { type: 'voice', act: 'offer', id: '0123456789abcdef', sdp: 'v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\n', who: { 0: { pid: 'u_gm', name: 'GM', gm: true }, 1: { pid: 'u_p2', name: 'Bram' } } },   // voice chat (1.5.9): the GM's word about this player's voice link
+        'voice-up@client': { type: 'voice-up', act: 'join' },
         'blast': { type: 'blast', mapId: 'm_open', blast: { x: 1, y: 1, ft: 10, name: CANARY, shape: 'cone', deg: 60, dir: 1 } }, 'blastClear': { type: 'blastClear' },
         'apply': { type: 'apply', id: 'a_1', from: { id: 'u_p2', name: 'Bram' }, label: 'Heal', lines: [{ f: 'HP', text: '+3' }], ts: 1 },
         'acts-left': { type: 'acts-left', charId: 'c_p1', left: { attack: 1 }, mode: 'warn' },
@@ -2997,6 +3012,13 @@ function mutations(tpl) {
         checks++; const bad = openFindings().some(f => f.detail.indexOf(kind + ' ') === 0 || f.detail.indexOf(kind + '|') === 0 || f.detail === kind);
         if (bad) checksFailed++;
         console.log((bad ? 'FAIL      ' : 'ok        ') + 'client: ' + kind + ' — ' + muts.length + ' mutations × host, 10 × stale, 10 × another host, a flood of 500');
+    }
+    {   // voice chat (1.5.9, pull request #1 by Hydragal): the GM's word about this player's voice link reaches voice.js only from the synced host, never from a stale connection or another host; a player's own word sent at the player has no branch
+        resetClient(); await fireClient('host', 'voice', 'well-formed', clone(ctpl.voice)); const c1 = rec.voice.slice();
+        resetClient(); await fireClient('stale', 'voice', 'from a stale connection', clone(ctpl.voice)); const c2 = rec.voice.slice();
+        resetClient(); await fireClient('other', 'voice', 'from another host', clone(ctpl.voice)); const c3 = rec.voice.slice();
+        resetClient(); await fireClient('host', 'voice-up@client', 'a player\'s word sent at the player', clone(ctpl['voice-up@client'])); const c4 = rec.voice.slice();
+        check('client: voice chat\'s voice word reaches voice.js from the synced host alone; a stale connection\'s and another host\'s reach nothing, and a voice-up word sent at a player has no branch', JSON.stringify([c1, c2, c3, c4]) === JSON.stringify([['host:offer'], [], [], []]), [c1, c2, c3, c4]);
     }
     {   // the snapshot itself fuzzed (after the real one so the app stays synced)
         const muts = mutations(snapshotForClient).filter(m => !/appState=|\.campaigns/.test(m.name) || /appState=\{\}|appState=null|appState=\[\]/.test(m.name)).slice(0, 80);
