@@ -3538,7 +3538,7 @@ function applyRowOp(sys, char, fieldId, q, F, opts) {
             if (fx.on !== undefined) {
                 if (!spec || !isObj(spec.on) || typeof fx.on !== 'boolean') return { ok: false, reason: 'value' };
                 var rdS = rowDef(sys, rw), emode = rdS && rdS.def && RM_MODES[rdS.def.eq] === 1 ? rdS.def.eq : '', wasOn = rw.on === true, enm = emode ? (rdS.def.name || 'Item') : '';   // stored: a row on only by the list's "starts on" was never switched on, so no lock holds it
-                var swN = fx.on === true && rw.keptOn !== 1 && !rowOn(spec, rw) && typeof spec.on.needs === 'string' && spec.on.needs ? spec.on : null;   // 1.5.8: a switch's needs, judged as a row that is off is switched on
+                var onJ = playerNeeds(sys, fieldId, spec, opts, 'on'), swN = fx.on === true && rw.keptOn !== 1 && !rowOn(spec, rw) && isObj(onJ) && typeof onJ.needs === 'string' && onJ.needs ? onJ : null;   // the review of 1.5.9's fold: a player's by their own view's needs (playerNeeds)   // 1.5.8: a switch's needs, judged as a row that is off is switched on
                 if (swN && !switchOk(sys, char, f, rw, swN.needs, F)) { if (!opts.player) extra.onNeeds = rollNeedsSays(swN); else if (!fl) return { ok: false, reason: 'needs', msg: rollNeedsSays(swN) }; }   // a player's own change is refused (a file that fills a character is not judged); the GM's hand passes, and is told
                 if (!opts.player || mkR) { rw.on = fx.on; delete rw.keptOn; }
                 else if (fx.on) { rw.on = true; if (rw.keptOn === 1) delete rw.keptOn; else if (!wasOn && emode) { extra.onRow = q.rowId; extra.eqNote = emode; extra.name = enm; } }
@@ -3694,7 +3694,7 @@ function rowLoad(sys, char, f, list, spec, q, opts, at, vo, F) {
     if (!t) return { ok: false, reason: 'field' };
     if ((h.qty | 0) !== 1) return { ok: false, reason: 'value' };   // a stack of them is not one
     var from = typeof q.from === 'string' ? q.from : null; if (from === null && !isObj(h.ld)) return { ok: false, reason: 'value' };
-    if (from !== null && typeof ld.needs === 'string' && ld.needs && !switchOk(sys, char, f, h, ld.needs, F)) return { ok: false, reason: 'needs', msg: rollNeedsSays(ld) };   // Loads only where: this row loads nothing (the GM's hand too: it is what the row is)
+    var ldN = playerNeeds(sys, f.id, spec, opts, 'load'); if (from !== null && ldN && typeof ldN.needs === 'string' && ldN.needs && !switchOk(sys, char, f, h, ldN.needs, F)) return { ok: false, reason: 'needs', msg: rollNeedsSays(ldN) };   // Loads only where: this row loads nothing (the GM's hand too: it is what the row is)
     var sList = JSON.parse(JSON.stringify(isObj(char) && isObj(char.values) && Array.isArray(char.values[sf.id]) ? char.values[sf.id] : [])), known = knownItems(sys, opts), name = '';
     h.ct = isObj(h.ct) ? h.ct : {};
     if (isObj(h.ld)) {   // what comes out first: the copy, at what the counter has left
@@ -3743,7 +3743,15 @@ function chamberTakes(sys, spec, h, sl, s) {
 }
 // Chambers only where (spec.chamber.needs, 1.5.9): whether a row may take a round now, by a formula of its own names (Row.*), no dice, as Loads only
 // where; a formula that cannot be worked out holds it back. Unchamber is never judged, so no round is ever stranded
-function chamberHolds(sys, char, f, row, F) { var ch = isObj(f) && isObj(f.list) && isObj(f.list.chamber) ? f.list.chamber : null; return !ch || typeof ch.needs !== 'string' || !ch.needs || switchOk(sys, char, f, row, ch.needs, F); }
+function chamberHolds(sys, char, f, row, F, by) { var ch = by !== undefined ? by : isObj(f) && isObj(f.list) && isObj(f.list.chamber) ? f.list.chamber : null; return !isObj(ch) || typeof ch.needs !== 'string' || !ch.needs || switchOk(sys, char, f, row, ch.needs, F); }   // by: the needs judged by (playerNeeds), else the list's own
+// the review of 1.5.9's fold: the needs (Loads only where, Chambers only where, a switch's needs) a PLAYER's own change is judged by on the host:
+// their own view's, so needs that read a GM-only value, which their view does not hold, never hold them back, as a list roll's do not, and the
+// words of such needs never reach them in a refusal; with no view (fail closed) the GM's needs, said in no words of theirs. The GM's hand: the list's
+function playerNeeds(sys, fieldId, spec, opts, key) {
+    var g = isObj(spec) && isObj(spec[key]) ? spec[key] : null; if (!opts || !opts.player) return g;
+    if (!isObj(opts.view)) return g && typeof g.needs === 'string' && g.needs ? { needs: g.needs, needsText: 'Not now.' } : null;
+    var a = actorSpec(sys, fieldId, spec, opts); return a && isObj(a[key]) ? a[key] : null;
+}
 // the words a chamber is refused in where its row does not meet Chambers only where, else '' (a player's own app asks it before it sends)
 function chamberSays(sys, char, fieldId, rowId, F) {
     var f = isObj(sys) && Array.isArray(sys.fields) ? fieldById(sys, fieldId) : null, list = f && isObj(char) && isObj(char.values) && Array.isArray(char.values[fieldId]) ? char.values[fieldId] : [], row = null;
@@ -3760,7 +3768,7 @@ function rowChamber(sys, char, f, list, spec, q, opts, at, vo, F) {
     var sl = isObj(sf.list) ? sf.list : null, sList = same ? list : JSON.parse(JSON.stringify(isObj(char) && isObj(char.values) && Array.isArray(char.values[sf.id]) ? char.values[sf.id] : []));
     var cap = chamberCap(spec), rd = Array.isArray(h.rd) ? h.rd.slice() : [], name = '';
     if (q.op === 'chamber') {
-        if (!chamberHolds(sys, char, f, h, F)) return { ok: false, reason: 'needs', msg: rollNeedsSays(ch) };   // Chambers only where: this row takes no round now (the GM's hand too: it is what the row is)
+        var chN = playerNeeds(sys, f.id, spec, opts, 'chamber'); if (!chamberHolds(sys, char, f, h, F, chN)) return { ok: false, reason: 'needs', msg: rollNeedsSays(chN) };   // Chambers only where: this row takes no round now (the GM's hand too: it is what the row is)
         if (rd.length >= cap) return { ok: false, reason: 'value', msg: 'It is full: it holds ' + cap + ' at most.' };
         var from = typeof q.from === 'string' ? q.from : '', si = -1; for (var k = 0; k < sList.length; k++) if (rowIdOf(sList[k]) === from) { si = k; break; }
         var s = si >= 0 ? sList[si] : null, sd = s ? rowDef(sys, s) : null;
