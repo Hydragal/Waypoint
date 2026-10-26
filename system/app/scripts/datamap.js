@@ -786,6 +786,72 @@ import { getRoomInspectorHtml, attachRoomInspectorEvents, renderInspector,  rend
       var LZ = { back: 10, 'back-mid': 15, middle: 20, 'front-mid': 25, front: 30 }, n = Number(cand.z), z = Object.prototype.hasOwnProperty.call(LZ, cand.layer) ? LZ[cand.layer] : (isFinite(n) && n ? n : 10);
       return cand.aboveGrid ? z + 15020 : z;
   }
+  // [systemcheck:wallpick-start]
+  // A wall or a door drawn as a line is easy for the GM to pick (the owner, at the table on 2026-10-25: "id like to be able to more easily
+  // erase, or delete a drawn wall. i couldnt select it for delete either from what I could tell"). A line takes a press on its stroke alone,
+  // and a floor laid after the walls lies over it. On the GM's own screen a press within WALL_REACH board pixels of the stroke of a wall's or
+  // a door's line goes to that line, before a floor, a plain shape, a picture or a text box under the pointer: the nearest line, then the
+  // topmost (handZ), then the later in the list. A token, a waiting token and a GM note card keep their own press, and an unlocked token
+  // under the pointer still wins. A locked line is not picked: a locked piece hands its press on. Never on a player's app or at someone else's
+  // table, and never where this screen may not write the campaign (the stream window, a window of its own). The press itself goes on
+  // through handOn, so the bound on hand-overs holds; a right-click and a double-click ask wallPickAt for the same answer
+  var WALL_REACH = 8;
+  function wallLine(c) { return !!c && typeof c === 'object' && c.type === 'path' && c.tip !== 'fill' && Array.isArray(c.pts) && (c.blocksSight === true || c.barrier === true); }
+  function wallPickGm() { var n = window.wpNet; return !(n && (n.foreign || (n.active && n.role === 'client'))) && !!(window.wpCanPersistLocal && window.wpCanPersistLocal()); }
+  // how far a point lies outside a line's drawn stroke, in board pixels (0 or less on it); Infinity for a line with no stretch
+  function wallGap(c, px, py) {
+      var num = function(v) { return typeof v === 'number' && isFinite(v); };
+      if (!num(c.x) || !num(c.y) || !num(px) || !num(py)) return Infinity;
+      var ww = num(c.w) && c.w > 0 ? c.w : 0, hh = num(c.h) && c.h > 0 ? c.h : 0, bw = num(c.baseW) && c.baseW > 0 ? c.baseW : (ww || 1), bh = num(c.baseH) && c.baseH > 0 ? c.baseH : (hh || 1);
+      var sx = ww ? ww / bw : 1, sy = hh ? hh / bh : 1, rot = num(c.rot) ? c.rot % 360 : 0, cx = c.x + ww / 2, cy = c.y + hh / 2;
+      if (rot) { var ra = -rot * Math.PI / 180, co = Math.cos(ra), si = Math.sin(ra), rx = px - cx, ry = py - cy; px = cx + rx * co - ry * si; py = cy + rx * si + ry * co; }   // the board turns a line about its box's centre: the point is turned back
+      var sw = typeof c.strokeWidth === 'number' ? c.strokeWidth : parseFloat(c.strokeWidth), half = Math.min(200, (num(sw) && sw > 0 ? sw : 3) * Math.max(sx, sy) / 2), far = half + WALL_REACH + 1;
+      if (ww && hh && (px < c.x - far || px > c.x + ww + far || py < c.y - far || py > c.y + hh + far)) return Infinity;   // a line far from the pointer is passed over by its box alone
+      var best = Infinity, prev = null, n = Math.min(c.pts.length, 4000);
+      for (var i = 0; i < n; i++) {
+          var p = c.pts[i]; if (!Array.isArray(p) || !num(p[0]) || !num(p[1])) continue;
+          var q = [c.x + p[0] * sx, c.y + p[1] * sy];
+          if (prev) {
+              var dx = q[0] - prev[0], dy = q[1] - prev[1], L = dx * dx + dy * dy, t = L > 0 ? ((px - prev[0]) * dx + (py - prev[1]) * dy) / L : 0;
+              t = Math.max(0, Math.min(1, t));
+              var ex = px - (prev[0] + t * dx), ey = py - (prev[1] + t * dy), d = Math.sqrt(ex * ex + ey * ey);
+              if (d < best) best = d;
+          } else if (n === 1) { best = Math.hypot(px - q[0], py - q[1]); }
+          prev = q;
+      }
+      return best - half;
+  }
+  // the wall or door line a press on `pressed` at (px, py) goes to, or null
+  function wallPick(list, pressed, px, py) {
+      if (!Array.isArray(list) || !pressed || typeof pressed !== 'object' || pressed.isChar || pressed.waiting || pressed.gmNoteFor || wallLine(pressed)) return null;
+      var best = null, bestD = Infinity, bestZ = -Infinity, bestI = -1, inTok = false;
+      list.forEach(function(c, idx) {
+          if (!c || typeof c !== 'object' || c === pressed || c.id === pressed.id) return;
+          if ((c.isChar || c.waiting) && !c.locked && px >= c.x && px <= c.x + (c.w || 0) && py >= c.y && py <= c.y + (c.h || 0)) { inTok = true; return; }
+          if (!wallLine(c) || c.locked) return;
+          var d = wallGap(c, px, py); if (!(d <= WALL_REACH)) return;
+          d = Math.max(0, d);   // on the stroke is on it, however deep
+          var z = handZ(c);
+          if (d < bestD || (d === bestD && (z > bestZ || (z === bestZ && idx > bestI)))) { best = c; bestD = d; bestZ = z; bestI = idx; }
+      });
+      return inTok ? null : best;
+  }
+  // a press of the pointer event e on the piece `pressed` of the map: the element of the line it goes to, or null
+  function wallPickEl(map, pressed, e) {
+      if (!map || !Array.isArray(map.whiteboard) || !wallPickGm()) return null;
+      var wr = wbWrap.getBoundingClientRect(), px = (e.clientX - wr.left + wbWrap.scrollLeft) / state.zoomLevel, py = (e.clientY - wr.top + wbWrap.scrollTop) / state.zoomLevel;
+      var w = wallPick(map.whiteboard, pressed, px, py), wEl = w && document.querySelector('.wb-item[data-id="' + w.id + '"]');
+      return wEl && wEl.style.display !== 'none' ? wEl : null;
+  }
+  // for the right-click menu and a double-click: the id of the line a press at (clientX, clientY) on the piece of that id goes to, or null
+  function wallPickAt(id, clientX, clientY) {
+      var map = getActiveMap(); if (!map || !Array.isArray(map.whiteboard)) return null;
+      var pressed = map.whiteboard.find(function(x) { return x && x.id === id; }); if (!pressed) return null;
+      var wEl = wallPickEl(map, pressed, { clientX: clientX, clientY: clientY });
+      return wEl ? wEl.dataset.id : null;
+  }
+  window.wpWallPick = wallPickAt;
+  // [systemcheck:wallpick-end]
   function attachDrag(el, modeStr){
       var startX,startY,moved,dragging=false,item;
       var multiDrag = [];
@@ -853,6 +919,9 @@ import { getRoomInspectorHtml, attachRoomInspectorEvents, renderInspector,  rend
                 if (best) {
                     var underEl = document.querySelector('.wb-item[data-id="' + best.id + '"]');
                     if (underEl && underEl.style.display !== 'none' && handOn(underEl, e)) { e.preventDefault(); return; }
+                } else {   // nothing unlocked under the pointer: a wall's or a door's line near it takes the press, on the GM's own screen
+                    var wallLk = wallPickEl(activeMap, item, e);
+                    if (wallLk && handOn(wallLk, e)) { e.preventDefault(); return; }
                 }
             }
             if (modeStr === 'visual') {
@@ -897,6 +966,11 @@ import { getRoomInspectorHtml, attachRoomInspectorEvents, renderInspector,  rend
                 var tokEl = document.querySelector('.wb-item[data-id="' + tok.id + '"]');
                 if (tokEl && tokEl.style.display !== 'none' && handOn(tokEl, e)) { e.preventDefault(); return; }
             }
+        }
+        // A wall's or a door's line near the pointer takes the press before a floor, a shape, a picture or a text box over it (the GM's own screen; see wallPick)
+        if (modeStr === 'visual' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+            var wallEl = wallPickEl(activeMap, item, e);
+            if (wallEl && handOn(wallEl, e)) { e.preventDefault(); return; }
         }
 
         if (modeStr === 'visual') {
@@ -1018,7 +1092,9 @@ import { getRoomInspectorHtml, attachRoomInspectorEvents, renderInspector,  rend
       el.addEventListener('dblclick', function(e) {
           if (modeStr !== 'visual') return;
           var am2 = getActiveMap(); var it2 = am2 && am2.whiteboard.find(function(x){ return x.id === el.dataset.id; }); if (!it2) return;
-          if (it2.type === 'text' || it2.nodeId || it2.targetMapId) return;   // text boxes edit and portals travel on double-click — leave those to their own handlers
+          var wallD = wallPickEl(am2, it2, e), wallDi = wallD && am2.whiteboard.find(function(x){ return x.id === wallD.dataset.id; });   // a double-click near a wall's line opens the wall, as its press picked it
+          if (wallDi) { e.stopImmediatePropagation(); it2 = wallDi; }
+          else if (it2.type === 'text' || it2.nodeId || it2.targetMapId) return;   // text boxes edit and portals travel on double-click — leave those to their own handlers
           e.stopPropagation();
           if (!state.selWbIds || state.selWbIds.length !== 1 || state.selWbIds[0] !== it2.id) { state.selWbIds = [it2.id]; state.selWbId = it2.id; render(); }   // select it, then open Properties
           if (window.wpOpenRightPanel) window.wpOpenRightPanel();
