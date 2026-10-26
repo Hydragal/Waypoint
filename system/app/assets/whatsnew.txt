@@ -12,6 +12,14 @@ At the table
   for Clear and their name, or right-click their chip on the party
   strip. Everyone at the table sees the pointer go.
 
+Walls
+- A wall or a door drawn as a line is easy to pick. As the GM, a press
+  near its line picks it, even where a floor lies over it. A right-click
+  and a double-click there are the wall's too, so Delete removes it.
+- The GM's eraser takes a wall or a door laid as a block whole: a square,
+  a hexagon, a diamond or a pillar its circle touches. A locked one
+  stays. A wall drawn as a line is still cut as any line is.
+
 Character sheets
 - Every roll on the sheet and the HUD has a small ± button beside it. It
   opens the modifier popover for that roll: add a bonus or a penalty, or

@@ -3162,6 +3162,44 @@ window.wpFitToGrid = fitToGrid;
   // [netcheck:erasehold-end]
   var lastErasePt = null, _heldSaid = false;   // 49 (c): the notice is said once a stroke of the eraser
 
+  // [buildcheck:eraseblock-start]
+  // The GM's eraser takes a wall or a door laid as a BLOCK whole (the owner, at the table on 2026-10-25: "id like to be able to more easily
+  // erase, or delete a drawn wall"). A block is a box piece, a rectangle, a hexagon, a diamond or a circle, that blocks sight or is a
+  // see-through barrier, a door among them, laid by Build or by hand. One the eraser's circle touches goes whole, in either eraser mode, as a
+  // painted cell does. Never a locked one, a token, a waiting token, a GM note card, a picture or a text box (they are no box piece), nor a
+  // piece with a purpose of its own: a portal by its own key or its node's, a light, a fog mark, a pin to a page, a play area, a null area,
+  // a painted cell (its own branch). A hidden one too: the GM sees it. A line is still cut as before, and a player's eraser is unchanged
+  var ERASE_BLOCKS = ['rect', 'hexagon', 'diamond', 'circle'];
+  function eraseBlockOk(w) {
+      return !!w && typeof w === 'object' && ERASE_BLOCKS.indexOf(w.type) >= 0 && (w.blocksSight === true || w.barrier === true)
+          && !w.locked && !w.isChar && !w.waiting && !w.gmNoteFor && !w.fill && !w.targetMapId && !w.nodeId && !w.light && !w.fogHand && !w.page && !w.fogged && !w.nulls;
+  }
+  // whether the eraser's circle (radius r about x, y) touches the block as the board draws it: its box turned about its centre, cut to a
+  // hexagon or a diamond as the style sheet cuts it, a circle as the ellipse its box holds
+  function eraseBlockHit(w, x, y, r) {
+      var num = function(v) { return typeof v === 'number' && isFinite(v); };
+      if (!w || !num(w.x) || !num(w.y) || !num(x) || !num(y)) return false;
+      var bw = num(w.w) && w.w > 0 ? w.w : 0, bh = num(w.h) && w.h > 0 ? w.h : 0, rr = num(r) && r > 0 ? r : 0, cx = w.x + bw / 2, cy = w.y + bh / 2;
+      if (num(w.rot) && w.rot % 360) { var ra = -w.rot * Math.PI / 180, co = Math.cos(ra), si = Math.sin(ra), dx = x - cx, dy = y - cy; x = cx + dx * co - dy * si; y = cy + dx * si + dy * co; }
+      if (w.type === 'circle') { var ax = bw / 2 + rr, ay = bh / 2 + rr; if (!(ax > 0 && ay > 0)) return false; var ux = (x - cx) / ax, uy = (y - cy) / ay; return ux * ux + uy * uy <= 1; }
+      var poly = w.type === 'hexagon' ? [[0.25, 0], [0.75, 0], [1, 0.5], [0.75, 1], [0.25, 1], [0, 0.5]] : w.type === 'diamond' ? [[0.5, 0], [1, 0.5], [0.5, 1], [0, 0.5]] : [[0, 0], [1, 0], [1, 1], [0, 1]];
+      poly = poly.map(function(p) { return [w.x + p[0] * bw, w.y + p[1] * bh]; });
+      var inside = false;
+      for (var i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+          var xi = poly[i][0], yi = poly[i][1], xj = poly[j][0], yj = poly[j][1];
+          if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) inside = !inside;
+      }
+      if (inside) return true;
+      for (var k = 0, m = poly.length - 1; k < poly.length; m = k++) {
+          var A = poly[m], B = poly[k], ex = B[0] - A[0], ey = B[1] - A[1], L = ex * ex + ey * ey, t = L > 0 ? ((x - A[0]) * ex + (y - A[1]) * ey) / L : 0;
+          t = Math.max(0, Math.min(1, t));
+          var fx = x - (A[0] + t * ex), fy = y - (A[1] + t * ey);
+          if (fx * fx + fy * fy <= rr * rr) return true;
+      }
+      return false;
+  }
+  // [buildcheck:eraseblock-end]
+
   function eraseAt(clientX, clientY) {
       var box = wbWrap.getBoundingClientRect();
       var x = (clientX - box.left + wbWrap.scrollLeft) / state.zoomLevel;
@@ -3221,6 +3259,10 @@ window.wpFitToGrid = fitToGrid;
                   out.push(item); return;
               }
               if (x >= item.x - _er && x <= item.x + item.w + _er && y >= item.y - _er && y <= item.y + item.h + _er) { changed = true; return; }
+              out.push(item); return;
+          }
+          if (!eraserClient && !(window.wpNet && window.wpNet.foreign) && typeof eraseBlockOk === 'function' && eraseBlockOk(item)) {   // the GM's eraser: a wall or a door laid as a block goes whole
+              if (eraseBlockHit(item, x, y, state.eraserSize || 6)) { changed = true; return; }
               out.push(item); return;
           }
           if (item.type !== 'path' || !item.pts || item.locked) { out.push(item); return; }
@@ -9011,6 +9053,8 @@ document.addEventListener('contextmenu', function(e) {
         isCanvasOrWb = true; isWb = true;
         var itemEl = e.target.closest('.wb-item');
         if (itemEl) targetId = itemEl.dataset.id;
+        var wallM = targetId && window.wpWallPick ? window.wpWallPick(targetId, e.clientX, e.clientY) : null;   // a right-click near a wall's or a door's line is the wall's, as its press is (datamap.js wallPick)
+        if (wallM) targetId = wallM;
     } else if (e.target.closest('#canvasWrap') && state.viewMode === 'data') {
         isCanvasOrWb = true; isWb = false;
         var itemEl = e.target.closest('.room');

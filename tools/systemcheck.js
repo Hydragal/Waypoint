@@ -11307,6 +11307,8 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
                     wpSnapOn() { return false; }, wpHostGestureStart() { B.said.push('open'); }, wpHostGestureEnd() { B.said.push('close'); } };
                 if (o.netRaw) win.wpNet = o.netRaw; else if (o.net) win.wpNet = Object.assign({ streamPos(item, fin, mapId) { B.sent.push([item.id, !!fin, mapId, item.x, item.y]); } }, o.net);
                 if (o.core !== null) win.wpSystemCore = o.core === undefined ? S : o.core;
+                if (o.gm !== undefined) win.wpCanPersistLocal = () => o.gm;   // 1.5.9, a wall's line picked: this screen may write the campaign (the GM's own), or not (the stream window, a window of its own). Left out, as in every scene before, the pick never runs
+                win.wpOpenRightPanel = () => { B.said.push('panel'); };
                 ownMaker(win, () => camp);   // window.wpOwnTokenNow and window.wpRegrabDrag, the real ones
                 const doc = { querySelector(sel) { const m = /^\.wb-item\[data-id="([^"]*)"\]$/.exec(sel); if (!m) throw new Error('a selector the page does not know: ' + sel); return Object.prototype.hasOwnProperty.call(els, m[1]) && pieces.some(w => w.id === m[1]) ? els[m[1]] : null; },
                     createElement() { return { style: {}, className: '', remove() { B.said.push('box off'); } }; }, getElementById(id) { if (id !== 'whiteboard') throw new Error('an id the page does not know: ' + id); return { appendChild() { B.said.push('box on'); } }; } };
@@ -11316,7 +11318,9 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
                 const made = mk.apply(null, kit), attach = made.attachDrag;
                 pieces.forEach(w => mkEl(w, 'visual')); map.rooms.forEach(r => mkEl(r, 'data'));
                 const ev = (type, wx, wy, mods) => Object.assign({ type: type, button: 0, pointerId: 7, clientX: wx * V.zoom - V.sl + V.left, clientY: wy * V.zoom - V.st + V.top, shiftKey: false, ctrlKey: false, metaKey: false, preventDefault() { this.prevented = true; }, stopPropagation() {} }, mods || {});
-                const W = { state, B, handOn: made.handOn, handZ: made.handZ,   // the two helpers of this very page (the count of hand-overs is the page's own)
+                const W = { state, B, win, handOn: made.handOn, handZ: made.handZ,   // the two helpers of this very page (the count of hand-overs is the page's own)
+                    dbl(id, wx, wy) { const d = ev('dblclick', wx, wy); d.stopImmediatePropagation = function() { this.imm = true; }; els[id].dispatchEvent(d); return d; },   // 1.5.9: a double-click on a piece's element
+                    at(wx, wy) { return [wx * V.zoom - V.sl + V.left, wy * V.zoom - V.st + V.top]; },   // a board point in the screen's coordinates
                     down(id, wx, wy, mods) { W.first = ev('pointerdown', wx, wy, mods); els[id].dispatchEvent(W.first); return W; },
                     move(id, wx, wy, mods) { (B.cap || els[id]).dispatchEvent(ev('pointermove', wx, wy, mods)); return W; },   // a held pointer's moves and its release go to whoever holds it
                     up(id, wx, wy, mods) { (B.cap || els[id]).dispatchEvent(ev('pointerup', wx, wy, mods)); return W; },
@@ -11651,6 +11655,103 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
                 && j(brief(t1)) === GAVE('b') && j(s1.asked) === j(['a', 'b']) && sound(t1) && j(brief(t2)) === TOOK('b') && j(s2.asked) === j(['a', 'b']) && sound(t2) && j(brief(t3)) === GAVE1('b') && j(s3.asked) === j(['b', 'a']) && sound(t3)
                 && j(brief(t4)) === GAVE('a') && j(s4.asked) === j(['b', 'a']) && sound(t4) && j(brief(t5)) === GAVE('b') && j(s5.asked) === j(['a', 'b']) && sound(t5) && !bad(rowsZ).length && rowsZ.length === 18,
                 j([badZ.slice(0, 4), gotZ, askedZ.length, oddZ, brief(t1), s1.asked, brief(t2), s2.asked, brief(t3), s3.asked, brief(t4), s4.asked, brief(t5), s5.asked, bad(rowsZ).slice(0, 4)]));
+            // 12. 1.5.9, a wall's line picked (the owner, at the table on 2026-10-25: "id like to be able to more easily erase, or delete a drawn wall. i
+            // couldnt select it for delete either from what I could tell"): on the GM's own screen a press within 8 board pixels of the stroke of a wall's
+            // or a door's line goes to that line, before a floor, a shape, a picture or a text box over it (datamap.js wallPick, the fourth hand-over,
+            // through handOn). The wall: a straight line from (200, 245) to (400, 245), 6 px wide, so the pointer at (300, 250) is 2 px off its stroke.
+            // In a block of its own, so that its names are its own
+            {
+            const wl = (id, more) => Object.assign({ id, type: 'path', x: 200, y: 245, w: 200, h: 1, baseW: 200, baseH: 1, pts: [[0, 0], [200, 0]], color: '#3f3b47', strokeWidth: 6, tip: 'square', blocksSight: true, sightType: 'wall', layer: 'back-mid' }, more || {});
+            const fl = more => floor('floor1', Object.assign({ layer: 'back-mid' }, more || {})), GM = { gm: true }, NEAR = [PX, PY], FAR = [PX, 270];
+            const pr = (list, o, id, at, mods) => run(now, list, o, W => W.press(id, at[0], at[1], mods));
+            const TWO = (a, b) => j([[a + ':pointerdown', b + ':pointerdown'], 4, 3, [b], [b], true, ['open', 'close', 'render'], []]);
+            const rowsW = [
+                ['a press near the wall on an unlocked floor laid after it goes to the wall', pr([wl('wall1'), fl()], GM, 'floor1', NEAR), GAVE('wall1')],
+                ['the same at a hosted table', pr([wl('wall1'), fl()], Object.assign({ net: HOST }, GM), 'floor1', NEAR), GAVE('wall1')],
+                ['the same in a view zoomed and scrolled', pr([wl('wall1'), fl()], Object.assign({}, GM, VIEW), 'floor1', NEAR), GAVE('wall1')],
+                ['the same with no core at hand for the stacking', pr([wl('wall1'), fl()], Object.assign({ core: null }, GM), 'floor1', NEAR), GAVE('wall1')],
+                ['a press on the wall\'s very stroke, through the floor', pr([wl('wall1'), fl()], GM, 'floor1', [PX, 245]), GAVE('wall1')],
+                ['8 px off the stroke still goes to the wall', pr([wl('wall1'), fl()], GM, 'floor1', [PX, 256]), GAVE('wall1')],
+                ['9 px off the stroke is the floor\'s', pr([wl('wall1'), fl()], GM, 'floor1', [PX, 257]), KEPT('floor1')],
+                ['far from the wall the floor keeps its press', pr([wl('wall1'), fl()], GM, 'floor1', FAR), KEPT('floor1')],
+                ['past the wall\'s end the floor keeps its press', pr([wl('wall1'), fl()], GM, 'floor1', [420, 245]), KEPT('floor1')],
+                ['a door\'s line is picked as a wall\'s', pr([wl('door1', { sightType: 'door' }), fl()], GM, 'floor1', NEAR), GAVE('door1')],
+                ['a see-through barrier\'s line is picked as a wall\'s', pr([wl('bar1', { blocksSight: undefined, barrier: true }), fl()], GM, 'floor1', NEAR), GAVE('bar1')],
+                ['a HIDDEN wall is picked for the GM, who sees it', pr([wl('wall1', { hidden: true }), fl()], GM, 'floor1', NEAR), GAVE('wall1')],
+                ['a plain pen line that blocks nothing is not', pr([wl('line1', { blocksSight: undefined, sightType: undefined }), fl()], GM, 'floor1', NEAR), KEPT('floor1')],
+                ['a filled region that blocks sight is no line: not picked', pr([wl('reg1', { tip: 'fill' }), fl()], GM, 'floor1', NEAR), KEPT('floor1')],
+                ['a LOCKED wall is not picked (a locked piece hands its press on)', pr([wl('wall1', { locked: true }), fl()], GM, 'floor1', NEAR), KEPT('floor1')],
+                ['a wall whose element is not shown is not picked', pr([wl('wall1'), fl()], Object.assign({ gone: ['wall1'] }, GM), 'floor1', NEAR), KEPT('floor1')],
+                ['a picture over the wall hands the press to it', pr([wl('wall1'), pic('pic1', { x: 250, y: 200 })], GM, 'pic1', NEAR), GAVE('wall1')],
+                ['a text box over the wall hands the press to it', pr([wl('wall1'), label('label1')], GM, 'label1', NEAR), GAVE('wall1')],
+                ['a plain shape over the wall hands the press to it', pr([wl('wall1'), box('box1')], GM, 'box1', NEAR), GAVE('wall1')],
+                ['a token over both keeps its own press', pr([wl('wall1'), fl(), tok('tok1', { ownerId: '' })], GM, 'tok1', NEAR), KEPT('tok1')],
+                ['a token under the floor takes the press as before, not the wall', pr([wl('wall1'), tok('tok1', { ownerId: '' }), fl()], GM, 'floor1', NEAR), TOOK('tok1')],
+                ['a waiting token keeps its own press', pr([wl('wall1'), fl(), wait('wait1')], GM, 'wait1', NEAR), KEPT('wait1')],
+                ['a GM note card keeps its own press', pr([wl('wall1'), box('note1', { gmNoteFor: 'p1' })], GM, 'note1', NEAR), KEPT('note1')],
+                ['an unlocked waiting token under the floor keeps the wall from it: the floor\'s', pr([wl('wall1'), wait('wait1'), fl()], GM, 'floor1', NEAR), KEPT('floor1')],
+                ['of two walls near the pointer, the nearer', pr([wl('wall1'), wl('wall2', { y: 251 }), fl()], GM, 'floor1', NEAR), GAVE('wall2')],
+                ['of two walls as near, the one on top', pr([wl('wall2', { layer: 'front' }), wl('wall1', { y: 255 }), fl()], GM, 'floor1', NEAR), GAVE('wall2')],
+                ['of two walls as near and level, the later in the list', pr([wl('wall1'), wl('wall2', { y: 255 }), fl()], GM, 'floor1', NEAR), GAVE('wall2')],
+                ['a wall drawn twice its size: its stroke is drawn twice as thick', pr([wl('wall1', { y: 240, w: 400, h: 2, x: 100, pts: [[0, 0], [200, 0]] }), fl()], GM, 'floor1', [PX, 254]), GAVE('wall1')],
+                ['a wall turned a quarter turn about its box\'s centre stands upright at x 300', pr([wl('wall1', { rot: 90 }), fl()], GM, 'floor1', [305, 300]), GAVE('wall1')],
+                ['a LOCKED floor with nothing unlocked under the pointer hands its press to the wall near it', pr([wl('wall1'), fl({ locked: true })], GM, 'floor1', NEAR), GAVE('wall1')],
+                ['a locked cover over an unlocked floor near the wall: the cover to the floor, the floor to the wall, two hand-overs', pr([wl('wall1'), fl(), cover()], GM, 'lock', NEAR), TWO('floor1', 'wall1')],
+                ['with shift held nothing is handed on: the floor is added to the selection', pr([wl('wall1'), fl()], GM, 'floor1', NEAR, { shiftKey: true }), KEPT('floor1')]
+            ].map(r => [r[0], j(brief(r[1])) === r[2] && sound(r[1]) && r[1].still, j(brief(r[1]))]);
+            // never on a player's app, at someone else's table with its link down, nor where this screen may not write the campaign: each press ends as the same press with no wall on the map
+            const ALONE = [['a player\'s app', { net: P1, gm: true }], ['someone else\'s table, its link down', { net: { active: false, role: null, foreign: true }, gm: true }], ['the stream window or a window of its own', { gm: false }], ['a page that never says', {}]];
+            const rowsA2 = ALONE.map(r => { const a = pr([wl('wall1'), fl()], r[1], 'floor1', NEAR), b = pr([fl()], r[1], 'floor1', NEAR); return [r[0], j(brief(a)) === j(brief(b)) && sound(a) && a.still && a.sel.indexOf('wall1') < 0, j([brief(a), brief(b)])]; });
+            // a right-click and a double-click ask the same pick (window.wpWallPick, which the right-click menu asks; the element's own double-click)
+            const Wr = page(now, [wl('wall1'), fl(), tok('tok1', { ownerId: '', x: 600, y: 600 })], Object.assign({}, GM, VIEW)), cN = Wr.at(PX, PY), cF = Wr.at(PX, 270);
+            const pickR = [Wr.win.wpWallPick('floor1', cN[0], cN[1]), Wr.win.wpWallPick('floor1', cF[0], cF[1]), Wr.win.wpWallPick('wall1', cN[0], cN[1]), Wr.win.wpWallPick('tok1', cN[0], cN[1]), Wr.win.wpWallPick('nobody', cN[0], cN[1])];
+            const pickP = page(now, [wl('wall1'), fl()], { net: P1, gm: true }).win.wpWallPick('floor1', PX, PY), pickS = page(now, [wl('wall1'), fl()], { gm: false }).win.wpWallPick('floor1', PX, PY);
+            const Wd = page(now, [wl('wall1'), fl()], GM), dN = Wd.dbl('floor1', PX, PY), dSel = Wd.state.selWbIds.slice(), Wf = page(now, [wl('wall1'), fl()], GM), dF = Wf.dbl('floor1', PX, 270), fSel = Wf.state.selWbIds.slice();
+            const Wt = page(now, [wl('wall1'), label('label1')], GM), dT = Wt.dbl('label1', PX, PY), tSel = Wt.state.selWbIds.slice(), Wp = page(now, [wl('wall1'), fl()], { net: P1, gm: true }), dP = Wp.dbl('floor1', PX, PY);
+            const dblOk = !!dN.imm && j(dSel) === j(['wall1']) && Wd.B.said.indexOf('panel') >= 0 && !dF.imm && j(fSel) === j(['floor1']) && !!dT.imm && j(tSel) === j(['wall1']) && !dP.imm && Wp.state.selWbIds.indexOf('wall1') < 0;
+            // the menu asks it in one place, right after the piece under the pointer is read, and the Delete key deletes a selected piece of any kind with no refusal
+            const ctxLine = "        var wallM = targetId && window.wpWallPick ? window.wpWallPick(targetId, e.clientX, e.clientY) : null;", ioD = fs.readFileSync(path.join(app, 'scripts', 'io.js'), 'utf8').replace(/\r\n/g, NL);
+            const wired = wbD.split(ctxLine).length === 2 && wbD.indexOf(ctxLine) > wbD.indexOf("        if (itemEl) targetId = itemEl.dataset.id;\n") && wbD.indexOf(ctxLine) - wbD.indexOf("        if (itemEl) targetId = itemEl.dataset.id;\n") < 200 && wbD.indexOf(NL + '        if (wallM) targetId = wallM;' + NL) > wbD.indexOf(ctxLine) && wbD.indexOf(NL + '        if (wallM) targetId = wallM;' + NL) - wbD.indexOf(ctxLine) < 300
+                && ioD.includes('              m.whiteboard = m.whiteboard.filter(x => !ids.includes(x.id));') && dSrc.split('wallPickEl(').length === 6 && dSrc.split('handOn(wall').length === 3;
+            check('the board\'s drag, 1.5.9, a wall\'s line picked (datamap.js wallPick, the fourth hand-over, run for real): on the GM\'s own screen, alone or hosting, zoomed or not, with or without the core, a press within 8 board pixels of the stroke of a wall\'s, a door\'s or a see-through barrier\'s line goes to that line through handOn, before an unlocked floor laid after it, a picture, a text box or a plain shape over it; 9 px off, far from it or past its end the piece keeps its press; a hidden wall is picked, a locked one, a plain pen line, a filled region and a wall not shown are not; a token, a waiting token and a GM note card keep their own press, a token under the floor still takes it and an unlocked waiting token there keeps the wall from it; the nearer wall, then the one on top, then the later; a resized and a turned wall read as the board draws them; a locked floor with nothing unlocked under the pointer hands to the wall, a locked cover hands to the floor and the floor to the wall (two hand-overs, under handOn\'s bound of three); shift hands nothing on. On a player\'s app, at someone else\'s table with its link down, in a window that may not write the campaign and on a page that never says, every press ends as the same press with no wall on the map. The right-click menu asks the same pick (window.wpWallPick, by the screen\'s coordinates: the floor near the wall gives the wall, far gives none, the wall, a token and a piece that is not there give none, a player\'s app and the stream window none) in one place right after it reads the piece under the pointer; a double-click near the wall selects the wall, opens Properties and stops the piece\'s own double-click (a text box\'s editing), far from it the floor as before, and on a player\'s app nothing of the wall; the Delete key deletes a selected piece of any kind',
+                !bad(rowsW).length && rowsW.length === 32 && !bad(rowsA2).length && j(pickR) === j(['wall1', null, null, null, null]) && pickP === null && pickS === null && dblOk && wired,
+                j([bad(rowsW).slice(0, 4), bad(rowsA2).slice(0, 2), pickR, pickP, pickS, [!!dN.imm, dSel, Wd.B.said, !!dF.imm, fSel, !!dT.imm, tSel, !!dP.imm], wired]));
+            // 12 (ii). seeded scenes on the GM's machines against a reading of the suite's own written from the four hand-overs, with wall, door and barrier
+            // lines near the pointer: who is handed the press and what it comes to; no press is handed on more than twice and none reaches the bound
+            let seedW = 20261025; const rndW = () => { seedW = (Math.imul(seedW, 1664525) + 1013904223) >>> 0; return seedW / 4294967296; }, pickW = a => a[Math.floor(rndW() * a.length)];
+            const KW = [{ type: 'rect' }, { type: 'rect' }, { type: 'image' }, { type: 'text' }, { type: 'circle', isChar: true, ownerId: '' }, { type: 'circle', waiting: 1, ownerId: 'p1' }, { type: 'rect', gmNoteFor: 'p1' }, { line: { blocksSight: true, sightType: 'wall' } }, { line: { blocksSight: true, sightType: 'door' } }, { line: { barrier: true } }, { line: {} }];
+            const sceneW = () => { const list = [], n = 2 + Math.floor(rndW() * 5); for (let i = 0; i < n; i++) { const k = pickW(KW); let w;
+                    if (k.line) { const off = Math.floor(rndW() * 31) - 15, len = 40 + Math.floor(rndW() * 100), sw = pickW([2, 4, 6, 10]), up = rndW() < 0.5, from = Math.floor(rndW() * 60);
+                        w = Object.assign({ id: 'p' + i, type: 'path', strokeWidth: sw, tip: 'square' }, k.line, up ? { x: PX + off, y: PY - from, w: 1, h: len, baseW: 1, baseH: len, pts: [[0, 0], [0, len]] } : { x: PX - from, y: PY + off, w: len, h: 1, baseW: len, baseH: 1, pts: [[0, 0], [len, 0]] }); }
+                    else w = Object.assign({ id: 'p' + i }, k, { x: 235 + Math.floor(rndW() * 60), y: 185 + Math.floor(rndW() * 60), w: 30 + Math.floor(rndW() * 90), h: 30 + Math.floor(rndW() * 90) });
+                    if (rndW() < 0.3) w.locked = true; if (rndW() < 0.2) w.hidden = true; const r = rndW(); if (r < 0.4) w.layer = pickW(['back', 'back-mid', 'middle', 'front-mid', 'front']); else if (r < 0.7) w.z = pickW([5, 10, 20, 35]); list.push(w); } return list; };
+            const lineW = c => c.type === 'path' && c.tip !== 'fill' && Array.isArray(c.pts) && (c.blocksSight === true || c.barrier === true);
+            const gapW = c => { const x0 = c.x, y0 = c.y, x1 = c.x + c.pts[1][0], y1 = c.y + c.pts[1][1], cx = Math.max(Math.min(x0, x1), Math.min(Math.max(x0, x1), PX)), cy = Math.max(Math.min(y0, y1), Math.min(Math.max(y0, y1), PY)); return Math.hypot(PX - cx, PY - cy) - c.strokeWidth / 2; };   // an upright or a level line: its nearest point is the pointer held to its box
+            const wallOf = (list, it) => { if (it.isChar || it.waiting || it.gmNoteFor || lineW(it)) return null; if (list.some(c => c.id !== it.id && (c.isChar || c.waiting) && !c.locked && here(c))) return null;
+                let b = null, bd = Infinity; list.forEach(c => { if (c.id === it.id || !lineW(c) || c.locked) return; const d = gapW(c); if (!(d <= 8)) return; const dd = Math.max(0, d); if (!b || dd < bd || (dd === bd && S.stackZ(c) >= S.stackZ(b))) { b = c; bd = dd; } }); return b; };
+            const readingW = (list, id, mod) => {
+                const chain = []; let it = list.find(c => c.id === id), m = mod; const give = to => { if (chain.length >= 3) return false; chain.push(to.id); it = to; m = false; return true; };
+                for (let hop = 0; hop < 9; hop++) {
+                    if (grip(it)) return { chain, end: 'none' };
+                    if (it.locked) { if (m) return { chain, end: 'toggle', id: it.id }; const b = topOf(list, c => !c.locked && c.id !== it.id && here(c)); if (b) { if (give(b)) continue; return { chain, end: 'held', id: it.id }; } const wv = wallOf(list, it); if (wv && give(wv)) continue; return { chain, end: 'held', id: it.id }; }
+                    const t = !it.isChar && !it.waiting && !m ? topOf(list, c => !!c.isChar && !c.locked && c.id !== it.id && here(c)) : null; if (t && give(t)) continue;
+                    const wv = !m ? wallOf(list, it) : null; if (wv && give(wv)) continue;
+                    return { chain, end: 'drag', id: it.id };
+                }
+                return { chain, end: 'on and on' };
+            };
+            const swW = { ran: 0, off: [], toWall: 0, two: 0, hops: [0, 0, 0, 0] };
+            for (let i = 0; i < 1500; i++) {
+                const list = sceneW(), can = list.filter(c => here(c) || (lineW(c) && gapW(c) <= 3)); if (!can.length) continue;   // a piece under the pointer, a line by its stroke
+                const id = pickW(can).id, mod = rndW() < 0.15 ? pickW(['shiftKey', 'ctrlKey']) : '', mods = {}; if (mod) mods[mod] = true;
+                const r = readingW(list, id, !!mod), o = { gm: true, net: pickW([undefined, HOST]), core: rndW() < 0.5 ? null : undefined }, t = run(now, JSON.parse(j(list)), o, tap(id, mods));
+                swW.ran++; swW.hops[Math.min(3, r.chain.length)]++; const lastW = r.chain.length && list.find(c => c.id === r.chain[r.chain.length - 1]); if (lastW && lineW(lastW)) { swW.toWall++; if (r.chain.length === 2) swW.two++; }
+                if (j(brief(t)) !== wanted(r) || !sound(t) || !t.still) swW.off.push(swW.off.length < 3 ? j([list, id, mod, brief(t), wanted(r)]) : '');
+            }
+            check('the board\'s drag, 1.5.9, over 1,500 seeded scenes on the GM\'s machines with wall, door, barrier and plain lines around the pointer (two to six pieces of eleven kinds, locked or not, hidden or not, on a layer, at a level or neither; a piece under the pointer is pressed, with a modifier for one press in seven, with systemcore at hand for half of them): each press ends as a reading of the suite\'s own says, written from the four hand-overs (the fourth: a wall\'s line within 8 px of its stroke, never from a token, a waiting token, a GM note card or a line, never where an unlocked token lies under the pointer, the nearer first, then the higher): who is handed the press and in what order, what is selected and who holds the pointer; many presses end on a wall, some after two hand-overs, and none is handed on three times',
+                !swW.off.length && swW.ran > 1200 && swW.toWall > 150 && swW.two > 5 && swW.hops[3] === 0,
+                j([swW.off.slice(0, 2), swW.off.length, swW.ran, swW.toWall, swW.two, swW.hops]));
+            }
             check('the board\'s drag: in all of the scenes above no listener threw anything (the page gives the sliced code every name it reads on these paths, and no dispatch was left open)', !thrown.length, j(thrown));
         }
     }
