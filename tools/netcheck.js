@@ -12788,11 +12788,11 @@ pendingChecks.push((async () => {
         new Function('net', 'SC', 'getActiveCampaign', 'window', '_charPending', 'charPendingDone', 'setTimeout', ciSrc)(netC, () => Sx, () => campC, { wpFormula: Fx, wpVtt: { on: () => true } }, {}, () => {}, () => 0);
         const ADD = k => netC.charItem('c_1', 'f_kit', { op: 'add', defId: 'i_' + k, rowId: 'w_' + k + '1', qty: 1 }), kit =() => (campC.chars.c_1.values.f_kit || []).map(r => r.defId);
         const r1 = ADD('two'), r2 = ADD('own'), r3 = ADD('lib8'), n0 = sent.length, k0 = kit(), r4 = ADD('med'), r5 = ADD('own'), r6 = ADD('lib8'), r7 = ADD('two'), r8 = ADD('hid'), r9 = ADD('gone');
-        check('126b a player\'s own app (the real net.charItem with the real core): a pick their character does not meet, by the needs their own copy of the entry names, is answered at once in the core\'s words, the GM\'s own where the entry has them, and nothing is stored or sent; an entry of the library is judged alike from the copy their app fetched; once the need is carried the same picks are stored and sent; a need their copy does not name is left to the host, so that pick is sent; an entry that is gone still says so; every message packs',
+        check('126b a player\'s own app (the real net.charItem with the real core): a pick their character does not meet, by the needs their own copy of the entry names, is answered at once in the core\'s words, the GM\'s own where the entry has them, and nothing is stored or sent; an entry of the library is judged alike from the copy their app fetched; once the need is carried the same picks are stored and sent; a need their copy does not name is left to the host, so that pick is sent; an entry that is gone still says so; a refusal with words of its own says them (the pin moved on purpose in 1.5.9, Chambers from: a launcher made a stack is refused in words); every message packs',
             r1.error === 'That needs MED and something else.' && r2.error === 'Train first.' && r3.error === 'That needs MED.' && n0 === 0 && k0.length === 0
             && r4.ok === true && r5.ok === true && r6.ok === true && r7.error === 'That needs something you do not have.' && r8.ok === true && r9.error === 'That item is gone.'
             && j(sent.map(m => [m.type, m.op, m.defId])) === j([['char-item', 'add', 'i_med'], ['char-item', 'add', 'i_own'], ['char-item', 'add', 'i_lib8'], ['char-item', 'add', 'i_hid']]) && j(kit()) === j(['i_med', 'i_own', 'i_lib8', 'i_hid'])
-            && ciSrc.includes("res.reason === 'needs' ? (res.msg || 'Your character does not meet what that needs.') : 'That change is not allowed.' };"),
+            && ciSrc.includes("res.reason === 'needs' ? (res.msg || 'Your character does not meet what that needs.') : res.reason === 'value' && typeof res.msg === 'string' && res.msg ? res.msg : 'That change is not allowed.' };"),
             j([r1, r2, r3, r7, r8, r9, sent.map(m => m.defId)]));
     }
 })());
@@ -12863,17 +12863,19 @@ pendingChecks.push((async () => {
         const gear = () => j(camp.chars.c_1.values.f_gear);
         const a1 = SEND({ rid: 'c1', op: 'chamber', from: 'w_f1' }), g1 = gear();
         const a2 = SEND({ rid: 'c2', op: 'chamber', from: 'w_f1' }), g2 = gear();
+        const a7 = SEND({ rid: 'c7', op: 'setQty', qty: 2 }), g7 = gear();
         const a3 = SEND({ rid: 'c3', op: 'unchamber', back: 'w_bk' }), g3 = gear();
         const a4 = SEND({ rid: 'c4', op: 'chamber', from: 'w_d1' }), g4 = gear();
         const a5 = SEND({ rid: 'c5', op: 'chamber', fieldId: 'f_bag', rowId: 'w_b1', from: 'w_bf' });
         const a6 = SEND({ rid: 'c6', op: 'chamber', from: 5 });
-        check('1.5.9 Chambers from on the host (the real row branch with the real core): a player\'s chamber takes one unit off the stack into the launcher\'s chamber, stored, saved once, acked and sent to its owner; a second refused in words while the chamber is full; unchamber gives it back onto its stack; a round that does not fit refused in words; a list with no chamber answered field; a message of the wrong shape answered nothing; nothing moves on a refusal; every message packs',
+        check('1.5.9 Chambers from on the host (the real row branch with the real core): a player\'s chamber takes one unit off the stack into the launcher\'s chamber, stored, saved once, acked and sent to its owner; a second refused in words while the chamber is full; unchamber gives it back onto its stack; a round that does not fit refused in words; a list with no chamber answered field; a message of the wrong shape answered nothing; a launcher holding a round made a stack refused in words (its rounds would be lost); nothing moves on a refusal; every message packs',
             j(a1.answer) === j([{ type: 'char-ack', rid: 'c1' }]) && a1.saved === 1 && g1 === j([{ id: 'w_t1', defId: 'i_tube', qty: 1, rd: [{ defId: 'i_fizz' }] }, { id: 'w_f1', defId: 'i_fizz', qty: 1 }, { id: 'w_d1', defId: 'i_dud', qty: 1 }]) && a1.owner.some(m => m.values && m.values.f_gear)
             && a2.answer.length === 1 && a2.answer[0].type === 'char-deny' && /full/.test(a2.answer[0].msg || '') && a2.saved === 0 && a2.owner.length === 0 && g2 === g1
             && j(a3.answer) === j([{ type: 'char-ack', rid: 'c3' }]) && g3 === j([{ id: 'w_t1', defId: 'i_tube', qty: 1 }, { id: 'w_f1', defId: 'i_fizz', qty: 2 }, { id: 'w_d1', defId: 'i_dud', qty: 1 }])
             && a4.answer.length === 1 && a4.answer[0].type === 'char-deny' && a4.answer[0].reason === 'value' && /does not fit/.test(a4.answer[0].msg || '') && g4 === g3
-            && a5.answer.length === 1 && a5.answer[0].type === 'char-deny' && a5.answer[0].reason === 'field' && a6.answer.length === 0,
-            j([a1, g1, a2.answer, a3.answer, g3, a4.answer, a5.answer, a6.answer]));
+            && a5.answer.length === 1 && a5.answer[0].type === 'char-deny' && a5.answer[0].reason === 'field' && a6.answer.length === 0
+            && a7.answer.length === 1 && a7.answer[0].type === 'char-deny' && a7.answer[0].reason === 'value' && /Unchamber it first/.test(a7.answer[0].msg || '') && a7.saved === 0 && g7 === g1,
+            j([a1, g1, a2.answer, a3.answer, g3, a4.answer, a5.answer, a6.answer, a7.answer]));
         const cA = src.indexOf('net.charItem = function('), cZ = src.indexOf('\n};\n', cA) + 3, sent = [], pend = {};
         const campP = { id: 'k', system: Sx.cleanSystem(raw, { F: Fx, gmView: false }), chars: { c_1: { id: 'c_1', name: 'Kael', ownerId: 'u_k', npc: false, values: { f_gear: [{ id: 'w_t1', defId: 'i_tube', qty: 1 }, { id: 'w_f1', defId: 'i_fizz', qty: 2 }] } } } };
         const before = j(campP.chars.c_1.values);

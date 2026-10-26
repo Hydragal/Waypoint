@@ -96,8 +96,8 @@ function validPageId(id) { return typeof id === 'string' && PAGE_ID.test(id) && 
 var FIELD_ID = /^f_[A-Za-z0-9_]{1,24}$/, ROLL_ID = /^r_[A-Za-z0-9_]{1,24}$/, SECTION_ID = /^s_[A-Za-z0-9_]{1,24}$/, TAB_ID = /^t_[A-Za-z0-9_]{1,24}$/, CHAR_ID = /^c_[A-Za-z0-9_]{1,24}$/, ITEM_ID = /^i_[A-Za-z0-9_]{1,24}$/, RID_RE = /^[A-Za-z0-9_-]{1,24}$/;
 var SHAPES = Object.freeze({ circle: 1 }), BLAST_AUTO = Object.freeze({ full: 1, roll: 1, measure: 1 });
 // Stage 6 F4a: a carried row's id (w_…; a legacy {defId, qty} row's is derived from its item) and the row ops a change may carry
-var ROW_ID = /^w_[A-Za-z0-9_]{1,24}$/, ROW_OPS = Object.freeze({ add: 1, remove: 1, setQty: 1, keep: 1, undo: 1, set: 1, ov: 1, custom: 1, load: 1, restore: 1, chamber: 1, unchamber: 1 });   // 1.5.9 Chambers from: chamber, one unit of a round into a row's chamber; unchamber, the last one in back to its list
-var CHAMBER_CAP = 8;   // 1.5.9 Chambers from: the most rounds a chamber holds   // restore (1.5.8): a removed row put back whole at its place (its Undo)   // undo (Stage 6): a pickup taken back; set (F4b): a row's facts; ov (F4c2): a copy's own values; custom (F4c3): a character's own row, made or changed
+var ROW_ID = /^w_[A-Za-z0-9_]{1,24}$/, ROW_OPS = Object.freeze({ add: 1, remove: 1, setQty: 1, keep: 1, undo: 1, set: 1, ov: 1, custom: 1, load: 1, restore: 1, chamber: 1, unchamber: 1 });   // 1.5.9 Chambers from: chamber, one unit of a round into a row's chamber; unchamber, the last one in back to its list   // restore (1.5.8): a removed row put back whole at its place (its Undo)   // undo (Stage 6): a pickup taken back; set (F4b): a row's facts; ov (F4c2): a copy's own values; custom (F4c3): a character's own row, made or changed
+var CHAMBER_CAP = 8;   // 1.5.9 Chambers from: the most rounds a chamber holds
 // Stage 6 F4b: an item's key in formulas (F5a: Skills.<Key>.lvl) — never a row word, which a row's own names use
 var ITEM_KEY = /^[A-Za-z][A-Za-z0-9_]{0,39}$/, ROW_WORDS = Object.freeze({ count: 1, qty: 1, on: 1, has: 1, lvl: 1, paid: 1, row: 1, opened: 1, loaded: 1, loadmax: 1, once: 1, oncecost: 1, oncefree: 1, chambered: 1 });   // 1.5.9 Chambers from: chambered, how many rounds a row holds   // 1.5.8 Loads from: loaded, a row that holds a loaded copy; loadmax, that copy's full level   // 1.5.8: opened, a row another row opens (openSync)   // 1.5.8 Counted once: once, oncecost, oncefree
 // 1.5.4: the words a list's names put between the list and what they read — List.on.Wt (the rows switched on), List.max.Parry and List.min.Wt
@@ -3563,6 +3563,7 @@ function applyRowOp(sys, char, fieldId, q, F, opts) {
         } else {
             var cur = list[idx].qty | 0, nq = 0, gr = isObj(opts.grace) ? Math.max(0, opts.grace.added | 0) : -1;   // gr: what the open pickup window may still take back (-1: none open)
             if (q.op === 'setQty') { nq = cleanNum(q.qty, NaN); if (!isFinite(nq)) return { ok: false, reason: 'value' }; nq = Math.min(Math.max(0, nq | 0), LIMITS.maxQty); }
+            if (nq > 1 && Array.isArray(list[idx].rd) && list[idx].rd.length) return { ok: false, reason: 'value', msg: 'Unchamber it first: a row with rounds in its chamber is one of its own.' };   // 1.5.9 Chambers from: a stack holds no chamber, so its rounds would be lost
             else if (q.op === 'undo') { var back = clampNum(cleanNum(q.qty, 0) | 0, 0, LIMITS.maxQty); if (gr >= 0) back = Math.min(back, gr); nq = Math.max(0, cur - back); }   // the host's own count wins: never more than was picked up
             var rd = rowDef(sys, list[idx]), rmode = rd && rd.def && RM_MODES[rd.def.rm] === 1 ? rd.def.rm : '';
             var eqOn = spec && isObj(spec.on) && list[idx].on === true && rd && rd.def && RM_MODES[rd.def.eq] === 1 ? rd.def.eq : '';   // F4b (owner, after the review): while it is on, its switch lock covers dropping it too
@@ -5030,8 +5031,8 @@ function validateSystem(sys, F) {
         if (w[word] === 'pick') return total ? { pickTotal: true, list: lf } : { id: '', key: node + '.' + word, kind: 'number', vis: lf.vis, list: lf };   // F5a2: a choice reads its option's value; it has no total; a node of the loop graph (owed review F5a2#5)
         if (w[word] === 'stat' || word === 'qty' || word === 'paid' || (total ? word === 'count' : word === 'lvl')) return { id: '', key: node, kind: 'number', vis: lf.vis, list: lf, noEdge: true };
         if (!total && (word === 'on' || word === 'has')) return { id: '', key: node, kind: 'toggle', vis: lf.vis, list: lf, noEdge: true };
-        if (!total && (word === 'opened' || word === 'loaded' || word === 'loadmax')) return { id: '', key: node, kind: 'number', vis: lf.vis, list: lf, noEdge: true };
-        if (!total && word === 'chambered' && isObj(lf.list) && isObj(lf.list.chamber)) return { id: '', key: node, kind: 'number', vis: lf.vis, list: lf, noEdge: true };   // 1.5.9 Chambers from: Row.chambered   // 1.5.8: Row.opened; Row.loaded and Row.loadmax (Loads from)
+        if (!total && (word === 'opened' || word === 'loaded' || word === 'loadmax')) return { id: '', key: node, kind: 'number', vis: lf.vis, list: lf, noEdge: true };   // 1.5.8: Row.opened; Row.loaded and Row.loadmax (Loads from)
+        if (!total && word === 'chambered' && isObj(lf.list) && isObj(lf.list.chamber)) return { id: '', key: node, kind: 'number', vis: lf.vis, list: lf, noEdge: true };   // 1.5.9 Chambers from: Row.chambered
         if (!total && (word === 'once' || word === 'oncefree')) return { id: '', key: node, kind: 'number', vis: lf.vis, list: lf, noEdge: true };   // 1.5.8 Counted once
         if (!total && word === 'oncecost') { var ocK = isObj(lf.list) && isObj(lf.list.once) && typeof lf.list.once.cost === 'string' ? lower(lf.list.once.cost) : ''; return ocK && w[ocK] === 'col' ? { id: '', key: node + '.' + ocK, kind: 'number', vis: lf.vis, list: lf } : { id: '', key: node, kind: 'number', vis: lf.vis, list: lf, noEdge: true }; }
         return null;
