@@ -8932,7 +8932,7 @@ function dueLine(rec) { var D = DC(); return D && D.dueText ? D.dueText(rec) : '
 // (each connection of theirs; the GM's copy then says whose it is to press), else the GM's alone. A whisper: never in the join's history
 net.postDue = function(ch, act, kind, round, toOwner) {
     if (!ch || typeof ch.id !== 'string' || !act || typeof act.id !== 'string') return;
-    var rec = { type: 'due', id: 'r_' + Math.random().toString(36).slice(2, 10), from: diceFrom(getProfile(), true), charId: ch.id, act: act.id, label: String(act.label || 'Apply').split('{')[0].trim().slice(0, 60) || 'Apply', why: kind === 'turn' ? 'turn' : 'round', round: Math.max(1, Math.min(9999, Math.floor(Number(round) || 1))), ts: Date.now() };
+    var rec = { type: 'due', id: 'r_' + Math.random().toString(36).slice(2, 10), from: diceFrom(getProfile(), true), charId: ch.id, act: act.id, label: String(act.label || 'Apply').split('{')[0].trim().slice(0, 60) || 'Apply', why: kind === 'turn' ? 'turn' : kind === 'cross' ? 'cross' : 'round', round: Math.max(1, Math.min(9999, Math.floor(Number(round) || 1))), ts: Date.now() };
     if (ch.name) rec.as = String(ch.name).slice(0, 60);
     if (!Array.isArray(act.apply)) { rec.roll = 1; if (rec.label === 'Apply') rec.label = String(act.label || 'Roll').split('{')[0].trim().slice(0, 60) || 'Roll'; }   // 1.5.9 (book es/et plan 4b): a roll that is due; its card's button rolls it
     postDue(rec, ch, !!toOwner);

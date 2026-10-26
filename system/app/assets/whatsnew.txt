@@ -28,6 +28,9 @@ Character sheets
 - A change a roll or an action makes can be Rolled. Its amount may then
   roll dice, such as 1d6 for a heal, and the host rolls it each time. The
   card in chat shows the dice it drew.
+- A roll or an action can run when a value crosses a step, such as a
+  death check each time HP falls past minus its most. It runs once for
+  each step a change passes, and again after the value goes back up.
 - An effect can set a posture, so Down lays a token prone the moment it
   comes on. Tick Back when it ends to stand the token up again after.
 - A roll can be due at its character's turn, or each round, in a

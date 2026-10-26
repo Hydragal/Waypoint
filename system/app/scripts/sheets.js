@@ -8,7 +8,7 @@ import { getActiveCampaign } from './models.js';
 import { save, toast, toastAction } from './io.js';
 import { picRef } from './safecore.js';
 import { showConfirm, showPrompt } from './dialogs.js';
-import { cleanDamageRules, postureFx, loadFits, chamberTakes, chamberCap, CHAMBER_CAP, cleanReach, openSync, moneyBoxes, moneyHeld, rowOpMoney, onceOf, catHome, catPlace, cleanPlaceCats, catSplits, cleanFieldUnit, unitTail, heightWords, measureWords, unitWords, unitHead, listWords, unitOf, textWords, measureStore, rollNeedsOk, rollNeedsSays, timeRuleRun, ruleRunCtx, chainsShallow, makeResolver, hasDice, figText, cleanEvery, cleanInFight, droppedCounts, validPageId, LIMITS, KINDS, showsIf, rowRollNames, gmOnlyNames, applyAct, withOnSelf, applyScope, applyRound, dueActs, combatChars, roundSecs, fxLeftNow, lastsSecs, APPLY_KINDS, TURN_UNITS, LIGHT_UNITS, RANGE_UNITS, HEIGHT_UNITS, TIME_WORDS, STORED, DEF_PROP, BAND_KINDS, IDENTITY_KINDS, LEDGER_KINDS, headerEntry, captionParts, emptySystem, uid, validKey, cleanSystem, cleanChar, validateSystem, resolveAll, hoverLines, autoLayout, applyEdit, applyStyle, cleanLooks, lookOf, lookFor, lookRule, applyEffectOp, fxText, fmtNum, budgetsOf, budgetWatch, budgetSays, needsMet, needsSays, initRoll, applyProposal, cleanUploads, sideOf, threatArc, facingCtx, facingNow, setAimSource, stanceCtx, tokenCtx, POSTURE_IDS, POSTURE_NAMES, DEFAULT_POSTURES, postureList, postureAt, autoEffectsOn, initTie, charTokenOn, cycleThreat, valueTone, TONES, activeCharOf, playableChars, ownedTokenPlan, applyOwnerOps, migrateBindings, capExpr, cleanValue, fieldById, valueOpts, applyRowOp, rowIdOf, rowDef, orphanRows, stampRows, cleanRowDef, projectRows, STAT_KEY, PALETTE_KEYS, GLYPHS, glyphPath, headerEdits, pinTargets, pinTargetsAll, hudView, hudHasContent, resetTargets, cleanListSpec, statKey, rowStat, plusText, rowPaid, itemReach, gmDerivedNames, labelGmNames, gmEffectNames, labelNames, withRound, rangeCtx, withRange, rowLvl, rowOn, cleanItemKey, charForView, secretFieldIds, gmViewFields } from './systemcore.js';
+import { cleanDamageRules, postureFx, crossings, loadFits, chamberTakes, chamberCap, CHAMBER_CAP, cleanReach, openSync, moneyBoxes, moneyHeld, rowOpMoney, onceOf, catHome, catPlace, cleanPlaceCats, catSplits, cleanFieldUnit, unitTail, heightWords, measureWords, unitWords, unitHead, listWords, unitOf, textWords, measureStore, rollNeedsOk, rollNeedsSays, timeRuleRun, ruleRunCtx, chainsShallow, makeResolver, hasDice, figText, cleanEvery, cleanInFight, droppedCounts, validPageId, LIMITS, KINDS, showsIf, rowRollNames, gmOnlyNames, applyAct, withOnSelf, applyScope, applyRound, dueActs, combatChars, roundSecs, fxLeftNow, lastsSecs, APPLY_KINDS, TURN_UNITS, LIGHT_UNITS, RANGE_UNITS, HEIGHT_UNITS, TIME_WORDS, STORED, DEF_PROP, BAND_KINDS, IDENTITY_KINDS, LEDGER_KINDS, headerEntry, captionParts, emptySystem, uid, validKey, cleanSystem, cleanChar, validateSystem, resolveAll, hoverLines, autoLayout, applyEdit, applyStyle, cleanLooks, lookOf, lookFor, lookRule, applyEffectOp, fxText, fmtNum, budgetsOf, budgetWatch, budgetSays, needsMet, needsSays, initRoll, applyProposal, cleanUploads, sideOf, threatArc, facingCtx, facingNow, setAimSource, stanceCtx, tokenCtx, POSTURE_IDS, POSTURE_NAMES, DEFAULT_POSTURES, postureList, postureAt, autoEffectsOn, initTie, charTokenOn, cycleThreat, valueTone, TONES, activeCharOf, playableChars, ownedTokenPlan, applyOwnerOps, migrateBindings, capExpr, cleanValue, fieldById, valueOpts, applyRowOp, rowIdOf, rowDef, orphanRows, stampRows, cleanRowDef, projectRows, STAT_KEY, PALETTE_KEYS, GLYPHS, glyphPath, headerEdits, pinTargets, pinTargetsAll, hudView, hudHasContent, resetTargets, cleanListSpec, statKey, rowStat, plusText, rowPaid, itemReach, gmDerivedNames, labelGmNames, gmEffectNames, labelNames, withRound, rangeCtx, withRange, rowLvl, rowOn, cleanItemKey, charForView, secretFieldIds, gmViewFields } from './systemcore.js';
 import { fileBase, charToJson, charFromJson, sheetToMarkdown, isCharFile } from './sheetexport.js';
 import { lvlsFromBox, lvlsToText } from './librarycore.js';
 import { dieNode, DIE_LABELS } from './dieicons.js';   // 1.5.8, backlog 149: the dice drawings (pure)
@@ -376,7 +376,57 @@ function afterCharChange(c, whole, values) {
     if (posA.length && n && n.active && n.role === 'host' && n.broadcastItemFiltered) posA.forEach(function(mid) { n.broadcastItemFiltered(camp.id, mid); });   // 1.5.9: the maps whose tokens it moved
     if (window.appRender) window.appRender();
     renderViews(c.id);   // HUD frame (HF2a): the sheet and every HUD of this character
+    if (typeof crossFollow === 'function') crossFollow(c, camp);   // 1.5.9: a value that crossed a step runs its rules, once the change is stored
 }
+// [systemcheck:cross-start]
+// 1.5.9 (docs/BOOK_ES_ET_PLAN.md 4a; the book (et) and (eu): a death check every time HP falls past -HP or a further multiple, even at a line
+// already rolled; rising above a line re-arms it; the owner's O5: a value typed by hand counts like any change): on the machine that owns the
+// campaign alone, after every change of a character, each rule that watches a value (systemcore crossings, the one judge) compares the value
+// with what it last saw of that character, here in memory. crossSeed, asked by the board's every redraw, notes the characters not seen yet, so a
+// load or a new character crosses nothing. Each step passed runs the rule once (once in all with Once however many), as the GM's own press of it:
+// an apply action through applyAction, a roll through the dice with its own name, so the host judges its needs and works its Then. With By a
+// reminder it posts its card for its player or the GM; an NPC whose rules the GM switched off gets the GM's reminder. A run's own changes are
+// judged again, at most 3 deep and 8 runs a change, the rest said once
+var _crossSeen = Object.create(null), _crossDepth = 0;
+function crossRules(sys) { return (sys && Array.isArray(sys.rolls) ? sys.rolls : []).filter(function(r) { return !!r && typeof r.id === 'string' && !!r.cross && typeof r.cross === 'object' && typeof r.cross.f === 'string'; }); }
+function crossOk() { return !isClient() && canWrite() && !!F(); }
+function crossValue(sys, c, r, vars) { var f = fieldById(sys, r.cross.f), v = f ? vars(f.key) : null; return typeof v === 'number' && isFinite(v) ? v : null; }
+function crossSeed() {
+    var camp = getActiveCampaign(), sys = camp && camp.system; if (!sys || !crossOk() || typeof makeResolver !== 'function') return 0;
+    var rules = crossRules(sys), n = 0; if (!rules.length) return 0;
+    Object.keys(camp.chars || {}).forEach(function(id) {
+        var c = camp.chars[id], vars = null; if (!c || typeof c !== 'object') return;
+        rules.forEach(function(r) { var k = (camp.id || '') + '|' + id + '|' + r.id; if (Object.prototype.hasOwnProperty.call(_crossSeen, k)) return; vars = vars || makeResolver(sys, c, F(), null); var v = crossValue(sys, c, r, vars); if (v !== null) { _crossSeen[k] = v; n++; } });
+    });
+    return n;
+}
+function crossFollow(c, camp) {
+    if (!c || typeof c.id !== 'string' || !camp || !camp.system || !crossOk() || typeof crossings !== 'function' || typeof makeResolver !== 'function') return 0;
+    var sys = camp.system, rules = crossRules(sys); if (!rules.length) return 0;
+    var vars = makeResolver(sys, c, F(), tokenCtxFor(c.id, camp)), runs = [];
+    rules.forEach(function(r) {
+        var now = crossValue(sys, c, r, vars), k = (camp.id || '') + '|' + c.id + '|' + r.id; if (now === null) return;
+        var was = Object.prototype.hasOwnProperty.call(_crossSeen, k) ? _crossSeen[k] : null; _crossSeen[k] = now; if (was === null) return;
+        var hit = crossings(r, was, now, vars, F()); if (!hit.length) return;
+        for (var i = 0; i < (r.cross.one ? 1 : hit.length); i++) runs.push(r);
+    });
+    if (!runs.length) return 0;
+    if (_crossDepth >= 3) { toast('A crossing set off another too many times in one change. The rest did not run.'); return 0; }
+    if (runs.length > 8) { toast('One change crossed more steps than run at once. Only the first 8 ran.'); runs = runs.slice(0, 8); }
+    var n = net(), off = window.wpCalendar && typeof window.wpCalendar.rulesRun === 'function' && window.wpCalendar.rulesRun(c.id) === false;
+    _crossDepth++;
+    try {
+        runs.forEach(function(r) {
+            var lb = String(r.label || (Array.isArray(r.apply) ? 'Apply' : 'Roll')).split('{')[0].trim() || (Array.isArray(r.apply) ? 'Apply' : 'Roll');
+            if (r.cross.by || off) { if (n && n.postDue) n.postDue(c, r, 'cross', 1, !off && r.cross.by === 'owner' && r.vis !== 'gm'); return; }
+            var cN = charById(c.id, camp); if (!cN) return;
+            if (Array.isArray(r.apply)) applyAction(r, cN, lb);
+            else if (window.wpDice && window.wpDice.rollFor) window.wpDice.rollFor(cN.id, r.formula, lb, r.vis === 'gm' ? { act: r.id, gmOnly: true } : { act: r.id });
+        });
+    } finally { _crossDepth--; }
+    return runs.length;
+}
+// [systemcheck:cross-end]
 // [systemcheck:fxposture-start]
 // 1.5.9 (docs/BOOK_ES_ET_PLAN.md; the owner's O6: "An effect can set posture", so Down lays its token prone the moment it applies; the book (eu):
 // Down's prone lasts after healing): on the machine that owns the campaign, after every change of a character, the effects that set a posture
@@ -5132,6 +5182,7 @@ function charChanged(id) {
     if (typeof window !== 'undefined' && window.wpFog && window.wpFog.sensesForget) window.wpFog.sensesForget();   // the fog's kept senses are read again from the sheet
     if (typeof lookPrune === 'function') lookPrune(id);   // item 35: a change from the table (a player's edit, a time rule) that left a look without its text
     if (typeof openSyncOne === 'function') openSyncOne(id);   // 1.5.8: a change from the table (a Form a player switched on) that opens or closes rows
+    if (typeof crossFollow === 'function' && typeof id === 'string') { var campX = getActiveCampaign(), cX = charById(id, campX); if (cX) crossFollow(cX, campX); }   // 1.5.9: a change from the table that crossed a step
     if (typeof postureFollow === 'function' && typeof id === 'string') { var campP = getActiveCampaign(), cP = charById(id, campP), mpP = cP ? postureFollow(cP, campP) : []; if (mpP.length) { var nP = net(), wasP = nP ? nP.applyingRemote : false; if (nP) nP.applyingRemote = true; try { save(true); } finally { if (nP) nP.applyingRemote = wasP; } if (nP && nP.active && nP.role === 'host' && nP.broadcastItemFiltered) mpP.forEach(function(mid) { nP.broadcastItemFiltered(campP.id, mid); }); } }   // 1.5.9: a change from the table (a player's edit, a time rule) that brought on an effect that sets a posture; never a step of the GM's undo
     var lost = {};   // HUD frame (HF2a): one notice per character, however many of its views close
     if (sheetOpen && isClient() && (id === null || sheetOpen === id)) { var gone = charById(sheetOpen); if (gone && (gone.partial || gone.ownerId !== myId())) { var nmG = gone.name; lost[gone.id] = 1; closeSheet(); toast(nmG + ' is no longer your character.'); var nG = net(); if (nG && nG.dropPending) nG.dropPending(gone.id); } }
@@ -5854,6 +5905,7 @@ function rollRow(r) {
     row.appendChild(everyRow(r));   // item 20 K5: by the campaign's clock
     row.appendChild(fightRow(r));   // backlog 152, fold 5: in a fight
     row.appendChild(askRow(r));   // and whether its runs wait for your word
+    if (typeof crossRow === 'function') row.appendChild(crossRow(r));   // 1.5.9 (book es/et plan 4a): when a value crosses a step
     row.appendChild(applyEditor(r, isApply ? 'apply' : 'then'));   // R1: a roll's consequences under it
     var err = errorCell(r.id); err.dataset.errFor = r.id; row.appendChild(err);
     return row;
@@ -7502,6 +7554,32 @@ function fightRow(r) {   // In a fight: every n rounds, minutes, hours or the sy
     var hl = el('label', 'sys-hover'), hc = el('input', 'sys-roll-ifhold'); hc.type = 'checkbox'; hc.checked = !!(fi && fi.whileNeeds === true); hc.title = 'In a fight, its count grows only while this rule\u2019s Needs hold for its character, and stands still the rest of the time. Save keeps the tick only beside Needs.'; hl.appendChild(hc); hl.appendChild(document.createTextNode(' Only while its needs hold')); row.appendChild(hl);   // 1.5.5
     return row;
 }
+// 1.5.9 (docs/BOOK_ES_ET_PLAN.md 4a): When a value crosses, a pool or a number of the system, the step where it first does, how far apart the next are
+// and how many, Once however many, and who runs it; every text a value, the fields named as text
+function crossRow(r) {
+    var cr = r.cross && typeof r.cross === 'object' ? r.cross : null, row = el('div', 'sys-flags sys-roll-xsrow');
+    var fl = [['', 'Runs on no value crossing a step']].concat((draft.fields || []).filter(function(f) { return f && (f.kind === 'resource' || f.kind === 'number'); }).map(function(f) { return [f.id, 'When ' + (f.label || f.key) + ' crosses a step']; }));
+    row.appendChild(select('sys-roll-xsf', fl, cr ? cr.f : '', 'It also runs when this pool or number passes a step, as a death check when HP falls to minus its most. Set by hand counts too'));
+    if (!cr) return row;
+    row.appendChild(select('sys-roll-xsd', [['down', 'falling to'], ['up', 'rising to']], cr.dir === 'up' ? 'up' : 'down', 'Falling: from above a step to at or below it. Rising: from below to at or above'));
+    var at = input('sys-roll-xsat field', cr.at || '', 'The first step, a formula with no dice, such as -HP.max', 'First at'); at.maxLength = LIMITS.formula; row.appendChild(at);
+    var st = input('sys-roll-xsstep field', cr.step || '', 'How far apart the next steps are, such as HP.max. Empty: one step', 'Then every'); st.maxLength = LIMITS.formula; row.appendChild(st);
+    if (cr.step) { var cn = input('sys-roll-xsn field', cr.count ? String(cr.count) : '', 'How many steps in all, 2 to 20', 'Steps'); cn.type = 'number'; row.appendChild(cn); var ol = el('label', 'sys-hover'), oc = el('input', 'sys-roll-xsone'); oc.type = 'checkbox'; oc.checked = cr.one === true; ol.appendChild(oc); ol.appendChild(document.createTextNode(' Once however many')); ol.title = 'Runs once when one change passes several steps, not once a step'; row.appendChild(ol); }
+    row.appendChild(select('sys-roll-xsby', [['', 'runs at once'], ['owner', 'reminds its player'], ['gm', 'reminds me']], cr.by === 'owner' || cr.by === 'gm' ? cr.by : '', 'At once, as your own press of it, or as a reminder in chat with its button'));
+    return row;
+}
+function crossEdit(r, c, t) {
+    var cr = r.cross && typeof r.cross === 'object' ? r.cross : null;
+    if (c.indexOf('sys-roll-xsf') >= 0) { if (t.value) r.cross = Object.assign({ dir: 'down', at: '0' }, cr || {}, { f: t.value }); else delete r.cross; return 'all'; }
+    if (!cr) return '';
+    if (c.indexOf('sys-roll-xsd') >= 0) { cr.dir = t.value === 'up' ? 'up' : 'down'; return 'one'; }
+    if (c.indexOf('sys-roll-xsat') >= 0) { cr.at = String(t.value).slice(0, LIMITS.formula); return 'one'; }
+    if (c.indexOf('sys-roll-xsstep') >= 0) { var sv = String(t.value).slice(0, LIMITS.formula), had = !!cr.step; if (sv.trim()) cr.step = sv; else { delete cr.step; delete cr.count; delete cr.one; } return had !== !!cr.step ? 'all' : 'one'; }
+    if (c.indexOf('sys-roll-xsn') >= 0) { var nv = Number(t.value); if (String(t.value).trim() && isFinite(nv)) cr.count = nv; else delete cr.count; return 'one'; }
+    if (c.indexOf('sys-roll-xsone') >= 0) { if (t.checked) cr.one = true; else delete cr.one; return 'one'; }
+    if (c.indexOf('sys-roll-xsby') >= 0) { if (t.value === 'owner' || t.value === 'gm') cr.by = t.value; else delete cr.by; return 'one'; }
+    return '';
+}
 function askRow(r) {   // Ask me first: its runs wait for the GM's word
     var row = el('div', 'sys-flags sys-roll-askrow'), al = el('label', 'sys-hover'), ac = el('input', 'sys-roll-evask'); ac.type = 'checkbox'; ac.checked = r.ask === true; ac.title = 'Its runs wait for your word, even when Time rules run at once. With the Calendar on they wait in the Calendar window\u2019s list. With it off they wait in the bell in the top row.'; al.appendChild(ac); al.appendChild(document.createTextNode(' Ask me first')); row.appendChild(al);
     return row;
@@ -7792,6 +7870,7 @@ function onInput(e) {
         else if (c.indexOf('sys-roll-malf') >= 0) { if (t.value.trim()) r.malf = t.value.slice(0, LIMITS.formula); else delete r.malf; }   // Stage 6 HUD R3
         else if (c.indexOf('sys-roll-needstext') >= 0) { if (t.value.trim()) r.needsText = t.value.slice(0, LIMITS.label); else delete r.needsText; }   // 1.5.4: what it needs (Save cleans it)
         else if (c.indexOf('sys-roll-needs') >= 0) { if (t.value.trim()) r.needs = t.value.slice(0, LIMITS.formula); else delete r.needs; }
+        else if (c.indexOf('sys-roll-xs') >= 0) { if (crossEdit(r, c, t) === 'all') { markDirty(); renderAll(); return; } }   // 1.5.9 (book es/et plan 4a): When a value crosses
         else if (c.indexOf('sys-roll-evn') >= 0 || c.indexOf('sys-roll-ifn') >= 0) everyEdit(r, c, t);   // item 20 K5; backlog 152, fold 5: In a fight's number
         else return;
     } else return;
@@ -7955,6 +8034,7 @@ function onChange(e) {
         else if (c.indexOf('sys-roll-near') >= 0) { if (t.value === 'near') r.to = 'near'; else delete r.to; }   // 1.5.9: Applies to (Save keeps it only on a roll that is not the initiative)
         else if (c.indexOf('sys-roll-each') >= 0) { delete r.round; if (t.value === 'round' || t.value === 'turn') { r.each = t.value; if (!Array.isArray(r.apply) && r.by !== 'gm' && r.by !== 'owner') r.by = 'owner'; } else { delete r.each; delete r.by; } markDirty(); renderAll(); return; }   // 1.5.9: a roll is due for its player until another is picked   // Stage 6 HUD G10 + turn-based combat T2b
         else if (c.indexOf('sys-roll-by') >= 0) { if (t.value === 'gm' || t.value === 'owner') r.by = t.value; else delete r.by; }
+        else if (c.indexOf('sys-roll-xs') >= 0) { if (crossEdit(r, c, t) === 'all') { markDirty(); renderAll(); return; } }   // 1.5.9 (book es/et plan 4a): When a value crosses
         else if (c.indexOf('sys-roll-evu') >= 0 || c.indexOf('sys-roll-evrest') >= 0 || c.indexOf('sys-roll-evwait') >= 0 || c.indexOf('sys-roll-ifu') >= 0 || c.indexOf('sys-roll-iffresh') >= 0 || c.indexOf('sys-roll-evask') >= 0 || c.indexOf('sys-roll-evhold') >= 0 || c.indexOf('sys-roll-ifhold') >= 0) everyEdit(r, c, t);   // item 20 K5; backlog 152, fold 5: Waits in a fight, In a fight's unit and tick, Ask me first; 1.5.5: Only while its needs hold, in both rows
         else if (c.indexOf('sys-dmg-chk') >= 0) { if (t.checked) r.dmg = true; else delete r.dmg; }   // chat cards: a damage roll
         else if (c.indexOf('sys-init-chk') >= 0) { r.init = t.checked; if (t.checked) draft.rolls.forEach(function(o) { if (o !== r) delete o.init; }); markDirty(); renderAll(); return; }
@@ -8321,7 +8401,7 @@ function damageFromRoll(fromId, total, done, type) {   // 1.5.7: done, called on
 }
 function damageOn() { var sys = systemOf(); return !!dmgRules(sys) && !isClient() && canWrite(); }   // the cards' Apply to target: the GM's own machine
 // [systemcheck:dmgwin-end]
-window.wpSheets = { bellNote: bellNote, runTimeRules: runTimeRules, startMaking: startMaking, inviteMaking: inviteMaking, applyTokenFace: applyTokenFace, open: open, close: close, playerSystem: playerSystem, readablePages: readablePages, openPage: openPage, sheetRefsChanged: sheetRefsChanged, systemOf: systemOf, save: saveDraft, startFrom: startFrom, sync: sync, roundHook: roundHook, turnHook: turnHook, runDue: runDue, draft: function() { return draft; },
+window.wpSheets = { bellNote: bellNote, crossSeed: crossSeed, runTimeRules: runTimeRules, startMaking: startMaking, inviteMaking: inviteMaking, applyTokenFace: applyTokenFace, open: open, close: close, playerSystem: playerSystem, readablePages: readablePages, openPage: openPage, sheetRefsChanged: sheetRefsChanged, systemOf: systemOf, save: saveDraft, startFrom: startFrom, sync: sync, roundHook: roundHook, turnHook: turnHook, runDue: runDue, draft: function() { return draft; },
     gmFinder: gmFinder, uploadsChanged: uploadsChanged, approveNote: approveNote, openReview: openReview, readersChanged: readersChanged, emojiSet: EMOJI_SET, applyCharFace: applyCharFace, applyCharFrame: applyCharFrame, applyTokenFrame: applyTokenFrame,
     charsOf: charsOf, charList: charList, charById: charById, newCharacter: newCharacter, addCharacter: addCharacter, askDeleteSheet: askDeleteSheet, deleteCharacter: deleteCharacter, linkToken: linkToken, newFromToken: newFromToken, syncOwners: syncOwners, giveCharacter: giveCharacter, unbindName: unbindName, ownerFromToken: ownerFromToken,
     charSelectHtml: charSelectHtml, wireCharSelect: wireCharSelect, hoverLinesForToken: hoverLinesForToken, hoverLinesForTokenId: hoverLinesForTokenId, tokenFx: tokenFx, tokenFxModel: tokenFxModel, tokenFxCharOp: tokenFxCharOp,

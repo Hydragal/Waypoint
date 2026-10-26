@@ -8487,7 +8487,7 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             const RR5 = new Function('draft', 'document', 'NL', 'LIMITS', 'errorsById', 'warningsById', 'formulaTextFor', 'turnActs', 'costOptions', 'glyphButton', 'btnRow', 'applyEditor', "'use strict';" + NL + domSrc + NL + erSrc + NL + rrS5 + NL + 'return rollRow;')(
                 { combat: { turn: { units: [{ key: 'Watch', label: 'Watch', secs: 14400 }] } }, fields: [] }, docL, NL, S.LIMITS, {}, {}, () => '', () => [], () => [], () => feL('button'), () => feL('span'), (r, k) => { const b = feL('div'); b.className = 'sys-apply-stub'; b.dataset.k = k; return b; });
             const rrRows5 = [RR5({ id: 'r_rr', label: 'Rr', formula: '1d6', every: { n: 1, u: 'hour', wait: true }, inFight: { n: 2, u: 'Watch', fresh: true }, ask: true }), RR5({ id: 'r_ra', label: 'Ra', apply: [{ f: 'f_fp', formula: '1', add: true }], each: 'round', inFight: { n: 3, u: 'round' } })];
-            const rrShape5 = rrRows5.map(row => row.children.map(x => x.className)), rrWant5 = ['sys-row-main', 'sys-flags sys-roll-needsrow', 'sys-flags sys-roll-everyrow', 'sys-flags sys-roll-fightrow', 'sys-flags sys-roll-askrow', 'sys-apply-stub', 'sys-err'];
+            const rrShape5 = rrRows5.map(row => row.children.map(x => x.className)), rrWant5 = ['sys-row-main', 'sys-flags sys-roll-needsrow', 'sys-flags sys-roll-everyrow', 'sys-flags sys-roll-fightrow', 'sys-flags sys-roll-askrow', 'sys-flags sys-roll-xsrow', 'sys-apply-stub', 'sys-err'];   // 1.5.9 (book es/et plan 4a), moved on purpose: When a value crosses, after Ask me first
             const rq5 = (row, c, f) => { const x = findL(row, c)[0]; return x ? f(x) : null; };   // a row that is not there reads as null
             const rrSeen5 = rrRows5.map(row => [rq5(row, 'sys-roll-evwait', x => x.checked), rq5(row, 'sys-roll-ifn', x => x.value), rq5(row, 'sys-roll-ifu', pickedL), rq5(row, 'sys-roll-iffresh', x => x.checked), rq5(row, 'sys-roll-evask', x => x.checked), rq5(row, 'sys-apply-stub', x => x.dataset.k)]);
             check('152 fold 5 the Rolls tab shows the three pieces (sheets.js rollRow, sliced and run for real with the rows of the everyrow slice; the review of fold 5): a roll\'s row and an apply action\'s hold By the clock, then In a fight, then Ask me first, right after the Needs row and before the consequences or the changes, each drawn from the rule as stored',
@@ -14773,6 +14773,44 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         const offs = [mk({ client: true }), mk({ write: false }), mk({ posture: false })].map(x => { x.go(); x.c.values.f_hp = { cur: 0 }; return [J(x.go()), x.tA.posture === undefined]; });
         check('1.5.9 an effect can set its token\'s posture (the owner\'s O6; cleanSystem, postureFx, and sheets.js postureFollow run for real): the cleaner keeps a posture of the list by its id and Back when it ends only beside one, alike in both views; postureFx names the effects on that set one, by hand or by themselves; the first look at a character only notes, so a load moves nobody; Down coming on lays every token of the character prone on every map, never a waiting token or another character\'s; healed, its prone stays as the book says; an effect ticked Back when it ends puts back the posture its token had, only where it still stands as the effect set it; a player\'s app, a campaign this machine may not write and Token posture off move nothing',
             clOk && fxOk && J(steps) === J(want) && offs.every(x => x[0] === '[]' && x[1]), J([clOk, fxOk, steps, offs]));
+    }
+    // 1.5.9 (docs/BOOK_ES_ET_PLAN.md 4a; the book (et) and (eu): a death check every time HP falls past -HP or a further multiple, even at a line
+    // already rolled; rising above a line re-arms it): crossings in the core, and sheets.js crossFollow and crossSeed sliced by their cross
+    // markers and run for real with the real resolver
+    {
+        const J = JSON.stringify, NLc = '\n';
+        const base = { v: 1, name: 'X', fields: [{ id: 'f_hp', key: 'HP', label: 'HP', kind: 'resource', maxFormula: '10', def: 'max', min: -40 }, { id: 'f_dead', key: 'Dead', kind: 'toggle' }, { id: 'f_note', key: 'Note', kind: 'text' }],
+            rolls: [{ id: 'r_dc', label: 'Death check', formula: '3d6 <= 10', cross: { f: 'f_hp', dir: 'down', at: '-HP.max', step: 'HP.max', count: 2 } },
+                { id: 'r_dead', label: 'Dead', apply: [{ f: 'f_dead', formula: '1', set: true }], cross: { f: 'f_hp', at: '-3 * HP.max', by: 'gm' } },
+                { id: 'r_up', label: 'Up', formula: '1d6', cross: { f: 'f_hp', dir: 'up', at: '1', step: '2', count: 3, one: true } },
+                { id: 'r_txt', label: 'T', formula: '1d6', cross: { f: 'f_note', at: '0' } }, { id: 'r_bad', label: 'B', formula: '1d6', cross: { f: 'x', at: '0' } }, { id: 'r_noat', label: 'N', formula: '1d6', cross: { f: 'f_hp' } }] };
+        const gm = S.cleanSystem(base, { F, gmView: true }), pl = S.cleanSystem(base, { F, gmView: false }), rOf = (s, id) => s.rolls.filter(r => r.id === id)[0] || {};
+        const clOk = J(rOf(gm, 'r_dc').cross) === J({ f: 'f_hp', dir: 'down', at: '-HP.max', step: 'HP.max', count: 2 }) && J(rOf(gm, 'r_dead').cross) === J({ f: 'f_hp', dir: 'down', at: '-3 * HP.max', by: 'gm' })
+            && J(rOf(gm, 'r_up').cross) === J({ f: 'f_hp', dir: 'up', at: '1', step: '2', count: 3, one: true }) && !('cross' in rOf(gm, 'r_txt')) && !('cross' in rOf(gm, 'r_bad')) && !('cross' in rOf(gm, 'r_noat'))
+            && pl.rolls.every(r => !('cross' in r)) && J(S.cleanSystem(gm, { F, gmView: true })) === J(gm);
+        const vars = S.makeResolver(gm, { id: 'c', values: { f_hp: { cur: 0 } } }, F, null), dc = rOf(gm, 'r_dc'), up = rOf(gm, 'r_up'), X = (r, a, b) => J(S.crossings(r, a, b, vars, F));
+        const pureOk = J(S.crossSteps(dc, vars, F)) === J([-10, -20]) && X(dc, 5, -10) === '[1]' && X(dc, -9, -11) === '[1]' && X(dc, -10, -12) === '[]' && X(dc, -5, -25) === '[1,2]' && X(dc, -15, -5) === '[]' && X(dc, -5, -15) === '[1]'
+            && X(dc, -25, -30) === '[]' && X(up, 0, 6) === '[1,2,3]' && X(up, 2, 3) === '[2]' && X(up, 3, 2) === '[]' && X(dc, 'a', -20) === '[]' && X(dc, NaN, -20) === '[]' && X({}, 5, -20) === '[]';
+        const shX = fs.readFileSync(path.join(app, 'scripts', 'sheets.js'), 'utf8').replace(/\r\n/g, NLc), xa = shX.indexOf('// [systemcheck:cross-start]'), xz = shX.indexOf('// [systemcheck:cross-end]');
+        const mk = o => { o = o || {};
+            const out = { rolls: [], applied: [], dues: [], toasts: [] }, c = { id: 'c_a', name: 'Ana', ownerId: 'u_a', values: { f_hp: { cur: 10 } } }, camp = { id: 'k', system: gm, chars: { c_a: c } };
+            const n = { postDue: (ch, r, kind, rd, own) => out.dues.push([ch.id, r.id, kind, own]) };
+            const api = new Function('isClient', 'canWrite', 'F', 'crossings', 'makeResolver', 'getActiveCampaign', 'fieldById', 'tokenCtxFor', 'charById', 'net', 'toast', 'applyAction', 'window', shX.slice(xa, xz) + NLc + 'return { crossFollow: crossFollow, crossSeed: crossSeed };')(
+                () => !!o.client, () => o.write !== false, () => F, S.crossings, S.makeResolver, () => camp, (s, id) => s.fields.filter(f => f.id === id)[0] || null, () => null, (id, k) => k.chars[id] || null, () => n, t => out.toasts.push(t),
+                (r, ch, lb) => out.applied.push([r.id, ch.id, lb]), { wpDice: { rollFor: (id, f, lb, op) => out.rolls.push([id, f, lb, J(op)]) }, wpCalendar: { rulesRun: () => (o.off ? false : null) } });
+            return { out, c, camp, api, hp: v => { c.values.f_hp = { cur: v }; return api.crossFollow(c, camp); } };
+        };
+        const w = mk(), seeded = w.api.crossSeed(), seededAgain = w.api.crossSeed();
+        const r1 = w.hp(-12), r2 = w.hp(-25), r3 = w.hp(-5), r4 = w.hp(-15), r5 = w.hp(-30), r6 = w.hp(3);
+        const runOk = seeded === 3 && seededAgain === 0 && J([r1, r2, r3, r4, r5, r6]) === J([1, 1, 0, 1, 2, 1])
+            && J(w.out.rolls) === J([['c_a', '3d6 <= 10', 'Death check', J({ act: 'r_dc' })], ['c_a', '3d6 <= 10', 'Death check', J({ act: 'r_dc' })], ['c_a', '3d6 <= 10', 'Death check', J({ act: 'r_dc' })], ['c_a', '3d6 <= 10', 'Death check', J({ act: 'r_dc' })], ['c_a', '1d6', 'Up', J({ act: 'r_up' })]])
+            && J(w.out.dues) === J([['c_a', 'r_dead', 'cross', false]]) && w.out.applied.length === 0;
+        const fresh = mk(), notSeen = fresh.hp(-12);   // the first look at a character only notes, so a load crosses nothing
+        const offs = [mk({ client: true }), mk({ write: false })].map(x => { x.api.crossSeed(); return [x.hp(-12), x.out.rolls.length]; });
+        const nOff = mk({ off: true }); nOff.api.crossSeed(); nOff.hp(-12);
+        check('1.5.9 crossings (the book (et) and (eu); cleanSystem, crossSteps and crossings, and sheets.js crossFollow and crossSeed run for real): the cleaner keeps a crossing of a pool or a number with its first step, its steps, how many, Once however many and who runs it, in the GM\'s view alone, and drops one of a text, of no field or with no first step; the steps are worked out with the character\'s names after the change; a fall past a step crosses it, a fall past two crosses both, a value already past crosses nothing, back above and down again crosses again, and a rising rule with Once however many runs once for three steps; on the machine that owns the campaign the first look only notes, a run is the GM\'s own roll by its name, a step set to remind posts the GM\'s reminder, an NPC switched off gets a reminder in place of a run, and a player\'s app or a campaign this machine may not write runs nothing',
+            clOk && pureOk && runOk && notSeen === 0 && fresh.out.rolls.length === 0 && offs.every(x => x[0] === 0 && x[1] === 0) && nOff.out.rolls.length === 0 && J(nOff.out.dues) === J([['c_a', 'r_dc', 'cross', false]]),
+            J([clOk, pureOk, seeded, seededAgain, [r1, r2, r3, r4, r5, r6], w.out, notSeen, offs, nOff.out]));
     }
     summed = true;
     console.log(NL + pass + ' passed, ' + fail + ' failed.');
