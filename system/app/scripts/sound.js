@@ -398,7 +398,7 @@ function renderInd() {
     var mine = !st.on && !!(window.wpVtt && typeof window.wpVtt.whyOff === 'function' && window.wpVtt.whyOff('sound') === 'local');   // off by this player's own switch: struck through, and its menu offers the way back
     b.classList.toggle('off-mine', mine);
     b.classList.toggle('gate', !!gateShown);
-    b.title = !st.on ? (mine ? 'Sound is off for you at this table \u2014 click to turn it back on' : 'Sound is off ' + (isClient() ? 'for you at this table' : 'for this campaign')) : gateShown ? 'Click to enable sound at this table' : st.ambient ? 'Playing: ' + st.ambient.name + (muted ? ' (muted for you)' : '') : muted ? 'Sound muted for you' : 'Sound — your volume and mute' + (atTable ? '' : ' (nothing playing)');
+    b.title = !st.on ? (mine ? 'Sound is off for you at this table \u2014 click to turn it back on' : 'Sound is off ' + (isClient() ? 'for you at this table' : 'for this campaign')) : gateShown ? 'Click to enable sound at this table' : st.ambient ? 'Playing: ' + st.ambient.name + (muted ? ' (muted for you)' : '') : muted ? 'Sound effects muted for you. Right-click to unmute' : 'Sound effects — your volume and mute. Right-click to mute' + (atTable ? '' : ' (nothing playing)');
     var pop = ui('soundPop'); if (!pop || pop.style.display === 'none') return;
     var vol = ui('soundVolume'); if (vol && document.activeElement !== vol) vol.value = Math.round(local * 100);
     var mu = ui('soundMuteChk'); if (mu) mu.checked = muted;
@@ -413,7 +413,9 @@ function renderInd() {
     document.addEventListener('pointerdown', function(e) { if (pop.style.display !== 'none' && !e.target.closest('#soundPop') && !e.target.closest('#soundInd')) pop.style.display = 'none'; }, true);
     pop.addEventListener('input', function(e) { if (e.target.id === 'soundVolume') setLocalVolume(Number(e.target.value) / 100); });
     pop.addEventListener('change', function(e) { if (e.target.id === 'soundMuteChk') setMute(e.target.checked); else if (e.target.id === 'soundOffChk') { if (window.wpVtt) window.wpVtt.setLocal('sound', e.target.checked); refresh(); } });
-    pop.addEventListener('click', function(e) { if (e.target.id === 'soundOnBtn') { if (window.wpVtt) window.wpVtt.setLocal('sound', false); pop.style.display = 'none'; refresh(); } });
+    b.addEventListener('contextmenu', function(e) { e.preventDefault(); if (gateShown) return; setMute(!muted); renderInd(); });   // 1.6.0 (the owner, by prompt: "Mute, as Voice does"): the right button mutes or unmutes sound effects for you
+    pop.addEventListener('click', function(e) { if (e.target.id === 'soundMusicBtn') { pop.style.display = 'none'; var mi = ui('musicInd'); if (mi) mi.click(); return; }   // 1.6.0: Music has its own button
+        if (e.target.id === 'soundOnBtn') { if (window.wpVtt) window.wpVtt.setLocal('sound', false); pop.style.display = 'none'; refresh(); } });
 })();
 
 /* ---------- the stream window (same machine as the GM: plays the ambient it is told about) ---------- */

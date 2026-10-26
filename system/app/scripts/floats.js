@@ -190,13 +190,32 @@ function spotPlace(el) {
     if (p && typeof el.dispatchEvent === 'function' && typeof CustomEvent === 'function') { try { el.dispatchEvent(new CustomEvent(SPOT_MOVED)); } catch (e) {} }   // the dice roller finds its place against Table Chat again
     return !!p;
 }
+// [floatcheck:fitview-start]
+// 1.6.0 (the owner, 2026-10-26: "in not a full window, some boxes appear to be cut off"): a box that is up is held inside the window under the
+// top row, whatever place it was given (a place kept from a larger window, or dragged): shifted in by the edge it stands on, and held to the
+// room's height (its max-height, with a scroll) when it is taller. A box wholly inside is left as it is. Answers whether it was moved
+function fitView(el) {
+    if (!el || !el.style || !floatUp(el) || floatAway(el)) return false;
+    var r = spotRect(el); if (!r) return false;
+    var a = spotArea(), G = SPOT_GAP, s = el.style, moved = false, cs = typeof getComputedStyle === 'function' ? getComputedStyle(el) : null, room = a.b - a.t - 2 * G;
+    if (r.height > room + 1 && room > 80) { s.maxHeight = Math.floor(room) + 'px'; if (cs && cs.overflowY === 'visible') s.overflowY = 'auto'; r = spotRect(el) || r; moved = true; }
+    var dx = r.right > a.r - G ? (a.r - G) - r.right : 0; if (r.left + dx < a.l + G) dx = (a.l + G) - r.left;
+    var dy = r.bottom > a.b - G ? (a.b - G) - r.bottom : 0; if (r.top + dy < a.t + G) dy = (a.t + G) - r.top;
+    var px = function(k, d) { var v = parseFloat(s[k]); if (!isFinite(v) && cs) v = parseFloat(cs[k]); if (!isFinite(v)) return; s[k] = Math.round(v + d) + 'px'; };
+    var set = function(k) { return !!s[k] && s[k] !== 'auto'; };
+    if (Math.abs(dx) >= 1) { if (set('left') || !set('right')) px('left', dx); else px('right', -dx); moved = true; }
+    if (Math.abs(dy) >= 1) { if (set('top') || !set('bottom')) px('top', dy); else px('bottom', -dy); moved = true; }
+    return moved;
+}
+function fitAll() { var n = 0; floatBoxes().forEach(function(el) { if (fitView(el)) n++; }); return n; }
+// [floatcheck:fitview-end]
 // A style change of a box: one that came up is put clear; one the user moved or sized since it was put clear is theirs, and loses the
 // height it was held to. Nothing is measured for a box dragged about
 function spotSeen(el) {
     if (!el || !el.style || !_spotHome.has(el)) return;
     var up = floatUp(el), was = _spotWas.get(el) === true, mine = _spotMine.get(el); _spotWas.set(el, up);
     if (mine && spotShape(el) !== mine.shape) { if (el.style.maxHeight === mine.cap) el.style.maxHeight = _spotHome.get(el).max; _spotMine.delete(el); }
-    if (up && !was) spotPlace(el);
+    if (up && !was) { spotPlace(el); fitView(el); }   // 1.6.0: and held inside the window
 }
 function spotWatch() {
     if (typeof MutationObserver !== 'function' || typeof document === 'undefined') return;
@@ -210,7 +229,7 @@ function spotWatch() {
     var due = false;   // the window changed size: every box this put clear is put clear again, once a frame
     if (typeof window.addEventListener === 'function') window.addEventListener('resize', function() {
         if (due) return; due = true;
-        var go = function() { due = false; els.forEach(function(el) { if (_spotMine.has(el)) spotPlace(el); }); };
+        var go = function() { due = false; els.forEach(function(el) { if (_spotMine.has(el)) spotPlace(el); }); fitAll(); };   // 1.6.0: and every box held inside the window
         if (typeof requestAnimationFrame === 'function') requestAnimationFrame(go); else setTimeout(go, 16);
     });
 }
@@ -238,6 +257,6 @@ function watch() {
 // boxes(): every floating box, which a press is told by (backlog 143: whiteboard.js barPress puts a tool bar's open menu back under the box pressed)
 // spot(want, up): the clear place for a box a module places itself (sheets.js placeHud, handbook.js readerPlace)
 // last(): the box last used, of those that show (esckey.js: Escape closes Table Chat, the notepad, Sound or Music while one of them is it)
-window.wpFloats = { sync: floatSync, reveal: floatReveal, leave: floatLeave, away: floatAway, shown: floatShown, view: floatNow, boxes: floatBoxes, spot: spotFind, last: floatLast };
+window.wpFloats = { fit: fitView, fitAll: fitAll, sync: floatSync, reveal: floatReveal, leave: floatLeave, away: floatAway, shown: floatShown, view: floatNow, boxes: floatBoxes, spot: spotFind, last: floatLast };
 watch();
 spotWatch();

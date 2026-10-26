@@ -184,8 +184,8 @@ const VIEWS = ['play', 'data', 'page'];
     sheet.style.display = 'none'; mo.cb([{ type: 'attributes', target: sheet }]); const downCls = J(sheet.classes()); sheet.style.display = 'flex'; mo.cb([{ type: 'attributes', target: sheet }]); const upAgain = W.is(sheet);
     check('what the watcher sees: a box that comes up belongs to the view on screen then (a sheet opened on the play map is away on the data map, opened again on the data map it shows there), a HUD added to the layer alike, a text node is no box, and a box dragged about asks nothing',
         first === 'shown' && dragged === 0 && still === 'away' && hudOn === 'shown' && hudPage === 'away' && downCls === '[]' && upAgain === 'shown', J([first, dragged, still, hudOn, hudPage, downCls, upAgain]));
-    check('the module publishes its nine calls and starts its two watchers (boxes, the one list of the floating boxes, which a press on one is told by: backlog 143, whiteboard.js barPress; spot, the clear place for a box a module places itself; last, the box last used, which Escape asks: esckey.js); it imports only the app\'s state and the two readers of the open item, and nothing in it writes a box\'s own display',
-        /\nwindow\.wpFloats = \{ sync: floatSync, reveal: floatReveal, leave: floatLeave, away: floatAway, shown: floatShown, view: floatNow, boxes: floatBoxes, spot: spotFind, last: floatLast \};\nwatch\(\);\nspotWatch\(\);\n$/.test(fl)
+    check('the module publishes its eleven calls (1.6.0: fit and fitAll, a box held inside the window) and starts its two watchers (boxes, the one list of the floating boxes, which a press on one is told by: backlog 143, whiteboard.js barPress; spot, the clear place for a box a module places itself; last, the box last used, which Escape asks: esckey.js); it imports only the app\'s state and the two readers of the open item, and nothing in it writes a box\'s own display',
+        /\nwindow\.wpFloats = \{ fit: fitView, fitAll: fitAll, sync: floatSync, reveal: floatReveal, leave: floatLeave, away: floatAway, shown: floatShown, view: floatNow, boxes: floatBoxes, spot: spotFind, last: floatLast \};\nwatch\(\);\nspotWatch\(\);\n$/.test(fl)
         && J((fl.match(/^import [^\n]*$/gm) || [])) === J(["import { state } from './state.js';", "import { getActiveMap, isDocLike } from './models.js';"]) && !/\.style\.display\s*=[^=]/.test(fl) && !/innerHTML|eval\(|new Function/.test(fl), J(fl.match(/^import [^\n]*$/gm)));
 }
 
@@ -321,8 +321,8 @@ function spotPage() {
     sh.style.left = '300px'; sh.style.top = '200px'; sh.style.right = 'auto'; P.tell(sh); const s3 = P.at(sh); const n0 = sh.rects;
     for (let i = 0; i < 50; i++) { sh.style.left = (300 + i) + 'px'; P.tell(sh); } const dragged = sh.rects - n0;
     P.shut('sheetPanel'); P.open('sheetPanel'); const s4 = P.at(sh);
-    check('a sheet that comes up at its default place is put clear (spotPlace, run for real on a page of plain objects): left of the column and under the strip, standing by its right edge, held to the room above the toolbar, and the move told; closed and opened again it is put clear again; dragged, it is the user\'s: it keeps the place dragged to, loses the height it was held to, and nothing is measured while it is dragged about',
-        s1 === '|145px|99px||615px||' && e1 === J(['wpfloatmoved']) && s2 === s1 && s2b === '|120px|99px||640px||' && s3 === '300px|200px|auto||||' && dragged === 0 && s4 === '349px|200px|auto||||', J([s1, e1, s2, s2b, s3, dragged, s4]));
+    check('a sheet that comes up at its default place is put clear (spotPlace, run for real on a page of plain objects): left of the column and under the strip, standing by its right edge, held to the room above the toolbar, and the move told; closed and opened again it is put clear again; dragged, it is the user\'s (1.6.0: held inside the window, so one dragged partly below its foot comes up into it): it keeps the place dragged to, loses the height it was held to, and nothing is measured while it is dragged about',
+        s1 === '|145px|99px||615px||' && e1 === J(['wpfloatmoved']) && s2 === s1 && s2b === '|120px|99px||640px||' && s3 === '300px|200px|auto||||' && dragged === 0 && s4 === '349px|145px|auto||||', J([s1, e1, s2, s2b, s3, dragged, s4]));
     // a place the module keeps (a stored place, set as it opens), a size the user gave, a box put away as it comes up
     const np = P.open('notepadPanel', el => { el.style.left = '40px'; el.style.top = '300px'; el.style.right = 'auto'; }), n1 = P.at(np);
     const vd = P.open('videoPanel', el => { el.style.width = '460px'; el.style.height = '500px'; }), v1 = P.at(vd);
@@ -335,8 +335,16 @@ function spotPage() {
     P.VW = 1200; P.keep.wbFloatingToolbar = RC(164, 700, 1066, 820); P.keep.wbEdgeTools = RC(1109, 556, 1169, 686); P.keep.combatStrip = RC(357, 103, 872, 137);
     P.resize[0](); P.resize[0](); const queued = P.frames.length; P.frames.splice(0).forEach(f => f());
     const r1 = [P.at(ch), P.at(vd), P.at(fx), P.at(sh), P.at(np)];
-    check('the window changes size: once a frame, every box this put clear is put clear again for the new window (Table Chat above a toolbar that now wraps, the video, Effects), and a box the user moved or the module placed is left as it is',
-        queued === 1 && J(r1) === J(['||99px|158px|420px||', '|145px|99px|||460px|500px', '|120px|18px||||', '349px|200px|auto||||', '40px|300px|auto||||']), J([queued, r1]));
+    check('the window changes size: once a frame, every box this put clear is put clear again for the new window (Table Chat above a toolbar that now wraps, the video, Effects), and a box the user moved or the module placed is left as it is while it stands inside the window (1.6.0)',
+        queued === 1 && J(r1) === J(['||99px|158px|420px||', '|145px|99px|||460px|500px', '|120px|18px||||', '349px|145px|auto||||', '40px|300px|auto||||']), J([queued, r1]));
+    {   // 1.6.0 (the owner, 2026-10-26: "in not a full window, some boxes appear to be cut off"): a box placed outside the window comes back in
+        const F2 = spotPage(); F2.VW = 1000; F2.VH = 620;
+        const so = F2.open('soundPanel', el => { el.style.left = '1300px'; el.style.top = '700px'; el.style.right = 'auto'; }), sa = F2.at(so);
+        const nb = F2.open('notepadPanel', el => { el.style.left = '-200px'; el.style.top = '300px'; el.style.right = 'auto'; }), na = F2.at(nb);
+        const inn = F2.open('musicPanel', el => { el.style.left = '100px'; el.style.top = '120px'; el.style.right = 'auto'; }), ia = F2.at(inn);
+        check('1.6.0 a box held inside the window (fitView, run for real on a page of plain objects): one placed past the right and the foot of a smaller window comes back in by the edges it stands on, one past the left the same, and one wholly inside is left as it was',
+            !/^1300px/.test(sa) && !/\|700px\|/.test(sa) && !/^-200px/.test(na) && ia.indexOf('100px|120px') === 0, J([sa, na, ia]));
+    }
     // a page where nothing can be measured: nothing written
     const Q = spotPage(), qs = Q.box.soundPanel; qs.getBoundingClientRect = undefined; Q.open('soundPanel');
     const R2 = spotPage(); R2.keep = {}; const m2 = R2.open('musicPanel');

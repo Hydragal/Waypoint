@@ -21,6 +21,17 @@ Restore points, a trial run and a test copy
 - A roll back waits until you end your table. Each step is written to
   saves/error.log, so a problem can be traced.
 
+Sound and music
+- The Sound button is now named Sound effects: its volume and mute are
+  for sound effects, and its panel points at Music, which has its own.
+- Right-click Sound effects or Music to mute or unmute it for yourself,
+  as Voice already did.
+- A song set to loop that you switch to Loop off or Loop list keeps
+  playing from where it was. Before, it jumped to its end, and the table
+  following your music stopped.
+- Sound, Music, Table Chat and the Journal stay inside the window when it
+  is smaller than full screen, or made smaller while they are open.
+
 Voice chat
 - The Voice button stays in the top row when no table is open. It is
   dimmed, and its panel says voice works once you host or join a table.

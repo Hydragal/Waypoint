@@ -403,7 +403,7 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         };
         const R4 = { on: run4(true, '', true, true), mine: run4(false, 'local', true, true), gm: run4(false, 'gm', false, false), own: run4(false, 'own', false, false), none: run4(false, 'local', false, false, true) };
         check('1.5.4 Music a player switched off for themselves keeps its icon (music.js sliced by its offmine markers, run for real): the icon stays and is marked off-mine, neither playing nor muted, its title says how to bring it back; its menu is fixed words and one button that switches Music back on for them and closes; with Music on the icon is as ever; off by the GM\'s word, or by the campaign\'s own setting away from a table, it is hidden as before',
-            jj(R4.on.slice(0, 6)) === jj(['', false, true, true, 'Music — your volume and mute · now playing: Song', false])
+            jj(R4.on.slice(0, 6)) === jj(['', false, true, true, 'Music muted for you. Right-click to unmute · now playing: Song', false])
             && jj(R4.mine) === jj(['', true, false, false, 'Music is off for you at this table \u2014 click to turn it back on', true, ['div:Music', 'div:Off for you at this table', 'button:Turn music back on for me'], [['music', false], 'closed']])
             && R4.gm[0] === 'none' && R4.gm[1] === false && R4.own[0] === 'none' && R4.own[1] === false && R4.none[0] === 'none' && R4.none[5] === false, jj(R4));
         check('1.5.4 the icon\'s click opens that menu while Music is off for them, Sound marks its own icon the same way and offers Turn sound back on for me, both icons are struck through by the stylesheet, the music module is told of every feature change as the sound module is (its icon was left as it was until a song started or stopped), and Help says so',
@@ -414,6 +414,18 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             && css4.includes('#musicInd.off-mine::after, #soundInd.off-mine::after {') && css4.includes('#musicInd.off-mine, #soundInd.off-mine { opacity: .7; }')
             && rd4('system/app/scripts/vtt.js').split('    if (window.wpSoundSync) window.wpSoundSync();' + NL + '    if (window.wpMusicSync) window.wpMusicSync();' + NL).length === 6 && mu4.includes('window.wpMusicSync = sync;')
             && ix4.includes('A feature you switched off for yourself keeps its icon: <b>Music</b> and <b>Sound</b> stay in the top bar, struck through, and a click offers <b>Turn back on for me</b>.'));
+    }
+    {   // 1.6.0 (the owner, 2026-10-26: "the looping wasnt working correctly ... once it was off"): a loop switched while a track plays keeps its place
+        const mu = read('system/app/scripts/music.js'), a = mu.indexOf('function position() {'), b = mu.indexOf('\nfunction seek(', a), c = mu.indexOf('function loopTo('), d = mu.indexOf('\nfunction setShuffle(', c);
+        const run = (start, mode, now) => {
+            const told = [], W = new Function('ctx', 'cur', 'source', 'emit', 'broadcastControl', 'onTrackEnd', mu.slice(a, b) + '\n' + mu.slice(c, d) + '\nreturn { setLoop: setLoop, position: position, get: function() { return cur; } };')(
+                { currentTime: now || 350 }, { startedAt: 0, offset: 0, dur: 100, loopOne: start === 'one', rate: 1, src: { loop: start === 'one' } }, { loop: start }, () => {}, function() { told.push(this && this.x); }, () => {});
+            const before = W.position(); W.setLoop(mode); return [before, W.position(), W.get().loopOne, W.get().src.loop, typeof W.get().src.onended];
+        };
+        const one2off = run('one', 'off'), one2list = run('one', 'list'), off2one = run('list', 'one', 30);
+        check('1.6.0 a track looping one (3.5 loops in, 50 s into the song) switched to Loop off or Loop list stays at 50 s, not at its end, and plays to its end once more; Loop one switched on mid-song keeps its place too (music.js position, loopTo and setLoop, run for real)',
+            j(one2off) === j([50, 50, false, false, 'function']) && j(one2list) === j([50, 50, false, false, 'function']) && off2one[0] === 30 && off2one[1] === 30 && off2one[2] === true && off2one[3] === true, j([one2off, one2list, off2one]));
+        check('1.6.0 a player following the GM keeps their place as the loop changes (onControl asks loopTo, source)', mu.includes("        loopTo(mc.loop === 'one');   // 1.6.0: its place kept as the loop changes\n        if (Math.abs((mc.pos || 0) - position()) > 2.5) seek(mc.pos || 0);"));
     }
     summed = true;
     console.log(NL + pass + ' passed, ' + fail + ' failed.');

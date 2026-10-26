@@ -188,7 +188,11 @@ function prev() { if (!source || !order.length) return; if (position() > 3) { se
 function position() { if (!cur || !ctx) return 0; var e = (ctx.currentTime - cur.startedAt) * (cur.rate || 1) + cur.offset; return cur.loopOne && cur.dur ? (e % cur.dur) : Math.min(e, cur.dur); }
 function seek(pos) { if (!cur) return; playTrackAt(cur.entry, Math.max(0, Math.min(pos, cur.dur - 0.05)), 0.05, cur.loopOne); }
 function setSpeed(r) { rate = Math.max(0.5, Math.min(2, r || 1)); setPref('wp_musicRate', Math.round(rate * 100)); if (cur && ctx) { cur.offset = position(); cur.startedAt = ctx.currentTime; cur.rate = rate; try { cur.src.playbackRate.setValueAtTime(rate, ctx.currentTime); } catch (e) {} } emit(); }
-function setLoop(mode) { if (!source) return; source.loop = (mode === 'off' || mode === 'one' || mode === 'list') ? mode : 'list'; if (cur) { cur.loopOne = source.loop === 'one'; cur.src.loop = cur.loopOne; if (cur.loopOne) cur.src.onended = null; else cur.src.onended = (function(rec) { return function() { if (cur === rec) onTrackEnd(); }; })(cur); } emit(); broadcastControl(); }
+// 1.6.0 (the owner, 2026-10-26: "the looping wasnt working correctly ... id go to switch the loop type and once it was off"): a track's loop
+// switched while it plays keeps its place. Its clock is rebased on the place it has reached first, since a track that looped counts every
+// loop it played: read without the loop, that time stood past its end, the table was told so, and a player following jumped to the end
+function loopTo(one) { if (!cur) return; var at = position(); cur.offset = at; if (ctx) cur.startedAt = ctx.currentTime; cur.loopOne = !!one; cur.src.loop = !!one; }
+function setLoop(mode) { if (!source) return; source.loop = (mode === 'off' || mode === 'one' || mode === 'list') ? mode : 'list'; if (cur) { loopTo(source.loop === 'one'); if (cur.loopOne) cur.src.onended = null; else cur.src.onended = (function(rec) { return function() { if (cur === rec) onTrackEnd(); }; })(cur); } emit(); broadcastControl(); }
 function setShuffle(on) { if (!source || source.kind !== 'playlist') return; source.shuffle = !!on; var curId = cur ? cur.entry.id : null; order = resolveOrder(source); qi = Math.max(0, curId ? order.indexOf(curId) : 0); emit(); broadcastControl(); }
 function setVolume(v) { mvol = Math.max(0, Math.min(1, v)); setPref('wp_musicVolume', Math.round(mvol * 100)); if (cur) ramp(cur.gain, effGain(), 0.1); emit(); }
 function setMute(on) { mmuted = !!on; setPref('wp_musicMuted', mmuted ? 'yes' : 'no'); if (cur) ramp(cur.gain, effGain(), 0.1); emit(); }
@@ -295,7 +299,7 @@ function onControl(msg) {
     if (!want || !trackById(want)) { stopLane(0.3); return; }   // nothing to play / a track this client does not have
     source = { kind: mc.playlist ? 'playlist' : 'track', id: mc.playlist || mc.track, loop: mc.loop, shuffle: !!mc.shuffle };
     if (cur && cur.entry.id === want) {   // already on this exact track: follow loop, re-seek on a real jump, follow pause/play
-        cur.loopOne = mc.loop === 'one'; cur.src.loop = cur.loopOne;
+        loopTo(mc.loop === 'one');   // 1.6.0: its place kept as the loop changes
         if (Math.abs((mc.pos || 0) - position()) > 2.5) seek(mc.pos || 0);
         if (!mc.playing) stopLane(0.2); else if (!cur) playCurrent(0.2, mc.pos || 0);   // paused: the lane and a song still on its way
         return;
@@ -366,7 +370,7 @@ function renderPill() {
     ind.classList.toggle('playing', !!cur && !mine);   // NOT 'on' — that class triggers the toolbar's gold active-background
     ind.classList.toggle('muted', mmuted && !mine);
     var e = nowPlaying();
-    ind.title = mine ? 'Music is off for you at this table \u2014 click to turn it back on' : 'Music — your volume and mute' + (e ? ' · now playing: ' + e.name : '');
+    ind.title = mine ? 'Music is off for you at this table \u2014 click to turn it back on' : (mmuted ? 'Music muted for you. Right-click to unmute' : 'Music — your volume and mute. Right-click to mute') + (e ? ' · now playing: ' + e.name : '');
 }
 // The icon's menu while music is off for this player: fixed words and the way back
 function offPill(pop) {
@@ -643,6 +647,7 @@ window.wpMusic = { play: play, stop: stop, next: next, prev: prev, seek: seek, t
 (function wire() {
     var b = ui('musicBtn'); if (b) b.addEventListener('click', function() { if (panelOpen() && !(window.wpFloats && window.wpFloats.away(ui('musicPanel')))) closePanel(); else openPanel(); });
     var ind = ui('musicInd'); if (ind) ind.addEventListener('click', function() { if (pillPop) closePill(); else openPill(); });
+    if (ind) ind.addEventListener('contextmenu', function(e) { e.preventDefault(); if (offMine()) return; setMute(!mmuted); renderPill(); });   // 1.6.0 (the owner, by prompt: "Mute, as Voice does"): the right button mutes or unmutes music for you
     var mp = ui('musicPanel'), drag = null;   // drag the panel by its header (the head is rebuilt each render, so listen on the persistent panel)
     if (mp) {
         mp.addEventListener('pointerdown', function(e) { if (!e.target.closest('.music-head') || e.target.closest('button')) return; var r = mp.getBoundingClientRect(); drag = { dx: e.clientX - r.left, dy: e.clientY - r.top }; try { mp.setPointerCapture(e.pointerId); } catch (x) {} });
