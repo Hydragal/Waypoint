@@ -181,7 +181,28 @@ import { getRoomInspectorHtml, attachRoomInspectorEvents, renderInspector,  rend
 
   };
 
-  
+
+
+  // 1.6.0: a campaign's first map, which it then opens (null where it holds none)
+  function firstMapOf(camp) {
+      if (!camp || !camp.items || typeof camp.items !== 'object') return null;
+      var id = Object.keys(camp.items).find(function(k) { var it = camp.items[k]; return !!it && it.type === 'map'; });
+      if (!id) return null;
+      camp.activeItemId = id;
+      return camp.items[id];
+  }
+  // 1.6.0: what a campaign with no map draws. The style sheet puts the board's own parts away by the body's no-map class and shows
+  // #noMapState, whose New map button is the left panel's. The left panel, the boxes and the row follow as with a map
+  function renderNoMap() {
+      var bc = document.getElementById('mapBreadcrumb'); if (bc) bc.style.display = 'none';
+      if (window.wpLeftRail) window.wpLeftRail.sync();
+      if (window.wpRowHide) window.wpRowHide.fit();
+      if (window.wpFloats) window.wpFloats.sync();
+      if (window.wpMapTabs) window.wpMapTabs.sync();
+      if (window.wpCharList) window.wpCharList.sync();
+      if (window.wpNotices) window.wpNotices.sync();
+      if (window.wpPills) window.wpPills.sync();
+  }
 
   export function render() {
 
@@ -191,8 +212,12 @@ import { getRoomInspectorHtml, attachRoomInspectorEvents, renderInspector,  rend
       if (window.wpVideo && window.wpVideo.refresh) window.wpVideo.refresh();   // item 21: the Video panel follows a campaign switch, a feature switched, a table joined
 
       var activeMap = getActiveMap();
+      if (!activeMap) activeMap = firstMapOf(getActiveCampaign());   // 1.6.0: a campaign whose open item is gone opens on its first map
 
-      if(!activeMap) return;
+      // 1.6.0 (the owner, 2026-10-26: a new campaign showed the last campaign's play map): a campaign with no map shows its empty
+      // state, and the board's own parts are put away, never left drawn from the campaign before (the owner, by prompt: "An empty screen")
+      document.body.classList.toggle('no-map', !activeMap && !!getActiveCampaign());
+      if(!activeMap) { renderNoMap(); return; }
 
       
 

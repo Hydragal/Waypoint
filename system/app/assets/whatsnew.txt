@@ -1,3 +1,23 @@
+WAYPOINT 1.6.0 — What's New
+============================
+
+Campaigns
+- A new campaign opens on an empty screen that says it has no map yet,
+  with a New map button. Before, the last campaign's map stayed on
+  screen. Any campaign with no map shows this screen.
+
+Voice chat
+- The Voice button stays in the top row when no table is open. It is
+  dimmed, and its panel says voice works once you host or join a table.
+
+Using an item on someone next to you
+- When the GM rolls it, an amount that reads a GM-only value keeps the
+  card about the other character to the GM.
+- An action that applies to you or someone next to you now runs each
+  round, at its turn's start or by the clock on its own character, with
+  OnSelf reading 1. Before, one that read OnSelf did not run at all.
+- Revert after such a press takes back both characters' changes.
+
 WAYPOINT 1.5.9 — What's New
 ============================
 

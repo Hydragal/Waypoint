@@ -81,6 +81,11 @@ process.on('exit', code => { if (!summed && !code) { console.log(NL + 'FAIL     
     /* ================= the host's hub ================= */
     const H = loadVoice(V, { role: 'host', dice: D, profile: { name: 'Gina' } }), A = H.conn('peerA', 'u_a', 'Ann'), B = H.conn('peerB', 'u_b', HOST), X = H.conn('peerX', null);
     check('voice.js loads whole on the page of plain objects, wires itself and publishes its calls; the microphone is shown while this machine hosts a table', typeof H.win.wpVoice.fromPlayer === 'function' && typeof H.win.wpVoice.escape === 'function' && H.els.voiceInd.style.display === '' && H.world.markup === 0);
+    {   // 1.6.0 (the owner, by prompt: "Show Voice when not hosting")
+        const N = loadVoice(V, { role: 'host', dice: D, net: { active: false } }), b = N.els.voiceInd;
+        check('with no table open the microphone stays in the row, dimmed, and says it works once you host or join; with a table it is not dimmed',
+            b.style.display === '' && b.classList.contains('no-table') && b.title === 'Voice \u2014 it works once you host a table or join one' && !H.els.voiceInd.classList.contains('no-table'), j([b.style.display, b.className, b.title]));
+    }
     H.api.fromPlayer({ type: 'voice-up', act: 'join' }, A); await tick();
     const lnA = H.api.hub.links.peerA, pcA = H.world.pcs[0], offA = A.sent[0];
     check('a join from an admitted player makes one link on that connection: one peer connection, with the table\'s own ICE servers, whose first line takes the player\'s microphone up; the host offers, with a link id of sixteen hex digits and a map of who each line is (none yet); the player\'s name is cleaned; nothing goes to anyone else',

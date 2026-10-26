@@ -3867,10 +3867,11 @@ function applyAction(r, c, label, row, on) {   // row (H7b): { f, r, i } — a l
     if (act.to === 'near' && typeof withOnSelf === 'function') vv = withOnSelf(vv, !onT);   // 1.5.9: OnSelf, 1 on its user and 0 on another
     var res = applyAct(sys, c, act, vv, F(), tc, row ? { f: row.f, r: row.r } : null, undefined, window.wpDiceCore || null, onT ? { char: onT.ch, tctx: n && typeof n.allyCtx === 'function' ? n.allyCtx(ftT.map, onT.tok) : null } : null);   // R2b: a list's action may move its row's counters; 1.5.9: this machine's dice roll a Rolled amount, and a field's change lands on the one it is used on
     if (!res.ok) { toast(res.reason === 'none' ? 'Nothing to apply.' : res.reason === 'error' ? (res.message || 'That amount could not be worked out.') : 'That action cannot change those values now.'); return; }
-    var keepUndo = function(ch, vals) { var ks = Object.keys(vals), pv = {}, ex = null; ks.forEach(function(fid) { pv[fid] = ch.values && Object.prototype.hasOwnProperty.call(ch.values, fid) ? clone(ch.values[fid]) : undefined; }); ks.slice(1).forEach(function(fid) { (ex = ex || {})[fid] = pv[fid]; }); lastChange = { charId: ch.id, fieldId: ks[0], prev: pv[ks[0]], extra: ex }; };   // one Revert: the user's change, or where it moved only the one it was used on, that change
+    var undoOf = function(ch, vals) { var ks = Object.keys(vals), pv = {}, ex = null; ks.forEach(function(fid) { pv[fid] = ch.values && Object.prototype.hasOwnProperty.call(ch.values, fid) ? clone(ch.values[fid]) : undefined; }); ks.slice(1).forEach(function(fid) { (ex = ex || {})[fid] = pv[fid]; }); return { charId: ch.id, fieldId: ks[0], prev: pv[ks[0]], extra: ex }; };
+    var keepUndo = function(ch, vals) { lastChange = undoOf(ch, vals); };   // one Revert: the user's change, or where it moved only the one it was used on, that change
     var ids = Object.keys(res.values), onIds = onT && res.onValues ? Object.keys(res.onValues) : [];
     if (ids.length) { keepUndo(c, res.values); c.values = c.values || {}; ids.forEach(function(fid) { c.values[fid] = res.values[fid]; }); afterCharChange(c, false, res.values); }
-    if (onIds.length) { if (!ids.length) keepUndo(onT.ch, res.onValues); onT.ch.values = onT.ch.values || {}; onIds.forEach(function(fid) { onT.ch.values[fid] = res.onValues[fid]; }); afterCharChange(onT.ch, false, res.onValues); }
+    if (onIds.length) { if (!ids.length) keepUndo(onT.ch, res.onValues); else if (lastChange && lastChange.charId === c.id) lastChange.also = undoOf(onT.ch, res.onValues); onT.ch.values = onT.ch.values || {}; onIds.forEach(function(fid) { onT.ch.values[fid] = res.onValues[fid]; }); afterCharChange(onT.ch, false, res.onValues); }
     var hit = [], low = [], keep = function(x) { var l = String(x).toLowerCase(); if (low.indexOf(l) < 0) { low.push(l); hit.push(String(x)); } };
     var rowP = row ? rowRollNames(sys, c, row.f, row.r, res.names, F()) : null, nmA = rowP ? rowP.names : res.names, gmRow = !!(rowP && rowP.gm), keptRow = !!(rowP && rowP.kept);   // owed review F5b#2: a curse the GM keeps on (its owner sees it off)   // H7b: what Row.* read (a column's own names, a choice's option) and a GM-only row
     if (n && n.active && n.role === 'host' && act.vis !== 'gm') { gmOnlyNames(sys, nmA).concat(gmDerivedNames(sys, F(), nmA), gmEffectNames(vv, nmA)).forEach(keep); var ls = row ? '' : labelSecret(sys, vv, act.label); if (ls) keep(ls); }
@@ -3894,7 +3895,7 @@ function timedHook(mapId, combat, kind) {
     combatChars(mp, who, charsOf(camp)).forEach(function(e) {
         var c = charById(e.charId, camp); if (!c) return;
         var tc = withRound(tokenCtx(mp, e.tok, Object.assign({}, tokenFlags(), { viewer: typeof e.tok.ownerId === 'string' ? e.tok.ownerId : undefined })), combat), vvD = null;   // 1.5.5 (the release trace, F2): a player's character is judged by what its player sees, as turnMoveStart judges it, so an attacker hidden from them counts for nothing
-        dues.forEach(function(a) { if (a.needs && typeof rollNeedsOk === 'function') { vvD = vvD || resolveAll(sys, c, F(), tc).vars; if (!rollNeedsOk(a, vvD, F())) return; } if (n.postDue) n.postDue(c, a, kind, combat.round, a.by === 'owner' && a.vis !== 'gm'); });   // 1.5.4: no reminder while its needs are not met
+        dues.forEach(function(a) { if (a.needs && typeof rollNeedsOk === 'function') { vvD = vvD || resolveAll(sys, c, F(), tc).vars; if (!rollNeedsOk(a, a.to === 'near' ? withOnSelf(vvD, true) : vvD, F())) return; } if (n.postDue) n.postDue(c, a, kind, combat.round, a.by === 'owner' && a.vis !== 'gm'); });   // 1.5.4: no reminder while its needs are not met
         var res = applyRound(sys, c, function(w) { return resolveAll(sys, w, F(), tc).vars; }, F(), tc, kind, window.wpDiceCore || null), ids = Object.keys(res.values);   // 1.5.9: the host's dice roll a Rolled amount
         if (!ids.length) return;
         c.values = c.values || {}; ids.forEach(function(fid) { c.values[fid] = res.values[fid]; }); c.updated = Date.now();
@@ -4500,8 +4501,15 @@ function revertLast() {
     else { c.values[lastChange.fieldId] = lastChange.prev; d[lastChange.fieldId] = lastChange.prev; }
     if (lastChange.extra) Object.keys(lastChange.extra).forEach(function(fid) { var pv = lastChange.extra[fid]; if (pv === undefined) { delete c.values[fid]; d[fid] = null; } else { c.values[fid] = pv; d[fid] = pv; } });   // 5h: a pool an effect's end brought down
     if (fR && fR.kind === 'item-list' && ownerSeesSame(camp, sysR, curR, lastChange.prev, fidR)) delete d[fidR];   // F4b review: taking back a change its owner never held (a kept curse, a kept-on switch) tells them nothing
+    var also = lastChange.also || null;
     lastChange = null;
     afterCharChange(c, d[Object.keys(d)[0]] === null, d);
+    var c2 = also ? charById(also.charId, camp) : null;   // 1.6.0 (the review of 96e39ae6): a press used on another moved both sheets, and one Revert takes both back
+    if (c2) {
+        var d2 = {}, back = function(fid, pv) { if (pv === undefined) { delete c2.values[fid]; d2[fid] = null; } else { c2.values[fid] = pv; d2[fid] = pv; } };
+        c2.values = c2.values || {}; back(also.fieldId, also.prev); if (also.extra) Object.keys(also.extra).forEach(function(fid) { back(fid, also.extra[fid]); });
+        afterCharChange(c2, d2[Object.keys(d2)[0]] === null, d2);
+    }
     toast('Reverted.');
 }
 /* ---------- Onboarding F1c: a character's own picture ---------- */

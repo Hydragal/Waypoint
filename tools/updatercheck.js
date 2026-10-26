@@ -349,10 +349,10 @@ process.on('exit', code => { if (!summed && !code) { console.log(NL + 'FAIL     
             check('the installer\'s update in place deletes nothing under system\\app (no InstallDelete section, no Excludes naming private), so an installer run keeps the reader too; only a clean install wipes the program files',
                 !/^\[InstallDelete\]/m.test(iss) && !/private/i.test((/Excludes: "([^"]*)"/.exec(iss) || [])[1] || 'private') && /InstallMode\(\) = 1\) then\s*\n\s*WipeProgramFiles/.test(iss));
             const help = read('system/app/index.html'), notesA = read('WHATSNEW.txt'), notesB = read('system/app/assets/whatsnew.txt');
-            const top = t => t.slice(0, t.indexOf('WAYPOINT 1.5.8'));
+            const top = t => t.slice(t.indexOf('WAYPOINT 1.5.9'), t.indexOf('WAYPOINT 1.5.8'));   // 1.5.9's own part, wherever a later release put its notes above it
             check('Help\'s Updates part and both release notes of 1.5.9 say that an update keeps an outside sheet reader, that a restore keeps it too, and the notes that this release changes the core and so installs through the installer once',
                 /<li><b>An outside sheet reader<\/b> you added to the app folder stays through an update\. Restore the previous version keeps it too\./.test(help)
-                && [notesA, notesB].every(t => /^WAYPOINT 1\.5\.9/.test(t) && /An update keeps an outside sheet reader you added to the app folder\./.test(top(t)) && /Restore the previous version\s+keeps it too\./.test(top(t)) && /This release changes Waypoint's core[\s\S]{0,120}installer once\./.test(top(t))));
+                && [notesA, notesB].every(t => /(^|\n)WAYPOINT 1\.5\.9/.test(t) && /An update keeps an outside sheet reader you added to the app folder\./.test(top(t)) && /Restore the previous version\s+keeps it too\./.test(top(t)) && /This release changes Waypoint's core[\s\S]{0,120}installer once\./.test(top(t))));
         }
         {   // the three routes, through the handler both servers mount, with the shell's own appVersion (sliced from main.js) as the version reported
             const mainSrc = read('system/resources/app/main.js'), avA = mainSrc.indexOf('function appVersion() {'), avB = mainSrc.indexOf('const updateCfg = {');

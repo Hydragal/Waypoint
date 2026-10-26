@@ -483,6 +483,8 @@ if(_el_newMapSidebarBtn) _el_newMapSidebarBtn.addEventListener('click', function
 
 
 
+  var _el_noMapNewBtn = document.getElementById('noMapNewBtn');   // 1.6.0: a campaign with no map: the empty state's New map is the left panel's
+  if (_el_noMapNewBtn) _el_noMapNewBtn.addEventListener('click', function() { if (_el_newMapSidebarBtn) _el_newMapSidebarBtn.click(); });
   var _el_newPlannerBtn = document.getElementById('newPlannerBtn');
 
 if(_el_newPlannerBtn) _el_newPlannerBtn.addEventListener('click', function() {

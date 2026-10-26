@@ -400,8 +400,9 @@ const ix = read('index.html'), css = read('style.css'), mainS = read('scripts/ma
         count(ix, 'scripts/floats.js') === 1 && names.indexOf('floats') === names.indexOf('main') + 1 && names.indexOf('floats') < names.indexOf('net') && names.indexOf('floats') < names.indexOf('dice') && names.indexOf('floats') < names.indexOf('sheets') && names.indexOf('floats') < names.indexOf('docpanel'), J(names.slice(0, 12)));
     const r0 = mainS.indexOf('export function render() {'), wrap = mainS.indexOf("document.getElementById('plannerWrap').style.display = isPlanner ? 'flex' : 'none';", r0), sync = mainS.indexOf('if (window.wpFloats) window.wpFloats.sync();', r0), crumb = mainS.indexOf('// Breadcrumb trail for nested maps', r0);
     const early = mainS.slice(r0, sync);
-    check('the view switch tells the module once, in render(): after the three wrappers are switched (so the view it reads is the one drawn) and before anything of the view is drawn; the only ways out of render() before it are the ones with no map to show',
-        r0 > 0 && wrap > r0 && sync > wrap && crumb > sync && count(mainS, 'window.wpFloats.sync()') === 1 && count(mainS, 'wpFloats') === 2 && count(early, 'return;') === 2 && count(early, 'if(!activeMap) return;') === 1 && count(early, 'if (!activeMap) return;') === 1,
+    check('the view switch tells the module once, in render(): after the three wrappers are switched (so the view it reads is the one drawn) and before anything of the view is drawn; the only ways out of render() before it are the ones with no map to show, the first of which draws a campaign\'s empty state, which tells the module itself, once (1.6.0)',
+        r0 > 0 && wrap > r0 && sync > wrap && crumb > sync && count(mainS, 'window.wpFloats.sync()') === 2 && count(mainS, 'wpFloats') === 4 && count(early, 'return;') === 2 && count(early, 'if(!activeMap) { renderNoMap(); return; }') === 1 && count(early, 'if (!activeMap) return;') === 1
+        && mainS.indexOf('if (window.wpFloats) window.wpFloats.sync();') > mainS.indexOf('  function renderNoMap() {') && mainS.indexOf('if (window.wpFloats) window.wpFloats.sync();') < r0,
         J([r0 > 0, wrap > r0, sync > wrap, crumb > sync, count(early, 'return;')]));
 }
 

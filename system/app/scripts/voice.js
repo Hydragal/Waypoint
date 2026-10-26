@@ -515,6 +515,7 @@ function members() {   // who is listed: every voice this machine plays, then (t
 function renderBody() {
     var body = ui('voiceBody'); body.textContent = '';
     if (!me.on) {
+        if (!tableOn()) body.appendChild(el('div', 'voice-none', 'Voice works once you host a table or join one.'));   // 1.6.0: the row shows it with no table too
         var j = button('voice-join', me.joining ? 'Connecting…' : 'Join voice', 'Talk with the table: your microphone goes to everyone in voice', join);
         j.disabled = me.joining || !tableOn(); body.appendChild(j);
         devSection(body);   // chosen before joining, too
@@ -583,13 +584,15 @@ function renderDots() {
 }
 function renderInd() {
     var b = ui('voiceInd'); if (!b) return;
-    var on = tableOn() || me.on;
+    var table = tableOn() || me.on, on = table || !(window.wpStream || window.wpPopout);   // 1.6.0 (the owner, by prompt: "Show Voice when not hosting"): in the row with no table too, dimmed
     b.style.display = on ? '' : 'none';
     if (!on && popOpen()) popShut();
     var off = me.on && (me.muted || me.deaf);
     b.classList.toggle('in-voice', me.on);
     b.classList.toggle('mic-off', off);
-    b.title = !me.on ? 'Voice — talk with the table'
+    b.classList.toggle('no-table', !table);
+    b.title = !table ? 'Voice — it works once you host a table or join one'
+        : !me.on ? 'Voice — talk with the table'
         : (me.deaf ? 'Voice — deafened' : me.muted ? 'Voice — your microphone is muted' : prefs.mode === 'ptt' ? 'Voice — hold ' + bindLabel(prefs.bind) + ' to talk' : 'Voice — you are in voice')
           + '. Right-click or Ctrl+Shift+M to ' + (me.muted ? 'unmute' : 'mute');
 }

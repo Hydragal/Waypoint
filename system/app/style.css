@@ -975,6 +975,13 @@
   
   /* ---- layout ---- */
   #main { display: flex; flex: 1; overflow: hidden; position: relative; }
+  /* 1.6.0: a campaign with no map. The board's own parts are put away, whatever a script last set on them, and the empty state shows */
+  #noMapState { display: none; }
+  body.no-map #main > *:not(#noMapState):not(#toggleLeftBtn), body.no-map #sidebar, body.no-map header #viewModeSelect, body.no-map header #mapBreadcrumb { display: none !important; }
+  body.no-map #noMapState { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 8px; background: var(--bg2); padding: 24px 16px; text-align: center; }
+  #noMapState .nm-title { font-size: 15px; font-weight: 600; color: var(--text); }
+  #noMapState .nm-line { font-size: 12px; color: var(--dim); max-width: 360px; line-height: 1.5; }
+  #noMapState #noMapNewBtn { margin-top: 6px; }
   #canvasWrap { flex: 1; position: relative; overflow: hidden; background: var(--bg2); user-select: none; touch-action: none; }
   #canvas { position: relative; width: 30000px; height: 30000px; background-image: url("data:image/svg+xml,%3Csvg width='20' height='20' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='2' cy='2' r='1' fill='%233a3a4a'/%3E%3C/svg%3E"); transform-origin: top left; transform: scale(1); flex-shrink: 0; }
   
@@ -2512,6 +2519,7 @@
   #voiceInd.talking .vc-w2 { animation-delay: .2s; }
   @keyframes vcwave { 0% { opacity: .35; } 25% { opacity: 1; } 100% { opacity: .35; } }
   #voiceInd.mic-off .vc-w { opacity: .3; animation: none; }
+  #voiceInd.no-table { opacity: .45; }   /* 1.6.0: no table open, so voice cannot start yet */
   #voiceInd.mic-off::after { content: ''; position: absolute; left: 4px; right: 4px; top: 50%; height: 2px; margin-top: -1px; background: var(--red); border-radius: 1px; transform: rotate(-45deg); pointer-events: none; }   /* struck through, as a sound off for you is */
   #moreFold .vc-w { display: none; }   /* More's row for the microphone, while the row is folded: the mic alone, as the icon is out of voice */
   #voicePop { position: fixed; z-index: 100001; width: 260px; background: var(--panel2); border: 1px solid var(--gold); border-radius: 8px; box-shadow: var(--shadow); padding: 8px 10px; font-size: 12px; color: var(--ink); }

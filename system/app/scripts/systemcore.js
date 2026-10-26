@@ -2829,6 +2829,7 @@ function applyRound(sys, char, varsFor, F, tctx, kind, D) {   // kind (T2b): 'ro
     var work = Object.assign({}, char, { values: Object.assign({}, isObj(char.values) ? char.values : {}) });
     roundActs(sys, kind).forEach(function(act) {
         var vv = varsFor(work); if (typeof vv !== 'function') return;
+        if (act.to === 'near') vv = withOnSelf(vv, true);   // 1.6.0 (the review of 96e39ae6): a run by itself is on its own character, so OnSelf reads 1
         var res = applyAct(sys, work, act, vv, F, tctx || null, null, undefined, D); if (!res.ok) return;
         Object.keys(res.values).forEach(function(k) { work.values[k] = res.values[k]; out.values[k] = res.values[k]; }); out.ran++;
     });
@@ -2861,6 +2862,7 @@ function timeRuleRun(sys, char, rule, n, F, D, at, opt) {
     for (var i = 0; i < count; i++) {
         var fx = due ? dueFx(due, efx, i) : null, wk = fx ? Object.assign({}, work, { values: Object.assign({}, work.values, fx) }) : work;   // 1.5.5's review: as its character stood where it came due
         var vars = lazy ? (i === 0 && own && !fx ? opt.vars : makeResolver(sys, wk, F, tctx ? { combat: tctx.combat, reuse: true } : { reuse: true })) : resolveAll(sys, wk, F, tctx).vars, act = null;
+        if (rule.to === 'near') vars = withOnSelf(vars, true);   // 1.6.0 (the review of 96e39ae6): a run by the clock is on its own character, so OnSelf reads 1
         if (!rollNeedsOk(rule, vars, F)) { out.held = true; break; }   // 1.5.4: its needs not met, it is passed over (the next run would read the same)
         if (Array.isArray(rule.apply)) act = rule;
         else if (typeof rule.formula === 'string' && rule.formula) {

@@ -1360,6 +1360,7 @@ Plain paragraphs are text: **bold**, *italic*, ~~strike~~, &lt;u&gt;underline&lt
                                   <li>Your Waypoint is the hub. Each voice comes to you and goes on from you to everyone else in voice.</li>
                                   <li>Up to 16 voices can be in voice at once, yours among them. A player who joins past that is told voice is full.</li>
                                   <li>Voice works only while you host a table. It ends for everyone when the table ends.</li>
+                                  <li>The button stays in the row when no table is open. It is dimmed until you host.</li>
                                   <li>Mute, <b>Deafen</b>, push to talk, each person&rsquo;s volume and <b>Devices</b> work for you as they do for a player. They stay on your computer.</li>
                               </ul>
                           </li>
@@ -2930,6 +2931,12 @@ Plain paragraphs are text: **bold**, *italic*, ~~strike~~, &lt;u&gt;underline&lt
       <div id="minimap">
           <canvas id="minimapCanvas" width="170" height="170"></canvas>
           <button id="minimapToggle" title="Collapse / expand the minimap">&#9662;</button>
+      </div>
+
+      <div id="noMapState" role="status">
+          <div class="nm-title">This campaign has no map yet.</div>
+          <div class="nm-line">Make one to start. Pages and planners are in the left panel.</div>
+          <button class="tool" id="noMapNewBtn" type="button" title="Make this campaign's first map">New map</button>
       </div>
 
       <div id="canvasWrap">

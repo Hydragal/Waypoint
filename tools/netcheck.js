@@ -3325,6 +3325,7 @@ pendingChecks.push((async () => {
     const sysN = Sx.cleanSystem({ v: 1, name: 'N', fields: [
         { id: 'f_hp', key: 'HP', label: 'HP', kind: 'resource', maxFormula: '20', def: 'max', min: -20, edit: 'gm', hover: true },
         { id: 'f_dn', key: 'Down', label: 'Down', kind: 'toggle', edit: 'gm' },
+        { id: 'f_sec', key: 'Secret', label: 'Secret', kind: 'number', vis: 'gm' },
         { id: 'f_kit', key: 'Kit', label: 'Kit', kind: 'item-list', list: { counters: [{ key: 'Uses', label: 'Uses', def: 3 }], rolls: [{ label: 'Wrap', apply: [{ f: 'f_hp', formula: '2 + OnSelf', add: true }, { c: 'Uses', formula: '1' }], to: 'near' }] } }],
         items: [{ id: 'i_kit', name: 'Kit' }],
         rolls: [
@@ -3332,7 +3333,8 @@ pendingChecks.push((async () => {
             { id: 'r_up', label: 'Up', apply: [{ f: 'f_dn', formula: '0', set: true }, { f: 'f_hp', formula: '1', add: true }], to: 'near' },
             { id: 'r_own', label: 'Own', apply: [{ f: 'f_hp', formula: '1', add: true }] },
             { id: 'r_chk', label: 'Check', formula: '3d6 <= 30 + OnSelf', then: [{ f: 'f_hp', formula: '1', add: true, when: 'hit' }], to: 'near' },
-            { id: 'r_pl', label: 'Plain', formula: '3d6 <= 30', then: [{ f: 'f_hp', formula: '1', add: true, when: 'hit' }] }] }, { F: Fx, gmView: true });
+            { id: 'r_pl', label: 'Plain', formula: '3d6 <= 30', then: [{ f: 'f_hp', formula: '1', add: true, when: 'hit' }] },
+            { id: 'r_sec', label: 'Salve', formula: '3d6 <= 30', then: [{ f: 'f_hp', formula: '1 + Secret', add: true, when: 'hit' }], to: 'near' }] }, { F: Fx, gmView: true });
     const tk = (id, o) => Object.assign({ id, type: 'circle', isChar: true, w: 50, h: 50 }, o);
     const mkCamp = () => ({ id: 'k', activeItemId: 'm1', system: sysN, items: { m1: { id: 'm1', type: 'map', meta: { gridType: 'square' }, whiteboard: [
             tk('tk_a', { charId: 'c_a', ownerId: 'u_a', name: 'Kael', x: 100, y: 100 }), tk('tk_b', { charId: 'c_b', ownerId: 'u_b', name: 'Bo', x: 150, y: 100 }), tk('tk_n', { charId: 'c_n', name: 'Orc', x: 100, y: 150 }),
@@ -3398,6 +3400,11 @@ pendingChecks.push((async () => {
         gH.ret.ok === true && j(gH.v('c_h')) === j({ f_hp: { cur: 9 } }) && gH.saves === 1 && j(gH.deltas) === j([['c_h', { f_hp: { cur: 9 } }]]) && gCard.apply && gCard.apply.on === 'Lurker' && j(gH.v('c_a').f_hp) === j({ cur: 10 })
         && gF.ret.error === 'They must stand next to you.' && gF.saves === 0 && gK.ret.error === 'That cannot be used on someone else.',
         j([gH.ret, gH.v('c_h'), gCard.apply, gF.ret, gK.ret]));
+    const gS = runG('3d6 <= 30', { act: 'r_sec', on: 'tk_b' }), gP = runG('3d6 <= 30 + OnSelf', { on: 'tk_b' }), gSc = gS.chat.find(m => m.apply) || {}, gPc = gP.chat.find(m => m.apply) || {};
+    check('1.6.0 (the review of 96e39ae6) the GM\'s own roll used on another: a Then whose amount reads a GM-only value keeps the card on that character the GM\'s, though every value it moves shows on hover (Bo\'s HP + 1 + Secret); the same roll with a public amount goes to the table',
+        j(gS.v('c_b')) === j({ f_hp: { cur: 6 } }) && gSc.apply && gSc.apply.on === 'Bo' && gSc.apply.priv === 'gm' && gSc.scope === 'whisper'
+        && gPc.apply && gPc.apply.on === 'Bo' && !('priv' in gPc.apply) && gPc.scope === 'global',
+        j([gS.v('c_b'), gSc, gPc]));
     // the client's word: net.charApply and net.diceRoll name the token, and dicecore cleanRollReq and systemcore cleanCharApply keep it only by the rule a target keeps
     const caAt = srcR.indexOf('net.charApply = function(charId, actId, label, row, on) {'), caSrc = srcR.slice(caAt, srcR.indexOf('\n};', caAt) + 3), sentC = [];
     const netC = { active: true, role: 'client', stream: false, foreign: true, syncedPeer: 'H', myId: 'u_a', conns: [{ peer: 'H', open: true, send: m => sentC.push(JSON.parse(JSON.stringify(m))) }] };
@@ -5585,7 +5592,7 @@ pendingChecks.push((async () => {
     const mainSrc = rd(path.join('scripts', 'main.js')), htmlSrc = rd('index.html'), cssSrc = rd('style.css');
     check('where (client): wired — renderWhere paints only through paintWhere with the real document, off the synced host\'s campaign; main.js render() calls it before its no-map return, and the clock in the header after it (item 20 K2); renderRoster calls it as the session class changes',
         /function renderWhere\(\) \{[^}]*tableWhere\(net, campOf\(state\.appState && state\.appState\.activeCampaignId\)\);[^}]*paintWhere\(box, mapBox, w, document\);\n\}/.test(src) && /var box = ui\('tableWhere'\), mapBox = ui\('tableWhereMap'\); if \(!box \|\| !mapBox\) return;/.test(src)
-        && /export function render\(\) \{\s*if \(window\.wpHideTooltip\)[^\n]*\n\s*if \(window\.wpNet && window\.wpNet\.renderWhere\) window\.wpNet\.renderWhere\(\);[^\n]*\n\s*if \(window\.wpCalendar && window\.wpCalendar\.refresh\) window\.wpCalendar\.refresh\(\);[^\n]*\n\s*if \(window\.wpVideo && window\.wpVideo\.refresh\) window\.wpVideo\.refresh\(\);[^\n]*\n\s*var activeMap = getActiveMap\(\);\s*if\(!activeMap\) return;/.test(mainSrc)
+        && /export function render\(\) \{\s*if \(window\.wpHideTooltip\)[^\n]*\n\s*if \(window\.wpNet && window\.wpNet\.renderWhere\) window\.wpNet\.renderWhere\(\);[^\n]*\n\s*if \(window\.wpCalendar && window\.wpCalendar\.refresh\) window\.wpCalendar\.refresh\(\);[^\n]*\n\s*if \(window\.wpVideo && window\.wpVideo\.refresh\) window\.wpVideo\.refresh\(\);[^\n]*\n\s*var activeMap = getActiveMap\(\);\s*if \(!activeMap\) activeMap = firstMapOf\(getActiveCampaign\(\)\);[^\n]*\n(\s*\/\/[^\n]*\n)*\s*document\.body\.classList\.toggle\('no-map', !activeMap && !!getActiveCampaign\(\)\);\s*if\(!activeMap\) \{ renderNoMap\(\); return; \}/.test(mainSrc)
         && /classList\.toggle\('net-client'[^\n]*\n\s*renderWhere\(\);/.test(src));
     check('where (client): the campaign\'s box sits beside the campaign\'s name, right after the wrap that holds the campaign menu and the page\'s own campaign list, and a player\'s app hides that wrap whole; the map\'s box is in the next section (right after the map tabs\' box, which holds the breadcrumb); both hidden unless a joined player has something to show',
         /<header>[\s\S]*<div class="row-menu-wrap" id="campMenuWrap">\n[\s\S]*?<select id="campaignSelect"[^\n]*\n\s*<\/div>\n\s*<div id="tableWhere" class="table-where"><\/div>[\s\S]*<div class="header-sep"><\/div>[\s\S]*<div id="mapTabs"[^\n]*\n[^\n]*<div id="mapBreadcrumb"><\/div>[^\n]*\n[^\n]*\n[^\n]*\n\s*<\/div>\n\s*<div id="tableWhereMap" class="table-where"><\/div>[\s\S]*<\/header>/.test(htmlSrc)
