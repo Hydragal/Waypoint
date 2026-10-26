@@ -196,6 +196,20 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             !!sg && ownPages.every(u => j(permRows(u, false)) === j(ASK) && j(permRows(u, true)) === j(ASK.concat(['media']))), sg ? j([permRows(OWN + '/', false), permRows(OWN + '/', true)]) : 'no shellguard.js');
         check('permissions: any other address is granted nothing at all, asked or checked — a web site, a look-alike host, another port, another spelling of this machine, a file, an empty or missing address',
             !!sg && strangers.every(u => permRows(u, false).length === 0 && permRows(u, true).length === 0), sg ? j(strangers.filter(u => permRows(u, false).length || permRows(u, true).length)) : 'no shellguard.js');
+        // voice chat (1.5.9, pull request #1 by Hydragal): a media REQUEST is granted at the app's own address only where Electron's details name
+        // the microphone alone (details.mediaTypes exactly ['audio']); the camera, the camera with the microphone, the screen and a request that
+        // names nothing stay refused, and a check answers as before
+        const AUD = { mediaTypes: ['audio'] }, notMic = [{ mediaTypes: ['video'] }, { mediaTypes: ['audio', 'video'] }, { mediaTypes: ['video', 'audio'] }, { mediaTypes: ['audio', 'audio'] }, { mediaTypes: [] }, { mediaTypes: 'audio' }, { mediaTypes: ['Audio'] }, { mediaTypes: [['audio']] }, {}, null, undefined, 'audio', ['audio'], { mediaTypes: { 0: 'audio', length: 1 } }];
+        const micReq = (u, d) => tryF(() => sg.permOk(OWN, 'media', u, false, d), 'threw');
+        const sgMicSrc = fs.readFileSync(path.join(__dirname, '..', 'system', 'resources', 'app', 'shellguard.js'), 'utf8').replace(/\r\n/g, '\n');
+        check('the microphone for voice chat (shellguard.permOk, run for real; 1.5.9, pull request #1): a media request from a page of the app\'s own address is granted when what it asks for is the microphone alone, and refused when it asks for the camera, the camera with the microphone, the screen, nothing, or names what it asks in any other shape; from any other address it is refused even for the microphone; no other permission is granted by naming the microphone, and a check answers as before, yes for media at the app\'s own address alone whatever it names; the shell hands Electron\'s details to the request and to nothing else, and the rule\'s comment still says what is refused',
+            !!sg && ownPages.every(u => micReq(u, AUD) === true && notMic.every(d => micReq(u, d) === false)) && strangers.every(u => micReq(u, AUD) === false)
+            && OTHERS.filter(p => p !== 'media').every(p => tryF(() => sg.permOk(OWN, p, OWN + '/', false, AUD), 'threw') === false)
+            && [AUD, { mediaTypes: ['video'] }, undefined].every(d => tryF(() => sg.permOk(OWN, 'media', OWN + '/', true, d), 'threw') === true) && strangers.every(u => tryF(() => sg.permOk(OWN, 'media', u, true, AUD), 'threw') === false)
+            && sgMicSrc.includes('        cb(permOk(own, perm, from, false, details));\n') && (sgMicSrc.match(/permOk\(own, perm, from, (true|false)(, details)?\)/g) || []).length === 2 && !/permOk\(own, perm, from, true, details\)/.test(sgMicSrc)
+            && sgMicSrc.includes('// Everything else is refused for every address: the camera, the screen, reading the clipboard, the location, notifications,\n// opening another program.')
+            && sgMicSrc.includes('a request for \'media\' is refused unless it is for the microphone alone.'),
+            sg ? j([ownPages.map(u => micReq(u, AUD)), notMic.map(d => micReq(OWN + '/', d)), strangers.map(u => micReq(u, AUD))]) : 'no shellguard.js');
 
         // ---- Developer mode ----
         const dirD = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-devmode-')), pf = (name, text) => { const f = path.join(dirD, name); if (text !== undefined) fs.writeFileSync(f, text); return f; };

@@ -394,10 +394,10 @@ pendingChecks.push((async () => {
     const scripts = fs.readdirSync(path.join(__dirname, '..', 'system', 'app', 'scripts')).filter(f => /\.js$/.test(f)), noCom = s => s.replace(/\/\/[^\n]*/g, '');
     const kickedSends = scripts.map(f => [f, (fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', f), 'utf8').match(/type: 'kicked'/g) || []).length]).filter(x => x[1]);
     const kickCalls = scripts.map(f => [f, (noCom(fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', f), 'utf8')).match(/kickPlayer\(/g) || []).length]).filter(x => x[1]);
-    check('M1: a Ban from the Players panel (its branch run for real) calls net.kickPlayer exactly once, with the first roster key of the profile, and that one call takes both of Pat\'s connections (told, closed, forgotten once); a profile not at the table and a player\'s machine call it not at all; in the source the Ban branch calls it once and never in a loop, net.js calls it twice (the roster\'s kick button, the Ban branch) and no other script does, and kickPlayer is the only place that sends \'kicked\'; the host has 25 message branches (the one new one is video-up, item 21)',
+    check('M1: a Ban from the Players panel (its branch run for real) calls net.kickPlayer exactly once, with the first roster key of the profile, and that one call takes both of Pat\'s connections (told, closed, forgotten once); a profile not at the table and a player\'s machine call it not at all; in the source the Ban branch calls it once and never in a loop, net.js calls it twice (the roster\'s kick button, the Ban branch) and no other script does, and kickPlayer is the only place that sends \'kicked\'; the host has 31 message branches (video-up of item 21 among them, and voice-up of voice chat, 1.5.9, the newest)',
         js(ban1) === js({ threw: '', calls: ['pA1'], roster: ['pB', 'pX', 'pY'], kicked: ['pA1', 'pA2'], timers: 2, forgot: ['forget:u_a'], banned: ['u_a'], session: ['u_a'], saves: 1 }) && js(banAway.calls) === js([]) && banAway.kicked.length === 0 && banAway.threw === '' && js(banClient.calls) === js([]) && banClient.kicked.length === 0 && banClient.threw === ''
         && (noCom(banBody).match(/net\.kickPlayer\(/g) || []).length === 1 && !/forEach|\bfor \(|\bwhile \(/.test(noCom(banBody)) && js(kickCalls) === js([['net.js', 2]]) && (noCom(src).match(/net\.kickPlayer\(/g) || []).length === 2
-        && js(kickedSends) === js([['net.js', 1]]) && kickSrc.indexOf("conn.send({ type: 'kicked' });") >= 0 && (src.match(/msg\.type === '[a-z-]+' && net\.role === 'host'/g) || []).length === 30, js([ban1, banAway, banClient, kickCalls, kickedSends]));
+        && js(kickedSends) === js([['net.js', 1]]) && kickSrc.indexOf("conn.send({ type: 'kicked' });") >= 0 && (src.match(/msg\.type === '[a-z-]+' && net\.role === 'host'/g) || []).length === 31, js([ban1, banAway, banClient, kickCalls, kickedSends]));
 
     /* round 2: the review's three older gaps — a removed player's pointer and roster row, a second connection under one key, a queued request */
     const tg = { u_a: { mapId: 'm1', id: 'orc' }, u_b: { mapId: 'm1', id: 'gob' } }, withT = t => h => { h.env.net.targets = JSON.parse(js(t)); };
@@ -4780,7 +4780,7 @@ pendingChecks.push((async () => {
     check('fold M0 (source): combatHidden is defined once and read only by combatsFor and net.syncCombatHidden, inside the combats slice; net.syncCombatHidden is called once, from the host\'s save; the GM\'s own strip (whiteboard.js) reads neither; the host\'s message handler has the same number of branches as before',
         (src.match(/function combatHidden\(/g) || []).length === 1 && (src.match(/combatHidden\(/g) || []).length === 3 && (cbSrc.match(/combatHidden\(/g) || []).length === 3
         && (src.match(/syncCombatHidden/g) || []).length === 3 && (cbSrc.match(/syncCombatHidden/g) || []).length === 1 && (olsSrc.match(/syncCombatHidden/g) || []).length === 2 && (cbSrc.match(/_combatHidSig = combatHidSigNow\(\);/g) || []).length === 1
-        && !/combatsFor|combatHidden|syncCombatHidden/.test(wbAll) && (src.match(/msg\.type === '[a-z-]+' && net\.role === 'host'/g) || []).length === 30,
+        && !/combatsFor|combatHidden|syncCombatHidden/.test(wbAll) && (src.match(/msg\.type === '[a-z-]+' && net\.role === 'host'/g) || []).length === 31,
         j([(src.match(/combatHidden\(/g) || []).length, (src.match(/syncCombatHidden/g) || []).length, (src.match(/msg\.type === '[a-z-]+' && net\.role === 'host'/g) || []).length]));
 }
 
@@ -7921,7 +7921,7 @@ pendingChecks.push((async () => {
             && /if \(hosting\) \{ window\.wpNet\.applyingRemote = true; save\(true\); window\.wpNet\.applyingRemote = false; if \(window\.wpFog\) window\.wpFog\.invalidateVision\(\); if \(backS && backS\.length && typeof window\.wpNet\.strokesBack === 'function'\) window\.wpNet\.strokesBack\(item\.id, backS\); if \(window\.wpNet\.sendItem\) window\.wpNet\.sendItem\(camp\.id, item\.id\);/.test(ioT));
         const dmT = read('datamap.js'), posCode = posS2.replace(/\/\/[^\n]*/g, ''), patCode = patS2.replace(/\/\/[^\n]*/g, '');
         check('senses S0 (source): nothing new comes in from a player — no branch of the host\'s message handler was added or names sight or senses, the hook and its timer read nothing of a message or of a connection\'s word, and what is kept (what a copy was made by, the text last known, the sends that wait) is never saved or sent: it lives in the host\'s memory, named nowhere else',
-            hostBranches.length === 30 && !hostBranches.some(b => /sens|sight/i.test(b)) && !/msg\.type === '[^']*(sens|sight)/i.test(src) && !/\bmsg\b/.test(smCode) && !/\bconn\b/.test(smCode) && !/type: '(?!combats'|targets')/.test(smCode)
+            hostBranches.length === 31 && !hostBranches.some(b => /sens|sight/i.test(b)) && !/msg\.type === '[^']*(sens|sight)/i.test(src) && !/\bmsg\b/.test(smCode) && !/\bconn\b/.test(smCode) && !/type: '(?!combats'|targets')/.test(smCode)
             && count(src, /_sensesSig/g) === count(flS + smS, /_sensesSig/g) && count(src, /_sensesPend/g) === count(smS, /_sensesPend/g) && count(smS, /_sensesPend/g) > 0 && count(flS, /_sensesSig/g) > 0 && !/_senses(Sig|Pend|At)/.test(sheetsT + ioT + fogT + dmT + read('main.js'))
             && count(src, /_sensesAt/g) === count(flS + smS, /_sensesAt/g) && count(flS, /_sensesAt/g) > 0 && count(smS, /_sensesAt/g) > 0
             && !/sensesReads|sensesHidden/.test(src) && count(smCode, /setTimeout\(/g) === 1 && count(smCode, /SENSES_RESEND_MS/g) === 2, j([hostBranches.length, count(src, /_sensesSig/g), count(src, /_sensesPend/g), count(src, /_sensesAt/g), count(smCode, /setTimeout\(/g)]));
@@ -7961,7 +7961,7 @@ pendingChecks.push((async () => {
         const cnt = (s, re) => (s.match(re) || []).length, hostB = cnt(src, /msg\.type === '[a-z-]+' && net\.role === 'host'/g);
         check('fold M0 (source): no pointer message goes to all outside broadcastTargets — net.js broadcasts one only there, in its branch for a table without fog, and (hidden pieces) that one too is built by targetsFor; every other pointer message is a player\'s own copy built by targetsFor; the combats slice now defines broadcastTargets, and the host\'s message handler has the same number of branches as before',
             btSrc.length > 0 && cnt(src, /broadcast\(\{ type: 'targets'/g) === 1 && cnt(btSrc, /broadcast\(\{ type: 'targets'/g) === 1 && cnt(src, /targets: net\.targets/g) === 0 && /broadcast\(\{ type: 'targets', targets: targetsFor\(null\) \}, null\)/.test(btSrc)
-            && cnt(src, /type: 'targets'/g) === cnt(src, /type: 'targets', targets: targetsFor\(/g) && cbS.indexOf(btSrc) >= 0 && cbS.indexOf('function targetsFor(') >= 0 && hostB === 30,
+            && cnt(src, /type: 'targets'/g) === cnt(src, /type: 'targets', targets: targetsFor\(/g) && cbS.indexOf(btSrc) >= 0 && cbS.indexOf('function targetsFor(') >= 0 && hostB === 31,
             j([btSrc.length, cnt(src, /broadcast\(\{ type: 'targets'/g), cnt(src, /type: 'targets'/g), cbS.indexOf(btSrc), hostB]));
 
         // (c) the live position relay and the drag that feeds it
@@ -8295,8 +8295,8 @@ pendingChecks.push((async () => {
         J([pF.map('mA').whiteboard.length, pF.rec.asked, pB.rec, threw, pT.net.applyingRemote]));
 
     // (8) where it sits: a client branch (the host's branches still 25), and nothing sends the message yet
-    check('fold M3: the catch-up is a client branch only (the host\'s branches are 30: none new but video-up of item 21, char-delete of 1.5.4, char-style of item 35, char-ask of 1.5.5, char-damage and trade of 1.5.6); the host builds it in one place only, its catch-up of a copy (fold M7)',
-        (src.match(/msg\.type === '[a-z-]+' && net\.role === 'host'/g) || []).length === 30 && /\} else if \(msg\.type === 'fogDiff' && net\.role === 'client'\) \{\n\s*\/\/ \[netcheck:fogdiff-start\]/.test(src)
+    check('fold M3: the catch-up is a client branch only (the host\'s branches are 31: none new but video-up of item 21, char-delete of 1.5.4, char-style of item 35, char-ask of 1.5.5, char-damage and trade of 1.5.6, and voice-up of voice chat, 1.5.9); the host builds it in one place only, its catch-up of a copy (fold M7)',
+        (src.match(/msg\.type === '[a-z-]+' && net\.role === 'host'/g) || []).length === 31 && /\} else if \(msg\.type === 'fogDiff' && net\.role === 'client'\) \{\n\s*\/\/ \[netcheck:fogdiff-start\]/.test(src)
         && (src.match(/msg\.type === 'fogDiff'/g) || []).length === 1 && (src.match(/type: 'fogDiff'/g) || []).length === 1 && /function fogCatchUp\([^]*?type: 'fogDiff'/.test(between('// [netcheck:fogmove-start]', '// [netcheck:fogmove-end]', 'fogmove')));
 })());
 // fold M4: an open drag is judged where it began. The real pos gate, patch path, relay, sends, kick, senses and the fogmove slice are compiled as
@@ -10096,7 +10096,7 @@ pendingChecks.push((async () => {
         /^\s*\/\/[^\n]*\n\s*\/\/[^\n]*\n\s*videoUp\(msg, conn\);\s*$/.test(upS) && /\} else if \(msg\.type === 'video-up' && net\.role === 'host'\) \{\n\s*\/\/ \[netcheck:videoup-start\]/.test(src)
         && /if \(snapOk && typeof videoLink === 'function'\) videoLink\(conn\);[^\n]*\n    broadcastRoster\(\);\n\}/.test(src)
         && /if \(net\.role === 'host' && typeof videoHang === 'function'\) \{ videoHang\(conn\.peer\); videoTold\(\); \}/.test(src) && /if \(typeof videoHang === 'function'\) \{ keys\.forEach\(videoHang\); videoTold\(\); \}/.test(src)
-        && /window\.wpVideo\.tableLeft\(\); \} catch \(e\) \{\} \}[^\n]*\n    net\.videoStop\(\); videoOver\(\);\n    var peerL = net\.peer; net\.peer = null; if \(peerL\) \{ try \{ peerL\.destroy\(\); \}/.test(src) && /videoOver\(\); if \(window\.wpVideo && window\.wpVideo\.tableLeft\) window\.wpVideo\.tableLeft\(\);/.test(src)
+        && /window\.wpVideo\.tableLeft\(\); \} catch \(e\) \{\} \}[^\n]*\n    net\.videoStop\(\); videoOver\(\);\n    if \(window\.wpVoice\) \{ try \{ window\.wpVoice\.tableLeft\(\); \} catch \(e\) \{\} \}[^\n]*\n    var peerL = net\.peer; net\.peer = null; if \(peerL\) \{ try \{ peerL\.destroy\(\); \}/.test(src) && /videoOver\(\); if \(window\.wpVideo && window\.wpVideo\.tableLeft\) window\.wpVideo\.tableLeft\(\);/.test(src)
         && (src.match(/peer\.on\('call', function\(call\) \{ try \{ call\.close\(\); \} catch \(e\) \{\} \}\);/g) || []).length === 2 && !/\.answer\(|peer\.call\(/.test(src));
 
     /* ---- the player ---- */
@@ -10191,7 +10191,7 @@ pendingChecks.push((async () => {
     const sayNo = [mkCli({ synced: false }), mkCli({ foreign: false }), mkCli({ streamWin: true }), (() => { const s = mkCli(); s.c0.open = false; return s; })(), (() => { const s = mkCli(); s.net.conns = []; return s; })(), (() => { const s = mkCli(); s.net.role = 'host'; return s; })(), (() => { const s = mkCli({ videoOn: false }); return s; })()].map(s => [s.api.videoAsk(), s.c0.sent.length]);
     check('item 21 V2 a player hears a video\'s word only from the synced host, after the snapshot, never in the stream window (the videomsg branch, run for real): an offer from their own GM that comes before the snapshot is remembered, to be asked for once it is in, and that GM\'s stop (no other peer\'s, no other word) forgets it; another peer\'s offer is nothing; and a player asks only their synced GM, over an open connection, with Video on',
         hOk.world.pcs.length === 1 && hStream.world.pcs.length === 0 && hStream.api.inn().offered === false && hMid.world.pcs.length === 0 && hMid.api.inn().offered === true && hEarly.world.pcs.length === 0 && j(earlyThen) === j([true, true, true, false]) && hOther.world.pcs.length === 0 && hOther.api.inn().offered === false && hEarlyStop.world.stopped === 0 && hEarlyStop.api.inn().offered === false
-        && sayNo.every(x => x[0] === false && x[1] === 0) && mkCli().api.videoAsk() === true && /net\.videoWake\(\);[^\n]*\n    \} else if \(msg\.type === 'item'\)/.test(src), j([hOk.world.pcs.length, earlyThen, sayNo]));
+        && sayNo.every(x => x[0] === false && x[1] === 0) && mkCli().api.videoAsk() === true && /net\.videoWake\(\);[^\n]*\n        if \(window\.wpVoice\) \{ try \{ window\.wpVoice\.tableReady\(\); \} catch \(e\) \{\} \}[^\n]*\n    \} else if \(msg\.type === 'item'\)/.test(src), j([hOk.world.pcs.length, earlyThen, sayNo]));
 })());
 // R2 security pass, cluster F (2026-10-01): journals, handouts and shares. The host's relayShare (sliced by its share markers, run with the real
 // RateLimit and the host's own allow() on an injected clock), the player's 'handout' and 'notepad' branches and applyNotepad (the handoutmsg,
@@ -15806,11 +15806,11 @@ pendingChecks.push((async () => {
         && /function combatForget\(fid\) \{ if \(fid === undefined\) \{ _combatSeen = Object\.create\(null\); _combatsSent = Object\.create\(null\); \}/.test(src)
         && (src.match(/net\.combatRoundOf\(/g) || []).length === 2 && !/net\.combatFor\(loc[QA]\)/.test(src) && (shSrcR.match(/n\.combatRoundOf\(/g) || []).length === 1
         && /el\.classList\.toggle\('wb-turn', onTurnHere\(window\.wpNet, activeMap\.id, item\.id\)\);/.test(wbSrcR) && (wbSrcR.match(/onTurnHere\(/g) || []).length === 2);
-    check('fold 2 (source): the join snapshot says fights (true) and carries the fights on the map the player lands on; a player\'s app takes the word through typeof before it reads the snapshot\'s fights and reads every later copy by it; nothing of the host reads a fight by its map\'s id any more (net.js, whiteboard.js, pills.js and sheets.js); fights start, change and end in fightSet alone and end in combatOver alone; the host\'s branches are still 28',
+    check('fold 2 (source): the join snapshot says fights (true) and carries the fights on the map the player lands on; a player\'s app takes the word through typeof before it reads the snapshot\'s fights and reads every later copy by it; nothing of the host reads a fight by its map\'s id any more (net.js, whiteboard.js, pills.js and sheets.js); fights start, change and end in fightSet alone and end in combatOver alone; the host\'s branches are 31 (voice-up of voice chat, 1.5.9, the newest)',
         /combats: combatsFor\(prof\.id, prof\.location\), fights: true,/.test(src) && /\n    if \(typeof fightsKnow === 'function'\) fightsKnow\(msg\.fights\);[^\n]*\n    net\.combats = typeof cleanFightsIn === 'function' \? cleanFightsIn\(msg\.combats\) : cleanCombats\(msg\.combats\);/.test(snapBody)
         && src.split('fightsKnow(').length === 3 && /var before = net\.combats, after = typeof cleanFightsIn === 'function' \? cleanFightsIn\(msg\.combats\) : cleanCombats\(msg\.combats\);/.test(src)
         && !/combats\[(mapId|am\.id|map\.id|activeMap\.id|combatDraft\.mapId|getActiveMap\(\)\.id|msg\.mapId|locQ|locA|pr\.location|mid)\]/.test(src + rdApp('scripts/whiteboard.js') + rdApp('scripts/pills.js') + rdApp('scripts/sheets.js'))
-        && (src.match(/net\.combats\[fid\] = f;/g) || []).length === 1 && (src.match(/combatOver\(/g) || []).length === 4 && (src.match(/msg\.type === '[a-z-]+' && net\.role === 'host'/g) || []).length === 30);
+        && (src.match(/net\.combats\[fid\] = f;/g) || []).length === 1 && (src.match(/combatOver\(/g) || []).length === 4 && (src.match(/msg\.type === '[a-z-]+' && net\.role === 'host'/g) || []).length === 31);
 })());
 // Fold 4 (backlog 152, docs/FIGHT_CLOCK_DESIGN.md sections 1 and 4 to 6; the owner's answer to question 1, "Every character"): each fight keeps its own
 // time, and the clock reads the one furthest behind, counting every second once. net.js run for real (the combats slice, everything from combatRefresh
@@ -16299,6 +16299,36 @@ pendingChecks.push((async () => {
             && ixH.includes('The pages nested under it are GM only too, whatever their own switch says.') && ixH.includes('removes it, and the pages under it, from every player at once. Moving a page under a GM-only page does the same.')
             && wn.every(t => { const a = t.indexOf('WAYPOINT 1.5.6'), b = t.indexOf('WAYPOINT 1.5.5'), k = t.indexOf('Handbook\n- A page set GM only now keeps every page nested under it from your\n'); return a >= 0 && k > a && k < b; }));
     } catch (e) { check('1.5.6 the hidden parent checks ran', false, String(e && e.stack || e)); } })());
+// Voice chat (1.5.9, pull request #1 by Hydragal): net.js routes two words to voice.js and reads nothing else of them. The two branches, sliced
+// by their markers (voice, voiceup) and run for real behind the real admission gate (runGate): a player's app hears the GM's word ('voice')
+// only from the synced host, after the snapshot, never in the stream window; the host hears a player's word ('voice-up') only from an
+// admitted connection, the gate at handleMessage's head having closed a stranger's before any branch; with no voice module neither throws.
+// voice.js itself (the hub, the player's link, the caps) is run on stub peer connections in tools/voicecheck.js
+{
+    const VJ = v => JSON.stringify(v);
+    const vS = between('// [netcheck:voice-start]', '// [netcheck:voice-end]', 'voice'), vuS = between('// [netcheck:voiceup-start]', '// [netcheck:voiceup-end]', 'voiceup');
+    const vDispatch = new Function('net', 'window', 'msg', 'conn', "if (msg.type === 'voice' && net.role === 'client') {\n" + vS + "\n} else if (msg.type === 'voice-up' && net.role === 'host') {\n" + vuS + "\n}\nreturn 'ran';");
+    const vRec = () => { const r = { host: [], player: [] }; r.win = { wpVoice: { fromHost: m => r.host.push(m.act), fromPlayer: (m, c) => r.player.push([m.act, c.peer]) } }; return r; };
+    const OFFER = { type: 'voice', act: 'offer', id: '0123456789abcdef', sdp: 'v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\n' };
+    const cli = o => Object.assign({ role: 'client', foreign: true, syncedPeer: 'gm-peer', stream: false }, o || {});
+    const hearC = (netO, peer, noMod) => { const r = vRec(); try { vDispatch(netO, noMod ? {} : r.win, Object.assign({}, OFFER), { peer }); } catch (e) { return 'threw'; } return r.host.length; };
+    const cl = [hearC(cli(), 'gm-peer'), hearC(cli({ foreign: false }), 'gm-peer'), hearC(cli({ syncedPeer: null }), 'gm-peer'), hearC(cli(), 'evil-peer'), hearC(cli({ stream: true }), 'gm-peer'), hearC(cli({ role: 'host' }), 'gm-peer'), hearC(cli(), 'gm-peer', true)];
+    // the host: the real gate first, then the branch
+    const hostFire = (admit, msg, noMod) => { const h = harness(), c = h.conn('peerV'), r = vRec(); if (admit) h.env.net.roster.peerV = { id: 'u_v', name: 'Vee' };
+        const g = runGate(h.env, Object.assign({}, msg), c); let out = 'gated'; if (g === 'ran') { try { out = vDispatch(h.env.net, noMod ? {} : r.win, Object.assign({}, msg), c) || 'returned'; } catch (e) { out = 'threw'; } }
+        return [g || 'closed', out, r.player, h.closed.slice()]; };
+    const JOIN = { type: 'voice-up', act: 'join' };
+    const ho = [hostFire(true, JOIN), hostFire(false, JOIN), hostFire(true, JOIN, true), hostFire(true, OFFER), hostFire(true, { type: 'voice-up', act: 'answer', id: '0123456789abcdef', sdp: 'v=0\r\n' })];
+    check('voice chat (1.5.9, pull request #1; the voice and voiceup branches run for real behind the real admission gate): a player\'s app hands the GM\'s word to voice.js only from the synced host, after the snapshot, never in the stream window, and never as a host; another peer\'s word, one before the snapshot and one in the stream window reach nothing; the host hands a player\'s word to voice.js with the connection it came on, only from an admitted connection: a stranger\'s is closed by the gate before any branch reads it; a host that receives a player\'s own word for the other way has no branch for it; with no voice module neither side throws',
+        VJ(cl) === VJ([1, 0, 0, 0, 0, 0, 0]) && VJ(ho) === VJ([['ran', 'ran', [['join', 'peerV']], []], ['closed', 'gated', [], ['peerV']], ['ran', 'returned', [], []], ['ran', 'ran', [], []], ['ran', 'ran', [['answer', 'peerV']], []]]), VJ([cl, ho]));
+    check('voice chat (source): the client branch reads nothing of the message but hands it on, the host branch likewise with its connection; the host\'s close of a connection takes its voice link, a table\'s end on either side closes every voice link, the snapshot asks voice.js to come back into voice after a reconnect, and voice.js takes the table\'s own ICE servers and relay rule from net.rtcConfig, which is the peer\'s own config',
+        /^\s*\/\/[^\n]*\n\s*\/\/[^\n]*\n\s*if \(!net\.foreign \|\| conn\.peer !== net\.syncedPeer \|\| net\.stream \|\| !window\.wpVoice\) return;\n\s*window\.wpVoice\.fromHost\(msg\);\s*$/.test(vS)
+        && /^\s*\/\/[^\n]*\n\s*if \(!window\.wpVoice\) return;\n\s*window\.wpVoice\.fromPlayer\(msg, conn\);\s*$/.test(vuS)
+        && /\} else if \(msg\.type === 'voice' && net\.role === 'client'\) \{\n\s*\/\/ \[netcheck:voice-start\]/.test(src) && /\} else if \(msg\.type === 'voice-up' && net\.role === 'host'\) \{\n\s*\/\/ \[netcheck:voiceup-start\]/.test(src)
+        && (src.match(/msg\.type === 'voice(-up)?'/g) || []).length === 2
+        && src.includes("if (net.role === 'host' && window.wpVoice) { try { window.wpVoice.connGone(conn.peer); } catch (e) {} }") && (src.match(/window\.wpVoice\.tableLeft\(\)/g) || []).length === 2
+        && (src.match(/window\.wpVoice\.tableReady\(\)/g) || []).length === 1 && src.includes('net.rtcConfig = function() { return peerOpts().config; };'), VJ([vS.length, vuS.length]));
+}
 Promise.all(pendingChecks).then(() => {   // the async checks land before the summary
     /* ---- 1.5.4: the follow ruling (the owner, 2026-10-04): nobody follows the GM around unless the table is set to ---- */
     {

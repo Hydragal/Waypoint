@@ -42,6 +42,21 @@ Launchers and rounds
   blast goes off there. Your GM places a round that misses, with the
   row's Launch.
 
+Voice chat
+- Talk with everyone at the table. Press the microphone in the top row,
+  then Join voice. It shows only while you are at a table. The GM's
+  Waypoint is the hub, and up to 16 voices can be in voice at once.
+- Mute your microphone, or Deafen to hear nobody and send nothing.
+  Right-click the microphone or press Ctrl+Shift+M to mute at once.
+- Push to talk sends your voice only while you hold a key, V at first.
+  The button beside it picks another key or a mouse side button.
+- Each person in voice has a volume and a mute for you alone. Devices
+  picks the microphone and the speakers voice uses on this computer.
+  Your mutes, volumes and devices stay on this computer.
+- In the installed app the microphone needs this release's core, which
+  the installer brings, as said under Updates.
+- Voice chat is contributed by Hydragal.
+
 Updates
 - An update keeps an outside sheet reader you added to the app folder.
   Before, every update left it behind and Import Character went away

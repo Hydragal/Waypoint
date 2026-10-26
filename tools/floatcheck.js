@@ -804,6 +804,28 @@ const dice = read('scripts/dice.js');
             && J(hS) === J([false, 'flex']) && J([k1, kS, k2, kS2, k3]) === J([{ stopped: true, free: false, mapUse: false, prevented: true }, [true, ['sheet']], CL, false, FREE]) && J(lS) === J([false, 'flex']) && J(nS) === J([false, 'flex']) && J(qS) === J([true, ['chat']]),
             J([o1, s1, o2, b1, bS, x1, xS, hS, k1, kS, k2, kS2, k3, lS, nS, qS]));
     }
+    // 4c. the voice popover (voice.js, 1.5.9, voice chat from pull request #1): a small menu of the top row's Table group, put away by the
+    //     router as the party's menu is, before any window; a key being picked for push to talk is let go first, by the module's own escape, and
+    //     the popover stays up for that press; with no voice module the popover is put away all the same; a box in it is no reason to keep it
+    {
+        const vOne = (binding, noMod, t) => {
+            const V = page(), I = V.ids; V.mk('voicePop', { display: 'none' }); V.mk('voiceMute', { tag: 'input', type: 'checkbox', in: I.voicePop });
+            const mod = { binding: !!binding, escape() { V.said.push('voice'); if (mod.binding) { mod.binding = false; return; } I.voicePop.style.display = 'none'; } };
+            if (!noMod) V.win.wpVoice = mod;
+            show(V, 'voicePop', 'block'); show(V, 'helpModal');
+            const r1 = V.press(t ? I[t] : null), s1 = [I.voicePop.style.display, I.helpModal.style.display, mod.binding, V.said.slice()];
+            const r2 = V.press(), s2 = [I.voicePop.style.display, I.helpModal.style.display, V.said.slice()];
+            return [r1.stopped, r1.free, s1, r2.stopped, s2];
+        };
+        const vv = [vOne(false), vOne(true), vOne(false, true), vOne(false, false, 'voiceMute')];
+        const escSrc2 = read('scripts/esckey.js');
+        check('the voice popover (voice.js, 1.5.9; esckey.js run for real): Escape puts it away first, before the window under it, by the voice module\'s own escape, and goes no further; the next Escape closes the window; while a key is being picked for push to talk the first Escape lets go of that and the popover stays up, and the next puts it away; with no voice module the popover is put away all the same; a tick in it is no reason to keep it up; the router names it among the small menus that open over everything',
+            J(vv) === J([[true, false, ['none', 'flex', false, ['voice']], true, ['none', 'none', ['voice']]],
+                [true, false, ['block', 'flex', false, ['voice']], true, ['none', 'flex', ['voice', 'voice']]],
+                [true, false, ['none', 'flex', false, []], true, ['none', 'none', []]],
+                [true, false, ['none', 'flex', false, ['voice']], true, ['none', 'none', ['voice']]]])
+            && count(escSrc2, "doc.getElementById('voicePop')") === 1 && count(escSrc2, 'win.wpVoice.escape()') === 1, J(vv));
+    }
     // 5. a text box on the map, the floating boxes, a field outside them, the left panel opened from its rail
     {
         const T = page(); const t1 = T.press(T.ids.wbText), tS = [T.ids.wbText.blurs];

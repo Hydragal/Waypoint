@@ -90,6 +90,9 @@ jobs:
       - name: videocheck — campaign videos' pure core and the Video panel's rules
         if: ${{ !cancelled() }}
         run: node tools/videocheck.js
+      - name: voicecheck — voice chat's pure core, the host's hub and a player's link on stub connections
+        if: ${{ !cancelled() }}
+        run: node tools/voicecheck.js
       - name: zipcheck — the export bundle's archive, at any size
         if: ${{ !cancelled() }}
         run: node tools/zipcheck.js
