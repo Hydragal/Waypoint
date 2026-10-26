@@ -3771,7 +3771,11 @@ function trapToast(traveler, portal, text) {
 // The portal item under a token's center, if any (visible, room-linked, warp target set)
 // A free top-left for a w×h token near (cx, cy): spiral outwards until it overlaps no other
 // character token (and, when given, stays off the portal's footprint).
-function freeSpotNear(map, cx, cy, w, h, avoidId, portal) {
+// 1.5.9 (the owner, at the table, 2026-10-25: "sometimes players land outside of a wall and cant get in the play area when teleporting"): a
+// free spot is also one the token could walk to from where it arrives (from, a centre, else (cx, cy)), as fog.js arrivalOk judges it: no wall or barrier
+// between, not in a wall's cell, inside the map's play area where it has one. Nearest first, as before. Where no spot passes, the token comes in
+// where it arrives, which it can walk off, and never beyond a wall. With no fog module, or none of those on the map, exactly as before
+function freeSpotNear(map, cx, cy, w, h, avoidId, portal, from) {
     var others = (map.whiteboard || []).filter(function(o) { return (o.isChar || o.waiting) && o.id !== avoidId; });   // Onboarding F1a: a waiting token holds its spot too
     var sq = !!(map && map.meta && map.meta.gridType === 'square');   // grid-shaped tokens: a square grid seats in its 50 px cells
     function seated(x, y) {   // where a token placed at (x, y) ends up after seating on this map (a hex cell, a square cell)
@@ -3785,25 +3789,30 @@ function freeSpotNear(map, cx, cy, w, h, avoidId, portal) {
         if (portal && x < portal.x + (portal.w || 0) && x + w > portal.x && y < portal.y + (portal.h || 0) && y + h > portal.y) return true;
         return others.some(function(o) { return x < o.x + (o.w || 0) && x + w > o.x && y < o.y + (o.h || 0) && y + h > o.y; });
     }
+    var F = typeof window === 'object' && window && window.wpFog && typeof window.wpFog.arrivalOk === 'function' ? window.wpFog : null;
+    var fc = from && typeof from === 'object' && isFinite(from.x) && isFinite(from.y) ? from : { x: cx, y: cy }, fx = fc.x - w / 2, fy = fc.y - h / 2, tok = { w: w, h: h };
+    function walks(x, y) { if (!F) return true; try { return F.arrivalOk(map, tok, fx, fy, x, y) !== false; } catch (e) { return true; } }   // the one judge of walls, barriers and the play area (a judge that fails stops nothing, as before)
     var step = sq ? Math.ceil(Math.max(w, h) / 50) * 50 : Math.max(w, h) + 8, x0 = cx - w / 2, y0 = cy - h / 2, tried = {};   // on a square grid a step is whole cells (no cell skipped)
     var first = seated(x0, y0);
-    if (!clashes(first.x, first.y)) return first;
+    if (!clashes(first.x, first.y) && walks(first.x, first.y)) return first;
     for (var ring = 1; ring <= 8; ring++) {
         for (var dy = -ring; dy <= ring; dy++) for (var dx = -ring; dx <= ring; dx++) {
             if (Math.max(Math.abs(dx), Math.abs(dy)) !== ring) continue;
             var p = seated(x0 + dx * step, y0 + dy * step), k = Math.round(p.x) + ',' + Math.round(p.y);
             if (tried[k]) continue; tried[k] = true;
-            if (!clashes(p.x, p.y)) return p;
+            if (!clashes(p.x, p.y) && walks(p.x, p.y)) return p;
         }
     }
-    return first;
+    if (walks(first.x, first.y)) return first;
+    var home = seated(fx, fy);   // nothing passes: where it arrives (the portal's own spot, the landing room's), never beyond a wall
+    return walks(home.x, home.y) ? home : { x: fx, y: fy };
 }
 // The token left behind steps off the portal so the next crossing is not blocked
 function stepOffPortal(item, portal, map) {
     if (!item || !portal || !map) return;
     var w = item.w || 60, h = item.h || 52;
     var cx = portal.x + (portal.w || 0) / 2, cy = portal.y + (portal.h || 0) + h / 2 + 12;   // just below the portal
-    var p = freeSpotNear(map, cx, cy, w, h, item.id, portal);
+    var p = freeSpotNear(map, cx, cy, w, h, item.id, portal, { x: portal.x + (portal.w || 0) / 2, y: portal.y + (portal.h || 0) / 2 });   // 1.5.9: a spot it walks to from the portal it stands on, never one beyond a wall
     item.x = p.x; item.y = p.y;
     if (window.wpSeatHex) window.wpSeatHex(item, map);
 }
@@ -3877,6 +3886,7 @@ function offlinePlayerTravel(item, map) {
         mine.ownerId = item.ownerId; if ((src.op === 'clone' || src.op === 'link') && src.charId) mine.charId = src.charId;   // never stamps the character onto a copy of a pet
         delete mine.threats;   // 5h: threat marks belong to the map they were set on
         delete mine.hidden;
+        delete mine.locked; delete mine.groupId;   // 1.5.9: a lock and a group belong to the map they were set on too (a token locked once on one map made every copy locked)
         var Sd = SC(); if (Sd && Sd.shapeStandIn) Sd.shapeStandIn(mine, dest);   // grid-shaped tokens: it comes in in the destination's cell shape
         var spot = freeSpotNear(dest, sx, sy, mine.w || 60, mine.h || 52, null, nodeEl);
         mine.x = spot.x; mine.y = spot.y;
@@ -3885,7 +3895,7 @@ function offlinePlayerTravel(item, map) {
         var spot2 = freeSpotNear(dest, sx, sy, mine.w || 60, mine.h || 52, mine.id, nodeEl);
         mine.x = spot2.x; mine.y = spot2.y;
     }
-    if (S && S.ownedTokenPlan) S.applyOwnerOps(camp, S.ownedTokenPlan(camp, { keep: mine.id, mapId: dest.id, all: !sheetsOnFor(camp) }));   // one owned token of the character there
+    if (S && S.ownedTokenPlan) { var opsO = S.ownedTokenPlan(camp, { keep: mine.id, mapId: dest.id, all: !sheetsOnFor(camp) }); S.applyOwnerOps(camp, opsO); if (typeof passNote === 'function') passNote(camp, dest, opsO); }   // one owned token of the character there; the GM is told of a token that passes to them
     stepOffPortal(item, portal, map);
     if (window.wpHistBarrier) window.wpHistBarrier([map.id, dest.id]);   // a move between two maps: neither side can be undone past it
     net.applyingRemote = true; save(true); net.applyingRemote = false;
@@ -3952,7 +3962,7 @@ function handlePos(msg, conn) {
         try {
         if (net.paused || peerPaused(conn.peer)) return;   // frozen table (or this player is paused): client motion is dropped
         var pr = net.roster[conn.peer];
-        if (!pr || w.ownerId !== pr.id) return;   // same ownership rule as full patches
+        if (!pr || w.ownerId !== pr.id) { if (pr && !w.ownerId && w.isChar && !w.hidden) notMineNote(conn, pr, camp, w); return; }   // same ownership rule as full patches; 1.5.9: a shown token of their own character that the GM holds now says so, at most once in 10 s
         if (w.hidden || !(w.isChar || w.waiting) || (typeof pr.location === 'string' && msg.itemId !== pr.location)) return;   // the same Hide rule as patches (a final pos used to fire travel and room handouts), a character token only, on the map they are on
         msg.final = msg.final === true;   // one reading of final everywhere below (handouts and seating used to take any truthy value)
         if (w.locked) return;   // and the same lock rule: a token the GM locked is frozen for its player
@@ -4043,6 +4053,18 @@ function turnNote(conn, text, cid) {   // cid (the bell): the character it is ab
     if (!conn || typeof conn.send !== 'function') return;
     var m = { type: 'turn-note', text: String(text).slice(0, 200) }; if (typeof cid === 'string' && /^c_[A-Za-z0-9_]{1,24}$/.test(cid)) m.charId = cid;
     try { conn.send(m); } catch (e) { sendFailed(e); }
+}
+// 1.5.9 (the frozen-token investigation): a player who moves a token that passed to the GM (a character kept or still being made, a second copy)
+// is told so in the app's own fixed words, at most once in 10 s per player: only of a token of a character of their own (never an NPC's, a
+// hidden token or another player's, whose existence or keeping is not theirs to learn this way)
+var _notMineAt = Object.create(null), NOT_MINE_MS = 10000;
+function notMineNote(conn, pr, camp, w) {
+    var k = pr && typeof pr.id === 'string' ? pr.id : '', now = Date.now(); if (!k) return;
+    var cs = camp && camp.chars && typeof camp.chars === 'object' ? camp.chars : null, c = cs && w && typeof w.charId === 'string' && Object.prototype.hasOwnProperty.call(cs, w.charId) ? cs[w.charId] : null;
+    if (!c || c.ownerId !== k) return;
+    if (now - (_notMineAt[k] || 0) < NOT_MINE_MS) return;
+    if (Object.keys(_notMineAt).length > 500) _notMineAt = Object.create(null);
+    _notMineAt[k] = now; turnNote(conn, "That token is the GM's to move now.");
 }
 // Secrets (R2): a trigger zone's message is kept off every copy of the map (wireWbItem), so the host says it to the player whose own token lands
 // in a shown zone — the test the dropper's app ran on its own copy before (datamap.js: the token's centre inside the zone's box, a box 100 by 100
@@ -5610,7 +5632,7 @@ function ensurePlayerToken(pid, mapId, landRoomId, opts) {
     map.whiteboard = map.whiteboard || [];
     var sheetsOn = sheetsOnFor(camp), src = S.tokenSourceFor(camp, pid, mapId, { noSpawn: !sheetsOn });
     if (src.op === 'adopt' || (src.op === 'link' && src.here)) { src.tok.ownerId = pid; if (src.charId) src.tok.charId = src.charId; keepId = src.tok.id; changed = true; }
-    else if (src.op === 'clone' || src.op === 'link') { nw = JSON.parse(JSON.stringify(src.tok)); delete nw.threats; delete nw.hidden; nw.id = 'wb' + Math.random().toString(36).slice(2, 10); nw.ownerId = pid; if (src.charId) nw.charId = src.charId; }   // 5h: threat marks belong to the map they were set on
+    else if (src.op === 'clone' || src.op === 'link') { nw = JSON.parse(JSON.stringify(src.tok)); delete nw.threats; delete nw.hidden; delete nw.locked; delete nw.groupId; nw.id = 'wb' + Math.random().toString(36).slice(2, 10); nw.ownerId = pid; if (src.charId) nw.charId = src.charId; }   // 5h: threat marks belong to the map they were set on
     else if (src.op === 'spawn' && (camp && camp.chars && typeof src.charId === 'string' && Object.prototype.hasOwnProperty.call(camp.chars, src.charId) ? camp.chars[src.charId] : null)) nw = tokenFromChar((camp && camp.chars && typeof src.charId === 'string' && Object.prototype.hasOwnProperty.call(camp.chars, src.charId) ? camp.chars[src.charId] : null), pid);
     if (nw && S.shapeStandIn) S.shapeStandIn(nw, map);   // grid-shaped tokens: a new token, or one copied from another map, takes this map's cell shape
     if (nw) {
@@ -5628,7 +5650,8 @@ function ensurePlayerToken(pid, mapId, landRoomId, opts) {
     var ops = S.ownedTokenPlan(camp, { keep: keepId, mapId: mapId, all: !sheetsOn });
     if (ops.length) {
         S.applyOwnerOps(camp, ops); changed = true;
-        if (ops.some(function(o) { return !o.ownerId; })) toast('A second copy of ' + (pl.name || 'a player') + '\u2019s token on this map passes to GM control (still linked to the character).');
+        if (typeof passNote === 'function') passNote(camp, map, ops);   // 1.5.9: the GM is told which token passed to them, and why
+        else if (ops.some(function(o) { return !o.ownerId; })) toast('A second copy of ' + (pl.name || 'a player') + '\u2019s token on this map passes to GM control (still linked to the character).');
     }
     var wMaps = settleWaiting(camp, pid, map, src.op, landRoomId, opts.near && isFinite(opts.near.x) && isFinite(opts.near.y) ? opts.near : null);   // Onboarding F1a: a waiting token when they have nothing here, gone once they have a token
     if (wMaps.length) changed = true;
@@ -5642,6 +5665,31 @@ function ensurePlayerToken(pid, mapId, landRoomId, opts) {
     return changed;
 }
 
+// [netcheck:passnote-start]
+// 1.5.9 (the frozen-token investigation): the chooser (systemcore ownedTokenPlan) takes the owner off a token of a character that is kept (a
+// player plays one character at a time), still being made, an NPC or no player's, and off a second copy of a token on one map. The GM is told
+// once, as it happens, in one notice naming each token and why (three named, then how many more); the player's drags of it are answered by
+// notMineNote. ops: the chooser's, as applied. Returns the words, or '' when no token passed
+function passNote(camp, map, ops) {
+    var S = typeof SC === 'function' ? SC() : null, wb = map && Array.isArray(map.whiteboard) ? map.whiteboard : [], chars = camp && camp.chars && typeof camp.chars === 'object' ? camp.chars : {}, said = [];
+    (Array.isArray(ops) ? ops : []).forEach(function(o) {
+        if (!o || o.ownerId || o.mapId !== (map && map.id)) return;
+        var w = wb.find(function(x) { return x && x.id === o.wbId; }); if (!w) return;
+        var c = typeof w.charId === 'string' && Object.prototype.hasOwnProperty.call(chars, w.charId) ? chars[w.charId] : null;
+        var nm = String((c && c.name) || w.charName || w.name || 'A character').slice(0, 60), why;
+        if (!c) why = 'it is a second copy on this map';
+        else if (c.making === 1) why = 'the character is still being made';
+        else if (c.npc === true) why = 'the character is an NPC';
+        else if (!c.ownerId) why = 'the character has no player';
+        else { var act = S && S.activeCharOf ? S.activeCharOf(camp, c.ownerId) : null; why = act && act.id && act.id !== c.id ? 'the character is kept, as its player plays another' : 'it is a second copy on this map'; }
+        said.push(nm + '\u2019s token passed to you: ' + why + '.');
+    });
+    if (!said.length) return '';
+    var on = ' On ' + String((map.meta || {}).title || 'this map').slice(0, 80) + '.', text = said.slice(0, 3).join(' ') + (said.length > 3 ? ' And ' + (said.length - 3) + ' more.' : '') + on + ' Still linked to the character.';
+    toast(text); if (typeof logEvent === 'function') logEvent('char', text);
+    return text;
+}
+// [netcheck:passnote-end]
 /* ---------- Onboarding F1a: the waiting token ---------- */
 // [netcheck:waiting-start]
 // A connected player who has nothing on the map they are on gets a WAITING token: their face in a dashed circle they may move, which is

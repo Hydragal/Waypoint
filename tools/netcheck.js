@@ -6364,6 +6364,141 @@ pendingChecks.push((async () => {
         j(f2) === j({ x: 100, y: 200 }) && f1.x % 50 === 0 && f1.y % 50 === 0 && Math.max(Math.abs(f1.x - 100), Math.abs(f1.y - 200)) === 50 && j(f3) === j({ x: 112, y: 216 })
         && f4.x % 50 === 0 && f4.y % 50 === 0 && Math.max(Math.abs(f4.x - 100), Math.abs(f4.y - 200)) === 150 && j(f5) === j({ x: 250, y: 250 }), j([f1, f2, f3, f4, f5]));
 })());
+// 1.5.9 (the owner, at the table, 2026-10-25: "sometimes players land outside of a wall and cant get in the play area when teleporting"): an
+// arrival spot is one the token could walk to. The real freeSpotNear, stepOffPortal and spawnSpot over the real vision half of fog.js
+// (arrivalOk, moveBlocked, moveSetFor, fogMask) and fogcore: beside a wall on a square and on a hex map the token lands on the portal's side and
+// never in a wall's cell, a full ring with nothing but spots beyond a wall lands it on the portal itself, a play area is kept to, a secret door
+// is a wall and an open door is not; with no walls and no play area every spot is the very spot the code gives without the fog module. Then a
+// token copied for its player keeps no lock and no group (the real ensurePlayerToken), the GM is told once which token passed to them and why
+// (the real passNote over the real systemcore chooser), and a player's move of a token of their own character that the GM holds is answered by
+// one note in 10 s (the real notMineNote)
+pendingChecks.push((async () => {
+    const url = f => 'file:///' + path.resolve(path.join(__dirname, '..', 'system', 'app', 'scripts', f)).split(String.fromCharCode(92)).join('/');
+    const FCx = await import(url('fogcore.js')), Sx = await import(url('systemcore.js'));
+    const fogT = fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', 'fog.js'), 'utf8').replace(/\r\n/g, '\n');
+    const fogV = fogT.slice(fogT.indexOf('function core() {'), fogT.indexOf('/* ---------- the overlay'));
+    const J = JSON.stringify;
+    const camp = { id: 'k', items: {}, chars: {}, players: {} };
+    const win = { wpFogCore: FCx, wpSystemCore: Sx, wpVtt: { on: () => true, campaignOn: () => true, mode: () => 'host' } };
+    const fog = new Function('window', 'document', 'getActiveMap', 'getActiveCampaign', 'state', "'use strict';\n" + fogV + '\nreturn { arrivalOk: arrivalOk, moveBlocked: moveBlocked };')(win, { getElementById: () => null }, () => null, () => camp, { appState: { campaigns: { k: camp } } });
+    const fsS = fnSrc('function freeSpotNear(', '\nfunction ', 'freeSpotNear'), soS = fnSrc('function stepOffPortal(', '\nfunction ', 'stepOffPortal'), ssS = fnSrc('function spawnSpot(', '\n/* Host: player P', 'spawnSpot');
+    const mk = (w, lp) => new Function('window', 'landingPoint', fsS + '\n' + soS + '\n' + ssS + '\nreturn { freeSpotNear: freeSpotNear, stepOffPortal: stepOffPortal, spawnSpot: spawnSpot };')(w, lp || (() => null));
+    const withFog = mk({ wpFog: fog }), noFog = mk({});
+    let n = 0; const M = (grid, wb) => { const m = { id: 'mt' + (++n), type: 'map', meta: { title: 'T', gridType: grid, updated: n }, rooms: [], whiteboard: wb }; camp.items[m.id] = m; return m; };
+    const tokAt = (c, r) => ({ id: 'o' + c + '_' + r, isChar: true, x: c * 50, y: r * 50, w: 50, h: 50 });
+    const portal = { id: 'pt', type: 'rect', x: 500, y: 500, w: 50, h: 50, targetMapId: 'mX' };
+    const wallCol = { id: 'wl', type: 'rect', x: 550, y: 0, w: 50, h: 1500, blocksSight: true };   // the column of cells 11 beside the portal (cell 10)
+    const crowd = []; for (let c = 8; c <= 10; c++) for (let r = 8; r <= 12; r++) if (!(c === 10 && r === 10)) crowd.push(tokAt(c, r));   // every cell on the portal's side within two rings
+    const mSq = M('square', [portal, wallCol].concat(crowd));
+    const aSq = withFog.freeSpotNear(mSq, 525, 525, 50, 50, null, portal), bSq = noFog.freeSpotNear(mSq, 525, 525, 50, 50, null, portal);
+    const sideOk = p => p.x + 25 < 550 && !fog.moveBlocked(mSq, { w: 50, h: 50 }, 500, 500, p.x, p.y);
+    check('1.5.9 arrival: beside a wall on a square map the token lands on the portal\'s side, the nearest free cell there (two rings of tokens on that side, a wall\'s column of cells on the other), never in a wall\'s cell nor beyond the wall, where the spot without the judge was in the wall',
+        J(aSq) === J({ x: 350, y: 350 }) && sideOk(aSq) && J(bSq) === J({ x: 550, y: 450 }), J([aSq, bSq]));
+    // a hex map: a band of wall wide enough that every spot on its side is in it or beyond it
+    const pH = { id: 'ph', type: 'rect', x: 1000, y: 1000, w: 60, h: 52, targetMapId: 'mX' }, cxH = 1030, cyH = 1026, stH = 68;
+    const bandH = { id: 'bh', type: 'rect', x: cxH + 40, y: 0, w: 260, h: 3000, blocksSight: true };
+    const crowdH = []; [[-1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]].forEach(([dx, dy], i) => crowdH.push({ id: 'h' + i, isChar: true, x: cxH - 30 + dx * stH, y: cyH - 26 + dy * stH, w: 60, h: 52 }));
+    const mHx = M('hex', [pH, bandH].concat(crowdH));
+    const aH = withFog.freeSpotNear(mHx, cxH, cyH, 60, 52, null, pH), bH = noFog.freeSpotNear(mHx, cxH, cyH, 60, 52, null, pH);
+    check('1.5.9 arrival: beside a wall on a hex map the token lands on the portal\'s side (the nearest spots there taken), where the spot without the judge was in the wall',
+        aH.x + 30 < cxH + 40 && !fog.moveBlocked(mHx, { w: 60, h: 52 }, cxH - 30, cyH - 26, aH.x, aH.y) && bH.x + 30 > cxH + 40 && J(aH) === J({ x: cxH - 30 - 2 * stH, y: cyH - 26 - 2 * stH }), J([aH, bH]));
+    // a full ring: the eight cells round the portal taken, walls round them, nothing but spots beyond a wall
+    const ring = []; for (let c = 9; c <= 11; c++) for (let r = 9; r <= 11; r++) if (!(c === 10 && r === 10)) ring.push(tokAt(c, r));
+    const walls = [{ id: 'wn', type: 'rect', x: 400, y: 400, w: 250, h: 50, blocksSight: true }, { id: 'ws', type: 'rect', x: 400, y: 600, w: 250, h: 50, blocksSight: true }, { id: 'ww', type: 'rect', x: 400, y: 450, w: 50, h: 150, blocksSight: true }, { id: 'we', type: 'rect', x: 600, y: 450, w: 50, h: 150, blocksSight: true }];
+    const mRing = M('square', [portal].concat(walls, ring)), aR = withFog.freeSpotNear(mRing, 525, 525, 50, 50, null, portal), bR = noFog.freeSpotNear(mRing, 525, 525, 50, 50, null, portal);
+    check('1.5.9 arrival: a full ring round the portal with nothing past it but spots beyond a wall lands the token on the portal itself (it can walk off it), where the spot without the judge was beyond the wall',
+        J(aR) === J({ x: 500, y: 500 }) && !(bR.x === 500 && bR.y === 500), J([aR, bR]));
+    // a spot in a wall's cell is refused: the cell right below the portal is a wall's, the others round it free
+    const mCell = M('square', [portal, { id: 'wc', type: 'rect', x: 500, y: 550, w: 50, h: 50, blocksSight: true }]);
+    const cellA = withFog.freeSpotNear(mCell, 525, 575, 50, 50, null, portal, { x: 525, y: 525 }), cellB = noFog.freeSpotNear(mCell, 525, 575, 50, 50, null, portal, { x: 525, y: 525 });
+    check('1.5.9 arrival: a spot in a wall\'s cell is refused (the very cell asked for is a wall\'s), the nearest free cell beside it taken, where the spot without the judge was the wall\'s cell',
+        J(cellB) === J({ x: 500, y: 550 }) && J(cellA) === J({ x: 450, y: 500 }), J([cellA, cellB]));
+    // a play area: the cells 8 to 10 across, 8 to 12 down; the two cells above the portal taken, the one beyond the area's edge refused
+    const area = { id: 'pa', type: 'rect', x: 400, y: 400, w: 150, h: 250, fogged: true };
+    const mPA = M('square', [area, portal, tokAt(9, 9), tokAt(10, 9)]), aP = withFog.freeSpotNear(mPA, 525, 525, 50, 50, null, portal), bP = noFog.freeSpotNear(mPA, 525, 525, 50, 50, null, portal);
+    const hiddenArea = M('square', [Object.assign({}, area, { hidden: true }), portal, tokAt(9, 9), tokAt(10, 9)]), aPh = withFog.freeSpotNear(hiddenArea, 525, 525, 50, 50, null, portal);
+    check('1.5.9 arrival: a map\'s play area is kept to (a spot outside it refused, the nearest inside taken); a hidden play area marks none',
+        J(bP) === J({ x: 550, y: 450 }) && J(aP) === J({ x: 450, y: 500 }) && J(aPh) === J(bP), J([aP, bP, aPh]));
+    // a secret door is a wall, an open door is not, a hidden wall is none
+    const door = o => ({ id: 'dr', type: 'rect', x: 500, y: 550, w: 50, h: 50, blocksSight: true, sightType: 'door', doorOpen: true, ...o });
+    const dOpen = withFog.freeSpotNear(M('square', [portal, door({})]), 525, 575, 50, 50, null, portal, { x: 525, y: 525 });
+    const dSecret = withFog.freeSpotNear(M('square', [portal, door({ secret: true })]), 525, 575, 50, 50, null, portal, { x: 525, y: 525 });
+    const dHid = withFog.freeSpotNear(M('square', [portal, { id: 'wh', type: 'rect', x: 500, y: 550, w: 50, h: 50, blocksSight: true, hidden: true }]), 525, 575, 50, 50, null, portal, { x: 525, y: 525 });
+    check('1.5.9 arrival: a secret door is a wall (its cell refused, open or not), an open door is not and a hidden wall is none (their cells taken)',
+        J(dOpen) === J({ x: 500, y: 550 }) && J(dSecret) === J({ x: 450, y: 500 }) && J(dHid) === J({ x: 500, y: 550 }), J([dOpen, dSecret, dHid]));
+    // stepOffPortal: a wall row right below the portal; the token left behind steps off on the portal's side, walked from the portal itself
+    const rowS = { id: 'rs', type: 'rect', x: 0, y: 550, w: 1500, h: 50, blocksSight: true };
+    const mSO = M('square', [portal, rowS]), leftA = { id: 'lt', isChar: true, x: 500, y: 500, w: 50, h: 50 }, leftB = Object.assign({}, leftA);
+    withFog.stepOffPortal(leftA, portal, mSO); noFog.stepOffPortal(leftB, portal, mSO);
+    const mSO2 = M('square', [portal, { id: 'rr', type: 'rect', x: 0, y: 550, w: 1500, h: 400, blocksSight: true }]), leftC = { id: 'lc', isChar: true, x: 500, y: 500, w: 50, h: 50 };
+    withFog.stepOffPortal(leftC, portal, mSO2);
+    check('1.5.9 arrival: stepOffPortal walks from the portal it stands on: with a wall row just below, the token steps off beside the portal on its side, where without the judge it stood in the wall; a wall the whole way below still finds the portal\'s side',
+        J([leftB.x, leftB.y]) === J([500, 550]) && leftA.y + 25 < 550 && !fog.moveBlocked(mSO, { w: 50, h: 50 }, 500, 500, leftA.x, leftA.y) && leftC.y + 25 < 550, J([leftA, leftB, leftC]));
+    // spawnSpot: the landing room's item is the portal inside the ring of walls; a spot beside a token given is walked from it
+    const lp = () => ({ wbX: 525, wbY: 525, wbItemId: 'pt' }), spawnF = mk({ wpFog: fog }, lp), spawnN = mk({}, lp);
+    const mSp = M('square', [portal].concat(walls, ring)); mSp.rooms = [{ id: 'room1' }];
+    const sA = spawnF.spawnSpot(mSp, 'room1', null, 50, 50, null), sB = spawnN.spawnSpot(mSp, 'room1', null, 50, 50, null);
+    const mNear = M('square', [rowS, tokAt(10, 10), tokAt(9, 9), tokAt(10, 9), tokAt(11, 9), tokAt(9, 10), tokAt(11, 10)]);
+    const sNear = spawnF.spawnSpot(mNear, null, { x: 525, y: 525 }, 50, 50, null), sNearB = spawnN.spawnSpot(mNear, null, { x: 525, y: 525 }, 50, 50, null);
+    check('1.5.9 arrival: spawnSpot alike: a landing room ringed by tokens and walls lands the token on its own spot, and one placed beside a token never crosses the wall below it',
+        J(sA) === J({ x: 500, y: 500 }) && !(sB.x === 500 && sB.y === 500) && J(sNear) === J({ x: 400, y: 400 }) && J(sNearB) === J({ x: 450, y: 550 }), J([sA, sB, sNear, sNearB]));
+    // no walls and no play area: every spot the very one the code gives without the fog module (seeded, on a square, a hex and no grid)
+    let seed = 7; const rnd = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+    const diffs = []; let runs = 0;
+    ['square', 'hex', 'off'].forEach(g => { for (let t = 0; t < 60; t++) {
+        const wb = []; const k = Math.floor(rnd() * 40); for (let i = 0; i < k; i++) wb.push({ id: 'r' + i, isChar: rnd() < 0.8, waiting: rnd() < 0.1 ? 1 : undefined, x: Math.round(rnd() * 800), y: Math.round(rnd() * 800), w: 50 + Math.round(rnd() * 20), h: 50 });
+        if (rnd() < 0.5) wb.push({ id: 'deco', type: 'rect', x: 100, y: 100, w: 300, h: 300 });   // a piece that blocks nothing
+        const pp = rnd() < 0.7 ? { id: 'pp', type: 'rect', x: 300, y: 300, w: 60, h: 52 } : null, m = M(g, wb.concat(pp ? [pp] : []));
+        const cx = 300 + Math.round(rnd() * 200), cy = 300 + Math.round(rnd() * 200), w = 50 + Math.round(rnd() * 30), h = 50;
+        const a = withFog.freeSpotNear(m, cx, cy, w, h, null, pp), b = noFog.freeSpotNear(m, cx, cy, w, h, null, pp); runs++;
+        if (J(a) !== J(b)) diffs.push([g, t, a, b]);
+    } });
+    check('1.5.9 arrival: on a map with no wall, no barrier and no play area every spot is the very spot the code gives without the fog module, byte for byte (180 seeded maps on a square grid, a hex grid and none)',
+        runs === 180 && diffs.length === 0, J(diffs.slice(0, 3)));
+    check('1.5.9 arrival: the judge is fog.js arrivalOk, published on window.wpFog beside moveBlocked, which freeSpotNear asks through typeof; stepOffPortal walks from the portal\'s centre',
+        /moveBlocked: moveBlocked, arrivalOk: arrivalOk,/.test(fogT) && /\nfunction arrivalOk\(map, w, fx, fy, tx, ty\) \{\n    if \(!map \|\| map\.type !== 'map'\) return true;\n    if \(moveBlocked\(map, w, fx, fy, tx, ty\)\) return false;/.test(fogT)
+        && /window\.wpFog && typeof window\.wpFog\.arrivalOk === 'function'/.test(fsS) && /freeSpotNear\(map, cx, cy, w, h, item\.id, portal, \{ x: portal\.x \+ \(portal\.w \|\| 0\) \/ 2, y: portal\.y \+ \(portal\.h \|\| 0\) \/ 2 \}\);/.test(soS));
+    // a token copied for its player keeps no lock and no group: the real ensurePlayerToken with a clone from another map
+    const epS = fnSrc('function ensurePlayerToken(', '\n// [netcheck:passnote-start]', 'ensurePlayerToken');
+    const pnS = src.slice(src.indexOf('// [netcheck:passnote-start]'), src.indexOf('// [netcheck:passnote-end]'));
+    const runEnsure = () => {
+        const toasts = [], logs = [], src0 = { id: 'tk1', isChar: true, charId: 'c_k', ownerId: 'u_a', x: 0, y: 0, w: 50, h: 50, locked: true, groupId: 'g1', threats: ['x'] };
+        const ca = { id: 'k2', items: { mFrom: { id: 'mFrom', type: 'map', meta: {}, whiteboard: [src0] }, mTo: { id: 'mTo', type: 'map', meta: { title: 'The Inn' }, whiteboard: [] } }, chars: { c_k: { id: 'c_k', name: 'Kael', ownerId: 'u_a' } }, players: { u_a: { name: 'Ana', charId: 'c_k' } } };
+        const S = { tokenSourceFor: () => ({ op: 'clone', tok: src0, charId: 'c_k' }), ownedTokenPlan: () => [], applyOwnerOps() {}, waitingTokensOf: () => [] };
+        const api = new Function('net', 'getActiveCampaign', 'SC', 'own', 'healBindings', 'sheetsOnFor', 'tokenFromChar', 'spawnSpot', 'toast', 'logEvent', 'settleWaiting', 'save', 'render', 'window', epS + '\n' + pnS + '\nreturn ensurePlayerToken;')(
+            { role: 'host', broadcastItemFiltered() {} }, () => ca, () => S, (o, k) => !!o && Object.prototype.hasOwnProperty.call(o, k), () => {}, () => true, () => null, () => ({ x: 100, y: 100 }), t => toasts.push(t), (k, t) => logs.push(t), () => [], () => {}, () => {}, {});
+        api('u_a', 'mTo', null);
+        return { made: ca.items.mTo.whiteboard[0], src0: src0, toasts: toasts };
+    };
+    const ens = runEnsure();
+    check('1.5.9 arrival: a token copied for its player on arrival (the real ensurePlayerToken, a copy from another map) keeps no lock, no group and no threat marks, while the token it was copied from keeps its own; the GM\'s walk through a portal drops the same two',
+        !!ens.made && !('locked' in ens.made) && !('groupId' in ens.made) && !('threats' in ens.made) && ens.made.ownerId === 'u_a' && ens.src0.locked === true && ens.src0.groupId === 'g1'
+        && /delete mine\.threats;[^\n]*\n\s*delete mine\.hidden;\n\s*delete mine\.locked; delete mine\.groupId;/.test(src) && /nw = JSON\.parse\(JSON\.stringify\(src\.tok\)\); delete nw\.threats; delete nw\.hidden; delete nw\.locked; delete nw\.groupId;/.test(src), J(ens));
+    // the GM is told which token passed to them, and why: the real chooser over a player with two characters, one kept, one in the making, a second copy
+    const toastsP = [], logsP = [];
+    const PN = new Function('SC', 'toast', 'logEvent', pnS + '\nreturn passNote;')(() => Sx, t => toastsP.push(t), (k, t) => logsP.push([k, t]));
+    const T2 = (id, charId, owner, more) => Object.assign({ id: id, type: 'image', isChar: true, charId: charId, charName: id, x: 0, y: 0, w: 50, h: 50 }, owner ? { ownerId: owner } : {}, more || {});
+    const cP = { id: 'k3', items: { mI: { id: 'mI', type: 'map', meta: { title: 'The Inn' }, whiteboard: [T2('tKael', 'c_kael', 'u_a'), T2('tMira', 'c_mira', 'u_a'), T2('tMira2', 'c_mira', 'u_a'), T2('tNew', 'c_new', 'u_a')] } },
+        chars: { c_kael: { id: 'c_kael', name: 'Kael', ownerId: 'u_a' }, c_mira: { id: 'c_mira', name: 'Mira', ownerId: 'u_a' }, c_new: { id: 'c_new', name: 'Pebbles', ownerId: 'u_a', making: 1 } }, players: { u_a: { name: 'Ana', charId: 'c_mira' } } };
+    const opsP = Sx.ownedTokenPlan(cP, { keep: 'tMira', mapId: 'mI' }); Sx.applyOwnerOps(cP, opsP);
+    const said = PN(cP, cP.items.mI, opsP), again = PN(cP, cP.items.mI, Sx.ownedTokenPlan(cP, { keep: 'tMira', mapId: 'mI' }));
+    check('1.5.9 arrival: a token that passes to the GM is said once, in one notice naming each token and why (a kept character, one still being made, a second copy), logged; once passed nothing passes again and nothing is said',
+        said === 'Kael\u2019s token passed to you: the character is kept, as its player plays another. Pebbles\u2019s token passed to you: the character is still being made. Mira\u2019s token passed to you: it is a second copy on this map. On The Inn. Still linked to the character.'
+        && J(toastsP) === J([said]) && J(logsP) === J([['char', said]]) && again === '' && toastsP.length === 1
+        && /if \(typeof passNote === 'function'\) passNote\(camp, map, ops\);/.test(src) && /S\.applyOwnerOps\(camp, opsO\); if \(typeof passNote === 'function'\) passNote\(camp, dest, opsO\);/.test(src), J([said, toastsP, logsP, opsP]));
+    // a player's move of a token the GM holds: one note in 10 s, only of a token of a character of their own
+    const posS = between('// [netcheck:pos-start]', '// [netcheck:pos-end]', 'pos');
+    const nmA = posS.indexOf('var _notMineAt'), nmS = posS.slice(nmA, posS.indexOf('\n}\n', nmA) + 3), tnS = posS.slice(posS.indexOf('function turnNote('), posS.indexOf('\n}\n', posS.indexOf('function turnNote(')) + 3);
+    let clock = 1000000; const sent = [];
+    const NM = new Function('Date', 'sendFailed', tnS + nmS + '\nreturn notMineNote;')({ now: () => clock }, () => {});
+    const conn = { send: m => sent.push(m) }, prA = { id: 'u_a' }, campN = { chars: { c_kael: { id: 'c_kael', ownerId: 'u_a' }, c_n: { id: 'c_n', npc: true }, c_b: { id: 'c_b', ownerId: 'u_b' } } };
+    NM(conn, prA, campN, { charId: 'c_kael' }); NM(conn, prA, campN, { charId: 'c_kael' }); clock += 9999; NM(conn, prA, campN, { charId: 'c_kael' });
+    const one = sent.length; clock += 1; NM(conn, prA, campN, { charId: 'c_kael' }); const two = sent.length;
+    clock += 20000; NM(conn, prA, campN, { charId: 'c_n' }); NM(conn, prA, campN, { charId: 'c_b' }); NM(conn, prA, campN, { charId: '__proto__' }); NM(conn, prA, campN, {});
+    check('1.5.9 arrival: a player who moves a token of their own character that the GM holds is told once in the app\'s own fixed words, again only after 10 s, and never of an NPC\'s token, another player\'s or one with no character; the pos gate asks it for a shown character token with no owner alone',
+        one === 1 && two === 2 && sent.length === 2 && J(sent[0]) === J({ type: 'turn-note', text: 'That token is the GM\'s to move now.' })
+        && /if \(!pr \|\| w\.ownerId !== pr\.id\) \{ if \(pr && !w\.ownerId && w\.isChar && !w\.hidden\) notMineNote\(conn, pr, camp, w\); return; \}/.test(posS), J(sent));
+})());
 {   // the token creator (fold 2): a token's kept original never leaves the host (sanitizeItem, run for real)
     const siA = src.indexOf('function sanitizeItem(');
     const siF = new Function('window', siSrc() + '\nreturn sanitizeItem;')({});
