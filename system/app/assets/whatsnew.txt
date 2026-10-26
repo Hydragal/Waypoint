@@ -28,6 +28,18 @@ Updates
   app, so it updates through the installer once. Press Update and
   Waypoint runs the installer for you.
 
+Travel
+- A token that comes through a portal lands where it can walk to. It is
+  never put past a wall, in a wall or outside the map's play area. With
+  no room near, it lands on the portal itself and can walk off it.
+  Before, a player could land beyond a wall and not get back in.
+- A token copied to the new map for its player comes unlocked and in no
+  group. Before, a token locked once on one map came locked onto every
+  map after, and nobody could drag it.
+- When a token passes to the GM, because its character is kept or still
+  being made or it is a second copy, the GM is told which and why. A
+  player who tries to move it is told it is the GM's to move now.
+
 WAYPOINT 1.5.8 — What's New
 ============================
 

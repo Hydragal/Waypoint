@@ -553,6 +553,19 @@ function moveBlocked(map, w, fx, fy, tx, ty) {
     var hw = ((w && w.w) || 60) / 2, hh = ((w && w.h) || 52) / 2;
     return !C.moveClear(fx + hw, fy + hh, tx + hw, ty + hh, grid, bl);
 }
+// 1.5.9 (the owner, at the table, 2026-10-25: "sometimes players land outside of a wall and cant get in the play area when teleporting"): may a
+// token that comes in at (fx, fy), its stored top-left where it arrives (a portal, a landing room, a spot given), be seated at (tx, ty)? Only
+// where it could WALK there (moveBlocked: the walls and the barriers, the very rule a player's move is judged by, so a spot in a wall's cell or
+// beyond a wall is none; a secret door is a wall, an open door is not) and, where the map has a play area (pieces marked fogged, as fogMask
+// reads them), only where the token's centre stands inside it. The one judge net.js freeSpotNear asks of every spot it tries. No grid: any spot
+function arrivalOk(map, w, fx, fy, tx, ty) {
+    if (!map || map.type !== 'map') return true;
+    if (moveBlocked(map, w, fx, fy, tx, ty)) return false;
+    var C = core(), grid = gridForMap(map); if (!C || !grid) return true;
+    var mask = fogMask(map, activeCamp(), grid); if (!mask || mask.mode !== 'set') return true;   // no play area marked: the whole map is in play
+    var hw = ((w && w.w) || 60) / 2, hh = ((w && w.h) || 52) / 2;
+    return inMask(mask, C.cellKey(C.cellOf(tx + hw, ty + hh, grid), grid));
+}
 // See-through barriers (1.5.1; the owner's ruling of 2026-10-03: "active force fields are see through and impassible"): what stops a player's
 // token on a map — the walls (the fog's own sight-blocker set, handed in) and every barrier, a piece flagged barrier that stops movement and
 // nothing else (fogcore barrierOn: never a hidden piece, a token or an open door). Asked by moveBlocked alone: sight, light, senses, marks,
@@ -2152,7 +2165,7 @@ window.wpFogRedraw = redraw;
 setTimeout(sync, 0);
 window.wpFog = {
     // host enforcement (net.js)
-    fogDropIds: fogDropIds, fogLitFor: fogLitFor, canSeePoint: canSeePoint, coverAt: coverAt, blastSeat: blastSeat, moveBlocked: moveBlocked, moveCells: moveCells, moveCost: moveCost, invalidateVision: invalidateVision, invalidateSeen: invalidateSeen, seenKeyOf: seenKeyOf, lightMoves: lightMoves, sightSigFor: sightSigFor, tokenSightCells: tokenSightCells, coverBetween: coverBetween,
+    fogDropIds: fogDropIds, fogLitFor: fogLitFor, canSeePoint: canSeePoint, coverAt: coverAt, blastSeat: blastSeat, moveBlocked: moveBlocked, arrivalOk: arrivalOk, moveCells: moveCells, moveCost: moveCost, invalidateVision: invalidateVision, invalidateSeen: invalidateSeen, seenKeyOf: seenKeyOf, lightMoves: lightMoves, sightSigFor: sightSigFor, tokenSightCells: tokenSightCells, coverBetween: coverBetween,
     PARTY: PARTY, fogPartyCells: fogPartyCells,   // R2 #14: the stream window's standpoint (the players' tokens together) and the cells it draws by, for its copy (net.js fogPartyCopy)
     // GM tools
     handNote: handNote,   // 1.5.4: what to say when a piece's fog mark cannot show yet (inspector.js, whiteboard.js)
