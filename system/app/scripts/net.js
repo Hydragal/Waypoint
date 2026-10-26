@@ -4726,8 +4726,29 @@ function fightReachTurn(c) {
     if (th[k] === 1) return false;
     th[k] = 1; return true;
 }
+// [netcheck:turnended-start]
+// 1.6.0: a turn's end, lived once. A forward step ends the turn of the row that was on, in the round it was on; a step back is a correction and
+// ends nothing, and a turn ended once is not ended again in that round. eh: the highest round a turn ended in, et: the rows ended in it (the
+// host's own, never sent, kept through a roster edit as rh and th are). true: this turn's end is the first
+function fightReachTurnEnd(c, round, row, at) {
+    if (!c || !row || typeof round !== 'number') return false;
+    var eh = typeof c.eh === 'number' ? c.eh : 0;
+    if (round > eh) { c.eh = round; c.et = Object.create(null); }
+    else if (round < eh) return false;
+    var et = c.et && typeof c.et === 'object' ? c.et : (c.et = Object.create(null)), k = typeof row.id === 'string' && row.id ? row.id : '#' + at;
+    if (et[k] === 1) return false;
+    et[k] = 1; return true;
+}
+// 1.6.0: the sheets' turn-end hook for the row whose turn just ended, as the fight stood in that round; a fault in it never stops the turn
+function turnEnded(mapId, c, row, round, at) {
+    if (!fightReachTurnEnd(c, round, row, at)) return;
+    try { if (window.wpSheets && window.wpSheets.turnEndHook) window.wpSheets.turnEndHook(mapId, Object.assign({}, c, { round: round, turn: 0, rows: [row] })); } catch (e) { console.error(e); }
+}
+// [netcheck:turnended-end]
 function fightReachKept(had, f) {   // a roster edit: how far the fight has gone, kept whole (a row taken out and put back in the same round keeps its turn had)
     if (typeof had.rh === 'number') f.rh = had.rh;
+    if (typeof had.eh === 'number') f.eh = had.eh;   // 1.6.0: and the turns it has ended
+    if (had.et && typeof had.et === 'object') f.et = had.et;
     if (had.th && typeof had.th === 'object') f.th = had.th;
     if (had.turned && typeof had.turned === 'object') f.turned = had.turned;
 }
@@ -5209,12 +5230,13 @@ function fightStep(fid, dir, by) {   // host: that fight's next turn (dir 1) or 
     var c = orderById(fid); if (!c || !c.rows.length) return;
     if (by !== 'player') net.fightOn = fid;   // fold 4: the GM's own step of a fight makes it the one played
     var campS = campNow(), a0 = timeCore() ? fightAtOf(c, campS) : null;   // fold 4: the fight's own time before the step
-    var mapId = c.mapId, t = c.turn + (dir < 0 ? -1 : 1), r0 = c.round, t0 = c.turn;
+    var mapId = c.mapId, t = c.turn + (dir < 0 ? -1 : 1), r0 = c.round, t0 = c.turn, endRow = dir > 0 && c.rows[t0] && !c.rows[t0].held ? c.rows[t0] : null;   // 1.6.0: the turn a forward step ends (never a held one)
     if (t >= c.rows.length) { t = 0; c.round += 1; }
     else if (t < 0) { if (c.round > 1) { c.round -= 1; t = c.rows.length - 1; } else t = 0; }
     c.turn = t;
     if (c.round !== r0) c.rows.forEach(function(r) { if (r) delete r.held; });   // initiative O3 (the owner's answer): a hold not used by the round's end is lost
     if (c.rows[t]) delete c.rows[t].held;   // ...and a row whose turn it is holds nothing
+    if (endRow && typeof turnEnded === 'function') turnEnded(mapId, c, endRow, r0, t0);   // 1.6.0: its end first, before the new round and the next turn
     if (c.round > r0 && typeof combatNewRound === 'function') { combatNewRound(mapId, c); t = c.turn; }   // initiative O4: a new round's order (rolled again, by side), the first time the fight reaches it
     if (c.round !== r0) roundChanged(mapId, c);   // G10
     var tg = c.round !== r0 && a0 ? fightTurned(campS, c, a0, r0) : null;   // fold 4: its own time moves by the round's length (a step back, back)
@@ -8932,7 +8954,7 @@ function dueLine(rec) { var D = DC(); return D && D.dueText ? D.dueText(rec) : '
 // (each connection of theirs; the GM's copy then says whose it is to press), else the GM's alone. A whisper: never in the join's history
 net.postDue = function(ch, act, kind, round, toOwner) {
     if (!ch || typeof ch.id !== 'string' || !act || typeof act.id !== 'string') return;
-    var rec = { type: 'due', id: 'r_' + Math.random().toString(36).slice(2, 10), from: diceFrom(getProfile(), true), charId: ch.id, act: act.id, label: String(act.label || 'Apply').split('{')[0].trim().slice(0, 60) || 'Apply', why: kind === 'turn' ? 'turn' : kind === 'cross' ? 'cross' : 'round', round: Math.max(1, Math.min(9999, Math.floor(Number(round) || 1))), ts: Date.now() };
+    var rec = { type: 'due', id: 'r_' + Math.random().toString(36).slice(2, 10), from: diceFrom(getProfile(), true), charId: ch.id, act: act.id, label: String(act.label || 'Apply').split('{')[0].trim().slice(0, 60) || 'Apply', why: kind === 'turn' ? 'turn' : kind === 'turnEnd' ? 'turnEnd' : kind === 'cross' ? 'cross' : 'round', round: Math.max(1, Math.min(9999, Math.floor(Number(round) || 1))), ts: Date.now() };
     if (ch.name) rec.as = String(ch.name).slice(0, 60);
     if (!Array.isArray(act.apply)) { rec.roll = 1; if (rec.label === 'Apply') rec.label = String(act.label || 'Roll').split('{')[0].trim().slice(0, 60) || 'Roll'; }   // 1.5.9 (book es/et plan 4b): a roll that is due; its card's button rolls it
     postDue(rec, ch, !!toOwner);

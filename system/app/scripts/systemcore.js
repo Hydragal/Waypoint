@@ -557,7 +557,7 @@ function cleanApplyDef(r, vis, gmView) {
     var aIcon = cleanIcon(r.icon); if (aIcon) out.icon = aIcon;
     var aCost = costKey(r.cost); if (aCost) out.cost = aCost;   // turn-based combat T1: the action one press costs
     rollNeedsInto(out, r);   // 1.5.4: what it needs before it may be pressed or run
-    var ea = r.each === 'round' || r.each === 'turn' ? r.each : r.round === true ? 'round' : '';   // Stage 6 HUD G10 + turn-based combat T2b: it also runs by itself on every new round of a combat, or when its character's turn begins (an older round: true reads as each round)
+    var ea = r.each === 'round' || r.each === 'turn' || r.each === 'turnEnd' ? r.each : r.round === true ? 'round' : '';   // 1.6.0: or at its turn's end   // Stage 6 HUD G10 + turn-based combat T2b: it also runs by itself on every new round of a combat, or when its character's turn begins (an older round: true reads as each round)
     if (ea) { out.each = ea; if (r.by === 'gm' || r.by === 'owner') out.by = r.by; }   // T2b: or it waits for the GM's or its player's press (a reminder card); absent: automatically
     var aEv = cleanEvery(r.every, out.needs); if (aEv) out.every = aEv;   // item 20 K5: it also runs by the campaign's clock (1.5.5: Only while its needs hold, beside its needs)
     fightRuleInto(out, r, gmView);   // backlog 152: and in a fight, and whether its runs wait for the GM's word
@@ -637,7 +637,7 @@ function cleanRollDef(r, gmView) {
     var rmf = cleanFormulaText(r.malf); if (rmf) out.malf = rmf;   // Stage 6 HUD R3: its malfunction threshold (a natural total at or past it)
     rollNeedsInto(out, r);   // 1.5.4: what it needs before it may be rolled
     var rCost = costKey(r.cost); if (rCost) out.cost = rCost;   // turn-based combat T1: the action it costs
-    var rEa = r.each === 'round' || r.each === 'turn' ? r.each : ''; if (rEa && out.init !== true && (r.by === 'gm' || r.by === 'owner')) { out.each = rEa; out.by = r.by; }   // 1.5.9 (book es/et plan 4b; the owner: "Reminder card"): a roll is also due each round or at its turn's start, as a reminder card with its roll button for the GM or its player; a roll never runs by itself, and the initiative roll never carries it
+    var rEa = r.each === 'round' || r.each === 'turn' || r.each === 'turnEnd' ? r.each : ''; if (rEa && out.init !== true && (r.by === 'gm' || r.by === 'owner')) { out.each = rEa; out.by = r.by; }   // 1.5.9 (book es/et plan 4b; the owner: "Reminder card"): a roll is also due each round or at its turn's start, as a reminder card with its roll button for the GM or its player; a roll never runs by itself, and the initiative roll never carries it
     var rEv = cleanEvery(r.every, out.needs); if (rEv) out.every = rEv;   // item 20 K5: it also runs by the campaign's clock (1.5.5: Only while its needs hold, beside its needs)
     fightRuleInto(out, r, gmView);   // backlog 152: and in a fight, and whether its runs wait for the GM's word
     if (gmView) { var crO = cleanCross(r.cross); if (crO) out.cross = crO; }   // 1.5.9 (book es/et plan 4a): it also runs when a value crosses a step; the GM's view alone, since only the machine that owns the campaign runs it
@@ -2806,8 +2806,8 @@ function applyAct(sys, char, act, vars, F, tctx, rowCtx, same, D, on) {   // row
 // Stage 6 HUD G10 (his reference turn sweep, module/combat.mjs: when a combat's round changes, every combatant's Turn follows it and the sweep
 // resets its tallies): the apply actions ticked Each round, which the host runs by itself on every character in a combat each time its round
 // changes (the combat's start, Next turn past the last, a step back past the first); pressed, one is his "Sweep now"
-function roundActs(sys, kind) { var k = kind === 'turn' ? 'turn' : 'round'; return (sys && Array.isArray(sys.rolls) ? sys.rolls : []).filter(function(r) { return isObj(r) && r.each === k && !r.by && Array.isArray(r.apply) && r.apply.length > 0; }); }   // T2b: kind — each round (the default) or at its turn's start; those that run automatically
-function dueActs(sys, kind) { var k = kind === 'turn' ? 'turn' : 'round'; return (sys && Array.isArray(sys.rolls) ? sys.rolls : []).filter(function(r) { return isObj(r) && r.each === k && (r.by === 'gm' || r.by === 'owner') && ((Array.isArray(r.apply) && r.apply.length > 0) || (!Array.isArray(r.apply) && typeof r.formula === 'string' && r.formula !== '')); }); }   // T2b: those that wait for a press; 1.5.9: a roll due too (its reminder rolls it)
+function roundActs(sys, kind) { var k = kind === 'turn' || kind === 'turnEnd' ? kind : 'round'; return (sys && Array.isArray(sys.rolls) ? sys.rolls : []).filter(function(r) { return isObj(r) && r.each === k && !r.by && Array.isArray(r.apply) && r.apply.length > 0; }); }   // T2b: kind — each round (the default) or at its turn's start; those that run automatically
+function dueActs(sys, kind) { var k = kind === 'turn' || kind === 'turnEnd' ? kind : 'round'; return (sys && Array.isArray(sys.rolls) ? sys.rolls : []).filter(function(r) { return isObj(r) && r.each === k && (r.by === 'gm' || r.by === 'owner') && ((Array.isArray(r.apply) && r.apply.length > 0) || (!Array.isArray(r.apply) && typeof r.formula === 'string' && r.formula !== '')); }); }   // T2b: those that wait for a press; 1.5.9: a roll due too (its reminder rolls it)
 // the characters a combat holds: each row's token on the combat's map (a hidden one too: it is fighting), a character once (its first token)
 // — [{ charId, tok }]
 function combatChars(mp, combat, chars) {
@@ -2824,7 +2824,7 @@ function combatChars(mp, combat, chars) {
 // every Each round action on one character, in the System's order, each worked out on the values the one before left (varsFor(work): the
 // resolver of that working copy; a Set to reads the round just begun through tctx: Turn := CombatRound). One that cannot run (nothing to move,
 // an amount that fails) is passed over, as his sweep carries on. { values: { fieldId: value }, ran: n }
-function applyRound(sys, char, varsFor, F, tctx, kind, D) {   // kind (T2b): 'round' (the default) or 'turn'; D (1.5.9): the host's dice, for a Rolled amount
+function applyRound(sys, char, varsFor, F, tctx, kind, D) {   // kind (T2b): 'round' (the default) or 'turn' (1.6.0: or 'turnEnd'); D (1.5.9): the host's dice, for a Rolled amount
     var out = { values: {}, ran: 0 }; if (!sys || !isObj(char) || typeof varsFor !== 'function' || !F) return out;
     var work = Object.assign({}, char, { values: Object.assign({}, isObj(char.values) ? char.values : {}) });
     roundActs(sys, kind).forEach(function(act) {

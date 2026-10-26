@@ -25,6 +25,11 @@ Voice chat
 - The Voice button stays in the top row when no table is open. It is
   dimmed, and its panel says voice works once you host or join a table.
 
+System editor
+- A roll or an apply action can also be due, or run, at the end of its
+  character's turn in a fight: Also at its turn's end. A held turn ends
+  once it is played, and a step back runs nothing again.
+
 Using an item on someone next to you
 - When the GM rolls it, an amount that reads a GM-only value keeps the
   card about the other character to the GM.
