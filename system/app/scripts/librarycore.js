@@ -179,6 +179,13 @@ export function entryFromForm(f) {
         var dv = nb(f.areaAd); if (dv !== '') ar.ad = dv;
         var fl = s(f.areaFlight).trim(); if (fl) ar.flight = fl;   // 1.5.9 (es): how a launched round lands on a miss (the cleaner keeps scatter or line, never beside Placed)
         var fg = s(f.areaFrag).trim(); if (fg) { ar.frag = fg; var fgt = s(f.areaFragType).trim(); if (fgt) ar.fragType = fgt; }   // 1.5.9 (es): its fragmentation and that fragmentation's type (the cleaner keeps them in the GM's copy alone)
+        var afs = (Array.isArray(f.areaAffs) ? f.areaAffs : []).slice(0, 2).map(function(a) {   // 1.5.9 (es): its afflictions, each where it says what it is resisted against (the cleaner keeps them in the GM's copy alone)
+            if (!a || typeof a !== 'object' || !s(a.vs).trim()) return null;
+            var o = { vs: s(a.vs).trim(), fx: s(a.fx).trim() }; if (a.who === 'all') o.who = 'all';
+            var nd = s(a.needs).trim(); if (nd) o.needs = nd; var ln = s(a.n).trim(); if (ln) o.lasts = { n: ln, u: s(a.u).trim() || 'minutes' };
+            return o;
+        }).filter(Boolean);
+        if (afs.length) ar.aff = afs;
     }
     if (f.rm === 'bound' || f.rm === 'curse') { out.rm = f.rm; if (s(f.rmMsg).trim()) out.rmMsg = s(f.rmMsg); }   // L2b: a player's removal (bound / curse on contact) and its message, as the Items tab has them
     if (f.eq === 'bound' || f.eq === 'curse') { out.eq = f.eq; if (s(f.eqMsg).trim()) out.eqMsg = s(f.eqMsg); }   // and switching it off

@@ -126,6 +126,32 @@ function cleanMine(m) {   // 1.5.9 (es): and its fragmentation (frag, a formula'
     if (fin(m.ad) && m.ad > 0 && m.ad !== 1) out.ad = Math.max(0.1, Math.min(100, Math.round(m.ad * 10) / 10));
     var nt = text(m.notes, 800); if (nt) out.notes = nt;
     var fg = text(m.frag, 1200); if (fg) { out.frag = fg; if (typeof m.fragType === 'string' && MINE_TYPE.test(m.fragType)) out.fragType = m.fragType; }   // 1.5.9 (es): its fragmentation, rolled when it goes off
+    var af = cleanAffs(m.aff); if (af) out.aff = af;   // 1.5.9 (es): and its afflictions
+    return out;
+}
+// 1.5.9 (the book's (es), docs/BOOK_ES_ET_PLAN.md section 2, its affliction half): a blast's afflictions as a mine and a blast carry them, the
+// shape systemcore cleanAffs keeps: at most 2, each { vs, fx, who, needs, lasts } (vs and needs a formula's text, fx an effect's id, who 'all'
+// only, lasts { n, u } with its unit a word or a key); anything else is no key, and null where none is left
+var AFF_FX = /^e_[A-Za-z0-9_]{1,24}$/, AFF_UNIT = /^[A-Za-z][A-Za-z0-9_]{0,23}$/;
+function cleanAffs(v) {
+    if (!Array.isArray(v)) return null;
+    var out = [];
+    for (var i = 0; i < v.length && i < 40 && out.length < 2; i++) {
+        var a = v[i]; if (!isObj(a)) continue;
+        var vs = text(a.vs, 300), fx = typeof a.fx === 'string' && AFF_FX.test(a.fx) ? a.fx : ''; if (!vs || !fx) continue;
+        var o = { vs: vs, fx: fx }; if (a.who === 'all') o.who = 'all';
+        var nd = text(a.needs, 300); if (nd) o.needs = nd;
+        if (isObj(a.lasts)) { var ln = text(a.lasts.n, 300), lu = typeof a.lasts.u === 'string' && AFF_UNIT.test(a.lasts.u) ? a.lasts.u : ''; if (ln && lu) o.lasts = { n: ln, u: lu }; }
+        out.push(o);
+    }
+    return out.length ? out : null;
+}
+// Who an affliction reaches, each character once and in order: under all, the characters in the blast (inBlast: [{ id, shielded }], a character
+// shielded by cover passed over); else those it hurt (hurt: [character ids], in the order they were hurt). Junk is left out
+function affTargets(inBlast, hurt, all) {
+    var out = [], seen = Object.create(null), add = function(id) { if (typeof id === 'string' && id && seen[id] !== 1) { seen[id] = 1; out.push(id); } };
+    if (all === true) (Array.isArray(inBlast) ? inBlast : []).slice(0, 4000).forEach(function(r) { if (isObj(r) && r.shielded !== true) add(r.id); });
+    else (Array.isArray(hurt) ? hurt : []).slice(0, 4000).forEach(add);
     return out;
 }
 // 1.5.9 (the book's (es), docs/BOOK_ES_ET_PLAN.md section 2): who takes a blast's fragmentation, and by which roll. rows: [{ id, d }], each
@@ -158,6 +184,6 @@ var STAND_INS = Object.freeze({
     grenade: Object.freeze(['M12 9a6 6 0 1 0 0 12 6 6 0 0 0 0-12z', 'M10 9V6h4v3', 'M14 7l4-3', 'M9.5 13.5h5M9.5 16.5h5']),
     mine: Object.freeze(['M4 15c0-2.5 3.6-4 8-4s8 1.5 8 4-3.6 4-8 4-8-1.5-8-4z', 'M12 11V7', 'M7.5 11.5L6 8.5M16.5 11.5L18 8.5', 'M10 7h4'])
 });
-var API = { VERSION: VERSION, SCATTER_WAYS: SCATTER_WAYS, SCATTER_TURN: SCATTER_TURN, SCATTER_WAYS6: SCATTER_WAYS6, SCATTER_TURN6: SCATTER_TURN6, diceCount: diceCount, fallShare: fallShare, throwOutcome: throwOutcome, scatterPoint: scatterPoint, bookScatterYd: bookScatterYd, missOf: missOf, flightEnd: flightEnd, firstBox: firstBox, fragTargets: fragTargets, cleanMine: cleanMine, inTrigger: inTrigger, STAND_INS: STAND_INS };
+var API = { VERSION: VERSION, SCATTER_WAYS: SCATTER_WAYS, SCATTER_TURN: SCATTER_TURN, SCATTER_WAYS6: SCATTER_WAYS6, SCATTER_TURN6: SCATTER_TURN6, diceCount: diceCount, fallShare: fallShare, throwOutcome: throwOutcome, scatterPoint: scatterPoint, bookScatterYd: bookScatterYd, missOf: missOf, flightEnd: flightEnd, firstBox: firstBox, fragTargets: fragTargets, cleanAffs: cleanAffs, affTargets: affTargets, cleanMine: cleanMine, inTrigger: inTrigger, STAND_INS: STAND_INS };
 if (typeof window !== 'undefined') window.wpBlastCore = API;
-export { VERSION, SCATTER_WAYS, SCATTER_TURN, SCATTER_WAYS6, SCATTER_TURN6, diceCount, fallShare, throwOutcome, scatterPoint, bookScatterYd, missOf, flightEnd, firstBox, fragTargets, cleanMine, inTrigger, STAND_INS };
+export { VERSION, SCATTER_WAYS, SCATTER_TURN, SCATTER_WAYS6, SCATTER_TURN6, diceCount, fallShare, throwOutcome, scatterPoint, bookScatterYd, missOf, flightEnd, firstBox, fragTargets, cleanAffs, affTargets, cleanMine, inTrigger, STAND_INS };

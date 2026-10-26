@@ -3431,6 +3431,10 @@
   .sys-fx-mods { display: flex; flex-direction: column; gap: 4px; padding: 4px 0; }
   .sys-fx-mod { display: flex; gap: 6px; align-items: center; }
   .sys-fx-mod .sys-fx-amt { width: 80px; }
+  /* 1.5.9 (es): an explosive's afflictions in the Items tab, a line of the editor's own boxes and lists each, wrapping where the panel is narrow */
+  .sys-item-aff { flex-wrap: wrap; }
+  .sys-item-aff .sys-item-affvs, .sys-item-aff .sys-item-affneeds { width: 140px; font-family: ui-monospace, Consolas, monospace; }
+  .sys-item-aff .sys-item-afflasts { width: 100px; font-family: ui-monospace, Consolas, monospace; }
   .sys-fx-row .sys-fx-icon { width: 52px; flex: 0 0 52px; text-align: center; }
   .sheet-hdr-val.sheet-hdr-edit:focus-within { border-color: var(--sheet-accent, var(--gold)); }   /* the ledger box's focus ring (the input itself is borderless) */
   .sheet-pos, .sheet-hdr-pos, .sheet-field input.sheet-pos, .sheet-hdr-edit input.sheet-hdr-pos { color: var(--green); }

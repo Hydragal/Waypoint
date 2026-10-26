@@ -4180,6 +4180,7 @@ window.wpFitToGrid = fitToGrid;
           var ico = opts.goOff ? opts.icon : pre.def ? pre.def.icon : ''; if (typeof ico === 'string' && ico) b.icon = ico;
           var adB = opts.goOff ? opts.ad : pre.area && pre.area.ad; if (typeof adB === 'number' && isFinite(adB) && adB > 0) b.ad = adB;
           var fgB = opts.goOff ? opts.frag : pre.area && pre.area.frag; if (typeof fgB === 'string' && fgB) { b.frag = { expr: fgB.slice(0, 1200), by: typeof opts.charId === 'string' ? opts.charId : '', gm: !!opts.gmOnly }; var fgT = opts.goOff ? opts.fragType : pre.area && pre.area.fragType; if (typeof fgT === 'string' && fgT) b.frag.type = fgT; }   // 1.5.9 (es): its fragmentation, rolled as it goes off (the host's memory alone: broadcastBlast names none of it)
+          var afB = opts.goOff ? opts.aff : pre.area && pre.area.aff, BCa = window.wpBlastCore, afC = Array.isArray(afB) && BCa && typeof BCa.cleanAffs === 'function' ? BCa.cleanAffs(afB) : null; if (afC) b.aff = afC;   // 1.5.9 (es): its afflictions, rolled by those it reaches as it goes off (the host's memory alone, as its fragmentation)
       }
       if (onScreen) seatBlast(b);
       var thrB = opts.charId ? (map.whiteboard || []).filter(function(w) { return w.charId === opts.charId; }).sort(function(p, q) { return (q.isChar ? 1 : 0) - (p.isChar ? 1 : 0); })[0] : null;   // cover follow-ups (owner, answer 5): the thrower's token on this map
@@ -4199,14 +4200,14 @@ window.wpFitToGrid = fitToGrid;
   // The damage half of a throw (host/solo only): roll the item's damage, and in full-auto apply it to every in-range token as one undoable
   // transaction. blastAuto: full = roll+apply, roll = roll to chat (its card can apply it to all in the blast, once), measure = neither
   function resolveThrow(b, opts, nInRange, mapIn) {
-      var camp = getActiveCampaign(), sys = camp && camp.system, fgN = b && b.frag ? (opts && opts.name || 'The blast') : ''; if (!sys || !opts || !opts.damage) { if (fgN && sys && opts) toast(fgN + ' has no damage roll, so its fragmentation was not rolled.'); return; }   // 1.5.9 (es): fragmentation rides on the blast's damage
+      var camp = getActiveCampaign(), sys = camp && camp.system, fgN = b && b.frag ? (opts && opts.name || 'The blast') : '', afN = b && b.aff ? (opts && opts.name || 'The blast') : ''; if (!sys || !opts || !opts.damage) { if (fgN && sys && opts) toast(fgN + ' has no damage roll, so its fragmentation was not rolled.'); if (afN && sys && opts && typeof applyBlastAffs === 'function') applyBlastAffs(b, mapIn, afN); return; }   // 1.5.9 (es): fragmentation rides on the blast's damage; an affliction does not (one that reaches everyone in the blast is rolled at once)
       var combat = sys.combat || {}, auto = combat.blastAuto || 'full';
-      if (auto === 'measure') { if (fgN) toast('Blast automation is Measure only, so the fragmentation of ' + fgN + ' was not rolled.'); return; }
-      if (window.wpVtt && !window.wpVtt.on('dice')) { if (fgN) toast('Dice are off, so the fragmentation of ' + fgN + ' was not rolled.'); return; }
+      if (auto === 'measure') { if (fgN) toast('Blast automation is Measure only, so the fragmentation of ' + fgN + ' was not rolled.'); if (afN) toast('Blast automation is Measure only, so the afflictions of ' + afN + ' were not rolled.'); return; }
+      if (window.wpVtt && !window.wpVtt.on('dice')) { if (fgN) toast('Dice are off, so the fragmentation of ' + fgN + ' was not rolled.'); if (afN) toast('Dice are off, so the afflictions of ' + afN + ' were not rolled.'); return; }
       if (!window.wpDice || !window.wpDice.rollFor) return;
       var dr = window.wpDice.rollFor(opts.charId, opts.damage, (opts.name || 'Blast') + ' damage', { gmOnly: !!opts.gmOnly, dmg: true, blast: b && b.bid });   // a GM-only item's damage stays the GM's; chat cards: a damage card (an item's damage is damage by nature, as on his reference sheets)
       var total = dr && dr.ok && typeof dr.value === 'number' ? dr.value : null;
-      if (auto !== 'full' || total === null) { if (fgN && auto === 'roll' && total !== null) toast('The fragmentation of ' + fgN + ' is rolled when you press Apply to all in the blast.'); return; }
+      if (auto !== 'full' || total === null) { if (fgN && auto === 'roll' && total !== null) toast('The fragmentation of ' + fgN + ' is rolled when you press Apply to all in the blast.'); if (afN && auto === 'roll' && total !== null) toast('The afflictions of ' + afN + ' are rolled when you press Apply to all in the blast.'); return; }
       applyBlastDamage(b, total, combat.hpResource, mapIn);
   }
   var _lastThrowTx = null;
@@ -4301,7 +4302,7 @@ window.wpFitToGrid = fitToGrid;
   // goes through the damage step where the system has one, at the default location, by the item's fragmentation type, else the card's, else
   // the blast's, with no falloff and the item's armour divisor only under frag.ad; else off the damage resource. write: the pass's own writer,
   // which keeps what each character held first for the Undo. { hit, shielded } or null where the blast carries none
-  function fragPass(b, map, camp, sys, hpId, write) {
+  function fragPass(b, map, camp, sys, hpId, write, mark) {   // mark (1.5.9, afflictions): told who each hit wounded and whom it reached
       var S = window.wpSystemCore, F = window.wpFormula, BC = window.wpBlastCore, fg = b && b.frag && typeof b.frag === 'object' ? b.frag : null;
       if (!fg || typeof fg.expr !== 'string' || !fg.expr || !S || !F || !BC || typeof BC.fragTargets !== 'function' || !window.wpDice || typeof window.wpDice.rollFor !== 'function') return null;
       var rules = blastRules(sys), fr = rules && rules.frag && typeof rules.frag === 'object' ? rules.frag : {}, dice = BC.diceCount(fg.expr), rad = blastRadiusYd(b);
@@ -4330,25 +4331,103 @@ window.wpFitToGrid = fitToGrid;
               var res = S.applyEdit(sys, ch, hpId, { cur: (typeof e.value === 'number' ? e.value : 0) - amt }, F, {}); if (!res.ok) return;
               vals = {}; vals[hpId] = res.value;
           } else return;
-          write(ch, r.tok.charId, vals); hit++;
+          write(ch, r.tok.charId, vals); hit++; if (typeof mark === 'function') mark(r.tok.charId, dstep ? !!(st && st.info && st.info.wound > 0) : true, true);
           if (lines && window.wpNet && typeof window.wpNet.damageCard === 'function') window.wpNet.damageCard(ch, [(fg.gm === true ? 'Fragmentation' : label) + ':'].concat(lines));   // what it did, to the GM and the character's player
       });
       return { hit: hit, shielded: shielded };
   }
-  function applyBlastDamage(b, total, hpId, mapIn) {
-      var camp = getActiveCampaign(), sys = camp && camp.system, S = window.wpSystemCore, F = window.wpFormula, map = mapIn || getActiveMap();
-      if (!sys || !S || !F || !map) return;
-      var rules = typeof blastRules === 'function' ? blastRules(sys) : null, BC = window.wpBlastCore, fall = rules && rules.fall && BC ? rules.fall : '', step = !!(fall && sys.combat && sys.combat.damage && typeof S.damageStep === 'function');
-      var noRes = !hpId && !step; if (noRes) { toast('Full auto is on, but no damage resource is set (System editor ▸ Items ▸ Damage subtracts from).'); if (!(b && b.frag && sys.combat && sys.combat.damage)) return; }   // the review of fold 3: the GM is told whether or not a fragmentation goes on through the damage step
-      var byChar = Object.create(null), hits = [], applied = 0, halved = 0, shielded = 0, spared = 0, dice = fall ? BC.diceCount(b.dmgExpr || '') : 0, types = step && Array.isArray(sys.combat.damage.types) ? sys.combat.damage.types : [];
-      var typeOk = !!(b.dtype && types.some(function(y) { return y && typeof y.key === 'string' && y.key.toLowerCase() === String(b.dtype).toLowerCase(); }));
-      var write = function(ch, charId, vals) {   // one entry a character for the Undo, holding what it had before the blast first wrote each field (1.5.9: its fragmentation writes too)
+  // The pass's one writer: one entry a character for the Undo, holding what it had before the blast first wrote each field, an effects list among
+  // them (1.5.9: a blast's fragmentation and its afflictions write too), each change sent to the table and told to the sheet
+  function blastWriter(byChar, hits) {
+      return function(ch, charId, vals) {
           var h = byChar[charId]; if (!h) { h = byChar[charId] = { charId: charId, prevs: {} }; hits.push(h); }
           Object.keys(vals).forEach(function(fid) { if (!Object.prototype.hasOwnProperty.call(h.prevs, fid)) h.prevs[fid] = ch.values && Object.prototype.hasOwnProperty.call(ch.values, fid) ? JSON.parse(JSON.stringify(ch.values[fid])) : undefined; });
           ch.values = ch.values || {}; Object.keys(vals).forEach(function(fid) { ch.values[fid] = vals[fid]; }); ch.updated = Date.now();
           if (window.wpNet && window.wpNet.active && window.wpNet.role === 'host' && window.wpNet.syncCharDelta && Object.keys(vals).length) window.wpNet.syncCharDelta(charId, vals);
           if (window.wpSheets && window.wpSheets.charChanged) window.wpSheets.charChanged(charId);
       };
+  }
+  // 1.5.9 (the book's (es), docs/BOOK_ES_ET_PLAN.md section 2, its affliction half): a blast's afflictions, after its shares and its fragmentation
+  // and in the same pass. Each reaches everyone in the blast's own radius (who all; a character the system's cover outcome shields passed over),
+  // else those the blast or its fragmentation wounded, after DR, or under the Combat card's hurt 'share' those any share of it reached (H7). A
+  // character its Only where does not hold for is not touched. Each other rolls the Combat card's resist roll as itself, Resist standing for the
+  // item's resist target read with its own names (an NPC's card the GM's, a GM-only item's kept the GM's); a failure puts the effect on in the list
+  // that holds it, else the system's first effects list (applyEffectOp's add: on again and its timer afresh where it is there), for its Lasts
+  // where that is set (rolled as the victim) and else the effect's own time. With no resist roll on the card nothing is rolled, and the GM is told
+  // who must resist and against what. Each victim's card goes to the GM and its player, naming neither a GM-only item nor a GM-only effect.
+  // hurt: { w, s }, the character ids it wounded and reached, in order. { on, resisted, held } or null where the blast carries none
+  function affPass(b, map, camp, sys, write, hurt) {
+      var S = window.wpSystemCore, F = window.wpFormula, BC = window.wpBlastCore, A = b && Array.isArray(b.aff) ? b.aff : null;
+      if (!A || !A.length || !S || !F || !BC || typeof BC.affTargets !== 'function' || typeof S.applyEffectOp !== 'function' || !window.wpDice || typeof window.wpDice.rollFor !== 'function') return null;
+      var rules = blastRules(sys), rs = rules && typeof rules.resist === 'string' ? rules.resist : '', byShare = !!(rules && rules.hurt === 'share'), hu = hurt && typeof hurt === 'object' ? hurt : { w: [], s: [] };
+      var defs = Object.create(null); (Array.isArray(sys.effects) ? sys.effects : []).forEach(function(d) { if (d && typeof d.id === 'string') defs[d.id] = d; });
+      var fxLists = (Array.isArray(sys.fields) ? sys.fields : []).filter(function(f) { return f && f.kind === 'effects'; });
+      var elevOn = stanceOn('elevation'), inB = null, nm = b.gm === true ? '' : (b.name || ''), out = { on: 0, resisted: 0, held: 0 }, owed = [], gone = 0, odd = 0;
+      var inBlast = function() {   // every character in the blast, with whether the system's cover outcome shields it (worked out once)
+          if (inB) return inB; inB = [];
+          blastDistances(b, map).forEach(function(r) {
+              if (!r || !r.tok || typeof r.tok.charId !== 'string' || !shapeHolds(b, r)) return;
+              var tier = window.wpFog && window.wpFog.coverAt ? window.wpFog.coverAt(b.x, b.y, r.tok, map, elevOn ? (b.elev || 0) : 0, elevOn ? tokenElevation(r.tok, map, b.thrown === true) : 0) : null;
+              inB.push({ id: r.tok.charId, shielded: !!(S.coverOutcome && S.coverOutcome(sys, tier) === 'none') });
+          });
+          return inB;
+      };
+      A.forEach(function(a) {
+          if (!a || typeof a.vs !== 'string' || typeof a.fx !== 'string') return;
+          var def = Object.prototype.hasOwnProperty.call(defs, a.fx) ? defs[a.fx] : null; if (!def) { gone++; return; }   // an effect the system no longer has
+          BC.affTargets(a.who === 'all' ? inBlast() : null, byShare ? hu.s : hu.w, a.who === 'all').forEach(function(cid) {
+              var ch = camp.chars && Object.prototype.hasOwnProperty.call(camp.chars, cid) ? camp.chars[cid] : null; if (!ch) return;   // own ids only
+              var vars = S.makeResolver(sys, ch, F);
+              if (typeof a.needs === 'string' && a.needs && !S.rollNeedsOk({ needs: a.needs }, vars, F)) { out.held++; return; }
+              if (!rs) { owed.push(String(ch.name || 'A character').slice(0, 60)); return; }
+              var rr = window.wpDice.rollFor(cid, rs.replace(/\bResist\b/gi, function() { return '(' + a.vs + ')'; }), nm ? nm + ' resist' : 'Resist', { gmOnly: b.gm === true, priv: ch.npc === true || !ch.ownerId });
+              var ck = rr && rr.ok && window.wpNet ? window.wpNet.rollCheck : null; if (!ck || typeof ck.pass !== 'boolean') { odd++; return; }   // a resist roll that is no check puts nothing on
+              var vsW = typeof ck.total === 'number' && isFinite(ck.total) && typeof ck.target === 'number' && isFinite(ck.target) ? ', ' + ck.total + ' against ' + ck.target : '', head = (nm || 'Affliction') + ':';
+              if (ck.pass) { out.resisted++; if (window.wpNet && typeof window.wpNet.damageCard === 'function') window.wpNet.damageCard(ch, [head, 'Resisted' + vsW + '.']); return; }
+              var secs = 0, lw = '';
+              if (a.lasts && typeof a.lasts.n === 'string' && typeof S.affLastsSecs === 'function') { var lr = F.evaluate(a.lasts.n, { vars: vars }), ln = lr && lr.ok && typeof lr.value === 'number' && isFinite(lr.value) ? lr.value : 0; if (ln > 0) { secs = S.affLastsSecs(sys, ln, a.lasts.u); if (secs > 0) lw = lastsWords(sys, ln, a.lasts.u); } }   // rolled as the victim
+              var fl = fxLists.filter(function(f) { var l = ch.values ? ch.values[f.id] : null; return Array.isArray(l) && l.some(function(x) { return x && x.ref === a.fx; }); })[0] || fxLists[0]; if (!fl) { odd++; return; }
+              var res = S.applyEffectOp(sys, ch, fl.id, { op: 'add', rowId: 'x_' + Math.random().toString(36).slice(2, 14), ref: a.fx }, F, { now: Date.now(), inCombat: !!(window.wpNet && typeof window.wpNet.charInCombat === 'function' && window.wpNet.charInCombat(cid)), secs: secs > 0 ? secs : undefined });
+              if (!res || !res.ok) { odd++; return; }
+              var vals = {}; vals[fl.id] = res.value; if (res.clamp) Object.keys(res.clamp).forEach(function(k) { vals[k] = res.clamp[k]; });
+              write(ch, cid, vals); out.on++;
+              if (window.wpNet && typeof window.wpNet.damageCard === 'function') window.wpNet.damageCard(ch, [head, 'Failed to resist' + vsW + '.', (def.vis === 'gm' ? 'An effect' : String(def.name || 'An effect').slice(0, 60)) + ' is on' + (lw ? ' for ' + lw : '') + '.']);   // to the GM and the character's player
+          });
+      });
+      var who = nm || 'The blast';
+      if (owed.length) toast(who + ': ' + owed.slice(0, 6).join(', ') + (owed.length > 6 ? ' and ' + (owed.length - 6) + ' more' : '') + ' must resist. The Combat card has no resist roll, so nothing was rolled.');
+      if (gone) toast(who + ': the effect an affliction puts on is gone from the system, so it was not rolled.');
+      if (odd) toast(who + ': ' + odd + ' resist roll' + (odd === 1 ? '' : 's') + ' could not be judged, so nothing was put on. The resist roll must be a check, such as 3d6 <= Resist.');
+      return out;
+  }
+  function lastsWords(sys, n, u) {   // an affliction's Lasts as words: 4 minutes, 1 turn, 2 watches
+      var W = { turns: ['turn', 'turns'], seconds: ['second', 'seconds'], minutes: ['minute', 'minutes'], hours: ['hour', 'hours'], days: ['day', 'days'] }, num = String(Math.round(n * 100) / 100);
+      if (Object.prototype.hasOwnProperty.call(W, u)) return num + ' ' + W[u][n === 1 ? 0 : 1];
+      var t = sys && sys.combat && sys.combat.turn && Array.isArray(sys.combat.turn.units) ? sys.combat.turn.units : [], hit = t.filter(function(x) { return x && typeof x.key === 'string' && x.key.toLowerCase() === String(u).toLowerCase(); })[0];
+      return num + ' ' + String(hit && hit.label ? hit.label : u).slice(0, 60);
+  }
+  function affNote(ap) { return ap ? (ap.on ? ' · ' + ap.on + ' failed to resist' : '') + (ap.resisted ? ' · ' + ap.resisted + ' resisted' : '') : ''; }   // counts only, as the rest of the notice
+  // An item with no damage roll: its afflictions alone, rolled as it goes off (one that reaches everyone in the blast; one that reaches those it
+  // hurt reaches no one). Measure only and dice off roll nothing and say so
+  function applyBlastAffs(b, mapIn, nm) {
+      var camp = getActiveCampaign(), sys = camp && camp.system, map = mapIn || getActiveMap(); if (!sys || !map || !b) return null;
+      var auto = (sys.combat && sys.combat.blastAuto) || 'full';
+      if (auto === 'measure') { toast('Blast automation is Measure only, so the afflictions of ' + nm + ' were not rolled.'); return null; }
+      if (window.wpVtt && !window.wpVtt.on('dice')) { toast('Dice are off, so the afflictions of ' + nm + ' were not rolled.'); return null; }
+      var byChar = Object.create(null), hits = [], ap = affPass(b, map, camp, sys, blastWriter(byChar, hits), { w: [], s: [] });
+      if (ap && ap.on) { _lastThrowTx = { hits: hits }; save(); syncBlastMenu(); toast(nm + ': ' + ap.on + ' failed to resist' + (ap.resisted ? ', ' + ap.resisted + ' resisted' : '') + '. Undo last throw is in the Radius options.'); }
+      else if (ap && ap.resisted) toast(nm + ': ' + ap.resisted + ' resisted.');
+      return ap;
+  }
+  function applyBlastDamage(b, total, hpId, mapIn) {
+      var camp = getActiveCampaign(), sys = camp && camp.system, S = window.wpSystemCore, F = window.wpFormula, map = mapIn || getActiveMap();
+      if (!sys || !S || !F || !map) return;
+      var rules = typeof blastRules === 'function' ? blastRules(sys) : null, BC = window.wpBlastCore, fall = rules && rules.fall && BC ? rules.fall : '', step = !!(fall && sys.combat && sys.combat.damage && typeof S.damageStep === 'function');
+      var noRes = !hpId && !step; if (noRes) { toast('Full auto is on, but no damage resource is set (System editor ▸ Items ▸ Damage subtracts from).'); if (!(b && b.frag && sys.combat && sys.combat.damage) && !(b && Array.isArray(b.aff) && b.aff.length)) return; }   // 1.5.9 (es): an affliction that reaches everyone in the blast goes on all the same   // the review of fold 3: the GM is told whether or not a fragmentation goes on through the damage step
+      var byChar = Object.create(null), hits = [], applied = 0, halved = 0, shielded = 0, spared = 0, dice = fall ? BC.diceCount(b.dmgExpr || '') : 0, types = step && Array.isArray(sys.combat.damage.types) ? sys.combat.damage.types : [];
+      var typeOk = !!(b.dtype && types.some(function(y) { return y && typeof y.key === 'string' && y.key.toLowerCase() === String(b.dtype).toLowerCase(); }));
+      var hurt = { w: [], s: [] }, mark = function(cid, w, sh) { if (w && hurt.w.indexOf(cid) < 0) hurt.w.push(cid); if (sh && hurt.s.indexOf(cid) < 0) hurt.s.push(cid); };   // 1.5.9 (es): whom the blast and its fragmentation wounded, and whom a share reached, in that order
+      var write = blastWriter(byChar, hits);   // one entry a character for the Undo (1.5.9: its fragmentation and its afflictions write too)
       blastDistances(b, map).forEach(function(r) {
           if (!shapeHolds(b, r) || !r.tok.charId) return;   // what a blast holds is asked in one place: its radius, a ring's inner distance, a cone's angle, and the token an explosion spares
           var ch = camp.chars && typeof r.tok.charId === 'string' && Object.prototype.hasOwnProperty.call(camp.chars, r.tok.charId) ? camp.chars[r.tok.charId] : null; if (!ch || noRes) return;   // own ids only: a token from a file naming '__proto__' writes no damage onto a prototype
@@ -4369,15 +4448,16 @@ window.wpFitToGrid = fitToGrid;
               vals = {}; vals[hpId] = res.value;
           }
           if (ocC === 'half' && dmgC < share) halved++;
-          write(ch, r.tok.charId, vals);
+          write(ch, r.tok.charId, vals); mark(r.tok.charId, step ? !!(st && st.info && st.info.wound > 0) : dmgC > 0, dmgC > 0);   // 1.5.9 (es): who it wounded, after DR, and whom a share reached, for its afflictions
           if (lines && window.wpNet && typeof window.wpNet.damageCard === 'function') window.wpNet.damageCard(ch, (b.name && b.gm !== true ? [b.name + ':'] : []).concat(lines, b.notes ? ['Notes: ' + b.notes] : []));   // what it did, to the GM and the character's player
           applied++;
       });
-      var fp = typeof fragPass === 'function' ? fragPass(b, map, camp, sys, hpId, write) : null, fragNote = fp ? (fp.hit ? ' · fragmentation hit ' + fp.hit + ' token' + (fp.hit === 1 ? '' : 's') : '') + (fp.shielded ? ' · ' + fp.shielded + ' shielded from fragmentation' : '') : '';   // 1.5.9 (es)
-      var coverNote = (halved ? ' · ' + halved + ' behind cover took less' : '') + (shielded ? ' · ' + shielded + ' shielded by cover' : '') + (spared ? ' · ' + spared + ' too far to be hurt' : '') + fragNote;   // counts only: never a name (a hidden token counts too)
-      if (applied || (fp && fp.hit)) { _lastThrowTx = { hits: hits }; save(); syncBlastMenu(); if (b.notes) toast((b.name || 'The blast') + ': ' + b.notes); toast((!applied ? 'No blast damage' : fall ? 'Blast damage applied to ' + applied + ' token' + (applied === 1 ? '' : 's') + ' by distance' : '−' + total + ' to ' + applied + ' token' + (applied === 1 ? '' : 's')) + coverNote + '. Undo last throw is in the Radius options.'); }
+      var fp = typeof fragPass === 'function' ? fragPass(b, map, camp, sys, hpId, write, mark) : null, ap = typeof affPass === 'function' ? affPass(b, map, camp, sys, write, hurt) : null, fragNote = fp ? (fp.hit ? ' · fragmentation hit ' + fp.hit + ' token' + (fp.hit === 1 ? '' : 's') : '') + (fp.shielded ? ' · ' + fp.shielded + ' shielded from fragmentation' : '') : '';   // 1.5.9 (es)
+      var coverNote = (halved ? ' · ' + halved + ' behind cover took less' : '') + (shielded ? ' · ' + shielded + ' shielded by cover' : '') + (spared ? ' · ' + spared + ' too far to be hurt' : '') + fragNote + (ap ? affNote(ap) : '');   // counts only: never a name (a hidden token counts too)
+      if (applied || (fp && fp.hit) || (ap && ap.on)) { _lastThrowTx = { hits: hits }; save(); syncBlastMenu(); if (b.notes) toast((b.name || 'The blast') + ': ' + b.notes); toast((!applied ? 'No blast damage' : fall ? 'Blast damage applied to ' + applied + ' token' + (applied === 1 ? '' : 's') + ' by distance' : '−' + total + ' to ' + applied + ' token' + (applied === 1 ? '' : 's')) + coverNote + '. Undo last throw is in the Radius options.'); }
       else if (shielded && !spared) toast('No damage: ' + shielded + ' token' + (shielded === 1 ? '' : 's') + ' shielded by cover.');
       else if (shielded || spared) toast('No damage:' + coverNote.replace(/^ ·/, '') + '.');
+      if (ap && !ap.on && ap.resisted && !applied && !(fp && fp.hit) && !shielded && !spared) toast((b.name || 'The blast') + ': ' + ap.resisted + ' resisted.');   // 1.5.9 (es): an affliction resisted by all, and nothing else said
   }
   // The card's Apply to all in the blast (Roll to chat): the blast its damage was rolled for, still on the map on screen
   window.wpBlastApply = function(bid, total) {
@@ -4416,11 +4496,11 @@ window.wpFitToGrid = fitToGrid;
           if (pck && !pck.pass && pck.crit === 'fumble') {   // the book: a critical failure sets it off in the planter's cell
               var plT = throwerOf(map, opts.charId), plC = plT ? tokenCentre(plT) : { x: opts.x, y: opts.y };
               if (area.use === true) useOneUp(camp, tr);
-              return placeThrownBlast({ goOff: true, x: plC.x, y: plC.y, ft: area.ft, name: opts.name || def.name, by: opts.by || '', charId: opts.charId, damage: def.damage || '', gmOnly: !!opts.gmOnly, dtype: area.type, ad: area.ad, notes: opts.gmOnly ? '' : def.notes, icon: def.icon, frag: area.frag, fragType: area.fragType }, map);
+              return placeThrownBlast({ goOff: true, x: plC.x, y: plC.y, ft: area.ft, name: opts.name || def.name, by: opts.by || '', charId: opts.charId, damage: def.damage || '', gmOnly: !!opts.gmOnly, dtype: area.type, ad: area.ad, notes: opts.gmOnly ? '' : def.notes, icon: def.icon, frag: area.frag, fragType: area.fragType, aff: area.aff }, map);
           }
           var unarmed = !!(pck && !pck.pass);   // the book: a failure leaves it unarmed, and the planter knows
       }
-      var mine = BC.cleanMine({ ft: area.ft, name: opts.name || def.name, damage: def.damage || '', type: area.type, ad: area.ad, trig: area.trig, charId: opts.charId, fieldId: opts.fieldId, rowId: opts.rowId, by: opts.by, gmOnly: !!opts.gmOnly, notes: opts.gmOnly ? '' : def.notes, unarmed: typeof unarmed === 'boolean' ? unarmed : false, frag: area.frag, fragType: area.fragType });   // 1.5.9 (es): and its fragmentation
+      var mine = BC.cleanMine({ ft: area.ft, name: opts.name || def.name, damage: def.damage || '', type: area.type, ad: area.ad, trig: area.trig, charId: opts.charId, fieldId: opts.fieldId, rowId: opts.rowId, by: opts.by, gmOnly: !!opts.gmOnly, notes: opts.gmOnly ? '' : def.notes, unarmed: typeof unarmed === 'boolean' ? unarmed : false, frag: area.frag, fragType: area.fragType, aff: area.aff });   // 1.5.9 (es): and its fragmentation and afflictions
       if (!mine) return null;
       var amM = getActiveMap(), pxYd = amM && amM.id === map.id ? mapMeasureConfig().cellPx / cellYards() : 50, r = Math.max(10, mine.trig * pxYd);
       var z = { id: 'wb' + uid() + Math.random().toString(36).slice(2, 5), type: 'trigger', shape: 'circle', x: Math.round(opts.x - r), y: Math.round(opts.y - r), w: Math.round(r * 2), h: Math.round(r * 2), color: 'transparent', eventMessage: '', hidden: true, name: (mine.name || 'Mine') + ' (mine)', mine: mine };
@@ -4437,7 +4517,7 @@ window.wpFitToGrid = fitToGrid;
       var at = map.whiteboard.indexOf(zone); if (at < 0) return null;
       var m = zone.mine, cx = (Number(zone.x) || 0) + (Number(zone.w) || 0) / 2, cy = (Number(zone.y) || 0) + (Number(zone.h) || 0) / 2;
       map.whiteboard.splice(at, 1); save(); render();
-      return placeThrownBlast({ goOff: true, x: cx, y: cy, ft: m.ft, name: m.name || 'Mine', by: m.by || '', charId: m.charId, damage: m.damage || '', gmOnly: !!m.gmOnly, direct: direct || null, dtype: m.type, ad: m.ad, notes: m.notes, icon: zone.mineIcon, frag: m.frag, fragType: m.fragType }, map);
+      return placeThrownBlast({ goOff: true, x: cx, y: cy, ft: m.ft, name: m.name || 'Mine', by: m.by || '', charId: m.charId, damage: m.damage || '', gmOnly: !!m.gmOnly, direct: direct || null, dtype: m.type, ad: m.ad, notes: m.notes, icon: zone.mineIcon, frag: m.frag, fragType: m.fragType, aff: m.aff }, map);
   }
   // A character token that stepped in (the host's own map: the GM's drag, a player's drop): every mine whose trigger it stands in now and did
   // not stand in where the gesture began goes off, the token struck directly. Never on a player's app or in the stream window
@@ -4521,7 +4601,7 @@ window.wpFitToGrid = fitToGrid;
       var x = Number(opts.x), y = Number(opts.y); if (!isFinite(x) || !isFinite(y)) return null;
       var lr = launchRowOf(camp, opts); if (!lr) { toast('Nothing to put down there: no round fired or chambered on that row has a blast.'); return null; }
       var hasD = Object.prototype.hasOwnProperty.call(opts, 'direct'), aimT = hasD ? null : tokenAtPoint(map, x, y, true), aim = aimT ? tokenCentre(aimT) : { x: x, y: y }, d = lr.def, a = lr.area, gm = d.vis === 'gm' || lr.f.vis === 'gm';   // the character token clicked, else the point; 1.5.9 (es): a miss names its own point and whom it strikes
-      var dir = hasD ? (typeof opts.direct === 'string' ? opts.direct : null) : aimT ? aimT.id : null, po = { goOff: true, launched: true, x: aim.x, y: aim.y, ft: a.ft, name: a.name || d.name || '', by: lr.ch.name || '', charId: opts.charId, fieldId: lr.f.id, rowId: opts.rowId, damage: d.damage || '', gmOnly: gm, direct: dir, dtype: a.type, ad: a.ad, notes: gm ? '' : d.notes, icon: d.icon, frag: a.frag, fragType: a.fragType };   // 1.5.9 (es): the round's own fragmentation
+      var dir = hasD ? (typeof opts.direct === 'string' ? opts.direct : null) : aimT ? aimT.id : null, po = { goOff: true, launched: true, x: aim.x, y: aim.y, ft: a.ft, name: a.name || d.name || '', by: lr.ch.name || '', charId: opts.charId, fieldId: lr.f.id, rowId: opts.rowId, damage: d.damage || '', gmOnly: gm, direct: dir, dtype: a.type, ad: a.ad, notes: gm ? '' : d.notes, icon: d.icon, frag: a.frag, fragType: a.fragType, aff: a.aff };   // 1.5.9 (es): the round's own fragmentation and afflictions
       if (typeof opts.said === 'string' && opts.said) po.said = opts.said; if (opts.fuse === true) po.fuseOk = true;
       return placeThrownBlast(po, map);
   }

@@ -5859,9 +5859,52 @@ function itemRow(it) {
     var stBox = itemStatsBox(it, sDefs); if (stBox) row.appendChild(stBox);   // F4c1
     var nrow = el('div', 'sys-item-notes-row'); nrow.appendChild(input('sys-item-notes field', it.notes, 'Notes shown on the sheet', 'Notes (optional)')); row.appendChild(nrow);
     row.appendChild(itemModsBox(it, anyL, anyO));   // Stage 6 F6
+    if (it.area) row.appendChild(affBox(it));   // 1.5.9 (es): its blast's afflictions
     var err = errorCell(it.id); err.dataset.errFor = it.id; row.appendChild(err);
     return row;
 }
+// 1.5.9 (the book's (es), docs/BOOK_ES_ET_PLAN.md section 2, its affliction half): an explosive's afflictions (systemcore cleanAffs), two at most,
+// each a line of its own: what it is resisted against, the effect a failure puts on, whom it reaches, Only where, and how long it lasts; what Save
+// does with each said under it, the cleaner's own reading. Values and text nodes only
+var AFF_WHO = [['', 'Reaches those it hurts'], ['all', 'Reaches everyone in the blast']], AFF_UNITS_ED = [['turns', 'turns'], ['seconds', 'seconds'], ['minutes', 'minutes'], ['hours', 'hours'], ['days', 'days']];
+function affBox(it) {
+    var box = el('div', 'sys-fx-mods sys-item-affs'), affs = it.area && Array.isArray(it.area.aff) ? it.area.aff : [], effs = (draft.effects || []).filter(function(d) { return d && typeof d.id === 'string'; });
+    var tu = draft.combat && draft.combat.turn && Array.isArray(draft.combat.turn.units) ? draft.combat.turn.units.filter(function(u) { return u && typeof u.key === 'string'; }) : [];
+    box.appendChild(el('span', 'sys-note', 'Afflictions it puts on those it reaches, each resisted with the Combat card’s resist roll:'));
+    affs.forEach(function(a, ai) {
+        if (!a || typeof a !== 'object') return;
+        var ln = el('div', 'sys-fx-mod sys-item-aff'); ln.dataset.ai = String(ai);
+        ln.appendChild(input('sys-item-affvs field', typeof a.vs === 'string' ? a.vs : '', 'What it is resisted against, read with the character it reaches, such as HT-2. The Combat card’s resist roll reads it as Resist', 'Resist against, e.g. HT-2'));
+        var fxO = [['', 'On a failure: pick an effect']].concat(effs.map(function(d) { return [d.id, 'On a failure: ' + (d.name || d.id)]; }));
+        if (typeof a.fx === 'string' && a.fx && !effs.some(function(d) { return d.id === a.fx; })) fxO.push([a.fx, 'On a failure: an effect that is gone']);
+        ln.appendChild(select('sys-item-afffx', fxO, typeof a.fx === 'string' ? a.fx : '', 'The effect put on a character that fails to resist'));
+        ln.appendChild(select('sys-item-affwho', AFF_WHO, a.who === 'all' ? 'all' : '', 'Whom it reaches: those the blast or its fragmentation hurt, or everyone in the blast’s radius'));
+        ln.appendChild(input('sys-item-affneeds field', typeof a.needs === 'string' ? a.needs : '', 'A formula of the character it reaches that must hold for it to touch them at all, such as not Droid. Blank: everyone it reaches', 'Only where (optional)'));
+        var ls = a.lasts && typeof a.lasts === 'object' ? a.lasts : {};
+        ln.appendChild(input('sys-item-afflasts field', typeof ls.n === 'string' ? ls.n : '', 'How long the effect lasts, a formula that may roll dice, such as 1d6. Blank: the effect’s own duration', 'Lasts (optional)'));
+        var uO = AFF_UNITS_ED.concat(tu.map(function(u) { return [u.key, u.label || u.key]; })); if (typeof ls.u === 'string' && ls.u && !uO.some(function(o) { return o[0] === ls.u; })) uO.push([ls.u, ls.u]);
+        ln.appendChild(select('sys-item-affunit', uO, typeof ls.u === 'string' && ls.u ? ls.u : 'minutes', 'The unit of its Lasts'));
+        ln.appendChild(btnRow([['affdel', 'Remove this affliction', '&times;']]));
+        box.appendChild(ln);
+        var er = el('div', 'sys-err sys-item-afferr'); er.dataset.ai = String(ai); er.textContent = affSays(a); box.appendChild(er);
+    });
+    if (affs.length < (LIMITS.areaAffs || 2)) { var add = el('button', 'tool ghost sys-btn', '+ Affliction'); add.dataset.act = 'affadd'; add.title = effs.length ? 'A resist roll each character it reaches makes, and an effect put on at a failure' : 'Add an effect in the Effects tab first'; if (!effs.length) add.disabled = true; box.appendChild(add); }
+    return box;
+}
+function affSays(a) {   // what Save does with one affliction: '' where it keeps it whole
+    var SCa = window.wpSystemCore; if (!a || typeof a !== 'object' || !SCa || typeof SCa.cleanAffs !== 'function') return '';
+    if (!(typeof a.vs === 'string' && a.vs.trim())) return 'Save drops it: it needs what it is resisted against.';
+    if (!(draft.effects || []).some(function(d) { return d && d.id === a.fx; })) return 'Save drops it: it needs an effect it puts on.';
+    var c = SCa.cleanAffs([a]); if (!c) return 'Save drops it: what it is resisted against must be a formula.';
+    if (typeof a.needs === 'string' && a.needs.trim() && !c[0].needs) return 'Save drops its Only where: it must be a formula.';
+    if (a.lasts && typeof a.lasts.n === 'string' && a.lasts.n.trim() && !c[0].lasts) return 'Save drops its Lasts: it must be a formula with a unit.';
+    return '';
+}
+function affOfRow(t, it) {   // the affliction a control of the Items tab stands in, or null
+    var ln = t && t.closest ? t.closest('.sys-item-aff') : null, ai = ln ? Number(ln.dataset.ai) : -1, A = it && it.area && Array.isArray(it.area.aff) ? it.area.aff : null;
+    return A && ai >= 0 && ai < A.length && A[ai] && typeof A[ai] === 'object' ? { a: A[ai], ai: ai, ln: ln } : null;
+}
+function affSaysAt(t, it, a) { var box = t && t.closest ? t.closest('.sys-item-affs') : null, ln = t && t.closest ? t.closest('.sys-item-aff') : null, er = box && ln ? Array.prototype.filter.call(box.querySelectorAll('.sys-item-afferr'), function(x) { return x.dataset.ai === ln.dataset.ai; })[0] : null; if (er) er.textContent = affSays(a); }
 // Stage 6 F6: an item's changes to the character carrying it — a status effect's kind of change (a number, skill or formula up or down, a
 // pool's max, a toggle switched on); per level once a list has levels, "only while switched on" once a list has a switch
 function itemModsBox(it, anyL, anyO) {
@@ -6267,12 +6310,24 @@ function blastBox(box, cm) {
         var on = d[0] === 'cover' ? (fgC.cover === 'total' ? 'total' : '') : d[0] === 'each' ? (fgC.each === true ? 'each' : '') : d[0] === 'direct' ? (fgC.direct === true ? 'own' : '') : (fgC.ad === true ? 'yes' : '');
         box.appendChild(labeledSelect('sys-combat-fg' + d[0], d[1], d[2], on, d[3])); lineUnder(box, d[3]);
     });
+    var rsV = typeof bl.resist === 'string' ? bl.resist : '';   // 1.5.9 (es): an affliction's resist roll, and whom one that reaches those it hurt reaches
+    var rl = el('label', 'sys-combat-item'); rl.appendChild(el('span', 'sys-num-cap', 'Resist roll')); var ri = input('sys-combat-resist field', rsV, RESIST_LINE, 'e.g. 3d6 <= Resist'); ri.dataset.rk = 'resist'; rl.appendChild(ri); box.appendChild(rl);
+    lineUnder(box, RESIST_LINE);
+    var re = el('div', 'sys-blast-err'); re.dataset.rk = 'resist'; re.textContent = resistSays(rsV); box.appendChild(re);
+    box.appendChild(labeledSelect('sys-combat-affhurt', 'Those an affliction hurts', [['', 'Took a wound, after DR'], ['share', 'Took any share of the blast']], bl.hurt === 'share' ? 'share' : '', HURT_LINE)); lineUnder(box, HURT_LINE);
+}
+var RESIST_LINE = 'The check a character rolls against an affliction. Resist stands for what the item says it is resisted against. With none, you are told who must resist.';
+var HURT_LINE = 'For an affliction that reaches those it hurts. A wound is damage that got through DR.';
+function resistSays(v) {   // what Save does with the Resist roll: '' where it keeps it
+    var SCr = window.wpSystemCore; if (!v || !SCr || typeof SCr.cleanBlastRules !== 'function') return '';
+    var c = SCr.cleanBlastRules({ resist: v }, F()); return c && c.resist ? '' : 'Save drops it: it does not read as a formula.';
 }
 var FRAG_TYPE_LINE = 'The damage type of fragmentation whose item names none. With none, the blast\u2019s own type.';
 function onBlastChange(t) {   // the lists of the Blasts and throws part
-    var c = t && t.className || '', lk = /(^| )sys-combat-bl(fuse|fumble|stop|glance)( |$)/.exec(c), fk = /(^| )sys-combat-fg(type|cover|each|direct|ad)( |$)/.exec(c); if (c.indexOf('sys-combat-bways') < 0 && c.indexOf('sys-combat-bfuse') < 0 && !lk && !fk) return false;
+    var c = t && t.className || '', lk = /(^| )sys-combat-bl(fuse|fumble|stop|glance)( |$)/.exec(c), fk = /(^| )sys-combat-fg(type|cover|each|direct|ad)( |$)/.exec(c), hk = /(^| )sys-combat-affhurt( |$)/.test(c); if (c.indexOf('sys-combat-bways') < 0 && c.indexOf('sys-combat-bfuse') < 0 && !lk && !fk && !hk) return false;
     var cm = draft.combat || (draft.combat = { blastAuto: 'full', blastRoller: 'owner', hpResource: '' }), bl = cm.blast && typeof cm.blast === 'object' && !Array.isArray(cm.blast) ? cm.blast : (cm.blast = {});
-    if (fk) {   // 1.5.9 (es): fragmentation, kept only off the plan's reading
+    if (hk) { if (t.value === 'share') bl.hurt = 'share'; else delete bl.hurt; }   // 1.5.9 (es) H7: whom an affliction that reaches those it hurts reaches, kept only off the plan's reading
+    else if (fk) {   // 1.5.9 (es): fragmentation, kept only off the plan's reading
         var fo = bl.frag && typeof bl.frag === 'object' && !Array.isArray(bl.frag) ? bl.frag : (bl.frag = {}), fv = String(t.value || '');
         if (fk[2] === 'type') { if (fv) fo.type = fv.slice(0, 24); else delete fo.type; } else if (fk[2] === 'cover') { if (fv === 'total') fo.cover = 'total'; else delete fo.cover; }
         else if (fk[2] === 'each') { if (fv === 'each') fo.each = true; else delete fo.each; } else if (fk[2] === 'direct') { if (fv === 'own') fo.direct = true; else delete fo.direct; } else { if (fv === 'yes') fo.ad = true; else delete fo.ad; }
@@ -6289,6 +6344,12 @@ function onBlastChange(t) {   // the lists of the Blasts and throws part
     markDirty(); return true;
 }
 function onBlastInput(t) {
+    if (t && t.dataset && t.dataset.rk === 'resist' && /(^| )sys-combat-resist( |$)/.test(t.className || '')) {   // 1.5.9 (es): the Resist roll, and what Save does with it
+        var cmR = draft.combat || (draft.combat = { blastAuto: 'full', blastRoller: 'owner', hpResource: '' }), blR = cmR.blast && typeof cmR.blast === 'object' && !Array.isArray(cmR.blast) ? cmR.blast : (cmR.blast = {}), vR = String(t.value || '').trim();
+        if (vR) blR.resist = vR.slice(0, 1200); else delete blR.resist; if (!Object.keys(blR).length) delete cmR.blast;
+        var boxR = ui('sysCombatBox'), erR = boxR ? Array.prototype.filter.call(boxR.querySelectorAll('.sys-blast-err'), function(x) { return x.dataset.rk === 'resist'; })[0] : null; if (erR) erR.textContent = resistSays(vR);
+        markDirty(); return true;
+    }
     if (t && t.dataset && t.dataset.fk === 'reach' && /(^| )sys-combat-fgreach( |$)/.test(t.className || '')) {   // 1.5.9 (es): Fragmentation reaches, and what Save does with it
         var cmF = draft.combat || (draft.combat = { blastAuto: 'full', blastRoller: 'owner', hpResource: '' }), blF = cmF.blast && typeof cmF.blast === 'object' && !Array.isArray(cmF.blast) ? cmF.blast : (cmF.blast = {});
         var foF = blF.frag && typeof blF.frag === 'object' && !Array.isArray(blF.frag) ? blF.frag : (blF.frag = {}), vF = String(t.value || '').trim();
@@ -7503,6 +7564,12 @@ function onInput(e) {
         else if (ic.indexOf('sys-item-atrig') >= 0) { if (it.area) { var tgv = Number(t.value); if (t.value !== '' && isFinite(tgv) && tgv > 0) it.area.trig = tgv; else delete it.area.trig; } }   // 1.5.8 explosives
         else if (ic.indexOf('sys-item-damage') >= 0) it.damage = t.value;
         else if (/(^| )sys-item-afrag( |$)/.test(ic)) { if (!it.area) return; if (t.value.trim()) it.area.frag = t.value.slice(0, LIMITS.formula); else { delete it.area.frag; delete it.area.fragType; } }   // 1.5.9 (es): its fragmentation (Save cleans it, the validator reads it)
+        else if (/(^| )sys-item-aff(vs|needs|lasts)( |$)/.test(ic)) {   // 1.5.9 (es): an affliction's three formulas (Save cleans them, the validator reads them), and what Save does with it said at once
+            var afI = affOfRow(t, it); if (!afI) return; var kI = /sys-item-aff(vs|needs|lasts)/.exec(ic)[1], vI = String(t.value).slice(0, LIMITS.formula);
+            if (kI === 'vs') afI.a.vs = vI; else if (kI === 'needs') { if (vI.trim()) afI.a.needs = vI; else delete afI.a.needs; }
+            else if (vI.trim()) { var luI = afI.ln.querySelector('.sys-item-affunit'); afI.a.lasts = { n: vI, u: afI.a.lasts && afI.a.lasts.u ? afI.a.lasts.u : (luI && luI.value) || 'minutes' }; } else delete afI.a.lasts;
+            affSaysAt(t, it, afI.a);
+        }
         else if (ic.indexOf('sys-item-cost') >= 0) it.cost = t.value;
         else if (ic.indexOf('sys-item-throw') >= 0) it.throwSkill = t.value.trim();
         else if (ic.indexOf('sys-item-icon') >= 0) it.icon = t.value.slice(0, 32);   // Save keeps an emoji's first 8 code points, or a bundled icon's name
@@ -7688,6 +7755,12 @@ function onChange(e) {
         if (c.indexOf('sys-item-ause') >= 0) { if (iit.area) { if (t.checked) iit.area.use = true; else delete iit.area.use; } markDirty(); patchErrors(); return; }
         if (c.indexOf('sys-item-aplace') >= 0) { if (iit.area) { if (t.checked) { iit.area.place = true; delete iit.area.flight; } else { delete iit.area.place; delete iit.area.trig; } } markDirty(); renderAll(); return; }   // 1.5.9: a placed mine is never launched
         if (c.indexOf('sys-item-afragtype') >= 0) { if (iit.area) { if (t.value) iit.area.fragType = t.value; else delete iit.area.fragType; } markDirty(); patchErrors(); return; }   // 1.5.9 (es)
+        if (/(^| )sys-item-aff(fx|who|unit)( |$)/.test(c)) {   // 1.5.9 (es): an affliction's effect, whom it reaches and the unit of its Lasts
+            var afC = affOfRow(t, iit); if (!afC) return; var kC = /sys-item-aff(fx|who|unit)/.exec(c)[1], vC = String(t.value || '');
+            if (kC === 'fx') { if (vC) afC.a.fx = vC.slice(0, 32); else delete afC.a.fx; } else if (kC === 'who') { if (vC === 'all') afC.a.who = 'all'; else delete afC.a.who; }
+            else if (afC.a.lasts && typeof afC.a.lasts === 'object') afC.a.lasts.u = vC.slice(0, 24);
+            affSaysAt(t, iit, afC.a); markDirty(); patchErrors(); return;
+        }
         if (c.indexOf('sys-item-aflight') >= 0) { if (iit.area) { if (t.value === 'scatter' || t.value === 'line') iit.area.flight = t.value; else delete iit.area.flight; } markDirty(); patchErrors(); return; }   // 1.5.9 (es)
         if (c.indexOf('sys-item-shape') >= 0) { if (t.value === '') iit.area = null; else iit.area = { ft: iit.area ? iit.area.ft : 12, shape: 'circle', name: iit.area ? iit.area.name : '' }; markDirty(); renderAll(); return; }
         if (c.indexOf('sys-item-cat') >= 0) { var nsc = itemStatDefs(iit).map(function(s) { return s.key.toLowerCase(); }).join(','); if (nsc !== (t.dataset.scope || '')) { markDirty(); renderAll(); } return; }   // F4c1: a category that changes which lists it can be on redraws its stat boxes
@@ -7858,6 +7931,12 @@ function onClick(e) {
             iitem.mods.push(nmI);
         }
         else if (iact === 'itemmoddel') { var dlI = b.closest('.sys-item-mod'); if (dlI) (iitem.mods || []).splice(+dlI.dataset.mi, 1); }
+        else if (iact === 'affadd') {   // 1.5.9 (es): an affliction, at first on the system's first effect, resisted against nothing yet (Save says so under it)
+            var fx0 = (draft.effects || []).filter(function(d) { return d && typeof d.id === 'string'; })[0]; if (!iitem.area || !fx0) return;
+            var aA = Array.isArray(iitem.area.aff) ? iitem.area.aff : (iitem.area.aff = []); if (aA.length >= (LIMITS.areaAffs || 2)) { toast('At most ' + (LIMITS.areaAffs || 2) + ' afflictions an item.'); return; }
+            aA.push({ vs: '', fx: fx0.id });
+        }
+        else if (iact === 'affdel') { var dlA = b.closest('.sys-item-aff'), aD = iitem.area && Array.isArray(iitem.area.aff) ? iitem.area.aff : null; if (dlA && aD) { aD.splice(+dlA.dataset.ai, 1); if (!aD.length) delete iitem.area.aff; } }
         else return;
         markDirty(); renderAll(); return;
     }

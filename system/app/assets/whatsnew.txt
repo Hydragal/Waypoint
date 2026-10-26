@@ -74,6 +74,15 @@ Explosives
   the target struck directly, and whether an armour divisor counts. A
   thrown explosive, a mine and a launched round all carry it, and Undo
   last throw puts it back.
+- An explosive can carry afflictions, two at most. Each says what it is
+  resisted against, such as HT-2, and the effect a failure puts on. When
+  it goes off, each character it reaches rolls the Combat card's Resist
+  roll, and a failure puts the effect on, for its Lasts or its own time.
+- An affliction reaches those the blast hurt, or everyone in the blast.
+  Its Only where can leave some out. The Combat card says whether a wound
+  after DR or any share counts as hurt. An item with no damage roll still
+  puts its afflictions on everyone in the blast, and Undo last throw takes
+  the effects off again.
 
 Voice chat
 - Talk with everyone at the table. Press the microphone in the top row,

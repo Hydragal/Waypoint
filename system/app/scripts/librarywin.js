@@ -404,7 +404,7 @@ function modsBox(form, e) {
 function readForm() {
     var g = function(id) { var n = ui('libF_' + id); return n ? n.value : ''; }, e = current(), stats = {};
     Array.prototype.forEach.call(document.querySelectorAll('#libForm [data-stat]'), function(n) { stats[n.dataset.stat] = n.value; });
-    var typed = entryFromForm({ id: e.id, name: g('name'), key: g('key'), category: g('category'), icon: g('icon'), vis: g('vis'), lvl: g('lvl'), stats: stats, notes: g('notes'), desc: g('desc'), lvls: g('lvls'), lvlsWas: e.lvls, tags: g('tags'), ref: g('ref'), damage: g('damage'), cost: g('cost'), throwSkill: g('throwSkill'), areaFt: g('areaFt'), areaShape: e.area && e.area.shape, areaName: e.area && e.area.name, areaType: g('areaType'), areaUse: g('areaUse'), areaPlace: g('areaPlace'), areaTrig: g('areaTrig'), areaAd: g('areaAd'), areaFlight: g('areaFlight'), areaFrag: g('areaFrag'), areaFragType: g('areaFragType'), gmNotes: g('gmNotes'), rm: g('rm'), rmMsg: g('rmMsg'), eq: g('eq'), eqMsg: g('eqMsg'), mods: st.fmFor === e.id && st.fm ? st.fm : e.mods, modsOn: ui('libF_modsOn') ? ui('libF_modsOn').checked : e.modsOn === true, opens: st.foFor === e.id && st.fo ? st.fo : e.opens, needs: st.fnFor === e.id && st.fn ? st.fn : e.needs, needsIf: g('needsIf'), needsFrom: g('needsFrom'), needsMsg: g('needsMsg') });
+    var typed = entryFromForm({ id: e.id, name: g('name'), key: g('key'), category: g('category'), icon: g('icon'), vis: g('vis'), lvl: g('lvl'), stats: stats, notes: g('notes'), desc: g('desc'), lvls: g('lvls'), lvlsWas: e.lvls, tags: g('tags'), ref: g('ref'), damage: g('damage'), cost: g('cost'), throwSkill: g('throwSkill'), areaFt: g('areaFt'), areaShape: e.area && e.area.shape, areaName: e.area && e.area.name, areaType: g('areaType'), areaUse: g('areaUse'), areaPlace: g('areaPlace'), areaTrig: g('areaTrig'), areaAd: g('areaAd'), areaFlight: g('areaFlight'), areaFrag: g('areaFrag'), areaFragType: g('areaFragType'), areaAffs: [0, 1].map(function(i) { return { vs: g('areaAff' + i + 'Vs'), fx: g('areaAff' + i + 'Fx'), who: g('areaAff' + i + 'Who'), needs: g('areaAff' + i + 'Needs'), n: g('areaAff' + i + 'Lasts'), u: g('areaAff' + i + 'Unit') }; }), gmNotes: g('gmNotes'), rm: g('rm'), rmMsg: g('rmMsg'), eq: g('eq'), eqMsg: g('eqMsg'), mods: st.fmFor === e.id && st.fm ? st.fm : e.mods, modsOn: ui('libF_modsOn') ? ui('libF_modsOn').checked : e.modsOn === true, opens: st.foFor === e.id && st.fo ? st.fo : e.opens, needs: st.fnFor === e.id && st.fn ? st.fn : e.needs, needsIf: g('needsIf'), needsFrom: g('needsFrom'), needsMsg: g('needsMsg') });
     var out = clone(e), eqShown = !!ui('libF_eq'); FORM_KEYS.forEach(function(k) { if (eqShown || (k !== 'eq' && k !== 'eqMsg')) delete out[k]; }); return Object.assign(out, typed);   // a switch lock the form does not show (no list has a switch) is kept
 }
 // 1.5.8: an entry's blast extras beside its radius: its damage type (a key of the Combat card's types, or none), whether going off uses one
@@ -425,11 +425,27 @@ function blastBox(form, a) {
     field(form, 'areaFlight', 'On a miss, launched', a.flight === 'scatter' || a.flight === 'line' ? a.flight : '', { pairs: [['', 'You place it'], ['scatter', 'It scatters, as a throw'], ['line', 'It flies straight']], title: 'How a round fired from a launcher lands when the roll misses. One that scatters lands as a missed throw does. One that flies straight goes off on the first wall or character in its path, or at its farthest' });   // 1.5.9 (es)
     field(form, 'areaFrag', 'Fragmentation', typeof a.frag === 'string' ? a.frag : '', { title: 'Its fragmentation, a dice roll such as 1d6. When the blast goes off the host rolls it for the characters it reaches, as the Combat card says. Blank: none' });   // 1.5.9 (es)
     field(form, 'areaFragType', 'Fragmentation type', typeof a.fragType === 'string' ? a.fragType : '', { pairs: [['', 'As the Combat card says']].concat(dmgTypePairs(a.fragType).slice(1)), title: 'The damage type of its fragmentation, one of the Combat card\u2019s damage types' });
+    var afs = Array.isArray(a.aff) ? a.aff.filter(function(x) { return x && typeof x === 'object'; }).slice(0, 2) : [];   // 1.5.9 (es): its afflictions, a second drawn once the first is kept
+    for (var ai = 0; ai < Math.min(2, afs.length + 1); ai++) affRows(form, ai, afs[ai] || {});
+}
+// 1.5.9 (the book's (es)): one affliction's rows, as systemcore cleanAffs keeps one: what it is resisted against, the effect a failure puts on (the
+// system's effects by name), whom it reaches, Only where and how long it lasts
+function affRows(form, i, a) {
+    var c = camp(), effs = c && c.system && Array.isArray(c.system.effects) ? c.system.effects.filter(function(d) { return d && typeof d.id === 'string'; }) : [], n = 'Affliction ' + (i + 1) + ': ';
+    var fxP = [['', 'Pick an effect']].concat(effs.map(function(d) { return [d.id, typeof d.name === 'string' && d.name ? d.name : d.id]; })); if (typeof a.fx === 'string' && a.fx && !effs.some(function(d) { return d.id === a.fx; })) fxP.push([a.fx, 'An effect that is gone']);
+    var tu = c && c.system && c.system.combat && c.system.combat.turn && Array.isArray(c.system.combat.turn.units) ? c.system.combat.turn.units.filter(function(u) { return u && typeof u.key === 'string'; }) : [], ls = a.lasts && typeof a.lasts === 'object' ? a.lasts : {};
+    var uP = [['turns', 'Turns'], ['seconds', 'Seconds'], ['minutes', 'Minutes'], ['hours', 'Hours'], ['days', 'Days']].concat(tu.map(function(u) { return [u.key, typeof u.label === 'string' && u.label ? u.label : u.key]; })); if (typeof ls.u === 'string' && ls.u && !uP.some(function(o) { return o[0] === ls.u; })) uP.push([ls.u, ls.u]);
+    field(form, 'areaAff' + i + 'Vs', n + 'resisted against', typeof a.vs === 'string' ? a.vs : '', { max: 300, ph: 'e.g. HT-2', title: 'What a character it reaches rolls the Combat card\u2019s resist roll against, read with their own names. Blank: no affliction' });
+    field(form, 'areaAff' + i + 'Fx', n + 'on a failure', typeof a.fx === 'string' ? a.fx : '', { pairs: fxP, title: 'The effect put on a character that fails to resist, one of the system\u2019s effects' });
+    field(form, 'areaAff' + i + 'Who', n + 'reaches', a.who === 'all' ? 'all' : '', { pairs: [['', 'Those it hurts'], ['all', 'Everyone in the blast']], title: 'Whom it reaches: those the blast or its fragmentation hurt, or everyone in the blast\u2019s radius' });
+    field(form, 'areaAff' + i + 'Needs', n + 'only where', typeof a.needs === 'string' ? a.needs : '', { max: 300, ph: 'e.g. not Droid', title: 'A formula of the character it reaches that must hold for it to touch them at all. Blank: everyone it reaches' });
+    field(form, 'areaAff' + i + 'Lasts', n + 'lasts', typeof ls.n === 'string' ? ls.n : '', { max: 300, ph: 'e.g. 1d6', title: 'How long the effect lasts, a formula that may roll dice. Blank: the effect\u2019s own duration' });
+    field(form, 'areaAff' + i + 'Unit', n + 'lasts in', typeof ls.u === 'string' && ls.u ? ls.u : 'minutes', { pairs: uP, title: 'The unit of its Lasts' });
 }
 // what the cleaner left out of the blast's extras, said in fixed words (an empty text: nothing)
 function blastDrops(raw, c) {
     var f = raw && raw.area, k = c && c.area, out = [], g = function(id) { var n = ui('libF_' + id); return n ? String(n.value).trim() : ''; };
-    if (!f) { if (g('areaType') || g('areaUse') || g('areaPlace') || g('areaTrig') || g('areaAd') || g('areaFlight') || g('areaFrag') || g('areaFragType')) out.push('the blast\u2019s other settings, which need a blast radius'); }
+    if (!f) { if (g('areaType') || g('areaUse') || g('areaPlace') || g('areaTrig') || g('areaAd') || g('areaFlight') || g('areaFrag') || g('areaFragType') || g('areaAff0Vs') || g('areaAff1Vs')) out.push('the blast\u2019s other settings, which need a blast radius'); }
     else {
         if (f.type && !(k && k.type)) out.push('the damage type');
         if (g('areaTrig') && !(k && k.trig)) out.push(f.place === true ? 'the trigger radius, which must be a number above 0' : 'the trigger radius, which needs Placed, not thrown');
@@ -437,6 +453,8 @@ function blastDrops(raw, c) {
         if (g('areaFlight') && !(k && k.flight)) out.push('how it lands on a miss, which a placed blast never does');   // 1.5.9 (es)
         if (g('areaFrag') && !(k && k.frag)) out.push('the fragmentation, which must be a formula');   // 1.5.9 (es)
         if (g('areaFragType') && !(k && k.fragType)) out.push(g('areaFrag') ? 'the fragmentation type' : 'the fragmentation type, which needs a fragmentation');
+        var kA = k && Array.isArray(k.aff) ? k.aff : [], fA = Array.isArray(f.aff) ? f.aff : [];   // 1.5.9 (es): an affliction the cleaner left out, or its Only where or Lasts
+        fA.forEach(function(x, xi) { var y = x ? kA.filter(function(z) { return z && z.vs === x.vs && z.fx === x.fx; })[0] : null; if (!y) out.push('affliction ' + (xi + 1) + ', which needs a formula it is resisted against and an effect of the system'); else { if (x.needs && !y.needs) out.push('the Only where of affliction ' + (xi + 1) + ', which must be a formula'); if (x.lasts && !y.lasts) out.push('the Lasts of affliction ' + (xi + 1) + ', which must be a formula'); } });
     }
     return out.length ? 'Not kept: ' + out.join(', ') + '.' : '';
 }

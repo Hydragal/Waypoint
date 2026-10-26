@@ -5430,6 +5430,37 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             !!fgIn && fgIn.tag === 'input' && fgIn.value === BAD && !!fgSel && fgSel.tag === 'select' && j(fgOpts) === j([['', 'As the Combat card says'], [BAD, '<b>' + BAD + '</b>'], ['cr', 'Crushing']]) && fgSel.value === BAD
             && made.indexOf('innerHTML') < 0 && !!hostG && hostG.area.frag === '1d6' && hostG.area.fragType === undefined && !!keptG && keptG.area.fragType === 'cr' && !!plG && plG.area.frag === undefined && plG.area.fragType === undefined,
             j([fgIn && fgIn.value, fgOpts, hostG && hostG.area, keptG && keptG.area, plG && plG.area]));
+        // 1.5.9 (es): an entry's afflictions from a hostile file, and the system's effects by a hostile name, reach the form only as a box's value and an option's value and text
+        const sysA = { system: { effects: [{ id: 'e_ok', name: BAD }], combat: { turn: { units: [{ key: 'watch', label: BAD }] } } } }, BADA = { vs: BAD, fx: BAD, who: BAD, needs: BAD, lasts: { n: BAD, u: BAD } };
+        const BA = new Function('document', 'camp', 'ui', '"use strict";\n' + src + '\nreturn { blastBox };')(doc, () => sysA, id => ids[id] || null);
+        const formA = mk('div'); BA.blastBox(formA, { aff: [BADA] }); const affK = formA.kids.slice(8, 14).map(r => r.kids[1]), affK2 = formA.kids.slice(14, 20).map(r => r.kids[1]);
+        const optsOf = s => s && s.kids ? s.kids.map(o => [o.value, o.textContent]) : null;
+        const hostA = LCB.cleanLibEntry(LCB.entryFromForm({ id: 'i_h', name: 'Spark Grenade', vis: 'all', areaFt: '6', areaAffs: [{ vs: BAD, fx: BAD, who: BAD, needs: BAD, n: BAD, u: BAD }, { vs: 'HT-2', fx: 'e_ok', who: 'all', needs: '', n: '1d6', u: 'watch' }] }), ctx);
+        const plA = LCB.cleanLibEntry(LCB.entryFromForm({ id: 'i_h', name: 'Spark Grenade', vis: 'all', areaFt: '6', areaAffs: [{ vs: 'HT-2', fx: 'e_ok' }] }), LCB.libCtx(sysC, FB, false));
+        check('1.5.9 (es) the Library window\'s afflictions from a hostile campaign (librarywin.js blastBox and affRows, run on a page that records every write): a hostile resist target, Only where and Lasts reach their boxes only as values, a hostile effect name and unit label reach the lists only as an option\'s text, a stored effect and unit that are none of them only as an option\'s value with fixed words or its own text, a stored who that is not all reads as Those it hurts, a second slot drawn empty; nothing writes markup; the real cleaner keeps no effect that is no id and no unit that is no key, and the players\' copy holds none',
+            affK.length === 6 && affK[0].value === BAD && affK[3].value === BAD && affK[4].value === BAD && affK[2].value === '' && j(optsOf(affK[1])) === j([['', 'Pick an effect'], ['e_ok', BAD], [BAD, 'An effect that is gone']]) && affK[1].value === BAD
+            && optsOf(affK[5]).some(o => o[0] === 'watch' && o[1] === BAD) && optsOf(affK[5]).some(o => o[0] === BAD && o[1] === BAD) && affK[5].value === BAD && affK2.length === 6 && affK2[0].value === '' && affK2[5].value === 'minutes'
+            && made.indexOf('innerHTML') < 0 && !!hostA && j(hostA.area.aff) === j([{ vs: 'HT-2', fx: 'e_ok', who: 'all', lasts: { n: '1d6', u: 'watch' } }]) && !!plA && plA.area.aff === undefined,
+            j([affK.map(x => x && x.value), optsOf(affK[1]), hostA && hostA.area, plA && plA.area]));
+    }
+    {   // 1.5.9 (es): the Items tab's afflictions from a hostile system file (sheets.js affBox and affSays, sliced with the editor's own el, opt, input and select and
+        // run on a page that records every write): a hostile resist target, Only where and Lasts reach their boxes as values, a hostile effect name and unit label as an option's text
+        const SYI = await import(modUrl('systemcore.js')), shI = fs.readFileSync(path.join(dir, 'sheets.js'), 'utf8').replace(/\r\n/g, '\n'), madeI = [], j = JSON.stringify;
+        const mkI = tag => { const e = { tag, kids: [], className: '', dataset: {}, title: '', value: '', type: '', _t: '', appendChild(x) { this.kids.push(x); return x; } };
+            Object.defineProperty(e, 'textContent', { get() { return this._t; }, set(v) { this._t = String(v); } }); Object.defineProperty(e, 'innerHTML', { get() { return ''; }, set(v) { madeI.push('innerHTML'); } }); return e; };
+        const lineOf = (n) => { const i = shI.indexOf(n); return shI.slice(i, shI.indexOf('\n', i)); };
+        const srcI = [lineOf('function el(tag, cls, text) {'), lineOf('function opt(value, text, selected) {'), lineOf('function input(cls, value, title, placeholder) {'), lineOf('function select(cls, options, value, title) {'), 'function btnRow(list) { var s = el(\'span\', \'sys-btns\'); s.dataset.list = list.map(function(b) { return b[0]; }).join(\',\'); return s; }',
+            shI.slice(shI.indexOf('var AFF_WHO = '), shI.indexOf('function affOfRow('))].join('\n');
+        const BADI = '"><img src=x onerror=alert(1)>';
+        let draft = { effects: [{ id: 'e_ok', name: BADI }], combat: { turn: { units: [{ key: 'watch', label: BADI }] } } };
+        const AI = new Function('document', 'LIMITS', 'window', 'getDraft', '"use strict";\nvar draft = getDraft();\n' + srcI + '\nreturn affBox;')({ createElement: mkI }, SYI.LIMITS, { wpSystemCore: SYI }, () => draft);
+        const boxI = AI({ area: { ft: 6, aff: [{ vs: BADI, fx: BADI, needs: BADI, lasts: { n: BADI, u: BADI } }] } }), lnI = boxI.kids.find(k => /sys-item-aff( |$)/.test(k.className)), cI = lnI ? lnI.kids : [];
+        const byC = c => cI.find(k => k.className.indexOf(c) >= 0);
+        check('1.5.9 (es) the Items tab\'s afflictions from a hostile system (sheets.js affBox, run on a page that records every write): a hostile resist target, Only where and Lasts reach their boxes only as values, a hostile effect name and unit label reach the lists only as an option\'s text, a stored effect and unit that are none of them only as an option\'s value with fixed words or its own text; nothing writes markup; what Save does is said in fixed words',
+            !!lnI && byC('sys-item-affvs').value === BADI && byC('sys-item-affneeds').value === BADI && byC('sys-item-afflasts').value === BADI && byC('sys-item-afffx').kids.some(o => o.value === 'e_ok' && o.textContent === 'On a failure: ' + BADI) && byC('sys-item-afffx').kids.some(o => o.value === BADI && o.textContent === 'On a failure: an effect that is gone')
+            && byC('sys-item-affunit').kids.some(o => o.value === 'watch' && o.textContent === BADI) && byC('sys-item-affunit').kids.some(o => o.value === BADI && o.textContent === BADI)
+            && boxI.kids.some(k => /sys-item-afferr/.test(k.className) && k.textContent === 'Save drops it: it needs an effect it puts on.') && madeI.indexOf('innerHTML') < 0 && !/innerHTML|insertAdjacentHTML|outerHTML/.test(srcI.slice(srcI.indexOf('var AFF_WHO = '))),
+            j([cI.map(k => [k.className, k.value]), madeI.slice(0, 5)]));
     }
     {   // voice chat (1.5.9, pull request #1 by Hydragal): a player's name from the roster and a name a hostile host puts in the offer's map reach the
         // voice popover as text alone (voice.js loaded whole on tools/voicedom.js's page of plain objects, which counts every write of markup)
