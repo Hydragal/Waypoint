@@ -1,6 +1,12 @@
 # Waypoint
 
 [![Checks](https://github.com/ImmuneMoon/Waypoint/actions/workflows/checks.yml/badge.svg)](https://github.com/ImmuneMoon/Waypoint/actions/workflows/checks.yml)
+[![Release](https://img.shields.io/github/v/release/ImmuneMoon/Waypoint?include_prereleases&color=blue&logo=github)](https://github.com/ImmuneMoon/Waypoint/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/ImmuneMoon/Waypoint/total?logo=github)](https://github.com/ImmuneMoon/Waypoint/releases)
+![Windows 10 | 11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?logo=windows&logoColor=white)
+![Built with Electron](https://img.shields.io/badge/Built%20with-Electron-47848F?logo=electron&logoColor=white)
+![Multiplayer: peer-to-peer WebRTC](https://img.shields.io/badge/Multiplayer-peer--to--peer%20%28WebRTC%29-333333?logo=webrtc&logoColor=white)
+[![License: Terms of Use](https://img.shields.io/badge/License-Terms%20of%20Use-lightgrey)](license.txt)
 
 Current release: **Waypoint Alpha 1.5.8** — see [Releases](https://github.com/ImmuneMoon/Waypoint/releases) for downloads and notes.
 
