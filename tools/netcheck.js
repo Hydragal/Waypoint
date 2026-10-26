@@ -3168,8 +3168,11 @@ pendingChecks.push((async () => {
     const rqSrc = (ordersSrc + '\n' + between('// [netcheck:rollreq-start]', '// [netcheck:rollreq-end]', 'rollreq')), drSrc = between('// [netcheck:diceroll-start]', '// [netcheck:diceroll-end]', 'diceroll');
     const sysR = Sx.cleanSystem({ v: 1, name: 'R', fields: [
         { id: 'f_hp', key: 'HP', label: 'HP', kind: 'resource', maxFormula: '20', def: 'max', min: -20, edit: 'gm', hover: true },
-        { id: 'f_wk', key: 'WakeIn', kind: 'number', def: 0, min: 0, max: 60, edit: 'gm', hover: true }],
+        { id: 'f_wk', key: 'WakeIn', kind: 'number', def: 0, min: 0, max: 60, edit: 'gm', hover: true },
+        { id: 'f_kn', key: 'Knack', kind: 'number', def: 2, vis: 'gm' }, { id: 'f_tw', key: 'Twin', kind: 'formula', formula: 'Knack * 2' }],
         rolls: [
+            { id: 'r_gmo', label: 'Knack heal', formula: '3d6 <= 30', then: [{ f: 'f_hp', formula: 'Knack + 1d6', add: true, roll: true, when: 'hit' }] },
+            { id: 'r_gmd', label: 'Twin heal', formula: '3d6 <= 30', then: [{ f: 'f_hp', formula: 'Twin + 1d6', add: true, roll: true, when: 'hit' }] },
             { id: 'r_med', label: 'Medpac', apply: [{ f: 'f_hp', formula: '1d6', add: true, roll: true }] },
             { id: 'r_raw', label: 'Raw', apply: [{ f: 'f_hp', formula: '1d6', add: true }] },
             { id: 'r_aid', label: 'First Aid', formula: '3d6 <= 30', then: [{ f: 'f_hp', formula: '1d6', add: true, roll: true, when: 'hit' }, { f: 'f_wk', formula: '1d6', set: true, roll: true, when: 'hit' }] },
@@ -3229,6 +3232,14 @@ pendingChecks.push((async () => {
         && j(gA.cards) === j([['c_a', 'First Aid', [{ f: 'f_hp', n: 'HP', d: 3, v: 13, roll: '1d6: 3' }, { f: 'f_wk', n: 'WakeIn', d: 3, v: 3, roll: '1d6: 3' }], 'table']])
         && gF.cards.length === 0 && j(gF.vals) === j({ f_hp: { cur: 12 } }) && gB.cards.length === 0 && j(gB.vals) === j(START),
         j([gA.ret, gA.vals, gA.cards, gF.cards, gB.vals]));
+    // the review of fold 1: before it, a Then posted no card, so an amount that read a GM-only value told nobody. A Rolled Then's card says that amount,
+    // so on the GM's own roll it is kept between the GM and nobody else where the amount reads a GM-only value or one worked out from it, as the GM's
+    // press of an action already keeps its card (sheets.js applyAction); a public roll whose Then reads none still goes to the table
+    const gK = runG('3d6 <= 30', { act: 'r_gmo', label: 'Knack heal' }, 3), gT = runG('3d6 <= 30', { act: 'r_gmd', label: 'Twin heal' }, 3);
+    check('1.5.9 the review of fold 1: the GM\'s own roll (net.diceRoll, run for real) whose Rolled Then reads a GM-only value (Knack) or one worked out from it (Twin) moves the value as before and keeps its card the GM\'s (scope gm), since the card says the amount; a Then that reads none still goes to the table',
+        gK.ret.ok && j(gK.vals) === j({ f_hp: { cur: 15 } }) && gK.cards.length === 1 && gK.cards[0][3] === 'gm' && j(gK.cards[0][2]) === j([{ f: 'f_hp', n: 'HP', d: 5, v: 15, roll: '1d6: 3' }])
+        && gT.ret.ok && j(gT.vals) === j({ f_hp: { cur: 17 } }) && gT.cards.length === 1 && gT.cards[0][3] === 'gm' && gA.cards[0][3] === 'table',
+        j([gK.ret, gK.vals, gK.cards, gT.vals, gT.cards]));
     // applyLines, the card's own lines (sliced and run for real): the dice as text, cut to 60; a line with none as before
     const apL = new Function(line('function applyLines(lines)') + '\nreturn applyLines;')();
     check('1.5.9 Rolled, net.js applyLines (run for real): a line\'s dice as text cut to 60 beside its label and two numbers, and nothing for a line with none or with a roll that is no text',
