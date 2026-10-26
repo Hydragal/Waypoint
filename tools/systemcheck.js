@@ -14671,10 +14671,47 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             jr([tickOf(boxA, 'sys-apply-rolled'), lblOf(boxA, 'sys-apply-rolled'), findR(cardR, 'sys-list-applyrolled').map(x => x.checked)]));
         // the host's own presses and hooks hand their dice on (pinned): the GM's press, the round and turn hook, a time rule's flood line
         check('1.5.9 Rolled, the host\'s own paths (sheets.js, pinned): the GM\'s press of an apply action hands applyAct this machine\'s dice core, the round and turn hook hands applyRound the same, and a time rule\'s run that drew dice counts as rolled for the flood rule',
-            shRl.includes("var res = applyAct(sys, c, act, vv, F(), tc, row ? { f: row.f, r: row.r } : null, undefined, window.wpDiceCore || null);") && shRl.includes("F(), tc, kind, window.wpDiceCore || null), ids = Object.keys(res.values);")
+            shRl.includes("var res = applyAct(sys, c, act, vv, F(), tc, row ? { f: row.f, r: row.r } : null, undefined, window.wpDiceCore || null, onT ? { char: onT.ch, tctx: ")   /* 1.5.9 (book es/et plan, section 3): a deliberate change of this pin, the press on an adjacent character */ && shRl.includes("F(), tc, kind, window.wpDiceCore || null), ids = Object.keys(res.values);")
             && shRl.includes("!(res.rolls.made && ruleDice(rule)) && !(res.drew > 0)) return;"));
     }
     // [systemcheck:rolled-tests-end]
+    // 1.5.9 (docs/BOOK_ES_ET_PLAN.md section 3; the book: an item used "to oneself or an adjacent ally"): Applies to an adjacent character in the
+    // core. The cleaner keeps to: 'near' only as that word, never on the initiative roll, alike in both views; OnSelf reads 1 on oneself and 0 on
+    // another, and a field keyed OnSelf keeps its own; applyAct with on lands a field's change on a copy of that character, keeps a row's counters
+    // on the user, answers onValues and onLines, leaves the character it was handed as it was, and without on answers as before
+    {
+        const J = JSON.stringify;
+        const base = { v: 1, name: 'N', fields: [
+            { id: 'f_hp', key: 'HP', label: 'HP', kind: 'resource', maxFormula: '20', def: 'max', min: -20 },
+            { id: 'f_kit', key: 'Kit', label: 'Kit', kind: 'item-list', list: { counters: [{ key: 'Uses', label: 'Uses', def: 3 }], rolls: [
+                { label: 'Wrap', apply: [{ f: 'f_hp', formula: '2 + OnSelf', add: true }, { c: 'Uses', formula: '1' }], to: 'near' },
+                { label: 'Odd', apply: [{ f: 'f_hp', formula: '1', add: true }], to: 'far' }] } }],
+            items: [{ id: 'i_kit', name: 'Kit' }],
+            rolls: [
+                { id: 'r_aid', label: 'Aid', apply: [{ f: 'f_hp', formula: '4', add: true }], to: 'near' },
+                { id: 'r_chk', label: 'Check', formula: '3d6 <= 10', to: 'near' },
+                { id: 'r_odd', label: 'Odd', apply: [{ f: 'f_hp', formula: '1', add: true }], to: 'NEAR' },
+                { id: 'r_ini', label: 'Init', formula: '1d6', init: true, to: 'near' }] };
+        const gm = S.cleanSystem(base, { F, gmView: true }), pl = S.cleanSystem(base, { F, gmView: false });
+        const rolOf = (s, id) => (s.rolls || []).filter(r => r.id === id)[0] || {}, lr = s => s.fields.filter(f => f.id === 'f_kit')[0].list.rolls;
+        const clOk = rolOf(gm, 'r_aid').to === 'near' && rolOf(gm, 'r_chk').to === 'near' && !('to' in rolOf(gm, 'r_odd')) && !('to' in rolOf(gm, 'r_ini'))
+            && lr(gm)[0].to === 'near' && !('to' in lr(gm)[1]) && J(gm.rolls.map(r => r.to)) === J(pl.rolls.map(r => r.to)) && J(lr(gm).map(r => r.to)) === J(lr(pl).map(r => r.to))
+            && J(S.cleanSystem(gm, { F, gmView: true })) === J(gm);
+        const sysOs = S.cleanSystem({ v: 1, name: 'O', fields: [{ id: 'f_os', key: 'OnSelf', label: 'OnSelf', kind: 'number', def: 7 }] }, { F, gmView: true });
+        const vN = S.makeResolver(gm, { id: 'c', values: {} }, F, null), vO = S.makeResolver(sysOs, { id: 'c', values: {} }, F, null);
+        const osOk = typeof S.withOnSelf === 'function' && S.withOnSelf(vN, true)('OnSelf') === 1 && S.withOnSelf(vN, false)('OnSelf') === 0 && S.withOnSelf(vN, false)('onself') === 0
+            && vN('OnSelf') === undefined && S.withOnSelf(vO, false)('OnSelf') === 7 && S.withOnSelf(vN, false)('HP') === vN('HP') && S.withOnSelf(5, true) === 5;
+        const user = { id: 'c_a', name: 'Kael', values: { f_hp: { cur: 10 }, f_kit: [{ id: 'w_1', defId: 'i_kit', ct: { Uses: 3 } }] } }, other = { id: 'c_b', name: 'Bo', values: { f_hp: { cur: 5 } } };
+        const otherWas = J(other), actA = rolOf(gm, 'r_aid'), wrap = lr(gm)[0];
+        const vU = S.makeResolver(gm, user, F, null), rA = S.applyAct(gm, user, actA, S.withOnSelf(vU, false), F, null, null, undefined, null, { char: other, tctx: null });
+        const vRow = vU.row('f_kit', 'w_1'), rW = S.applyAct(gm, user, wrap, S.withOnSelf(vRow, false), F, null, { f: 'f_kit', r: 'w_1' }, undefined, null, { char: other, tctx: null });
+        const rS = S.applyAct(gm, user, actA, S.withOnSelf(vU, true), F, null, null, undefined, null);
+        const onOk = rA.ok === true && J(rA.onValues) === J({ f_hp: { cur: 9 } }) && J(rA.values) === J({}) && rA.onLines.length === 1 && rA.onLines[0].v === 9 && rA.lines.length === 0 && J(other) === otherWas
+            && rW.ok === true && J(rW.onValues) === J({ f_hp: { cur: 7 } }) && J(rW.values.f_kit[0].ct) === J({ Uses: 2 }) && !('f_hp' in rW.values) && J(other) === otherWas
+            && rS.ok === true && J(rS.values) === J({ f_hp: { cur: 14 } }) && !('onValues' in rS) && !('onLines' in rS);
+        check('1.5.9 Applies to an adjacent character in the core: the cleaner keeps to near only as that very word on a system roll, an apply action and a list\'s action, never on the initiative roll, alike in both views and cleaned twice alike; OnSelf reads 1 on oneself and 0 on another and a field keyed OnSelf keeps its own; applyAct with on lands the field\'s change on a copy of that character (Bo\'s HP 5 + 4), keeps a row\'s counter on the user (Uses 3 - 1) with OnSelf 0 in its amount (2 + 0), answers onValues and onLines, leaves the character it was handed untouched, and without on answers as before',
+            clOk && osOk && onOk, J([clOk, osOk, onOk, rolOf(gm, 'r_odd'), rA, rW, rS]));
+    }
     summed = true;
     console.log(NL + pass + ' passed, ' + fail + ' failed.');
     if (fail) process.exit(1);

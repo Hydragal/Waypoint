@@ -3178,7 +3178,7 @@ net.charEdits = function(charId, list) {
 };
 // Stage 6 HUD H7: a player's press of an apply action on their own character — the host works it out and answers; nothing changes here
 // meanwhile (the new values arrive as the host's delta, the card as its record). One at a time per character. { ok, pending } or { error }
-net.charApply = function(charId, actId, label, row) {   // row (H7b): { f, r, i } — a list's action on one row, in place of an action id
+net.charApply = function(charId, actId, label, row, on) {   // row (H7b): { f, r, i } — a list's action on one row, in place of an action id; on (1.5.9): the token of the adjacent character it is used on
     var S = SC(), camp = getActiveCampaign();
     if (!S || !camp || !net.active || net.role !== 'client' || net.stream) return { error: 'Not at a table.' };
     if (!net.foreign || !net.syncedPeer || !net.conns[0] || !net.conns[0].open || net.conns[0].peer !== net.syncedPeer) return { error: 'Not at the table yet.' };
@@ -3187,6 +3187,7 @@ net.charApply = function(charId, actId, label, row) {   // row (H7b): { f, r, i 
     if (Object.keys(_charPending).some(function(k) { return _charPending[k].apply && _charPending[k].charId === charId; })) return { error: 'Waiting for the GM to apply the last one.' };
     var rid = 'a' + Math.random().toString(36).slice(2, 10), req = { type: 'char-apply', rid: rid, charId: charId }; if (row) req.row = { f: String(row.f), r: String(row.r), i: Number(row.i) }; else req.act = String(actId);
     if (label) req.label = String(label).slice(0, S.LIMITS.label);
+    if (typeof on === 'string' && on) req.on = on.slice(0, 80);   // 1.5.9: the host judges it (allyOn) and works everything else out
     _charPending[rid] = { charId: charId, apply: true, batch: [], timer: setTimeout(function() { charPendingDone(rid, false, 'timeout'); }, S.LIMITS.editTimeoutMs) };   // batch []: nothing to undo on a refusal
     try { net.conns[0].send(req); } catch (e) { clearTimeout(_charPending[rid].timer); delete _charPending[rid]; return { error: 'Could not reach the GM.' }; }
     return { ok: true, pending: true };
@@ -5352,6 +5353,82 @@ net.aimsOf = function(map, tok, viewer) {
     return out;
 };
 // [netcheck:targetas-end]
+// [netcheck:ally-start]
+// 1.5.9 (docs/BOOK_ES_ET_PLAN.md section 3; the book: medical items are applied "to oneself or an adjacent ally"; the owner: "Apply at once", a
+// menu of you and the characters next to you with your Target first, and any adjacent character, NPCs included): a roll or an apply action whose
+// Applies to is the user or an adjacent character (to: 'near') may name the token it is used on. allyNear is the one reading of next to, through
+// fogcore nearTokens: the map's own grid (a gridless map by a yard of its scale) and the two heights where Token elevation is on, read from the
+// pieces players hold where shown is true (a judgement made for a player). allyOn is the host's one judge of the token a press names, asked by
+// char-apply, roll-req and the GM's own net.diceRoll before anything is rolled or moved: a character token of the campaign on the map the user's
+// token stands on, not waiting, not the user's own character, next to the user's token; for a player (pid) also shown and kept in their copy by
+// the fog, every open drag at its start. { ch, tok } or { error, message }. The GM's press reaches a hidden token too
+function allyNear(map, a, b, shown) {
+    var C = window.wpFogCore, S = SC(); if (!C || typeof C.nearTokens !== 'function' || !map || !a || !b) return false;
+    var gt = map.meta && map.meta.gridType, g = gt === 'square' ? C.squareGrid(50) : gt === 'hex' ? C.hexGrid(30, 52) : null;
+    var vt = window.wpVtt, el = !vt || (vt.rulesOn ? vt.rulesOn('elevation') : vt.on('elevation')), St = window.wpStance, o = { yardPx: S && typeof S.mapYardPx === 'function' ? S.mapYardPx(map) : 50 };
+    if (el && St && typeof St.tokenElevation === 'function') { o.za = Number(St.tokenElevation(a, map, !!shown)) || 0; o.zb = Number(St.tokenElevation(b, map, !!shown)) || 0; }
+    return C.nearTokens(a, b, g, o);
+}
+var ALLY_SAYS = { far: 'They must stand next to you.', missing: 'That character is not there.', self: 'That is you: use it with no one picked.', none: 'Your character has no token on this map.', kind: 'That cannot be used on someone else.' };
+function allyNo(k) { return { error: k, message: ALLY_SAYS[k] }; }
+function allyOn(camp, map, userTok, onId, pid) {
+    if (!camp || !map || !Array.isArray(map.whiteboard) || typeof onId !== 'string' || !onId) return allyNo('missing');
+    if (!userTok || typeof userTok !== 'object' || userTok.waiting || map.whiteboard.indexOf(userTok) < 0) return allyNo('none');
+    var judge = function() {
+        var tok = map.whiteboard.find(function(w) { return !!w && typeof w === 'object' && w.id === onId; }) || null;
+        if (!tok || !tok.isChar || tok.waiting || typeof tok.charId !== 'string' || !tok.charId || !camp.chars || !own(camp.chars, tok.charId)) return allyNo('missing');
+        var ch = camp.chars[tok.charId]; if (!ch || typeof ch !== 'object' || ch.making === 1) return allyNo('missing');
+        if (tok === userTok || tok.charId === userTok.charId) return allyNo('self');
+        if (pid) { if (tok.hidden) return allyNo('missing'); var drop = mapFogged(map) ? fogDrop(camp, map, pid) : null; if (drop && drop[tok.id]) return allyNo('missing'); }
+        if (!allyNear(map, userTok, tok, !!pid)) return allyNo('far');
+        return { ch: ch, tok: tok };
+    };
+    return typeof fogLanded === 'function' && typeof map.id === 'string' ? fogLanded(map.id, judge) : judge();
+}
+// the token context a change on the character it is used on is worked out in (its pool's most, say): its own token, on the table's settings
+function allyCtx(map, tok) { var S = SC(), vt = window.wpVtt, r = function(k) { return !vt || (vt.rulesOn ? vt.rulesOn(k) : vt.on(k)); }; return S && typeof S.tokenCtx === 'function' ? S.tokenCtx(map, tok, { turning: r('turning'), posture: r('posture'), elevation: r('elevation') }) : null; }
+// what a press did to the character it was used on, stored as the trade stores two characters: on the host's copy, its delta, its redraw
+function allyWrite(ch, values) {
+    var ks = values && typeof values === 'object' ? Object.keys(values) : []; if (!ch || !ks.length) return false;
+    ch.values = ch.values || {}; ks.forEach(function(k) { ch.values[k] = values[k]; }); ch.updated = Date.now();
+    if (net.syncCharDelta) net.syncCharDelta(ch.id, values);
+    if (window.wpSheets && window.wpSheets.charChanged) window.wpSheets.charChanged(ch.id);
+    return true;
+}
+// its card: to whoever may see that character's figures (scope, applyScope of the target: the table, its player and the GM, or the GM alone),
+// as the presser's card says the presser's. The presser's own player, where they are not among those (conn, pid), gets the same lines with no
+// figure after each and a value set said as set, so they learn what moved and never a value they could not read
+function allyCard(user, target, onName, label, lines, scope, from, conn, pid) {
+    var rec = { type: 'apply', id: 'r_' + Math.random().toString(36).slice(2, 10), from: from, lines: applyLines(lines), ts: Date.now() };
+    if (!rec.lines.length || !target) return null;
+    if (label) rec.label = String(label).slice(0, 60);
+    if (user && user.name) rec.as = String(user.name).slice(0, 60);
+    rec.on = String(onName || target.name || 'A character').slice(0, 60);
+    postApply(rec, scope, target, null);
+    var sees = scope === 'table' || (scope === 'owner' && !!target.ownerId && !target.npc && target.ownerId === pid);
+    if (conn && !sees && net.active && net.role === 'host') {
+        var bare = Object.assign({}, rec, { priv: 'gm', lines: rec.lines.map(function(l, i) { var o = lines[i] && lines[i].set === true ? { n: l.n, s: 1 } : { n: l.n, d: l.d }; if (l.roll) o.roll = l.roll; return o; }) });
+        try { conn.send(bare); } catch (e) { sendFailed(e); }
+    }
+    return rec;
+}
+net.allyCard = function(user, target, onName, label, lines, scope) { return allyCard(user, target, onName, label, lines, scope, diceFrom(getProfile(), true), null, ''); };
+net.allyOn = function(camp, map, userTok, onId) { return allyOn(camp, map, userTok, onId, ''); };   // the GM's own press (sheets.js applyAction)
+net.allyCtx = allyCtx;
+// the menu's choices (sheets.js allyPick): the characters next to the user's token on this screen's own copy of the map, each by its token's
+// name, a character once. A player's app reads only what it was sent; the GM's screen offers a hidden token too
+net.allyChoices = function(camp, map, userTok) {
+    if (!map || !Array.isArray(map.whiteboard) || !userTok || typeof userTok !== 'object' || userTok.waiting) return [];
+    var out = [], seen = Object.create(null), client = net.active && net.role === 'client';
+    map.whiteboard.forEach(function(w) {
+        if (!w || typeof w !== 'object' || !w.isChar || w.waiting || typeof w.charId !== 'string' || !w.charId || w === userTok || w.charId === userTok.charId || seen[w.charId]) return;
+        if (client && w.hidden) return;
+        if (!allyNear(map, userTok, w, client)) return;
+        seen[w.charId] = 1; out.push({ id: w.id, charId: w.charId, name: String(w.charName || w.name || (camp && camp.chars && own(camp.chars, w.charId) && camp.chars[w.charId] ? camp.chars[w.charId].name : '') || 'A character').slice(0, 60) });
+    });
+    return out;
+};
+// [netcheck:ally-end]
 // [netcheck:rangeto-start]
 // Range penalties R2 (docs/RANGE_PLAN.md 3): what RangeMod and TargetDistance read in a player's roll or apply action — from their token to
 // their own pointer's target on the map they are on: a character token their copy holds (never one the GM hid, nor on a fogged map one
@@ -6958,17 +7035,28 @@ function handleMessage(msg, conn) {
         if (typeof rangeTo === 'function' && Sa.withRange) tcA = Sa.withRange(tcA, rangeTo(campA, mapA, locA, Sa.charTokenOn(mapA, qa.charId, profA.id, { strict: true }), profA.id));   // range R2: an apply action reads the range as a roll does
         var varsA = Sa.makeResolver(viewA, chvA, Fa, tcA);
         if (qa.row) { varsA = varsA.row(qa.row.f, qa.row.r); if (!varsA) { denyA('missing'); return; } rowGmA = !!Sa.rowRollNames(campA.system, chA, qa.row.f, qa.row.r, [], Fa).gm; }   // H7b: the row's own names (a row they cannot see is gone); a row of a GM-only item keeps the card between them and the GM
-        var resA = Sa.applyAct(campA.system, chA, actA, varsA, Fa, tcA, qa.row ? { f: qa.row.f, r: qa.row.r } : null, undefined, window.wpDiceCore || null);   // R2b: a list's action may move its row's counters; 1.5.9: the host's dice roll a Rolled amount (never the player's word)
+        var onA = null;   // 1.5.9 (book es/et plan, section 3): the adjacent character it is used on, judged on the host's own map before anything moves
+        if (qa.on && actA.to !== 'near') { denyA('error', 'That cannot be used on someone else.'); return; }
+        if (actA.to === 'near') {
+            if (qa.on) { onA = typeof allyOn === 'function' ? allyOn(campA, mapA, tkA, qa.on, profA.id) : { error: 'missing', message: 'That character is not there.' }; if (onA.error) { denyA('error', onA.message); return; } }
+            if (typeof Sa.withOnSelf === 'function') varsA = Sa.withOnSelf(varsA, !onA);   // OnSelf: 1 on themselves, 0 on another
+        }
+        var resA = Sa.applyAct(campA.system, chA, actA, varsA, Fa, tcA, qa.row ? { f: qa.row.f, r: qa.row.r } : null, undefined, window.wpDiceCore || null, onA ? { char: onA.ch, tctx: typeof allyCtx === 'function' ? allyCtx(mapA, onA.tok) : null } : null);   // R2b: a list's action may move its row's counters; 1.5.9: the host's dice roll a Rolled amount (never the player's word); and its changes land on the one it is used on
         if (!resA.ok) { denyA(resA.reason, resA.message); return; }
         var costA = typeof actSpend === 'function' ? actSpend(campA, qa.charId, profA, actA.cost, conn, chA.name) : ''; if (costA) { denyA('error', costA); return; }   // turn-based combat T4: what it costs (worked out first: a press that cannot land spends nothing)
-        chA.values = chA.values || {}; Object.keys(resA.values).forEach(function(k) { chA.values[k] = resA.values[k]; }); chA.updated = Date.now();
+        var ownA = !onA || Object.keys(resA.values).length > 0;   // 1.5.9: a press that moved only the one it was used on writes nothing of the user's
+        if (ownA) { chA.values = chA.values || {}; Object.keys(resA.values).forEach(function(k) { chA.values[k] = resA.values[k]; }); chA.updated = Date.now(); }
         saveRemoteSoon();
         try { conn.send({ type: 'char-ack', rid: qa.rid }); } catch (e) { sendFailed(e); }
-        net.syncCharDelta(qa.charId, resA.values);
-        if (window.wpSheets) window.wpSheets.charChanged(qa.charId);
-        var recA = { type: 'apply', id: 'r_' + Math.random().toString(36).slice(2, 10), from: diceFrom(profA, false), label: qa.label || (actA.label.indexOf('{') < 0 ? actA.label : 'Apply'), lines: applyLines(resA.lines), ts: Date.now() };
-        if (chA.name) recA.as = String(chA.name).slice(0, 60);
-        postApply(recA, Sa.applyScope(campA.system, chA, actA, rowGmA, Fa), chA, conn);
+        if (ownA) { net.syncCharDelta(qa.charId, resA.values); if (window.wpSheets) window.wpSheets.charChanged(qa.charId); }
+        var labelA = qa.label || (actA.label.indexOf('{') < 0 ? actA.label : 'Apply');
+        if (onA && typeof allyWrite === 'function') allyWrite(onA.ch, resA.onValues);
+        if (!onA || resA.lines.length) {
+            var recA = { type: 'apply', id: 'r_' + Math.random().toString(36).slice(2, 10), from: diceFrom(profA, false), label: labelA, lines: applyLines(resA.lines), ts: Date.now() };
+            if (chA.name) recA.as = String(chA.name).slice(0, 60);
+            postApply(recA, Sa.applyScope(campA.system, chA, actA, rowGmA, Fa), chA, conn);
+        }
+        if (onA && typeof allyCard === 'function' && Array.isArray(resA.onLines) && resA.onLines.length) allyCard(chA, onA.ch, onA.tok.charName || onA.tok.name || onA.ch.name, labelA, resA.onLines, Sa.applyScope(campA.system, onA.ch, actA, rowGmA, Fa), diceFrom(profA, false), conn, profA.id);   // 1.5.9: the card of what moved on the one it was used on
         // [netcheck:charapply-end]
     } else if (msg.type === 'char-damage' && net.role === 'host') {
         // [netcheck:chardamage-start]
@@ -7735,7 +7823,7 @@ function handleMessage(msg, conn) {
         if (lim !== true) { var sk = conn.peer + '|' + lim; if (!_diceSlowSaid[sk] || Date.now() - _diceSlowSaid[sk] > Dq.LIMITS.windowMs) { _diceSlowSaid[sk] = Date.now(); denyQ(lim); } return; }   // one 'slow' per window, then silence
         if (window.wpVtt && !window.wpVtt.on('dice')) { denyQ('off'); return; }
         if (net.paused || peerPaused(conn.peer)) { denyQ('paused'); return; }   // frozen table (or this player is paused): no rolls
-        var chQ = null, varsQ = null, SQ = SC(), actQ = null, tcQ = null;
+        var chQ = null, varsQ = null, SQ = SC(), actQ = null, tcQ = null, onQ = null;   // onQ (1.5.9): the adjacent character a roll that Applies to one is used on
         if (q.charId) {   // the player's own character, resolved through the view they hold: a GM-only name is unknown there, a nulled formula an error, as on their sheet
             var campQ = getActiveCampaign(), pidQ = peerProfileId(conn), srcQ = (campQ && campQ.chars && typeof q.charId === 'string' && Object.prototype.hasOwnProperty.call(campQ.chars, q.charId) ? campQ.chars[q.charId] : null);
             if (!srcQ || srcQ.npc || !srcQ.ownerId || !pidQ || srcQ.ownerId !== pidQ || srcQ.making === 1 || !SQ || !campQ.system) { denyQ('char'); return; }   // making (Onboarding F3): not at the table yet
@@ -7758,6 +7846,11 @@ function handleMessage(msg, conn) {
                 if (wantQ && q.adv) { var awQ = Dq.withAdvantage(wantQ, q.adv, Fq.parse); wantQ = awQ.ok ? awQ.expr : null; }
                 var cmQ = wantQ ? Dq.composeModifier(wantQ, q.mod || 0, Fq.parse) : null;
                 if (!cmQ || !cmQ.ok || cmQ.expr !== q.expr) { denyQ('error', { error: { message: 'That roll does not match its button now.', pos: 0, len: 0 } }); return; }
+                if (q.on && actQ.to !== 'near') { denyQ('error', { error: { message: 'That cannot be used on someone else.', pos: 0, len: 0 } }); return; }   // 1.5.9 (book es/et plan, section 3)
+                if (actQ.to === 'near') {   // judged on the host's own map before anything is rolled; OnSelf in its formula, its needs and its Then, 1 on themselves and 0 on another
+                    if (q.on) { onQ = typeof allyOn === 'function' ? allyOn(campQ, mapQ, mapQ ? SQ.charTokenOn(mapQ, q.charId, pidQ, { strict: true }) : null, q.on, pidQ) : { error: 'missing', message: 'That character is not there.' }; if (onQ.error) { denyQ('error', { error: { message: onQ.message, pos: 0, len: 0 } }); return; } }
+                    if (typeof SQ.withOnSelf === 'function') varsQ = SQ.withOnSelf(varsQ, !onQ);
+                }
                 if (actQ.needs && !SQ.rollNeedsOk(actQ, varsQ, Fq)) { denyQ('error', { error: { message: SQ.rollNeedsSays(actQ), pos: 0, len: 0 } }); return; }   // R2b: what it needs, through their view (the row's names); the one reading (1.5.4: no die in it is rolled)
             }
         }
@@ -7785,9 +7878,10 @@ function handleMessage(msg, conn) {
         if (actQ && actQ.init === true && typeof initIntoFight === 'function') initIntoFight(campQ, locQ, q.charId, pidQ, resQ.value);   // initiative O1: their own initiative roll into the fight on their map, once
         if (actQ && actQ.then) {   // Stage 6 HUD R1: its consequences on the host's copy, through the roller's view, all or nothing (nothing to apply is quiet)
             var mfHitQ = mfQ !== null && Dq.naturalOf(resQ) >= mfQ, vdQ = Dq.verdictOf(resQ, ruleQ), crQ = typeof SQ.thenCrit === 'function' ? SQ.thenCrit(vdQ, mfHitQ) : '', thQ = SQ.thenChanges(actQ, mfHitQ ? false : (vdQ && vdQ.kind === 'check' ? vdQ.pass : null), mfHitQ, crQ);   // R3: a malfunction is a failure, with its own changes; 1.5.8: and a critical, with its own
-            var taQ = thQ.length ? SQ.applyAct(campQ.system, chQ, { apply: thQ }, typeof SQ.withRollCrit === 'function' ? SQ.withRollCrit(varsQ, crQ, typeof SQ.thenMargin === 'function' ? SQ.thenMargin(vdQ, mfHitQ) : 0) : varsQ, Fq, tcQ, q.row ? { f: q.row.f, r: q.row.r } : null, undefined, Dq) : null;   // 1.5.8: its amounts read RollCrit   // R2b: a list roll may move its row's counters   // 1.5.9: the host's dice roll a Rolled amount
-            if (taQ && taQ.ok) { chQ.values = chQ.values || {}; Object.keys(taQ.values).forEach(function(k) { chQ.values[k] = taQ.values[k]; }); chQ.updated = Date.now(); saveRemoteSoon(); net.syncCharDelta(q.charId, taQ.values); if (window.wpSheets) window.wpSheets.charChanged(q.charId); }
-            if (taQ && taQ.ok && taQ.drew && typeof postApply === 'function' && typeof applyLines === 'function') { var raQ = { type: 'apply', id: 'r_' + Math.random().toString(36).slice(2, 10), from: diceFrom(net.roster[conn.peer], false), label: String(recQ.label || (typeof actQ.label === 'string' && actQ.label && actQ.label.indexOf('{') < 0 ? actQ.label : 'Then')).slice(0, 60), lines: applyLines(taQ.lines), ts: Date.now() }; if (chQ.name) raQ.as = String(chQ.name).slice(0, 60); postApply(raQ, recQ.priv ? 'gm' : SQ.applyScope(campQ.system, chQ, { apply: thQ, vis: actQ.vis }, false, Fq), chQ, conn); }   // 1.5.9: a Then whose Rolled amount drew dice says them on a card of its own, kept as private as the roll
+            var taQ = thQ.length ? SQ.applyAct(campQ.system, chQ, { apply: thQ }, typeof SQ.withRollCrit === 'function' ? SQ.withRollCrit(varsQ, crQ, typeof SQ.thenMargin === 'function' ? SQ.thenMargin(vdQ, mfHitQ) : 0) : varsQ, Fq, tcQ, q.row ? { f: q.row.f, r: q.row.r } : null, undefined, Dq, onQ ? { char: onQ.ch, tctx: typeof allyCtx === 'function' ? allyCtx(mapQ, onQ.tok) : null } : null) : null;   // 1.5.8: its amounts read RollCrit   // R2b: a list roll may move its row's counters   // 1.5.9: the host's dice roll a Rolled amount, and its field changes land on the one it is used on
+            if (taQ && taQ.ok && (!onQ || Object.keys(taQ.values).length)) { chQ.values = chQ.values || {}; Object.keys(taQ.values).forEach(function(k) { chQ.values[k] = taQ.values[k]; }); chQ.updated = Date.now(); saveRemoteSoon(); net.syncCharDelta(q.charId, taQ.values); if (window.wpSheets) window.wpSheets.charChanged(q.charId); }
+            if (taQ && taQ.ok && onQ && typeof allyWrite === 'function' && allyWrite(onQ.ch, taQ.onValues)) { saveRemoteSoon(); if (typeof allyCard === 'function') allyCard(chQ, onQ.ch, onQ.tok.charName || onQ.tok.name || onQ.ch.name, String(recQ.label || (typeof actQ.label === 'string' && actQ.label && actQ.label.indexOf('{') < 0 ? actQ.label : 'Then')).slice(0, 60), taQ.onLines, recQ.priv ? 'gm' : SQ.applyScope(campQ.system, onQ.ch, { apply: thQ, vis: actQ.vis }, false, Fq), diceFrom(net.roster[conn.peer], false), conn, pidQ); }   // 1.5.9: what moved on the one it was used on, and its card
+            if (taQ && taQ.ok && taQ.drew && taQ.lines.some(function(l) { return !!l.roll; }) && typeof postApply === 'function' && typeof applyLines === 'function') { var raQ = { type: 'apply', id: 'r_' + Math.random().toString(36).slice(2, 10), from: diceFrom(net.roster[conn.peer], false), label: String(recQ.label || (typeof actQ.label === 'string' && actQ.label && actQ.label.indexOf('{') < 0 ? actQ.label : 'Then')).slice(0, 60), lines: applyLines(taQ.lines), ts: Date.now() }; if (chQ.name) raQ.as = String(chQ.name).slice(0, 60); postApply(raQ, recQ.priv ? 'gm' : SQ.applyScope(campQ.system, chQ, { apply: thQ, vis: actQ.vis }, false, Fq), chQ, conn); }   // 1.5.9: a Then whose Rolled amount drew dice says them on a card of its own, kept as private as the roll
             if (taQ && taQ.ok && taQ.fired && !mfHitQ && vdQ && vdQ.kind === 'check' && vdQ.pass === true && tcQ && tcQ.range && typeof tcQ.range.tid === 'string' && typeof window.wpLaunchHit === 'function') window.wpLaunchHit({ charId: q.charId, fieldId: taQ.fired.f, rowId: taQ.fired.r, tid: tcQ.range.tid, mapId: tcQ.range.mapId });   // 1.5.9 Chambers from: a hit puts the round it fired on the roller's target
             else if (taQ && taQ.ok && taQ.fired && !mfHitQ && vdQ && vdQ.kind === 'check' && vdQ.pass === false && typeof window.wpLaunchMiss === 'function') window.wpLaunchMiss({ charId: q.charId, fieldId: taQ.fired.f, rowId: taQ.fired.r, tid: tcQ && tcQ.range && typeof tcQ.range.tid === 'string' ? tcQ.range.tid : '', mapId: tcQ && tcQ.range && typeof tcQ.range.mapId === 'string' ? tcQ.range.mapId : '', margin: vdQ.margin, crit: ((typeof Dq.checkOf === 'function' ? Dq.checkOf(resQ, ruleQ) : null) || vdQ).crit === 'fumble' ? 'fumble' : '' });   // 1.5.9 (es): a miss lands as its round says, by the verdict's margin (a round that says nothing: the GM places it); its critical failure read as a throw's is, by every system's own (the review of fold 2: a d20's natural 1 too)
         }
@@ -8929,7 +9023,7 @@ net.diceRoll = function(expr, o) {
         if (o.charId) req.charId = o.charId;
         if (o.label) req.label = String(o.label).slice(0, D.LIMITS.label);
         if (o.row && o.charId) { req.row = { f: String(o.row.f), r: String(o.row.r) }; if (typeof o.row.i === 'number') req.row.i = o.row.i; }   // R2b: a list's roll with consequences or needs names its index
-        if (o.charId && ((o.act && !o.row) || (o.row && typeof o.row.i === 'number'))) { if (o.act && !o.row) req.act = String(o.act); if (o.mod) req.mod = o.mod; if (o.adv) req.adv = o.adv; }   // Stage 6 HUD R1: the entry, its modifier and advantage (the host rebuilds the formula)   // Stage 6 F5b: a roll on a row
+        if (o.charId && ((o.act && !o.row) || (o.row && typeof o.row.i === 'number'))) { if (o.act && !o.row) req.act = String(o.act); if (o.mod) req.mod = o.mod; if (o.adv) req.adv = o.adv; if (typeof o.on === 'string' && o.on) req.on = o.on.slice(0, 80); }   // 1.5.9: on, the token of the adjacent character it is used on (the host judges it)   // Stage 6 HUD R1: the entry, its modifier and advantage (the host rebuilds the formula)   // Stage 6 F5b: a roll on a row
         _dicePending = { rid: rid, expr: expr, charId: o.charId || '', timer: setTimeout(function() { _dicePending = null; if (window.wpDice) window.wpDice.onDeny({ reason: 'error', message: 'No answer from the GM. Their Waypoint may not have dice yet.', pos: 0, len: 0 }, expr); }, D.LIMITS.timeoutMs) };
         try { net.conns[0].send(req); } catch (e) { clearTimeout(_dicePending.timer); _dicePending = null; return { error: 'Could not reach the GM.' }; }
         return { ok: true, pending: true };
@@ -8943,6 +9037,12 @@ net.diceRoll = function(expr, o) {
     if (chR && SR && campR && campR.system) {
         if (o.act && !o.row) (Array.isArray(campR.system.rolls) ? campR.system.rolls : []).forEach(function(r) { if (r && r.id === o.act && typeof r.formula === 'string' && !r.apply) entR = r; });
         else if (o.row && typeof o.row.i === 'number') (Array.isArray(campR.system.fields) ? campR.system.fields : []).forEach(function(f) { if (f && f.id === o.row.f && f.kind === 'item-list' && f.list && Array.isArray(f.list.rolls)) { var lrR0 = f.list.rolls[o.row.i]; if (lrR0 && typeof lrR0.formula === 'string' && !lrR0.apply) entR = lrR0; } });
+    }
+    var onR = null, ftR = null;   // 1.5.9 (book es/et plan, section 3): the adjacent character a roll that Applies to one is used on, this machine's own word, judged here before anything is rolled
+    if (o.on && !(entR && entR.to === 'near')) return { error: 'That cannot be used on someone else.' };
+    if (entR && entR.to === 'near' && chR && varsR) {
+        if (typeof o.on === 'string' && o.on) { ftR = window.wpSheets && window.wpSheets.facingTarget ? window.wpSheets.facingTarget(chR, campR) : null; onR = typeof allyOn === 'function' ? allyOn(campR, ftR && ftR.map, ftR && ftR.tok, o.on, '') : { error: 'missing', message: 'That character is not there.' }; if (onR.error) return { error: onR.message }; }
+        if (typeof SR.withOnSelf === 'function') varsR = SR.withOnSelf(varsR, !onR);   // OnSelf in its formula, its needs and its Then
     }
     if (entR && entR.needs && varsR && !SR.rollNeedsOk(entR, varsR, F)) return { error: SR.rollNeedsSays(entR) };   // R2b: its needs (before anything is rolled)   // Stage 6 F5b: a roll on one row — its Row.* names
     var res = F.evaluate(expr, varsR ? { vars: varsR } : {});
@@ -8984,9 +9084,10 @@ net.diceRoll = function(expr, o) {
     logEvent('dice', D.cardText(rec, res, F, { maxChars: D.LIMITS.logChars, toName: toName, rule: ruleR }));
     if (entR && entR.then && chR && SR && campR && campR.system) {   // Stage 6 HUD R1/R2b: the GM's own roll's consequences, here (a player's are the host's); a list's roll may move its row's counters
         var mfHitR = mfR !== null && D.naturalOf(res) >= mfR, vdR = D.verdictOf(res, ruleR), crR = typeof SR.thenCrit === 'function' ? SR.thenCrit(vdR, mfHitR) : '', thR = SR.thenChanges(entR, mfHitR ? false : (vdR && vdR.kind === 'check' ? vdR.pass : null), mfHitR, crR);   // R3; 1.5.8: and its critical
-        var taR = thR.length ? SR.applyAct(campR.system, chR, { apply: thR }, typeof SR.withRollCrit === 'function' ? SR.withRollCrit(varsR, crR, typeof SR.thenMargin === 'function' ? SR.thenMargin(vdR, mfHitR) : 0) : varsR, F, null, o.row ? { f: o.row.f, r: o.row.r } : null, undefined, D) : null;   // 1.5.8: its amounts read RollCrit   // 1.5.9: this machine's dice roll a Rolled amount (it owns the campaign: a player's app sent a roll-req above)
-        if (taR && taR.ok) { chR.values = chR.values || {}; Object.keys(taR.values).forEach(function(k) { chR.values[k] = taR.values[k]; }); chR.updated = Date.now(); save(true); if (hosting && net.syncCharDelta) net.syncCharDelta(chR.id, taR.values); if (window.wpSheets && window.wpSheets.charChanged) window.wpSheets.charChanged(chR.id); }
-        if (taR && taR.ok && taR.drew && typeof net.postApplyCard === 'function') {   // 1.5.9: a Then whose Rolled amount drew dice says them on a card of its own, kept as private as the roll
+        var taR = thR.length ? SR.applyAct(campR.system, chR, { apply: thR }, typeof SR.withRollCrit === 'function' ? SR.withRollCrit(varsR, crR, typeof SR.thenMargin === 'function' ? SR.thenMargin(vdR, mfHitR) : 0) : varsR, F, null, o.row ? { f: o.row.f, r: o.row.r } : null, undefined, D, onR ? { char: onR.ch, tctx: typeof allyCtx === 'function' ? allyCtx(ftR.map, onR.tok) : null } : null) : null;   // 1.5.8: its amounts read RollCrit   // 1.5.9: this machine's dice roll a Rolled amount (it owns the campaign: a player's app sent a roll-req above), and its field changes land on the one it is used on
+        if (taR && taR.ok && onR && typeof allyWrite === 'function' && allyWrite(onR.ch, taR.onValues)) { save(true); if (typeof allyCard === 'function') allyCard(chR, onR.ch, onR.tok.charName || onR.tok.name || onR.ch.name, String(o.label || (typeof entR.label === 'string' && entR.label && entR.label.indexOf('{') < 0 ? entR.label : 'Then')).slice(0, 60), taR.onLines, rec.priv || rec.to ? 'gm' : SR.applyScope(campR.system, onR.ch, { apply: thR, vis: entR.vis }, gmR.length > 0, F), diceFrom(getProfile(), true), null, ''); }   // 1.5.9: what moved on the one it was used on, and its card
+        if (taR && taR.ok && (!onR || Object.keys(taR.values).length)) { chR.values = chR.values || {}; Object.keys(taR.values).forEach(function(k) { chR.values[k] = taR.values[k]; }); chR.updated = Date.now(); save(true); if (hosting && net.syncCharDelta) net.syncCharDelta(chR.id, taR.values); if (window.wpSheets && window.wpSheets.charChanged) window.wpSheets.charChanged(chR.id); }
+        if (taR && taR.ok && taR.drew && taR.lines.some(function(l) { return !!l.roll; }) && typeof net.postApplyCard === 'function') {   // 1.5.9: a Then whose Rolled amount drew dice says them on a card of its own, kept as private as the roll
             var scT = rec.priv || rec.to ? 'gm' : SR.applyScope(campR.system, chR, { apply: thR, vis: entR.vis }, false, F), nmT = Array.isArray(taR.names) ? taR.names : [], hitT = [];
             if (hosting && scT !== 'gm') {   // the review of fold 1: the card says the amount, so one that reads a GM-only value, one worked out from it or one a GM-only effect moved keeps it the GM's, as the GM's press of an action does (sheets.js applyAction)
                 var rpT = o.row ? SR.rowRollNames(campR.system, chR, o.row.f, o.row.r, nmT, F) : null; if (rpT) { nmT = rpT.names; if (rpT.gm || rpT.kept) scT = 'gm'; }

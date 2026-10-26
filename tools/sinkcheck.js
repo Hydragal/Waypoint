@@ -5480,6 +5480,39 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             && nmP.length === 1 && nmP[0].textContent === want + ' (GM)' && Hv.world.markup === 0 && Pv.world.markup === 0 && !Hv.world.made.concat(Pv.world.made).some(e => /^(IMG|SCRIPT)$/.test(e.tag)) && gmc.sent.some(m => m.act === 'answer'),
             j([nmH.map(e => e.textContent), nmP.map(e => e.textContent), Hv.world.markup, Pv.world.markup]));
     }
+    // 1.5.9 (docs/BOOK_ES_ET_PLAN.md section 3; the owner: "a menu of you and the characters next to you, your Target first"): the sheet's menu of
+    // whom an item is for (sheets.js allyPick, sliced by its allymenu markers and run for real on a page of plain objects that refuses markup)
+    {
+        const j = JSON.stringify;
+        const shA = fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', 'sheets.js'), 'utf8').replace(/\r\n/g, '\n');
+        const aA = shA.indexOf('// [sinkcheck:allymenu-start]'), bA = shA.indexOf('// [sinkcheck:allymenu-end]');
+        const mkDoc = () => { const world = { markup: 0, body: [], made: [] };
+            const mk = tag => { const e = { tag, className: '', children: [], attrs: {}, style: {}, listeners: {}, type: '', _t: '',
+                get textContent() { return this._t + this.children.map(c => c.textContent).join(''); }, set textContent(v) { this._t = String(v); this.children = []; },
+                set innerHTML(v) { world.markup++; }, get innerHTML() { return ''; }, set outerHTML(v) { world.markup++; }, insertAdjacentHTML() { world.markup++; },
+                appendChild(c) { this.children.push(c); return c; }, setAttribute(k, v) { this.attrs[k] = String(v); }, addEventListener(k, f) { (this.listeners[k] = this.listeners[k] || []).push(f); },
+                querySelector(s) { const all = []; const walk = n => n.children.forEach(k => { all.push(k); walk(k); }); walk(this); return all.find(k => (' ' + k.className + ' ').indexOf(' ' + s.slice(1) + ' ') >= 0) || null; },
+                querySelectorAll(s) { const all = []; const walk = n => n.children.forEach(k => { all.push(k); walk(k); }); walk(this); return all.filter(k => (' ' + k.className + ' ').indexOf(' ' + s.slice(1) + ' ') >= 0); },
+                focus() {}, getBoundingClientRect() { return { left: 10, bottom: 20, top: 0, right: 40 }; } }; world.made.push(tag); return e; };
+            const doc = { createElement: mk, body: { appendChild(c) { world.body.push(c); return c; } }, addEventListener() {}, activeElement: null }; return { doc, world }; };
+        const runA = (list, targets, client) => { const { doc, world } = mkDoc(), got = [];
+            const n = { allyChoices: () => list, targets };
+            const pick = new Function('document', 'window', 'net', 'facingTarget', 'getActiveCampaign', 'isClient', 'myId', 'closeLoadMenu', 'ldOutside', 'ldKey',
+                'var _ldPop = null;\nfunction el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }\n' + shA.slice(aA, bA) + '\nreturn allyPick;')(
+                doc, { innerWidth: 800, innerHeight: 600 }, () => n, () => ({ tok: { id: 'tk_a' }, map: {}, mapId: 'm1' }), () => ({}), () => !!client, () => (client ? 'u_a' : 'u_gm'), () => {}, () => {}, () => {});
+            pick({ getBoundingClientRect() { return { left: 10, bottom: 20 }; } }, { id: 'c_a', name: '<b>Kael</b>', ownerId: 'u_a' }, on => got.push(on));
+            const pop = world.body[0] || null, items = pop ? pop.querySelectorAll('.sheet-dl-item') : [];
+            return { world, got, items: items.map(b => [b.children[0].textContent, b.children[1].textContent]), click: k => items[k].listeners.click.forEach(f => f({ preventDefault() {}, stopPropagation() {} })) }; };
+        const BAD = '<img src=x onerror=alert(1)>Bo';
+        const r1 = runA([{ id: 'tk_b', charId: 'c_b', name: BAD }, { id: 'tk_n', charId: 'c_n', name: 'Orc' }], { u_a: { id: 'tk_n', mapId: 'm1' } }, true);
+        r1.click(0);
+        const r2 = runA([], {}, false), r3 = runA([{ id: 'tk_b', charId: 'c_b', name: BAD }], { u_gm: { id: 'tk_zz', mapId: 'm1' } }, false);
+        check('1.5.9 Applies to an adjacent character, the sheet\'s menu of whom it is for (sheets.js allyPick, run for real on a page that refuses markup): your target first where it stands next to you, then Yourself, then the others, every name a text node and a hostile name as the very text; a pick hands on that token\'s id; with nobody next to you the press goes on at once on yourself and no menu is made; a target that is not next to you is not first; no markup is ever written',
+            j(r1.items) === j([['Orc', 'Your target, next to you'], ['Yourself', 'On <b>Kael</b>'], [BAD, 'Next to you']]) && j(r1.got) === j(['tk_n'])
+            && r2.items.length === 0 && j(r2.got) === j([null]) && !r2.world.body.length
+            && j(r3.items) === j([['Yourself', 'On <b>Kael</b>'], [BAD, 'Next to you']]) && [r1, r2, r3].every(r => r.world.markup === 0),
+            j([r1.items, r1.got, r2.got, r3.items, [r1, r2, r3].map(r => r.world.markup)]));
+    }
     summed = true;
     console.log('\n' + pass + ' passed, ' + fail + ' failed.');
     if (fail) process.exit(1);

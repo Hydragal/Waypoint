@@ -3076,7 +3076,7 @@ pendingChecks.push((async () => {
         j(typ(dH.owner)) === j(['char-deny:missing']) && j(typ(dNone.owner)) === j(['char-deny:missing']) && j(typ(dRoll.owner)) === j(['char-deny:field']) && j(typ(dList.owner)) === j(['char-deny:field']) && j(typ(dGl.owner)) === j(['char-deny:field'])
         && j(typ(dSly.owner)) === j(['char-deny:error']) && /GM only/.test(dSly.owner[0].msg || '') && [dH, dNone, dRoll, dList, dSly, dGl].every(quietL),
         j([dH.owner, dNone.owner, dRoll.owner, dList.owner, dSly.owner]));
-    const nsrcL = fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', 'net.js'), 'utf8').replace(/\r\n/g, '\n'), caAt = nsrcL.indexOf('net.charApply = function(charId, actId, label, row) {'), caSrc = nsrcL.slice(caAt, nsrcL.indexOf('\n};', caAt) + 3);
+    const nsrcL = fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', 'net.js'), 'utf8').replace(/\r\n/g, '\n'), caAt = nsrcL.indexOf('net.charApply = function(charId, actId, label, row, on) {'), caSrc = nsrcL.slice(caAt, nsrcL.indexOf('\n};', caAt) + 3);
     const clientReq = (calls, o) => { o = o || {}; const sent = [], pend = {}, camp = { system: sysL, chars: { c_1: { id: 'c_1', ownerId: 'u_a' }, c_2: { id: 'c_2', ownerId: 'u_b' } } }, conn = { peer: 'H', open: true, send: m => sent.push(JSON.parse(JSON.stringify(m))) };
         const netC = { active: true, role: 'client', stream: false, foreign: true, syncedPeer: 'H', myId: 'u_a', conns: [conn] };
         const run = new Function('net', 'SC', 'getActiveCampaign', 'window', '_charPending', 'charPendingDone', 'setTimeout', caSrc + '\nreturn net.charApply;')(netC, () => Sx, () => camp, { wpVtt: { on: () => true } }, pend, () => {}, () => 0);
@@ -3308,6 +3308,114 @@ pendingChecks.push((async () => {
     check('1.5.9 Rolled, net.js applyLines (run for real): a line\'s dice as text cut to 60 beside its label and two numbers, and nothing for a line with none or with a roll that is no text',
         j(apL([{ f: 'f_hp', n: 'HP', d: 4, v: 14, roll: '1d6: 4' }, { n: 'EP', d: -1, v: 2 }, { n: 'X', d: 1, v: 1, roll: 7 }, { n: 'Y', d: 1, v: 1, roll: 'z'.repeat(70) }])) === j([{ n: 'HP', d: 4, v: 14, roll: '1d6: 4' }, { n: 'EP', d: -1, v: 2 }, { n: 'X', d: 1, v: 1 }, { n: 'Y', d: 1, v: 1, roll: 'z'.repeat(60) }]));
 })());
+// 1.5.9 (docs/BOOK_ES_ET_PLAN.md section 3; the book: medical items are applied "to oneself or an adjacent ally"; the owner: "Apply at once", any
+// adjacent character, NPCs included): a roll or an action that Applies to an adjacent character names the token it is used on, and the host judges
+// it (allyOn) before anything is rolled or moved. char-apply, the roll-req branch and the GM's own net.diceRoll, each sliced and run for real beside
+// the ally slice and the real fogcore and systemcore: the changes that name a field land on the one it is used on, a row's counters stay with the
+// user, two deltas and one save, the card to whoever may see the target's figures and its user's player told what moved with no figure after it
+pendingChecks.push((async () => {
+    const url = f => 'file:///' + path.resolve(path.join(__dirname, '..', 'system', 'app', 'scripts', f)).split(String.fromCharCode(92)).join('/');
+    const Sx = await import(url('systemcore.js')), Fx = await import(url('formula.js')), Dx = await import(url('dicecore.js')), Cx = await import(url('fogcore.js'));
+    const srcR = fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', 'net.js'), 'utf8').replace(/\r\n/g, '\n');
+    const line = k => { const i = srcR.indexOf(k); if (i < 0) throw new Error('netcheck: ' + k + ' not found'); return srcR.slice(i, srcR.indexOf('\n', i)); };
+    const helpers = ['function own(', 'function peerProfileId(', 'function fxLib(', 'function itemLib(', 'function diceFrom('].map(line).join('\n') + '\n';
+    const allySrc = between('// [netcheck:ally-start]', '// [netcheck:ally-end]', 'ally');
+    const apSrc = (ordersSrc + '\n' + between('// [netcheck:charapply-start]', '// [netcheck:charapply-end]', 'charapply')), paSrc = between('// [netcheck:postapply-start]', '// [netcheck:postapply-end]', 'postapply');
+    const rqSrc = (ordersSrc + '\n' + between('// [netcheck:rollreq-start]', '// [netcheck:rollreq-end]', 'rollreq')), drSrc = between('// [netcheck:diceroll-start]', '// [netcheck:diceroll-end]', 'diceroll');
+    const sysN = Sx.cleanSystem({ v: 1, name: 'N', fields: [
+        { id: 'f_hp', key: 'HP', label: 'HP', kind: 'resource', maxFormula: '20', def: 'max', min: -20, edit: 'gm', hover: true },
+        { id: 'f_dn', key: 'Down', label: 'Down', kind: 'toggle', edit: 'gm' },
+        { id: 'f_kit', key: 'Kit', label: 'Kit', kind: 'item-list', list: { counters: [{ key: 'Uses', label: 'Uses', def: 3 }], rolls: [{ label: 'Wrap', apply: [{ f: 'f_hp', formula: '2 + OnSelf', add: true }, { c: 'Uses', formula: '1' }], to: 'near' }] } }],
+        items: [{ id: 'i_kit', name: 'Kit' }],
+        rolls: [
+            { id: 'r_aid', label: 'Aid', apply: [{ f: 'f_hp', formula: '4', add: true }], to: 'near' },
+            { id: 'r_up', label: 'Up', apply: [{ f: 'f_dn', formula: '0', set: true }, { f: 'f_hp', formula: '1', add: true }], to: 'near' },
+            { id: 'r_own', label: 'Own', apply: [{ f: 'f_hp', formula: '1', add: true }] },
+            { id: 'r_chk', label: 'Check', formula: '3d6 <= 30 + OnSelf', then: [{ f: 'f_hp', formula: '1', add: true, when: 'hit' }], to: 'near' },
+            { id: 'r_pl', label: 'Plain', formula: '3d6 <= 30', then: [{ f: 'f_hp', formula: '1', add: true, when: 'hit' }] }] }, { F: Fx, gmView: true });
+    const tk = (id, o) => Object.assign({ id, type: 'circle', isChar: true, w: 50, h: 50 }, o);
+    const mkCamp = () => ({ id: 'k', activeItemId: 'm1', system: sysN, items: { m1: { id: 'm1', type: 'map', meta: { gridType: 'square' }, whiteboard: [
+            tk('tk_a', { charId: 'c_a', ownerId: 'u_a', name: 'Kael', x: 100, y: 100 }), tk('tk_b', { charId: 'c_b', ownerId: 'u_b', name: 'Bo', x: 150, y: 100 }), tk('tk_n', { charId: 'c_n', name: 'Orc', x: 100, y: 150 }),
+            tk('tk_f', { charId: 'c_f', ownerId: 'u_b', name: 'Far', x: 400, y: 400 }), tk('tk_h', { charId: 'c_h', name: 'Lurker', hidden: true, x: 150, y: 150 }), { id: 'tk_w', type: 'circle', waiting: 1, ownerId: 'u_c', name: 'Cato', x: 50, y: 100, w: 50, h: 50 }] } },
+        chars: { c_a: { id: 'c_a', name: 'Kael', ownerId: 'u_a', npc: false, values: { f_hp: { cur: 10 }, f_kit: [{ id: 'w_1', defId: 'i_kit', ct: { Uses: 3 } }] } }, c_b: { id: 'c_b', name: 'Bo', ownerId: 'u_b', npc: false, values: { f_hp: { cur: 5 } } },
+            c_n: { id: 'c_n', name: 'Orc', npc: true, values: { f_hp: { cur: 6 }, f_dn: true } }, c_f: { id: 'c_f', name: 'Far', ownerId: 'u_b', npc: false, values: {} }, c_h: { id: 'c_h', name: 'Lurker', npc: true, values: { f_hp: { cur: 8 } } } } });
+    const winOf = (fogDropT, o) => Object.assign({ wpFormula: Fx, wpFogCore: Cx, wpVtt: { on: () => true, rulesOn: () => true }, wpSheets: { playerSystem: c => Sx.cleanSystem(c.system, { F: Fx, gmView: false }), charChanged() {} }, wpDiceCore: Dx }, o || {});
+    // char-apply: a player's press, its host branch beside the ally slice
+    const hostA = (msg, o) => { o = o || {};
+        const camp = mkCamp(), out = { owner: [], mate: [], chat: [], saves: 0, deltas: [] }, box = b => m => { packCheck(m); b.push(JSON.parse(JSON.stringify(m))); };
+        const conns = [{ peer: 'pA', open: true, send: box(out.owner) }, { peer: 'pB', open: true, send: box(out.mate) }];
+        const net = { active: true, role: 'host', paused: false, combats: {}, conns, roster: { pA: { id: 'u_a', name: 'Pebbles', location: 'm1' }, pB: { id: 'u_b', name: 'Bo', location: 'm1' } }, syncCharDelta: (id, d) => out.deltas.push([id, JSON.parse(JSON.stringify(d))]) };
+        new Function('msg', 'conn', 'net', 'SC', 'window', 'peerPaused', 'getActiveCampaign', 'saveRemoteSoon', 'sendFailed', 'peerProfileId', 'lim', 'own', 'diceFrom', 'sendTable', 'pushChat', 'logEvent', 'applyLine', 'fogDrop', 'mapFogged', 'getProfile',
+            'var charLimit = lim, _charSlowSaid = {}, _charPending = {}, _charHost = {}, _rowGrace = {};\n' + ['function fxLib(', 'function itemLib('].map(line).join('\n') + '\n' + paSrc + '\n' + allySrc + '\n' + apSrc)(
+            msg, conns[0], net, () => Sx, winOf(), () => false, () => camp, () => { out.saves++; }, e => { throw e; }, c => (net.roster[c.peer] ? net.roster[c.peer].id : null), { allow: () => true },
+            (ob, k) => !!ob && Object.prototype.hasOwnProperty.call(ob, k), (p, gm) => ({ id: p.id, name: p.name, gm: !!gm }), (m, ex) => conns.forEach(c => { if (c !== ex && c.open && net.roster[c.peer]) c.send(m); }), m => out.chat.push(JSON.parse(JSON.stringify(m))), () => {}, r => Dx.applyText(r),
+            () => o.drop || null, () => !!o.drop, () => ({ id: 'u_gm', name: 'GM' }));
+        out.camp = camp; out.v = id => camp.chars[id].values; return out; };
+    const A = (act, on, extra) => Object.assign({ type: 'char-apply', rid: 'a1', charId: 'c_a', act }, on === undefined ? {} : { on }, extra || {});
+    const tB = hostA(A('r_aid', 'tk_b')), tN = hostA(A('r_up', 'tk_n')), tSelf = hostA(A('r_aid')), tRow = hostA({ type: 'char-apply', rid: 'a2', charId: 'c_a', row: { f: 'f_kit', r: 'w_1', i: 0 }, on: 'tk_b' }), tRowS = hostA({ type: 'char-apply', rid: 'a3', charId: 'c_a', row: { f: 'f_kit', r: 'w_1', i: 0 } });
+    const deny = r => (r.owner.find(m => m.type === 'char-deny') || {}).msg || '', still = r => j(r.v('c_a')) === j(mkCamp().chars.c_a.values) && j(r.v('c_b')) === j({ f_hp: { cur: 5 } }) && r.saves === 0 && !r.deltas.length && !r.mate.length && !r.chat.length;
+    const tFar = hostA(A('r_aid', 'tk_f')), tHid = hostA(A('r_aid', 'tk_h')), tMe = hostA(A('r_aid', 'tk_a')), tNone = hostA(A('r_aid', 'tk_zz')), tWait = hostA(A('r_aid', 'tk_w')), tKind = hostA(A('r_own', 'tk_b')), tFog = hostA(A('r_aid', 'tk_b'), { drop: { tk_b: 1 } });
+    const cB = tB.mate.find(m => m.type === 'apply') || {}, cNo = tN.owner.find(m => m.type === 'apply') || {}, cNgm = tN.chat.find(m => m.apply) || {};
+    check('1.5.9 Applies to an adjacent character, char-apply (run for real with the ally slice and the real fogcore): a player\'s press on the token next to theirs moves the field on that character (Bo\'s HP 5 + 4) and nothing of theirs, one ack, one delta and a save, and its card, to the table where every value it moves shows on hover, says on whom; on an NPC (the GM\'s alone) the figures go to the GM and the presser\'s player gets the same lines with no figure after each and a value set said as set; with no token named it is their own, as ever',
+        tB.owner.some(m => m.type === 'char-ack') && j(tB.v('c_b')) === j({ f_hp: { cur: 9 } }) && j(tB.v('c_a')) === j(mkCamp().chars.c_a.values) && j(tB.deltas) === j([['c_b', { f_hp: { cur: 9 } }]]) && tB.saves === 1
+        && cB.on === 'Bo' && cB.as === 'Kael' && j(cB.lines) === j([{ n: 'HP', d: 4, v: 9 }]) && !('priv' in cB) && Dx.cleanApply(cB) !== null && tB.owner.filter(m => m.type === 'apply').length === 1
+        && j(tN.v('c_n')) === j({ f_hp: { cur: 7 }, f_dn: false }) && !tN.mate.some(m => m.type === 'apply') && cNo.priv === 'gm' && j(cNo.lines) === j([{ n: 'Down', s: 1 }, { n: 'HP', d: 1 }]) && Dx.cleanApply(cNo) !== null && j(Dx.cleanApply(cNo).lines) === j(cNo.lines)
+        && j(cNgm.apply.lines) === j([{ n: 'Down', d: -1, v: 0 }, { n: 'HP', d: 1, v: 7 }]) && cNgm.apply.on === 'Orc'
+        && j(tSelf.v('c_a').f_hp) === j({ cur: 14 }) && j(tSelf.v('c_b')) === j({ f_hp: { cur: 5 } }),
+        j([tB.owner.map(m => m.type), tB.v('c_b'), cB, cNo, cNgm.apply, tSelf.v('c_a')]));
+    check('1.5.9 Applies to an adjacent character, char-apply on a row (run for real): a list\'s action used on another moves its row\'s counter on the user (Uses 3 - 1) and the field on the other (Bo\'s HP 5 + 2, OnSelf 0), two deltas and one save; on themselves OnSelf reads 1 (HP 10 + 3)',
+        j(tRow.v('c_a').f_kit[0].ct) === j({ Uses: 2 }) && j(tRow.v('c_a').f_hp) === j({ cur: 10 }) && j(tRow.v('c_b')) === j({ f_hp: { cur: 7 } }) && j(tRow.deltas.map(d => d[0]).sort()) === j(['c_a', 'c_b']) && tRow.saves === 1
+        && j(tRowS.v('c_a').f_hp) === j({ cur: 13 }) && j(tRowS.v('c_a').f_kit[0].ct) === j({ Uses: 2 }),
+        j([tRow.v('c_a'), tRow.v('c_b'), tRow.deltas, tRowS.v('c_a')]));
+    check('1.5.9 Applies to an adjacent character, char-apply refusals (run for real): a token that is not next to theirs, a hidden one, one their copy drops by the fog, one that is not there, a waiting token, their own, and an action that applies only to its user each refused in its own words with nothing moved, saved, sent or posted',
+        [tFar, tHid, tMe, tNone, tWait, tKind, tFog].every(still) && deny(tFar) === 'They must stand next to you.' && deny(tHid) === 'That character is not there.' && deny(tFog) === 'That character is not there.' && deny(tNone) === 'That character is not there.' && deny(tWait) === 'That character is not there.'
+        && deny(tMe) === 'That is you: use it with no one picked.' && deny(tKind) === 'That cannot be used on someone else.',
+        j([tFar, tHid, tMe, tNone, tWait, tKind, tFog].map(deny)));
+    // the roll-req branch's Then: the roll is the user's, its field changes land on the one it is used on
+    const runQ = (msg, o) => { o = o || {}; const out = { table: [], sent: [], deltas: [], saves: 0, chat: [] }, camp = mkCamp();
+        const conn = { peer: 'pA', open: true, send(m) { packCheck(m); out.sent.push(JSON.parse(JSON.stringify(m))); } };
+        const net = { active: true, role: 'host', paused: false, conns: [conn], roster: { pA: { id: 'u_a', name: 'Pebbles', location: 'm1' } }, combats: {}, syncCharDelta: (id, d) => out.deltas.push([id, JSON.parse(JSON.stringify(d))]) };
+        const win = winOf(null, { wpFormula: Object.assign({}, Fx, { evaluate: (tx, op) => Fx.evaluate(tx, op && op.random ? op : Object.assign({}, op, { random: () => 4 })) }), wpVtt: { on: () => true, rulesOn: () => true } });
+        new Function('msg', 'conn', 'net', 'DC', 'SC', 'window', 'getActiveCampaign', 'peerPaused', 'sendFailed', 'sendTable', 'pushRoll', 'logEvent', 'saveRemoteSoon', 'pushChat', 'applyLine', 'fogDrop', 'mapFogged', 'getProfile', 'var diceLimit = null, _diceSlowSaid = {};\n' + helpers + paSrc + '\n' + allySrc + '\n' + rqSrc)(
+            Object.assign({ type: 'roll-req', rid: 'q1', charId: 'c_a' }, msg), conn, net, () => Dx, () => Sx, win, () => camp, () => false, e => { throw e; }, rec => { packCheck(rec); out.table.push(JSON.parse(JSON.stringify(rec))); }, () => {}, () => {}, () => { out.saves++; }, m => out.chat.push(m), r => Dx.applyText(r), () => o.drop || null, () => !!o.drop, () => ({ id: 'u_gm', name: 'GM' }));
+        out.v = id => camp.chars[id].values; return out; };
+    const qB = runQ({ act: 'r_chk', expr: '3d6 <= 30 + OnSelf', on: 'tk_b' }), qS = runQ({ act: 'r_chk', expr: '3d6 <= 30 + OnSelf' }), qF = runQ({ act: 'r_chk', expr: '3d6 <= 30 + OnSelf', on: 'tk_f' }), qK = runQ({ act: 'r_pl', expr: '3d6 <= 30', on: 'tk_b' });
+    const qRoll = qB.table.find(m => m.type === 'roll') || {}, qCard = qB.table.find(m => m.type === 'apply') || {};
+    check('1.5.9 Applies to an adjacent character, a player\'s roll (roll-req, run for real): its formula reads OnSelf 0 on another and 1 on themselves, the host rolls it, and its Then moves the field on the one it is used on (Bo\'s HP 5 + 1), one delta and a save, with a card that says on whom; a token that is not next to theirs is refused before anything is rolled, and so is one named for a roll that applies only to its user',
+        (qRoll.names || []).some(n => n.name === 'OnSelf' && n.value === 0) && j(qB.v('c_b')) === j({ f_hp: { cur: 6 } }) && j(qB.v('c_a').f_hp) === j({ cur: 10 }) && j(qB.deltas) === j([['c_b', { f_hp: { cur: 6 } }]]) && qB.saves === 1 && qCard.on === 'Bo' && j(qCard.lines) === j([{ n: 'HP', d: 1, v: 6 }])
+        && ((qS.table.find(m => m.type === 'roll') || {}).names || []).some(n => n.name === 'OnSelf' && n.value === 1) && j(qS.v('c_a').f_hp) === j({ cur: 11 })
+        && qF.table.length === 0 && (qF.sent[0] || {}).type === 'roll-deny' && qF.sent[0].message === 'They must stand next to you.' && qF.deltas.length === 0 && qK.table.length === 0 && (qK.sent[0] || {}).message === 'That cannot be used on someone else.',
+        j([qRoll.names, qB.v('c_b'), qB.deltas, qCard, qS.v('c_a'), qF.sent, qK.sent]));
+    // the GM's own roll: net.diceRoll with this machine's own word, the token, judged on the map the character's token is on (wpSheets.facingTarget)
+    const runG = (expr, o) => { const out = { deltas: [], saves: 0, cards: [], chat: [] }, camp = mkCamp(), m1 = camp.items.m1, tokA = m1.whiteboard[0];
+        const net = { active: true, role: 'host', stream: false, conns: [], roster: {}, syncCharDelta: (id, d) => out.deltas.push([id, JSON.parse(JSON.stringify(d))]), postApplyCard: (ch, label, lines) => out.cards.push([ch.id, label, lines]) };
+        const win = winOf(null, { wpFormula: Object.assign({}, Fx, { evaluate: (tx, op) => Fx.evaluate(tx, op && op.random ? op : Object.assign({}, op, { random: () => 3 })) }), wpSheets: { tokenCtxFor: () => null, charChanged() {}, facingTarget: () => ({ mapId: 'm1', map: m1, tok: tokA }) } });
+        const dr = new Function('net', 'DC', 'SC', 'window', 'getActiveCampaign', 'getProfile', 'toast', 'ui', 'sendFailed', 'sendTable', 'pushRoll', 'logEvent', 'save', 'pushChat', 'applyLine', 'fogDrop', 'mapFogged', 'var _dicePending = null;\n' + helpers + paSrc + '\n' + allySrc + '\n' + drSrc + '\nreturn net.diceRoll;')(
+            net, () => Dx, () => Sx, win, () => camp, () => ({ id: 'u_gm', name: 'GM' }), () => {}, () => null, e => { throw e; }, () => {}, () => {}, () => {}, () => { out.saves++; }, m => out.chat.push(JSON.parse(JSON.stringify(m))), r => Dx.applyText(r), () => null, () => false);
+        out.ret = dr(expr, Object.assign({ charId: 'c_a', act: 'r_chk' }, o || {})); out.v = id => camp.chars[id].values; return out; };
+    const gH = runG('3d6 <= 30 + OnSelf', { on: 'tk_h' }), gF = runG('3d6 <= 30 + OnSelf', { on: 'tk_f' }), gK = runG('3d6 <= 30', { act: 'r_own', on: 'tk_b' }), gCard = gH.chat.find(m => m.apply) || {};
+    check('1.5.9 Applies to an adjacent character, the GM\'s own roll (net.diceRoll, run for real): this machine\'s own word names the token, judged on the map the character\'s token is on, and the GM reaches a hidden one next to it (the Lurker\'s HP + 1), with a save and a card of what moved on it; a token that is not next to it, and one named for a roll that applies only to its user, are said and nothing is rolled',
+        gH.ret.ok === true && j(gH.v('c_h')) === j({ f_hp: { cur: 9 } }) && gH.saves === 1 && j(gH.deltas) === j([['c_h', { f_hp: { cur: 9 } }]]) && gCard.apply && gCard.apply.on === 'Lurker' && j(gH.v('c_a').f_hp) === j({ cur: 10 })
+        && gF.ret.error === 'They must stand next to you.' && gF.saves === 0 && gK.ret.error === 'That cannot be used on someone else.',
+        j([gH.ret, gH.v('c_h'), gCard.apply, gF.ret, gK.ret]));
+    // the client's word: net.charApply and net.diceRoll name the token, and dicecore cleanRollReq and systemcore cleanCharApply keep it only by the rule a target keeps
+    const caAt = srcR.indexOf('net.charApply = function(charId, actId, label, row, on) {'), caSrc = srcR.slice(caAt, srcR.indexOf('\n};', caAt) + 3), sentC = [];
+    const netC = { active: true, role: 'client', stream: false, foreign: true, syncedPeer: 'H', myId: 'u_a', conns: [{ peer: 'H', open: true, send: m => sentC.push(JSON.parse(JSON.stringify(m))) }] };
+    const runC = new Function('net', 'SC', 'getActiveCampaign', 'window', '_charPending', 'charPendingDone', 'setTimeout', caSrc + '\nreturn net.charApply;')(netC, () => Sx, () => ({ system: sysN, chars: { c_a: { id: 'c_a', ownerId: 'u_a' } } }), { wpVtt: { on: () => true } }, {}, () => {}, () => 0);
+    runC('c_a', 'r_aid', 'Aid', undefined, 'tk_b');
+    const CQ = Dx.cleanRollReq, CA = Sx.cleanCharApply, ctl = String.fromCharCode(1);
+    check('1.5.9 Applies to an adjacent character on the wire: a player\'s app names the token it is used on and nothing else of it; the host keeps it only as a token\'s id of 1 to 80 characters with no control character, and on a roll only beside its named entry (act or a list roll\'s index), refusing any other shape of the message whole',
+        j(sentC[0]) === j({ type: 'char-apply', rid: sentC[0] && sentC[0].rid, charId: 'c_a', act: 'r_aid', label: 'Aid', on: 'tk_b' })
+        && CA({ rid: 'a1', charId: 'c_a', act: 'r_aid', on: 'tk_b' }).on === 'tk_b' && !('on' in CA({ rid: 'a1', charId: 'c_a', act: 'r_aid' })) && ['', 'x'.repeat(81), 5, null, {}, 'a' + ctl].every(v => CA({ rid: 'a1', charId: 'c_a', act: 'r_aid', on: v }) === null)
+        && CQ({ rid: 'q1', expr: '1d6', charId: 'c_a', act: 'r_chk', on: 'tk_b' }).on === 'tk_b' && CQ({ rid: 'q1', expr: '1d6', charId: 'c_a', row: { f: 'f_kit', r: 'w_1', i: 0 }, on: 'tk_b' }).on === 'tk_b'
+        && CQ({ rid: 'q1', expr: '1d6', charId: 'c_a', on: 'tk_b' }) === null && CQ({ rid: 'q1', expr: '1d6', on: 'tk_b' }) === null && ['', 'x'.repeat(81), 7, 'b' + ctl].every(v => CQ({ rid: 'q1', expr: '1d6', charId: 'c_a', act: 'r_chk', on: v }) === null),
+        j([sentC]));
+    // the ally slice's own pieces, pinned: allyOn asked in the three places, before anything is rolled or moved
+    check('1.5.9 Applies to an adjacent character, the host\'s one judge (pinned): allyOn is asked by char-apply, the roll-req branch and net.diceRoll, each before applyAct and before anything is rolled; the choices of the sheet\'s menu are read from this screen\'s copy (net.allyChoices) and a player\'s app passes over a hidden token',
+        (srcR.match(/allyOn\(camp[AQR], /g) || []).length === 3 && srcR.indexOf("onA = typeof allyOn === 'function' ? allyOn(campA, mapA, tkA, qa.on, profA.id)") < srcR.indexOf('var resA = Sa.applyAct(') && srcR.indexOf('onQ = typeof allyOn') < srcR.indexOf('var resQ = Fq.evaluate(q.expr')
+        && srcR.indexOf('onR = typeof allyOn') < srcR.indexOf('var res = F.evaluate(expr, varsR') && allySrc.includes('if (client && w.hidden) return;'));
+})());
+
 
 // Stage 6 HUD R2b: a list roll with consequences or needs on the wire — the host finds the list's roll in the player's view by its index, rebuilds its
 // formula, refuses it while its needs fail, and moves the row's counters after it lands (sliced roll-req and diceroll, run for real)

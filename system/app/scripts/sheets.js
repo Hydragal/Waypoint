@@ -8,7 +8,7 @@ import { getActiveCampaign } from './models.js';
 import { save, toast, toastAction } from './io.js';
 import { picRef } from './safecore.js';
 import { showConfirm, showPrompt } from './dialogs.js';
-import { cleanDamageRules, loadFits, chamberTakes, chamberCap, CHAMBER_CAP, cleanReach, openSync, moneyBoxes, moneyHeld, rowOpMoney, onceOf, catHome, catPlace, cleanPlaceCats, catSplits, cleanFieldUnit, unitTail, heightWords, measureWords, unitWords, unitHead, listWords, unitOf, textWords, measureStore, rollNeedsOk, rollNeedsSays, timeRuleRun, ruleRunCtx, chainsShallow, makeResolver, hasDice, figText, cleanEvery, cleanInFight, droppedCounts, validPageId, LIMITS, KINDS, showsIf, rowRollNames, gmOnlyNames, applyAct, applyScope, applyRound, dueActs, combatChars, roundSecs, fxLeftNow, lastsSecs, APPLY_KINDS, TURN_UNITS, LIGHT_UNITS, RANGE_UNITS, HEIGHT_UNITS, TIME_WORDS, STORED, DEF_PROP, BAND_KINDS, IDENTITY_KINDS, LEDGER_KINDS, headerEntry, captionParts, emptySystem, uid, validKey, cleanSystem, cleanChar, validateSystem, resolveAll, hoverLines, autoLayout, applyEdit, applyStyle, cleanLooks, lookOf, lookFor, lookRule, applyEffectOp, fxText, fmtNum, budgetsOf, budgetWatch, budgetSays, needsMet, needsSays, initRoll, applyProposal, cleanUploads, sideOf, threatArc, facingCtx, facingNow, setAimSource, stanceCtx, tokenCtx, POSTURE_IDS, POSTURE_NAMES, DEFAULT_POSTURES, postureList, postureAt, autoEffectsOn, initTie, charTokenOn, cycleThreat, valueTone, TONES, activeCharOf, playableChars, ownedTokenPlan, applyOwnerOps, migrateBindings, capExpr, cleanValue, fieldById, valueOpts, applyRowOp, rowIdOf, rowDef, orphanRows, stampRows, cleanRowDef, projectRows, STAT_KEY, PALETTE_KEYS, GLYPHS, glyphPath, headerEdits, pinTargets, pinTargetsAll, hudView, hudHasContent, resetTargets, cleanListSpec, statKey, rowStat, plusText, rowPaid, itemReach, gmDerivedNames, labelGmNames, gmEffectNames, labelNames, withRound, rangeCtx, withRange, rowLvl, rowOn, cleanItemKey, charForView, secretFieldIds, gmViewFields } from './systemcore.js';
+import { cleanDamageRules, loadFits, chamberTakes, chamberCap, CHAMBER_CAP, cleanReach, openSync, moneyBoxes, moneyHeld, rowOpMoney, onceOf, catHome, catPlace, cleanPlaceCats, catSplits, cleanFieldUnit, unitTail, heightWords, measureWords, unitWords, unitHead, listWords, unitOf, textWords, measureStore, rollNeedsOk, rollNeedsSays, timeRuleRun, ruleRunCtx, chainsShallow, makeResolver, hasDice, figText, cleanEvery, cleanInFight, droppedCounts, validPageId, LIMITS, KINDS, showsIf, rowRollNames, gmOnlyNames, applyAct, withOnSelf, applyScope, applyRound, dueActs, combatChars, roundSecs, fxLeftNow, lastsSecs, APPLY_KINDS, TURN_UNITS, LIGHT_UNITS, RANGE_UNITS, HEIGHT_UNITS, TIME_WORDS, STORED, DEF_PROP, BAND_KINDS, IDENTITY_KINDS, LEDGER_KINDS, headerEntry, captionParts, emptySystem, uid, validKey, cleanSystem, cleanChar, validateSystem, resolveAll, hoverLines, autoLayout, applyEdit, applyStyle, cleanLooks, lookOf, lookFor, lookRule, applyEffectOp, fxText, fmtNum, budgetsOf, budgetWatch, budgetSays, needsMet, needsSays, initRoll, applyProposal, cleanUploads, sideOf, threatArc, facingCtx, facingNow, setAimSource, stanceCtx, tokenCtx, POSTURE_IDS, POSTURE_NAMES, DEFAULT_POSTURES, postureList, postureAt, autoEffectsOn, initTie, charTokenOn, cycleThreat, valueTone, TONES, activeCharOf, playableChars, ownedTokenPlan, applyOwnerOps, migrateBindings, capExpr, cleanValue, fieldById, valueOpts, applyRowOp, rowIdOf, rowDef, orphanRows, stampRows, cleanRowDef, projectRows, STAT_KEY, PALETTE_KEYS, GLYPHS, glyphPath, headerEdits, pinTargets, pinTargetsAll, hudView, hudHasContent, resetTargets, cleanListSpec, statKey, rowStat, plusText, rowPaid, itemReach, gmDerivedNames, labelGmNames, gmEffectNames, labelNames, withRound, rangeCtx, withRange, rowLvl, rowOn, cleanItemKey, charForView, secretFieldIds, gmViewFields } from './systemcore.js';
 import { fileBase, charToJson, charFromJson, sheetToMarkdown, isCharFile } from './sheetexport.js';
 import { lvlsFromBox, lvlsToText } from './librarycore.js';
 import { dieNode, DIE_LABELS } from './dieicons.js';   // 1.5.8, backlog 149: the dice drawings (pure)
@@ -2690,15 +2690,20 @@ function rowRollBtns(host, spec, entry, def, c, f, res) {   // res (R2b): the fi
             if (!applyOk || !r.apply.length) return;
             var al = r.label || 'Apply', ab = el('button', 'tool ghost sheet-item-roll sheet-item-apply', al); ab.type = 'button'; ab.title = nm + ' \u00b7 ' + al + ': ' + applyTitle(r, systemOf(getActiveCampaign()));
             var cbA = typeof costBlock === 'function' ? costBlock(c, r.cost) : ''; if (cbA) { ab.disabled = true; ab.title = cbA + ' \u2014 ' + ab.title; }   // turn-based combat T4
-            ab.addEventListener('click', function() { var campN = getActiveCampaign(), cN = charById(c.id, campN); if (cN) applyAction(r, cN, nm + ' \u00b7 ' + al, { f: f.id, r: rid, i: ri }); });
+            ab.addEventListener('click', function() { var campN = getActiveCampaign(), cN = charById(c.id, campN); if (!cN) return; if (r.to === 'near' && typeof allyPick === 'function') { allyPick(ab, cN, function(on) { applyAction(r, cN, nm + ' \u00b7 ' + al, { f: f.id, r: rid, i: ri }, on || undefined); }); return; } applyAction(r, cN, nm + ' \u00b7 ' + al, { f: f.id, r: rid, i: ri }); });   // 1.5.9: whom it is for first, where it Applies to an adjacent character
             host.appendChild(ab); return;
         }
         if (!rollOk || !r || typeof r.formula !== 'string' || !r.formula) return;
         var lb = r.label || 'Roll', b = el('button', 'tool ghost sheet-item-roll', lb); b.type = 'button'; if (typeof dieFor === 'function') b.insertBefore(dieFor(r.die, r.formula), b.firstChild); b.title = nm + ' \u00b7 ' + lb + ': ' + r.formula + ' (shift-click adds a modifier)';   // 1.5.8: its die (1.5.9: its title back, which this comment had swallowed)
         var nOk = !r.needs || !(res && res.rn && res.rn[rid]) || res.rn[rid][ri] !== false, withE = !!(Array.isArray(r.then) && r.then.length) || !!r.needs || !!r.malf || !!r.cost || !!r.dmg;   // Stage 6 HUD R2b: its needs for this row; a roll with consequences or needs names its index
+        if (r.to === 'near') withE = true;   // 1.5.9 (book es/et plan, section 3): one that Applies to an adjacent character names its index too, so the host finds whom it may reach
         if (!nOk) { b.disabled = true; b.title = (r.needsText || 'Not now') + ' \u2014 it needs ' + r.needs; }
         var cbL = typeof costBlock === 'function' ? costBlock(c, r.cost) : ''; if (cbL) { b.disabled = true; b.title = cbL + ' \u2014 ' + nm + ' \u00b7 ' + lb; }   // turn-based combat T4
-        var goL = function(e) { sheetRoll(e, c.id, r.formula, nm + ' \u00b7 ' + lb, { row: withE ? { f: f.id, r: rid, i: ri } : { f: f.id, r: rid } }); };
+        var goL = function(e) {
+            if (r.to === 'near' && typeof allyPick === 'function' && !(e && e.wpAlly !== undefined)) { var evL = typeof pressOf === 'function' ? pressOf(e, b) : e; allyPick(evL.currentTarget || b, c, function(on) { evL.wpAlly = on || ''; goL(evL); }); return; }   // 1.5.9 (book es/et plan, section 3): whom it is for first
+            var oL = { row: withE ? { f: f.id, r: rid, i: ri } : { f: f.id, r: rid } }; if (e && typeof e.wpAlly === 'string' && e.wpAlly) oL.on = e.wpAlly;
+            sheetRoll(e, c.id, r.formula, nm + ' \u00b7 ' + lb, oL);
+        };
         b.addEventListener('click', goL);
         host.appendChild(b); var pmL = typeof rollModBtn === 'function' ? rollModBtn(b, goL) : null; if (pmL) host.appendChild(pmL);   // 1.5.9: its ±
     });
@@ -3633,6 +3638,43 @@ function sheetRoll(e, charId, expr, label, opts) {
     if ((e.shiftKey || e.altKey) && window.wpDice.rollWithMod) window.wpDice.rollWithMod(charId, expr, label, opts, e.currentTarget);
     else if (window.wpDice.rollFor) window.wpDice.rollFor(charId, expr, label, opts);
 }
+// [sinkcheck:allymenu-start]
+// 1.5.9 (docs/BOOK_ES_ET_PLAN.md section 3; the book: an item used "to oneself or an adjacent ally"; the owner: a menu of you and the characters
+// next to you, your Target first): pressed, a roll or an action that Applies to an adjacent character asks whom it is for, only where someone
+// stands next to its character's token on this screen's own copy of the map (net.allyChoices: a player's app reads what it was sent, the GM's
+// screen a hidden token too). The character's Target first where it is one of them, then Yourself, then the others by their token's name, every
+// name as text. With nobody next to it, or no table module, the press goes on at once on the user (go(null)); a pick hands on the token's id
+// (go(id)), which the host judges again. On the page as the Load menu is: its class, its Escape, its arrow keys, a press elsewhere closing it
+function allyChoicesFor(c, camp) {
+    var n = net(), t = c && typeof facingTarget === 'function' ? facingTarget(c, camp) : null;
+    if (!t || !t.tok || !t.map || !n || typeof n.allyChoices !== 'function') return { list: [], tid: '' };
+    var list = n.allyChoices(camp, t.map, t.tok), tg = n.targets && typeof n.targets === 'object' ? n.targets : {}, tid = '';
+    var keys = isClient() ? [myId()] : [c.ownerId && !c.npc ? c.ownerId : '', 'tk:' + t.tok.id, myId()];   // whose pointer is this character's: a player's own, else the one the GM's character holds, else the GM's
+    keys.forEach(function(k) { var x = typeof k === 'string' && k && Object.prototype.hasOwnProperty.call(tg, k) ? tg[k] : null; if (!tid && x && typeof x.id === 'string' && x.mapId === t.mapId && list.some(function(o) { return o.id === x.id; })) tid = x.id; });
+    return { list: Array.isArray(list) ? list : [], tid: tid };
+}
+function allyPick(anchor, c, go) {
+    var got = allyChoicesFor(c, getActiveCampaign()); if (!got.list.length) { go(null); return; }
+    if (_ldPop) closeLoadMenu();
+    var pop = el('div', 'sheet-dl-pop sheet-ally-pop'); pop.setAttribute('role', 'menu'); pop.setAttribute('aria-label', 'Who it is for'); pop._anchor = anchor;
+    var item = function(label, sub, id) { var b = el('button', 'sheet-dl-item'); b.type = 'button'; b.setAttribute('role', 'menuitem'); b.appendChild(el('span', 'sheet-dl-t', label)); b.appendChild(el('span', 'sheet-dl-s', sub)); b.addEventListener('click', function(e) { e.preventDefault(); closeLoadMenu(); go(id); }); pop.appendChild(b); };
+    var tg = got.list.filter(function(o) { return o.id === got.tid; })[0] || null;
+    if (tg) item(tg.name, 'Your target, next to you', tg.id);
+    item('Yourself', 'On ' + (c && c.name ? c.name : 'your character'), null);
+    got.list.forEach(function(o) { if (o !== tg) item(o.name, 'Next to you', o.id); });
+    pop.addEventListener('mousedown', function(e) { e.stopPropagation(); });
+    pop.addEventListener('keydown', function(e) {
+        e.stopPropagation(); if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+        e.preventDefault(); var its = Array.prototype.slice.call(pop.querySelectorAll('.sheet-dl-item')), at = its.indexOf(document.activeElement), nx = its[(at + (e.key === 'ArrowDown' ? 1 : its.length - 1) + its.length) % its.length]; try { if (nx) nx.focus(); } catch (er) {}
+    });
+    document.body.appendChild(pop); _ldPop = pop;
+    var r = anchor && anchor.getBoundingClientRect ? anchor.getBoundingClientRect() : { left: 8, bottom: 8 }, nI = pop.children.length; pop.style.left = Math.max(8, Math.min(window.innerWidth - 288, r.left)) + 'px'; pop.style.top = Math.max(8, Math.min(window.innerHeight - (24 + 52 * nI), r.bottom + 6)) + 'px';
+    document.addEventListener('mousedown', ldOutside, true); document.addEventListener('keydown', ldKey, true);
+    var first = pop.querySelector('.sheet-dl-item'); try { if (first) first.focus(); } catch (er) {}
+}
+// the press as it was made, kept for after the menu (an event's currentTarget is gone once it is dispatched)
+function pressOf(e, b) { return { shiftKey: !!(e && e.shiftKey), altKey: !!(e && e.altKey), currentTarget: (e && (e.modAt || e.currentTarget)) || b, preventDefault: function() {} }; }
+// [sinkcheck:allymenu-end]
 // 1.5.9 (the owner, at the table: "theres no way to add modifiers to rolls in the character sheet"; by prompt: "A ± button on each roll"): the
 // small ± beside a roll button opens the very popover shift-click opens, for that very roll, anchored to the ±. go is the roll button's own
 // click handler, handed an event that says shift and names the ±, so the roll's formula, label and opts are the button's own. Pressed as the
@@ -3670,11 +3712,12 @@ function rollNode(r, c, sys, vars) {   // sys, vars: the system drawn and the re
     if (r.icon) b.insertBefore(iconNode(r.icon, 'sheet-roll-icon'), b.firstChild); if (typeof dieFor === 'function' && (r.die || !r.icon)) b.insertBefore(dieFor(r.die, r.formula, 'sheet-roll-die'), b.firstChild);   // 1.5.8: its die (the GM's pick, else its formula's; an icon of its own shows in place of its formula's die)
     b.title = r.formula + (can ? ' · shift-click to add a modifier' : ' (dice are off here, or this is not your character)'); b.disabled = !can;
     var cbR = can && typeof costBlock === 'function' ? costBlock(c, r.cost) : ''; if (cbR) { b.disabled = true; b.title = cbR + ' \u2014 ' + r.formula; }   // turn-based combat T4
-    if (can && r.needs && typeof rollNeedsOk === 'function' && typeof vars === 'function' && !rollNeedsOk(r, vars, F())) { b.disabled = true; b.title = (r.needsText || 'Not now') + ' \u2014 it needs ' + r.needs; }   // 1.5.4: what it needs, as a list roll's button (the host judges a player's roll)
+    if (can && r.needs && typeof rollNeedsOk === 'function' && typeof vars === 'function' && !rollNeedsOk(r, r.to === 'near' && typeof withOnSelf === 'function' ? withOnSelf(vars, true) : vars, F())) { b.disabled = true; b.title = (r.needsText || 'Not now') + ' \u2014 it needs ' + r.needs; }   // 1.5.4: what it needs, as a list roll's button (the host judges a player's roll); 1.5.9: read as on its user, OnSelf 1
     var goN = function(e) {   // 1.5.9: named, so its ± runs the very same click
+        if (r.to === 'near' && typeof allyPick === 'function' && !(e && e.wpAlly !== undefined)) { var evN = typeof pressOf === 'function' ? pressOf(e, b) : e; allyPick(evN.currentTarget || b, c, function(on) { evN.wpAlly = on || ''; goN(evN); }); return; }   // 1.5.9 (book es/et plan, section 3): whom it is for first, where someone stands next to it
         var lb = label, vv = vars;
         if (sys && typeof vars === 'function' && r.label && r.label.indexOf('{') >= 0 && F()) { try { var campN = getActiveCampaign(), cN = charById(c.id, campN) || c; vv = resolveAll(sys, cN, F(), tokenCtxFor(c.id, campN)).vars; lb = rollLabel(r, sys, cN, vv); } catch (err) { lb = label; vv = vars; } }   // HF5 review: the values as they are at the click, as the roll reads them (a redraw may still wait on a focused box)
-        var why = labelSecret(sys, vv, r.label); if (why) toast('Kept private: its label shows a GM-only value (' + why + ').'); var oR = why ? { priv: true } : r.vis === 'gm' ? { gmOnly: true } : undefined; if (r.needs) { oR = oR || {}; oR.act = r.id; } if ((Array.isArray(r.then) && r.then.length) || r.malf || r.cost || r.dmg || r.init === true) { oR = oR || {}; oR.act = r.id; } sheetRoll(e, c.id, r.formula, lb, oR);   // R1: a roll with consequences names itself (initiative O1: the initiative roll too, so the host can trust its number into the fight)   // a GM-only roll stays the GM's
+        var why = labelSecret(sys, vv, r.label); if (why) toast('Kept private: its label shows a GM-only value (' + why + ').'); var oR = why ? { priv: true } : r.vis === 'gm' ? { gmOnly: true } : undefined; if (r.needs) { oR = oR || {}; oR.act = r.id; } if (r.to === 'near') { oR = oR || {}; oR.act = r.id; if (e && typeof e.wpAlly === 'string' && e.wpAlly) oR.on = e.wpAlly; } if ((Array.isArray(r.then) && r.then.length) || r.malf || r.cost || r.dmg || r.init === true) { oR = oR || {}; oR.act = r.id; } sheetRoll(e, c.id, r.formula, lb, oR);   // R1: a roll with consequences names itself (initiative O1: the initiative roll too, so the host can trust its number into the fight)   // a GM-only roll stays the GM's
     };
     b.addEventListener('click', goN);
     var box = el('div', 'sheet-field sheet-kind-roll'); box.appendChild(b);
@@ -3700,10 +3743,11 @@ function applyNode(r, c, sys, vars) {
     var label = rollLabel(r, sys, c, vars), can = (_fxLive || window.wpPrintCopy === true) && canApply(c), b = el('button', 'tool sheet-roll sheet-apply' + (Object.prototype.hasOwnProperty.call(ROLL_TONE_CLS, r.tone) ? ROLL_TONE_CLS[r.tone] : ''), label);
     if (r.icon) b.insertBefore(iconNode(r.icon, 'sheet-roll-icon'), b.firstChild);
     b.title = applyTitle(r, sys) + (r.each ? ' \u2014 also ' + (r.by ? 'due' : 'by itself') + (r.each === 'turn' ? ' at the start of its character\u2019s turn' : ' on every new round of a combat') + (r.by ? ' (a reminder for ' + (r.by === 'gm' ? 'the GM' : 'its player') + ' to press)' : '') : '') + (can ? '' : ' (not here: this is a preview or a pop-out, or not your character)'); b.disabled = !can;
-    if (can && r.needs && typeof rollNeedsOk === 'function' && typeof vars === 'function' && !rollNeedsOk(r, vars, F())) { b.disabled = true; b.title = (r.needsText || 'Not now') + ' \u2014 it needs ' + r.needs; }   // 1.5.4: what it needs (the host judges a player's press, applyAct the GM's)
+    if (can && r.needs && typeof rollNeedsOk === 'function' && typeof vars === 'function' && !rollNeedsOk(r, r.to === 'near' && typeof withOnSelf === 'function' ? withOnSelf(vars, true) : vars, F())) { b.disabled = true; b.title = (r.needsText || 'Not now') + ' \u2014 it needs ' + r.needs; }   // 1.5.4: what it needs (the host judges a player's press, applyAct the GM's); 1.5.9: read as on its user, OnSelf 1
     b.addEventListener('click', function() {
         var campN = getActiveCampaign(), cN = charById(c.id, campN); if (!cN) return;
         var lb = label; if (sys && r.label && r.label.indexOf('{') >= 0) { try { lb = rollLabel(r, sys, cN, resolveAll(sys, cN, F(), tokenCtxFor(cN.id, campN)).vars); } catch (err) { lb = label; } }   // the label as it reads at the press
+        if (r.to === 'near' && typeof allyPick === 'function') { allyPick(b, cN, function(on) { applyAction(r, cN, lb, undefined, on || undefined); }); return; }   // 1.5.9 (book es/et plan, section 3): whom it is for first, where someone stands next to it
         applyAction(r, cN, lb);
     });
     var box = el('div', 'sheet-field sheet-kind-roll'); box.appendChild(b); return box;
@@ -3711,24 +3755,26 @@ function applyNode(r, c, sys, vars) {
 // Stage 6 HUD H7: an apply action pressed — a player asks the host (the new values come back as its delta, the card as its record); the GM
 // works it out here with the saved system (the sheet's own resolver, token and round included), stores it as ONE change (one Revert brings
 // every value back) and posts the card to whoever may see it (applyScope); a card that would carry a GM-only value is kept private, with a toast
-function applyAction(r, c, label, row) {   // row (H7b): { f, r, i } — a list's action on one of the character's rows
+function applyAction(r, c, label, row, on) {   // row (H7b): { f, r, i } — a list's action on one of the character's rows; on (1.5.9): the token of the adjacent character it is used on
     var n = net(), camp = getActiveCampaign(), sys = systemOf(camp); if (!camp || !sys || !F()) return;
-    if (isClient()) { if (!n || !n.charApply) return; var q = row ? n.charApply(c.id, null, label, row) : n.charApply(c.id, r.id, label); if (q && q.error) toast(q.error); return; }
+    if (isClient()) { if (!n || !n.charApply) return; var q = row ? (on ? n.charApply(c.id, null, label, row, on) : n.charApply(c.id, null, label, row)) : on ? n.charApply(c.id, r.id, label, undefined, on) : n.charApply(c.id, r.id, label); if (q && q.error) toast(q.error); return; }
     if (!canWrite()) return;
     var act = null;
     if (row) { var lfR = fieldById(sys, row.f), lrR = lfR && lfR.kind === 'item-list' && lfR.list && Array.isArray(lfR.list.rolls) ? lfR.list.rolls[row.i] : null; if (lrR && Array.isArray(lrR.apply)) act = lrR; }   // H7b: the saved list's action
     else (sys.rolls || []).forEach(function(x) { if (x && x.id === r.id && Array.isArray(x.apply)) act = x; });
     if (!act) return;   // the saved action, never a draft's
+    var onT = null, ftT = null;   // 1.5.9 (book es/et plan, section 3): the adjacent character it is used on, judged on this screen's own map (net.allyOn), a hidden token too
+    if (on && act.to !== 'near') return;
+    if (on) { ftT = facingTarget(c, camp); onT = n && typeof n.allyOn === 'function' ? n.allyOn(camp, ftT && ftT.map, ftT && ftT.tok, on) : null; if (!onT || onT.error) { toast(onT && onT.message ? onT.message : 'That cannot be used on them now.'); return; } }
     var tc = tokenCtxFor(c.id, camp), vv = resolveAll(sys, c, F(), tc).vars;
     if (row) { vv = vv && typeof vv.row === 'function' ? vv.row(row.f, row.r) : null; if (!vv) { toast('That row cannot be used now.'); return; } }   // H7b: the row's own names (Row.*)
-    var res = applyAct(sys, c, act, vv, F(), tc, row ? { f: row.f, r: row.r } : null, undefined, window.wpDiceCore || null);   // R2b: a list's action may move its row's counters; 1.5.9: this machine's dice roll a Rolled amount
+    if (act.to === 'near' && typeof withOnSelf === 'function') vv = withOnSelf(vv, !onT);   // 1.5.9: OnSelf, 1 on its user and 0 on another
+    var res = applyAct(sys, c, act, vv, F(), tc, row ? { f: row.f, r: row.r } : null, undefined, window.wpDiceCore || null, onT ? { char: onT.ch, tctx: n && typeof n.allyCtx === 'function' ? n.allyCtx(ftT.map, onT.tok) : null } : null);   // R2b: a list's action may move its row's counters; 1.5.9: this machine's dice roll a Rolled amount, and a field's change lands on the one it is used on
     if (!res.ok) { toast(res.reason === 'none' ? 'Nothing to apply.' : res.reason === 'error' ? (res.message || 'That amount could not be worked out.') : 'That action cannot change those values now.'); return; }
-    var ids = Object.keys(res.values), prevs = {}, extra = null;
-    ids.forEach(function(fid) { prevs[fid] = c.values && Object.prototype.hasOwnProperty.call(c.values, fid) ? clone(c.values[fid]) : undefined; });
-    ids.slice(1).forEach(function(fid) { (extra = extra || {})[fid] = prevs[fid]; });
-    lastChange = { charId: c.id, fieldId: ids[0], prev: prevs[ids[0]], extra: extra };
-    c.values = c.values || {}; ids.forEach(function(fid) { c.values[fid] = res.values[fid]; });
-    afterCharChange(c, false, res.values);
+    var keepUndo = function(ch, vals) { var ks = Object.keys(vals), pv = {}, ex = null; ks.forEach(function(fid) { pv[fid] = ch.values && Object.prototype.hasOwnProperty.call(ch.values, fid) ? clone(ch.values[fid]) : undefined; }); ks.slice(1).forEach(function(fid) { (ex = ex || {})[fid] = pv[fid]; }); lastChange = { charId: ch.id, fieldId: ks[0], prev: pv[ks[0]], extra: ex }; };   // one Revert: the user's change, or where it moved only the one it was used on, that change
+    var ids = Object.keys(res.values), onIds = onT && res.onValues ? Object.keys(res.onValues) : [];
+    if (ids.length) { keepUndo(c, res.values); c.values = c.values || {}; ids.forEach(function(fid) { c.values[fid] = res.values[fid]; }); afterCharChange(c, false, res.values); }
+    if (onIds.length) { if (!ids.length) keepUndo(onT.ch, res.onValues); onT.ch.values = onT.ch.values || {}; onIds.forEach(function(fid) { onT.ch.values[fid] = res.onValues[fid]; }); afterCharChange(onT.ch, false, res.onValues); }
     var hit = [], low = [], keep = function(x) { var l = String(x).toLowerCase(); if (low.indexOf(l) < 0) { low.push(l); hit.push(String(x)); } };
     var rowP = row ? rowRollNames(sys, c, row.f, row.r, res.names, F()) : null, nmA = rowP ? rowP.names : res.names, gmRow = !!(rowP && rowP.gm), keptRow = !!(rowP && rowP.kept);   // owed review F5b#2: a curse the GM keeps on (its owner sees it off)   // H7b: what Row.* read (a column's own names, a choice's option) and a GM-only row
     if (n && n.active && n.role === 'host' && act.vis !== 'gm') { gmOnlyNames(sys, nmA).concat(gmDerivedNames(sys, F(), nmA), gmEffectNames(vv, nmA)).forEach(keep); var ls = row ? '' : labelSecret(sys, vv, act.label); if (ls) keep(ls); }
@@ -3736,7 +3782,8 @@ function applyAction(r, c, label, row) {   // row (H7b): { f, r, i } — a list'
     if (gmRow && pub) toast('Kept private: that is on a GM-only item or list.');
     else if (keptRow && pub) toast('Kept private: its owner sees that item switched off.');
     else if (hit.length && pub) toast('Kept private: that amount uses a GM-only value (' + hit.join(', ') + ').');
-    if (n && n.postApplyCard) n.postApplyCard(c, label, res.lines, scope);
+    if (n && n.postApplyCard && res.lines.length) n.postApplyCard(c, label, res.lines, scope);
+    if (onT && onIds.length && n && typeof n.allyCard === 'function') n.allyCard(c, onT.ch, onT.tok.charName || onT.tok.name || onT.ch.name, label, res.onLines, applyScope(sys, onT.ch, act, hit.length > 0 || gmRow || keptRow, F()));   // 1.5.9: the card of what moved on the one it was used on
 }
 // Stage 6 HUD G10: the host's round hook — on every new round of a combat (net.js combatStep / combatSet), each Each round action on every
 // character with a token in it, worked out with the GM's full view and the round just begun (Turn := CombatRound), as his sweep runs on the
@@ -5300,6 +5347,10 @@ function refreshErrors() {
         if (!r || typeof r !== 'object' || typeof r.needs !== 'string' || !r.needs.trim()) return;
         var cr = (clean.rolls || []).filter(function(x) { return x && x.id === r.id; })[0]; if (cr && !cr.needs) (errorsById[r.id] = errorsById[r.id] || []).push({ prop: 'needs', message: 'This is no formula Save can keep, so Save drops it.' });
     });
+    (Array.isArray(draft.rolls) ? draft.rolls : []).forEach(function(r) {   // 1.5.9 (book es/et plan, section 3): Applies to as the cleaner reads it, never on the initiative roll
+        if (!r || typeof r !== 'object' || r.to !== 'near') return;
+        var cn = (clean.rolls || []).filter(function(x) { return x && x.id === r.id; })[0]; if (cn && cn.to !== 'near') (errorsById[r.id] = errorsById[r.id] || []).push({ prop: 'to', message: 'The initiative roll is always its own character\u2019s, so Save drops Applies to.' });
+    });
     // F4c1 review: what Save drops of an item's stats with no word otherwise — a value past ±1e9, and past LIMITS.entryStats an item (the first come are kept)
     var cleanById = Object.create(null); (clean.items || []).forEach(function(ci) { if (ci && ci.id) cleanById[ci.id] = ci; });
     (draft.items || []).forEach(function(it) {
@@ -5756,6 +5807,7 @@ function rollRow(r) {
     if (isApply) { var ea0 = r.each === 'round' || r.each === 'turn' ? r.each : r.round === true ? 'round' : ''; top.appendChild(select('sys-roll-each', [['', 'Only when pressed'], ['round', 'Also each round'], ['turn', 'Also at its turn\u2019s start']], ea0, 'Runs during a combat as well: on every new round (every character in it: Turn = CombatRound, Parries = 0), or when its character\u2019s turn begins (a bleed, a reaction back); pressed, it runs now')); if (ea0) top.appendChild(select('sys-roll-by', [['', 'automatically'], ['gm', 'when the GM presses it'], ['owner', 'when its player presses it']], r.by === 'gm' || r.by === 'owner' ? r.by : '', 'Automatically, or as a reminder in chat with a Run button: for you, or for the character\u2019s player (yours when they are not at the table, or the action is GM only)')); }   // Stage 6 HUD G10 + turn-based combat T2b
     if (!isApply) { var il = el('label', 'sys-hover'); var ic = el('input'); ic.type = 'checkbox'; ic.className = 'sys-init-chk'; ic.checked = !!r.init; il.appendChild(ic); il.appendChild(document.createTextNode(' Initiative')); il.title = 'The combat roster rolls this for initiative'; top.appendChild(il); }
     if (!isApply) { var dl = el('label', 'sys-hover'); var dc = el('input'); dc.type = 'checkbox'; dc.className = 'sys-dmg-chk'; dc.checked = r.dmg === true; dl.appendChild(dc); dl.appendChild(document.createTextNode(' Damage')); dl.title = 'A damage roll: its card in Table Chat takes the damage colour, a larger total and a damage tag'; top.appendChild(dl); }   // chat cards (owner 2026-09-27)
+    top.appendChild(select('sys-roll-near', [['', 'Applies to the user'], ['near', 'Applies to the user or an adjacent character']], r.to === 'near' ? 'near' : '', 'Applies to: whom its changes go on. With an adjacent character, a press asks who it is for when someone stands next to you, your target first. A row\u2019s own counters stay with the user. Its formulas read OnSelf, 1 on yourself and 0 on another'));   // 1.5.9 (book es/et plan, section 3): Applies to
     top.appendChild(btnRow([['up', 'Move up', '&#9650;'], ['down', 'Move down', '&#9660;'], ['del', 'Delete this roll', '&times;']]));
     row.appendChild(top);
     var ndR = el('div', 'sys-flags sys-roll-needsrow');   // 1.5.4: what it needs before it may be used, as a list roll's
@@ -6144,6 +6196,7 @@ function listCard(f, allCats, targets, acts) {   // acts (turn-based combat T1):
         [['roll', 'Roll'], ['apply', 'Apply']].forEach(function(o) { var op = el('option', null, o[1]); op.value = o[0]; rk.appendChild(op); }); rk.value = rApply ? 'apply' : 'roll'; rw.appendChild(rk);
         var actsL = Array.isArray(acts) ? acts : [];   // turn-based combat T1: what one press costs
         if (actsL.length || rr.cost) { var rco = el('select', 'sys-list-rollcost'); rco.title = 'What one press costs in turn-based combat: one of the actions a turn allows'; var rcOpts = [['', 'Costs nothing']].concat(actsL.map(function(a) { return [a.key, 'Costs: ' + (a.label || a.key)]; })); if (rr.cost && !actsL.some(function(a) { return a.key.toLowerCase() === String(rr.cost).toLowerCase(); })) rcOpts.push([rr.cost, 'Costs: ' + rr.cost + ' (no such action)']); rcOpts.forEach(function(o) { var op = el('option', null, o[1]); op.value = o[0]; rco.appendChild(op); }); rco.value = rr.cost || ''; rw.appendChild(rco); }
+        var rnr = el('select', 'sys-list-near'); rnr.title = 'Applies to: whom its changes go on. With an adjacent character, a press asks who it is for when someone stands next to you, your target first. A row\u2019s own counters stay with the user. Its formulas read OnSelf, 1 on yourself and 0 on another'; [['', 'Applies to the user'], ['near', 'Applies to the user or an adjacent character']].forEach(function(o) { var op = el('option', null, o[1]); op.value = o[0]; rnr.appendChild(op); }); rnr.value = rr.to === 'near' ? 'near' : ''; rw.appendChild(rnr);   // 1.5.9 (book es/et plan, section 3): Applies to
         if (rApply) { cb2.appendChild(rw); listApplyEditor(cb2, rr, ri, 'apply', sp, targets); return; }
         var rf = input('sys-list-rollformula field', typeof rr.formula === 'string' ? rr.formula : '', 'Rolled for the row: dice allowed; Row.lvl, Row.<stat>, Row.<column> read the row, any other name the character (3d6 <= Row.Skill, d20 + Row.Hit)', 'Formula (d20 + Row.Hit)'); rf.maxLength = LIMITS.formula; rw.appendChild(rf);
         rw.appendChild(checkLabel('sys-list-dmg', rr.dmg === true, 'Damage', 'A damage roll: its card in Table Chat takes the damage colour, a larger total and a damage tag'));   // chat cards (owner 2026-09-27)
@@ -7788,6 +7841,7 @@ function onChange(e) {
         else if (c.indexOf('sys-list-statshow') >= 0 || c.indexOf('sys-list-stathide') >= 0) { var ssr = t.closest('.sys-list-stat'), ssD = ssr && Array.isArray(lsc.stats) ? lsc.stats[+ssr.dataset.si] : null; if (!ssD || typeof ssD !== 'object') return; statTick(ssD, c.indexOf('sys-list-stathide') >= 0 ? 'hide' : 'show', t.checked, ssr); }   // Stage 6 F4c1; 1.5.4: Hidden
         else if (c.indexOf('sys-list-dmg') >= 0) { var rdr = t.closest('.sys-list-roll'), rdD = rdr && Array.isArray(lsc.rolls) ? lsc.rolls[+rdr.dataset.ri] : null; if (!rdD || typeof rdD !== 'object') return; if (t.checked) rdD.dmg = true; else delete rdD.dmg; }   // chat cards: a damage roll
         else if (c.indexOf('sys-list-rolldie') >= 0) { var rir = t.closest('.sys-list-roll'), riD = rir && Array.isArray(lsc.rolls) ? lsc.rolls[+rir.dataset.ri] : null; if (!riD || typeof riD !== 'object') return; if (t.value) riD.die = t.value; else delete riD.die; }   // 1.5.8: the die a list roll's button wears
+        else if (c.indexOf('sys-list-near') >= 0) { var nrr = t.closest('.sys-list-roll'), nrD = nrr && Array.isArray(lsc.rolls) ? lsc.rolls[+nrr.dataset.ri] : null; if (!nrD || typeof nrD !== 'object') return; if (t.value === 'near') nrD.to = 'near'; else delete nrD.to; }   // 1.5.9: Applies to
         else if (c.indexOf('sys-list-rollcost') >= 0) { var rcr = t.closest('.sys-list-roll'), rcD = rcr && Array.isArray(lsc.rolls) ? lsc.rolls[+rcr.dataset.ri] : null; if (!rcD || typeof rcD !== 'object') return; if (t.value) rcD.cost = t.value; else delete rcD.cost; }   // turn-based combat T1
         else if (c.indexOf('sys-list-rollkind') >= 0) { var rkr = t.closest('.sys-list-roll'), rkD = rkr && Array.isArray(lsc.rolls) ? lsc.rolls[+rkr.dataset.ri] : null; if (!rkD || typeof rkD !== 'object') return; if (t.value === 'apply') { if (!Array.isArray(rkD.apply)) rkD.apply = [{ f: '', formula: '' }]; } else delete rkD.apply; }   // Stage 6 HUD H7b: Roll | Apply (a formula typed before stays in the draft)
         else if (c.indexOf('sys-list-applyrolled') >= 0) { var arr = t.closest('.sys-list-applyrow'), arR = arr && Array.isArray(lsc.rolls) ? lsc.rolls[+arr.dataset.ri] : null, arK = arr && arr.dataset.k === 'then' ? 'then' : 'apply', arC = arR && Array.isArray(arR[arK]) ? arR[arK][+arr.dataset.ai] : null; if (!arC || typeof arC !== 'object') return; if (t.checked) arC.roll = true; else delete arC.roll; }   // 1.5.9: Rolled (Save keeps it only with a target and an amount)
@@ -7858,6 +7912,7 @@ function onChange(e) {
         else if (c.indexOf('sys-roll-tone') >= 0) { if (t.value) r.tone = t.value; else delete r.tone; }   // Stage 6 look fold
         else if (c.indexOf('sys-roll-die') >= 0) { if (t.value) r.die = t.value; else delete r.die; }   // 1.5.8: the die its button wears (Save keeps a name of the set)
         else if (c.indexOf('sys-roll-cost') >= 0) { if (t.value) r.cost = t.value; else delete r.cost; }   // turn-based combat T1
+        else if (c.indexOf('sys-roll-near') >= 0) { if (t.value === 'near') r.to = 'near'; else delete r.to; }   // 1.5.9: Applies to (Save keeps it only on a roll that is not the initiative)
         else if (c.indexOf('sys-roll-each') >= 0) { delete r.round; if (t.value === 'round' || t.value === 'turn') r.each = t.value; else { delete r.each; delete r.by; } markDirty(); renderAll(); return; }   // Stage 6 HUD G10 + turn-based combat T2b
         else if (c.indexOf('sys-roll-by') >= 0) { if (t.value === 'gm' || t.value === 'owner') r.by = t.value; else delete r.by; }
         else if (c.indexOf('sys-roll-evu') >= 0 || c.indexOf('sys-roll-evrest') >= 0 || c.indexOf('sys-roll-evwait') >= 0 || c.indexOf('sys-roll-ifu') >= 0 || c.indexOf('sys-roll-iffresh') >= 0 || c.indexOf('sys-roll-evask') >= 0 || c.indexOf('sys-roll-evhold') >= 0 || c.indexOf('sys-roll-ifhold') >= 0) everyEdit(r, c, t);   // item 20 K5; backlog 152, fold 5: Waits in a fight, In a fight's unit and tick, Ask me first; 1.5.5: Only while its needs hold, in both rows

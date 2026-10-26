@@ -168,6 +168,10 @@ function cleanRollReq(msg) {
         if (msg.mod !== undefined) { if (!isInt(msg.mod) || msg.mod < -99 || msg.mod > 99) return null; if (msg.mod) out.mod = msg.mod; }
         if (msg.adv !== undefined) { if (msg.adv !== 'adv' && msg.adv !== 'dis') return null; out.adv = msg.adv; }
     } else if (msg.mod !== undefined || msg.adv !== undefined) return null;
+    if (msg.on !== undefined) {   // 1.5.9 (book es/et plan, section 3): the token of the adjacent character a named entry is used on (the host judges it)
+        if (!(out.act || (out.row && out.row.i !== undefined)) || typeof msg.on !== 'string' || msg.on.length < 1 || msg.on.length > 80 || CTRL_RE.test(msg.on)) return null;
+        out.on = msg.on;
+    }
     return out;
 }
 // The host's record: { type: 'roll', id, from, expr, draws, v, ts, priv?, to?, rid? }
@@ -193,7 +197,9 @@ function cleanRoll(rec) {
     return out;
 }
 // Stage 6 HUD H7: the host's card for an apply action — { type: 'apply', id, from, as?, label?, lines: [{ n, d, v, roll? }] (1 to LIMITS.applyLines), ts, priv? }:
-// each change as text and numbers only (a field's label, the amount signed, the new value); null when anything is malformed
+// each change as text and numbers only (a field's label, the amount signed, the new value); null when anything is malformed. 1.5.9: on?, the
+// character it was used on, by name; and a line may have no new value ({ n, d, roll? }), or be { n, s: 1, roll? }, a value set with no figure:
+// the copy of a change on another character that its user's player gets
 function cleanApply(rec) {
     if (!rec || typeof rec !== 'object') return null;
     if (typeof rec.id !== 'string' || !ID_RE.test(rec.id)) return null;
@@ -203,8 +209,13 @@ function cleanApply(rec) {
     for (var i = 0; i < rec.lines.length; i++) {
         var l = rec.lines[i]; if (!l || typeof l !== 'object') return null;
         var n = cleanLabel(l.n); if (!n) return null;
-        if (typeof l.d !== 'number' || !isFinite(l.d) || Math.abs(l.d) > 1e15 || typeof l.v !== 'number' || !isFinite(l.v) || Math.abs(l.v) > 1e15) return null;
-        var ln = { n: n, d: l.d, v: l.v };
+        var ln;
+        if (l.s !== undefined) { if (l.s !== 1 || l.d !== undefined || l.v !== undefined) return null; ln = { n: n, s: 1 }; }   // 1.5.9 (book es/et plan, section 3): a value set on another character, said with no figure (its user's player's copy)
+        else {
+            if (typeof l.d !== 'number' || !isFinite(l.d) || Math.abs(l.d) > 1e15) return null;
+            if (l.v !== undefined && (typeof l.v !== 'number' || !isFinite(l.v) || Math.abs(l.v) > 1e15)) return null;   // 1.5.9: a line with no figure after it, as its user's player's copy of a change on another says it
+            ln = { n: n, d: l.d }; if (l.v !== undefined) ln.v = l.v;
+        }
         if (l.roll !== undefined) { if (typeof l.roll !== 'string') return null; var rt = l.roll.replace(new RegExp(CTRL_RE.source, 'g'), ' ').trim().slice(0, 60).trim(); if (rt) ln.roll = rt; }   // 1.5.9: the dice a Rolled amount drew, as text, cut to 60
         lines.push(ln);
     }
@@ -212,6 +223,7 @@ function cleanApply(rec) {
     if (rec.priv !== undefined) { if (rec.priv !== 'gm') return null; out.priv = 'gm'; }
     var lb = cleanLabel(rec.label); if (lb === null) return null; if (lb) out.label = lb;
     var as = cleanLabel(rec.as); if (as === null) return null; if (as) out.as = as;
+    var on = cleanLabel(rec.on); if (on === null) return null; if (on) out.on = on;   // 1.5.9 (book es/et plan, section 3): the character it was used on, by name
     return out;
 }
 // Turn-based combat T2b: a reminder card — { type: 'due', id, from, charId, act, label?, as?, why: 'round' | 'turn', round, ts, theirs? }: ids and
@@ -233,10 +245,10 @@ function dueText(rec) { return !rec ? '' : (rec.label || 'An action') + (rec.as 
 function applyText(rec) {
     if (!rec || !rec.from || !Array.isArray(rec.lines)) return '';
     var who = rec.from.gm ? 'GM' : rec.from.name, as = rec.as && rec.as !== rec.from.name ? ' as ' + rec.as : '';
-    return who + (rec.priv === 'gm' ? ' (private)' : '') + as + ' applied ' + (rec.label || 'an action') + ': ' + applyChanges(rec);
+    return who + (rec.priv === 'gm' ? ' (private)' : '') + as + ' applied ' + (rec.label || 'an action') + (rec.on ? ' on ' + rec.on : '') + ': ' + applyChanges(rec);   // 1.5.9: and on whom
 }
 // the changes alone, "HP \u22123 \u2192 7, FP +2 \u2192 5" (the HUD's bell)
-function applyChanges(rec) { return !rec || !Array.isArray(rec.lines) ? '' : rec.lines.map(function(l) { return l.n + ' ' + (l.d < 0 ? '\u2212' : '+') + fmtNum(Math.abs(l.d)) + ' \u2192 ' + fmtNum(l.v) + (typeof l.roll === 'string' && l.roll ? ' (' + l.roll + ')' : ''); }).join(', '); }   // 1.5.9: a Rolled amount's dice after it
+function applyChanges(rec) { return !rec || !Array.isArray(rec.lines) ? '' : rec.lines.map(function(l) { return l.n + (l.s === 1 ? ' set' : ' ' + (l.d < 0 ? '\u2212' : '+') + fmtNum(Math.abs(l.d)) + (typeof l.v === 'number' ? ' \u2192 ' + fmtNum(l.v) : '')) + (typeof l.roll === 'string' && l.roll ? ' (' + l.roll + ')' : ''); }).join(', '); }   // 1.5.9: a line with no figure, or a value set with none, as a change on another reaches its user's player   // 1.5.9: a Rolled amount's dice after it
 // The host's refusal: { type: 'roll-deny', rid, reason, message?, pos?, len? } — pos/len clamped to the expr the client sent
 function cleanDeny(msg, exprLen) {
     if (!msg || typeof msg !== 'object') return null;

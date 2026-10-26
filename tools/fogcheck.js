@@ -5948,6 +5948,27 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             ['.wb-item.wb-door:hover, .wb-item.wb-door.wb-door-near {', '.wb-item.wb-door.wb-door-open:hover, .wb-item.wb-door.wb-door-open.wb-door-near {', '.wb-item.path.wb-door:hover svg path, .wb-item.path.wb-door.wb-door-near svg path {', '.wb-item.wb-door:hover::after, .wb-item.wb-door.wb-door-near::after {', '.wb-item.wb-door:hover { cursor: pointer; }'].every(s => cssN.includes(s)));
     }
 
+    // 1.5.9 (docs/BOOK_ES_ET_PLAN.md section 3; the book: an item used "to oneself or an adjacent ally"): fogcore nearTokens, the one reading of next to
+    {
+        const NT = X.nearTokens, sq = X.squareGrid(50), hx = X.hexGrid(30, 52), J = JSON.stringify;
+        const T = (x, y, w, h) => ({ x, y, w: w === undefined ? 50 : w, h: h === undefined ? 50 : h });
+        const sqOk = typeof NT === 'function' && NT(T(100, 100), T(150, 100), sq) && NT(T(100, 100), T(150, 150), sq) && NT(T(100, 100), T(100, 100), sq) && NT(T(100, 100), T(50, 50), sq)
+            && !NT(T(100, 100), T(200, 100), sq) && !NT(T(100, 100), T(200, 200), sq) && !NT(T(100, 100), T(100, 210), sq);
+        const bigOk = typeof NT === 'function' && NT(T(100, 100, 100, 100), T(200, 150), sq) && NT(T(100, 100, 100, 100), T(200, 200), sq) && NT(T(200, 150), T(100, 100, 100, 100), sq) && !NT(T(100, 100, 100, 100), T(250, 150), sq);
+        const tinyOk = typeof NT === 'function' && NT(T(110, 110, 10, 10), T(160, 110, 10, 10), sq) && !NT(T(110, 110, 10, 10), T(210, 110, 10, 10), sq);   // a token whose box holds no cell's middle counts by the cell of its own middle
+        const hexAt = (q, r) => { const c = X.cellCenter({ q, r }, hx); return T(c.x - 30, c.y - 26, 60, 52); };
+        const ring1 = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, -1], [-1, 1]], ring2 = [[2, 0], [0, 2], [2, -2], [-2, 1], [1, 1], [-1, -1]];
+        const hexOk = typeof NT === 'function' && ring1.every(d => NT(hexAt(3, 2), hexAt(3 + d[0], 2 + d[1]), hx)) && ring2.every(d => !NT(hexAt(3, 2), hexAt(3 + d[0], 2 + d[1]), hx)) && NT(hexAt(3, 2), hexAt(3, 2), hx);
+        const offOk = typeof NT === 'function' && NT(T(0, 0), T(80, 0), null, { yardPx: 30 }) && !NT(T(0, 0), T(81, 0), null, { yardPx: 30 }) && NT(T(0, 0), T(100, 0), null) && !NT(T(0, 0), T(101, 0), null)
+            && NT(T(0, 0), T(70, 70), null, { yardPx: 30 }) && !NT(T(0, 0), T(72, 72), null, { yardPx: 30 }) && NT(T(0, 0), T(100, 0), null, { yardPx: -5 }) && NT(T(0, 0), T(100, 0), { type: 'odd' });
+        const htOk = typeof NT === 'function' && NT(T(100, 100), T(150, 100), sq, { za: 0, zb: 1 }) && !NT(T(100, 100), T(150, 100), sq, { za: 0, zb: 1.5 }) && !NT(T(100, 100), T(150, 100), sq, { za: 3, zb: 0 })
+            && NT(T(100, 100), T(150, 100), sq, { za: 0 }) && NT(T(100, 100), T(150, 100), sq, { za: 0, zb: 'high' }) && !NT(T(0, 0), T(80, 0), null, { yardPx: 30, za: 2, zb: 0 });
+        const hugeOk = typeof NT === 'function' && NT(T(0, 0, 1e9, 1e9), T(1e7 + 40, 0), sq) && !NT(T(0, 0, 1e6, 50), T(1e6 + 60, 0), sq);   // a token too large to list is judged by the gap between the boxes, a cell wide
+        const badOk = typeof NT === 'function' && [[null, T(0, 0)], [T(0, 0), null], [{ x: 'a', y: 0 }, T(0, 0)], [T(NaN, 0), T(0, 0)], [T(0, 0), { x: 0, y: Infinity }], [5, 6]].every(p => NT(p[0], p[1], sq) === false);
+        check('1.5.9 fogcore nearTokens, the one reading of next to (the book: "to oneself or an adjacent ally"): on squares a side or a corner of some cell of each footprint, the same cell too, never two cells apart; a large token by every cell of its box, and a token too small to hold a cell\'s middle by the cell of its own middle; on hexagons the same hex and its six neighbours, never the ring beyond; with no grid a gap of a yard at most (50 px, or the map\'s yard as handed in), measured from box to box; two heights a yard apart at most, read only where both are numbers; a token too large to list by the gap of a cell; anything that is no token is never next to anything',
+            sqOk && bigOk && tinyOk && hexOk && offOk && htOk && hugeOk && badOk, J([sqOk, bigOk, tinyOk, hexOk, offOk, htOk, hugeOk, badOk]));
+    }
+
     summed = true;
     console.log(NL + pass + ' passed, ' + fail + ' failed.');
     if (fail) process.exit(1);

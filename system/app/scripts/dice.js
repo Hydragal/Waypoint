@@ -143,14 +143,16 @@ function renderApply(m) {
     if (rec.from.gm) { wrap.appendChild(document.createTextNode(' ')); wrap.appendChild(el('span', 'chat-gm', 'GM')); }
     if (priv) { wrap.appendChild(document.createTextNode(' ')); wrap.appendChild(el('span', 'chat-tag', 'private')); }
     if (rec.as && rec.as !== rec.from.name) { wrap.appendChild(document.createTextNode(' ')); wrap.appendChild(el('span', 'chat-tag', 'as ' + rec.as)); }
+    if (rec.on) { wrap.appendChild(document.createTextNode(' ')); wrap.appendChild(el('span', 'chat-tag', 'on ' + rec.on)); }   // 1.5.9 (book es/et plan, section 3): the character it was used on, as text
     wrap.appendChild(el('span', 'chat-time', chatTime(rec.ts)));
     wrap.appendChild(el('br'));
     wrap.appendChild(el('div', 'roll-expr', rec.label || 'Applied'));
     var ls = el('div', 'apply-lines');
     rec.lines.forEach(function(l) {
         var s = el('span', 'apply-line'); s.appendChild(el('span', 'apply-n', l.n + ' '));
-        s.appendChild(el('span', 'apply-d ' + (l.d < 0 ? 'apply-sub' : 'apply-add'), (l.d < 0 ? '\u2212' : '+') + fmtNum(Math.abs(l.d))));
-        s.appendChild(document.createTextNode(' \u2192 ')); s.appendChild(el('b', null, fmtNum(l.v)));
+        if (l.s === 1) s.appendChild(el('span', 'apply-d apply-add', 'set'));   // 1.5.9: a value set on another character, with no figure
+        else s.appendChild(el('span', 'apply-d ' + (l.d < 0 ? 'apply-sub' : 'apply-add'), (l.d < 0 ? '\u2212' : '+') + fmtNum(Math.abs(l.d))));
+        if (typeof l.v === 'number') { s.appendChild(document.createTextNode(' \u2192 ')); s.appendChild(el('b', null, fmtNum(l.v))); }   // 1.5.9: none where the line has no figure
         if (typeof l.roll === 'string' && l.roll) s.appendChild(el('span', 'apply-roll', ' ' + l.roll));   // 1.5.9: the dice a Rolled amount drew, as text
         ls.appendChild(s);
     });
@@ -214,7 +216,7 @@ function rollFor(charId, expr, label, opts) {
     opts = opts || {};
     var s = ui('diceChar'); if (s && panelOpen()) { syncChars(); if (Array.prototype.some.call(s.options, function(o) { return o.value === charId; })) s.value = charId; }
     _rollMore = opts.range || opts.blast || opts.used === true ? { range: opts.range || undefined, blast: opts.blast || undefined, used: opts.used === true ? true : undefined } : null;   // 1.5.8 explosives: a throw's range to its aim, the blast a damage roll is for (this machine's own words); 1.5.9: a damage roll already applied as it is rolled (a blast's fragmentation)
-    var r = roll(expr, { priv: !!opts.priv, gmOnly: !!opts.gmOnly, charId: charId, label: label, source: opts.source || 'sheet', row: opts.row || undefined, act: opts.act || undefined, mod: opts.mod || undefined, adv: opts.adv || undefined, dmg: opts.dmg === true ? true : undefined });   // row (F5b): a roll on a list's row; act/mod/adv (R1): a roll with consequences   // gmOnly: a roll made of GM-only data (net.diceRoll keeps it the host's)
+    var r = roll(expr, { on: typeof opts.on === 'string' && opts.on ? opts.on : undefined, priv: !!opts.priv, gmOnly: !!opts.gmOnly, charId: charId, label: label, source: opts.source || 'sheet', row: opts.row || undefined, act: opts.act || undefined, mod: opts.mod || undefined, adv: opts.adv || undefined, dmg: opts.dmg === true ? true : undefined });   // row (F5b): a roll on a list's row; act/mod/adv (R1): a roll with consequences   // gmOnly: a roll made of GM-only data (net.diceRoll keeps it the host's)   // 1.5.9: on, the token of the adjacent character it is used on
     if (r.error) toast(r.error);
     return r;
 }
@@ -281,7 +283,7 @@ function roll(expr, opts) {
     lastSource = opts.source || 'panel';
     var clean = cleanExpr(expr);
     if (!clean) return { error: 'Type a formula, for example 2d6 + 3 (up to ' + LIMITS.expr + ' characters).' };
-    var r = n.diceRoll(clean, { priv: !!opts.priv, gmOnly: !!opts.gmOnly, charId: opts.charId || undefined, label: opts.label || undefined, row: opts.row || undefined, act: opts.act || undefined, mod: opts.mod || undefined, adv: opts.adv || undefined, dmg: opts.dmg === true ? true : undefined, range: more ? more.range : undefined, blast: more ? more.blast : undefined, used: more && more.used === true ? true : undefined });   // dmg: this machine's own word (a thrown item's damage); the wire never carries it
+    var r = n.diceRoll(clean, { priv: !!opts.priv, gmOnly: !!opts.gmOnly, charId: opts.charId || undefined, label: opts.label || undefined, row: opts.row || undefined, act: opts.act || undefined, mod: opts.mod || undefined, adv: opts.adv || undefined, dmg: opts.dmg === true ? true : undefined, on: typeof opts.on === 'string' && opts.on ? opts.on : undefined, range: more ? more.range : undefined, blast: more ? more.blast : undefined, used: more && more.used === true ? true : undefined });   // dmg: this machine's own word (a thrown item's damage); the wire never carries it
     if (!r.error && !opts.row) remember(clean);   // Stage 6 F5b: a row roll is not remembered (its Row.* names need its row)
     return r;
 }
