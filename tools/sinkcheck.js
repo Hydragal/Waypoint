@@ -5422,6 +5422,14 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             !!flSel && flSel.tag === 'select' && j(flOpts) === j([['', 'You place it'], ['scatter', 'It scatters, as a throw'], ['line', 'It flies straight']]) && flSel.value === '' && flLine.value === 'line'
             && made.indexOf('innerHTML') < 0 && !!hostF && hostF.area.flight === undefined && !!keptF && keptF.area.flight === 'line',
             j([flOpts, flSel && flSel.value, hostF && hostF.area, keptF && keptF.area]));
+        // 1.5.9 (es): an entry's Fragmentation and its type from a hostile file reach the form only as a box's value and an option's value and text
+        const formG = mk('div'); B.blastBox(formG, { frag: BAD, fragType: BAD }); const fgIn = formG.kids[6] && formG.kids[6].kids[1], fgSel = formG.kids[7] && formG.kids[7].kids[1], fgOpts = fgSel ? fgSel.kids.map(o => [o.value, o.textContent]) : null;
+        const hostG = LCB.cleanLibEntry(LCB.entryFromForm({ id: 'i_h', name: 'Spark Grenade', vis: 'all', areaFt: '6', areaFrag: '1d6', areaFragType: BAD }), ctx), keptG = LCB.cleanLibEntry(LCB.entryFromForm({ id: 'i_h', name: 'Spark Grenade', vis: 'all', areaFt: '6', areaFrag: '1d6', areaFragType: 'cr' }), ctx);
+        const plG = LCB.cleanLibEntry(LCB.entryFromForm({ id: 'i_h', name: 'Spark Grenade', vis: 'all', areaFt: '6', areaFrag: '1d6', areaFragType: 'cr' }), LCB.libCtx(sysC, FB, false));
+        check('1.5.9 (es) the Library window\'s Fragmentation from a hostile campaign (librarywin.js blastBox, run on a page that records every write): a hostile fragmentation reaches its box only as the box\'s value, and a hostile type key and label reach the list only as an option\'s value and its text, after As the Combat card says; nothing writes markup; the real cleaner keeps no type that is no key, keeps a fragmentation and a type that is one in the GM\'s copy, and the players\' copy holds neither',
+            !!fgIn && fgIn.tag === 'input' && fgIn.value === BAD && !!fgSel && fgSel.tag === 'select' && j(fgOpts) === j([['', 'As the Combat card says'], [BAD, '<b>' + BAD + '</b>'], ['cr', 'Crushing']]) && fgSel.value === BAD
+            && made.indexOf('innerHTML') < 0 && !!hostG && hostG.area.frag === '1d6' && hostG.area.fragType === undefined && !!keptG && keptG.area.fragType === 'cr' && !!plG && plG.area.frag === undefined && plG.area.fragType === undefined,
+            j([fgIn && fgIn.value, fgOpts, hostG && hostG.area, keptG && keptG.area, plG && plG.area]));
     }
     {   // voice chat (1.5.9, pull request #1 by Hydragal): a player's name from the roster and a name a hostile host puts in the offer's map reach the
         // voice popover as text alone (voice.js loaded whole on tools/voicedom.js's page of plain objects, which counts every write of markup)

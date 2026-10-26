@@ -5833,6 +5833,8 @@ function itemRow(it) {
         area.appendChild(numField('sys-item-aad', it.area.ad || '', 'Its armour divisor: DR is divided by it (2 for a (2) after the damage). Blank for none', 'divisor', '0.5'));
         area.appendChild(checkLabel('sys-item-ause', it.area.use === true, 'Uses one up', 'Going off takes one off the row it was thrown or placed from, and the row goes at none'));
         area.appendChild(checkLabel('sys-item-aplace', it.area.place === true, 'Placed, not thrown', 'A mine: its button places it on the map, hidden from players. It goes off only when a character steps into it, or by your hand'));
+        area.appendChild(input('sys-item-afrag field', typeof it.area.frag === 'string' ? it.area.frag : '', 'Its fragmentation, a dice roll such as 1d6. When the blast goes off the host rolls it for the characters it reaches, as the Combat card says. Blank: none', 'Fragmentation (optional)'));   // 1.5.9 (es)
+        if (dtys.length) area.appendChild(select('sys-item-afragtype', [['', 'Fragmentation type: as the Combat card says']].concat(dtys.filter(function(y) { return y && typeof y.key === 'string'; }).map(function(y) { return [y.key, 'Fragmentation type: ' + (y.label || y.key)]; })), typeof it.area.fragType === 'string' ? it.area.fragType : '', 'The damage type of its fragmentation, as the damage step reads it'));
         if (it.area.place === true) area.appendChild(numField('sys-item-atrig', it.area.trig || '', 'Trigger radius in yards: a character whose centre comes this near sets it off', 'trigger yd', '0.5'));
         else area.appendChild(select('sys-item-aflight', [['', 'On a miss, launched: you place it'], ['scatter', 'On a miss, launched: it scatters, as a throw'], ['line', 'On a miss, launched: it flies straight']], it.area.flight === 'scatter' || it.area.flight === 'line' ? it.area.flight : '', 'How a round fired from a launcher lands when the roll misses. One that scatters lands as a missed throw does. One that flies straight goes off on the first wall or character in its path, or at its farthest'));   // 1.5.9 (es)
     }
@@ -6219,6 +6221,19 @@ var BLAST_BOXES = [
     ['max', 'Longest throw', 'How far a thing may be thrown, in yards. It reads the thrower\u2019s sheet and the item\u2019s row as Row. With none, any distance.', ''],
     ['min', 'Shortest throw', 'How near a thing may be thrown, in yards. With none, any distance.', '']
 ];
+// 1.5.9 (the book's (es), docs/BOOK_ES_ET_PLAN.md section 2): how an explosive's fragmentation is rolled (cleanBlastRules' frag). Each list's
+// first choice is the plan's reading where the book has not ruled, and each has one line under it
+var FRAG_LISTS = [
+    ['cover', 'Fragmentation is stopped by', [['', 'Cover, as the blast'], ['total', 'Only full cover']], 'Only full cover: a character partly behind cover takes all of it.'],
+    ['each', 'Fragmentation is rolled', [['', 'Once for every character'], ['each', 'Once for each character']], 'One roll that every character it reaches takes, or a roll of their own.'],
+    ['direct', 'The character struck directly', [['', 'Takes the same roll'], ['own', 'Takes a hit of its own roll']], 'A hit of its own: the target struck directly rolls apart from the others.'],
+    ['ad', 'An armour divisor', [['', 'Counts against the blast alone'], ['yes', 'Counts against its fragmentation too']], 'Whether an item\u2019s armour divisor counts against its fragmentation.']
+];
+var FRAG_REACH_LINE = 'How far fragmentation reaches, in yards. Name: FragDice, the dice it rolls. With none, the blast\u2019s own radius. It never reaches less.';
+function fragSays(v) {   // what Save does with Fragmentation reaches: '' where it keeps it
+    var SCf = window.wpSystemCore; if (!v || !SCf || typeof SCf.cleanBlastRules !== 'function') return '';
+    var c = SCf.cleanBlastRules({ frag: { reach: v } }, F()); return c && c.frag && c.frag.reach ? '' : 'Save drops it: it may read only FragDice, with no dice.';
+}
 function blastSays(k, v) {   // what Save does with one formula: '' where it keeps it
     var SCb = window.wpSystemCore; if (!v || !SCb || typeof SCb.cleanBlastRules !== 'function') return '';
     var o = {}; o[k] = v; var c = SCb.cleanBlastRules(o, F());
@@ -6240,11 +6255,30 @@ function blastBox(box, cm) {
     box.appendChild(labeledSelect('sys-combat-blfumble', 'Its critical failure', [['', 'Misses by its margin'], ['feet', 'Goes off at the shooter\u2019s feet'], ['none', 'Spends the round and goes nowhere']], lnB.fumble === 'feet' || lnB.fumble === 'none' ? lnB.fumble : '', 'What a launched round does when its roll is a critical failure'));
     box.appendChild(labeledSelect('sys-combat-blstop', 'A round that flies straight stops at', [['', 'The first wall or character'], ['past', 'The first wall, or a character past its target'], ['walls', 'The first wall only']], lnB.stop === 'past' || lnB.stop === 'walls' ? lnB.stop : '', 'For a round whose item flies straight on a miss. With nothing in its path it goes off at its farthest'));
     box.appendChild(labeledSelect('sys-combat-blglance', 'A character it stops on', [['', 'Is struck directly'], ['glance', 'Is not struck directly']], lnB.glance === true ? 'glance' : '', 'Whether a character a straight round stops on takes the blast as its direct target'));
+    var fgC = bl.frag && typeof bl.frag === 'object' && !Array.isArray(bl.frag) ? bl.frag : {}, fgV = typeof fgC.reach === 'string' ? fgC.reach : '';   // 1.5.9 (es): fragmentation
+    var fl = el('label', 'sys-combat-item'); fl.appendChild(el('span', 'sys-num-cap', 'Fragmentation reaches')); var fi = input('sys-combat-fgreach field', fgV, FRAG_REACH_LINE, 'e.g. 5 * FragDice'); fi.dataset.fk = 'reach'; fl.appendChild(fi); box.appendChild(fl);
+    lineUnder(box, FRAG_REACH_LINE);
+    var fe = el('div', 'sys-blast-err'); fe.dataset.fk = 'reach'; fe.textContent = fragSays(fgV); box.appendChild(fe);
+    var dtF = cm.damage && Array.isArray(cm.damage.types) ? cm.damage.types.filter(function(y) { return y && typeof y.key === 'string'; }) : [], tyF = [['', 'The blast\u2019s own type']].concat(dtF.map(function(y) { return [y.key, y.label || y.key]; }));
+    if (typeof fgC.type === 'string' && fgC.type && !tyF.some(function(o) { return o[0] === fgC.type; })) tyF.push([fgC.type, fgC.type]);   // a stored type the card no longer lists stays as it is
+    box.appendChild(labeledSelect('sys-combat-fgtype', 'Fragmentation type', tyF, typeof fgC.type === 'string' ? fgC.type : '', 'The damage type of fragmentation whose item names none'));
+    lineUnder(box, FRAG_TYPE_LINE);
+    FRAG_LISTS.forEach(function(d) {
+        var on = d[0] === 'cover' ? (fgC.cover === 'total' ? 'total' : '') : d[0] === 'each' ? (fgC.each === true ? 'each' : '') : d[0] === 'direct' ? (fgC.direct === true ? 'own' : '') : (fgC.ad === true ? 'yes' : '');
+        box.appendChild(labeledSelect('sys-combat-fg' + d[0], d[1], d[2], on, d[3])); lineUnder(box, d[3]);
+    });
 }
+var FRAG_TYPE_LINE = 'The damage type of fragmentation whose item names none. With none, the blast\u2019s own type.';
 function onBlastChange(t) {   // the lists of the Blasts and throws part
-    var c = t && t.className || '', lk = /(^| )sys-combat-bl(fuse|fumble|stop|glance)( |$)/.exec(c); if (c.indexOf('sys-combat-bways') < 0 && c.indexOf('sys-combat-bfuse') < 0 && !lk) return false;
+    var c = t && t.className || '', lk = /(^| )sys-combat-bl(fuse|fumble|stop|glance)( |$)/.exec(c), fk = /(^| )sys-combat-fg(type|cover|each|direct|ad)( |$)/.exec(c); if (c.indexOf('sys-combat-bways') < 0 && c.indexOf('sys-combat-bfuse') < 0 && !lk && !fk) return false;
     var cm = draft.combat || (draft.combat = { blastAuto: 'full', blastRoller: 'owner', hpResource: '' }), bl = cm.blast && typeof cm.blast === 'object' && !Array.isArray(cm.blast) ? cm.blast : (cm.blast = {});
-    if (lk) {   // 1.5.9 (es): a launched round's miss, kept only off the plan's reading
+    if (fk) {   // 1.5.9 (es): fragmentation, kept only off the plan's reading
+        var fo = bl.frag && typeof bl.frag === 'object' && !Array.isArray(bl.frag) ? bl.frag : (bl.frag = {}), fv = String(t.value || '');
+        if (fk[2] === 'type') { if (fv) fo.type = fv.slice(0, 24); else delete fo.type; } else if (fk[2] === 'cover') { if (fv === 'total') fo.cover = 'total'; else delete fo.cover; }
+        else if (fk[2] === 'each') { if (fv === 'each') fo.each = true; else delete fo.each; } else if (fk[2] === 'direct') { if (fv === 'own') fo.direct = true; else delete fo.direct; } else { if (fv === 'yes') fo.ad = true; else delete fo.ad; }
+        if (!Object.keys(fo).length) delete bl.frag;
+    }
+    else if (lk) {   // 1.5.9 (es): a launched round's miss, kept only off the plan's reading
         var lo = bl.launch && typeof bl.launch === 'object' && !Array.isArray(bl.launch) ? bl.launch : (bl.launch = {}), lv = t.value;
         if (lk[2] === 'fuse') { if (lv === 'now') lo.now = true; else delete lo.now; } else if (lk[2] === 'glance') { if (lv === 'glance') lo.glance = true; else delete lo.glance; }
         else if (lk[2] === 'fumble') { if (lv === 'feet' || lv === 'none') lo.fumble = lv; else delete lo.fumble; } else { if (lv === 'past' || lv === 'walls') lo.stop = lv; else delete lo.stop; }
@@ -6255,6 +6289,14 @@ function onBlastChange(t) {   // the lists of the Blasts and throws part
     markDirty(); return true;
 }
 function onBlastInput(t) {
+    if (t && t.dataset && t.dataset.fk === 'reach' && /(^| )sys-combat-fgreach( |$)/.test(t.className || '')) {   // 1.5.9 (es): Fragmentation reaches, and what Save does with it
+        var cmF = draft.combat || (draft.combat = { blastAuto: 'full', blastRoller: 'owner', hpResource: '' }), blF = cmF.blast && typeof cmF.blast === 'object' && !Array.isArray(cmF.blast) ? cmF.blast : (cmF.blast = {});
+        var foF = blF.frag && typeof blF.frag === 'object' && !Array.isArray(blF.frag) ? blF.frag : (blF.frag = {}), vF = String(t.value || '').trim();
+        if (vF) foF.reach = vF.slice(0, 1200); else delete foF.reach;
+        if (!Object.keys(foF).length) delete blF.frag; if (!Object.keys(blF).length) delete cmF.blast;
+        var boxF = ui('sysCombatBox'), erF = boxF ? Array.prototype.filter.call(boxF.querySelectorAll('.sys-blast-err'), function(x) { return x.dataset.fk === 'reach'; })[0] : null; if (erF) erF.textContent = fragSays(vF);
+        markDirty(); return true;
+    }
     var k = t && t.dataset ? t.dataset.bk : ''; if (!k || !/(^| )sys-combat-b(fall|roll|scatter|max|min|hand)( |$)/.test(t.className || '')) return false;
     var cm = draft.combat || (draft.combat = { blastAuto: 'full', blastRoller: 'owner', hpResource: '' });
     var bl = cm.blast && typeof cm.blast === 'object' && !Array.isArray(cm.blast) ? cm.blast : (cm.blast = {}), v = String(t.value || '').trim();
@@ -7460,6 +7502,7 @@ function onInput(e) {
         else if (ic.indexOf('sys-item-aad') >= 0) { if (it.area) { var adI = Number(t.value); if (t.value !== '' && isFinite(adI) && adI > 0) it.area.ad = adI; else delete it.area.ad; } }   // 1.5.8 explosives
         else if (ic.indexOf('sys-item-atrig') >= 0) { if (it.area) { var tgv = Number(t.value); if (t.value !== '' && isFinite(tgv) && tgv > 0) it.area.trig = tgv; else delete it.area.trig; } }   // 1.5.8 explosives
         else if (ic.indexOf('sys-item-damage') >= 0) it.damage = t.value;
+        else if (/(^| )sys-item-afrag( |$)/.test(ic)) { if (!it.area) return; if (t.value.trim()) it.area.frag = t.value.slice(0, LIMITS.formula); else { delete it.area.frag; delete it.area.fragType; } }   // 1.5.9 (es): its fragmentation (Save cleans it, the validator reads it)
         else if (ic.indexOf('sys-item-cost') >= 0) it.cost = t.value;
         else if (ic.indexOf('sys-item-throw') >= 0) it.throwSkill = t.value.trim();
         else if (ic.indexOf('sys-item-icon') >= 0) it.icon = t.value.slice(0, 32);   // Save keeps an emoji's first 8 code points, or a bundled icon's name
@@ -7644,6 +7687,7 @@ function onChange(e) {
         if (c.indexOf('sys-item-atype') >= 0) { if (iit.area) { if (t.value) iit.area.type = t.value; else delete iit.area.type; } markDirty(); patchErrors(); return; }   // 1.5.8 explosives
         if (c.indexOf('sys-item-ause') >= 0) { if (iit.area) { if (t.checked) iit.area.use = true; else delete iit.area.use; } markDirty(); patchErrors(); return; }
         if (c.indexOf('sys-item-aplace') >= 0) { if (iit.area) { if (t.checked) { iit.area.place = true; delete iit.area.flight; } else { delete iit.area.place; delete iit.area.trig; } } markDirty(); renderAll(); return; }   // 1.5.9: a placed mine is never launched
+        if (c.indexOf('sys-item-afragtype') >= 0) { if (iit.area) { if (t.value) iit.area.fragType = t.value; else delete iit.area.fragType; } markDirty(); patchErrors(); return; }   // 1.5.9 (es)
         if (c.indexOf('sys-item-aflight') >= 0) { if (iit.area) { if (t.value === 'scatter' || t.value === 'line') iit.area.flight = t.value; else delete iit.area.flight; } markDirty(); patchErrors(); return; }   // 1.5.9 (es)
         if (c.indexOf('sys-item-shape') >= 0) { if (t.value === '') iit.area = null; else iit.area = { ft: iit.area ? iit.area.ft : 12, shape: 'circle', name: iit.area ? iit.area.name : '' }; markDirty(); renderAll(); return; }
         if (c.indexOf('sys-item-cat') >= 0) { var nsc = itemStatDefs(iit).map(function(s) { return s.key.toLowerCase(); }).join(','); if (nsc !== (t.dataset.scope || '')) { markDirty(); renderAll(); } return; }   // F4c1: a category that changes which lists it can be on redraws its stat boxes

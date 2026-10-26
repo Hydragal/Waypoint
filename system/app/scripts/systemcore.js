@@ -723,7 +723,7 @@ function cleanItemDef(it, F, gmView, keys, picks, kinds) {   // kinds (F6): the 
     var ist = cleanEntryStats(it.stats, keys, picks); if (ist) out.stats = ist;   // F4c1: its stats — under a key some item list of this view defines (any list, never scoped by category: a category changed later loses nothing, and the GM's sheet and the owner's read the same)
     if (isObj(it.area)) {
         var ft = cleanNum(it.area.ft, 0) | 0;
-        if (ft > 0) out.area = areaExtra({ ft: clampNum(ft, 1, LIMITS.maxBlastFt), shape: SHAPES[it.area.shape] ? it.area.shape : 'circle', name: cutText(it.area.name, LIMITS.label) }, it.area);   // F4c1: every control character (as a copy's); 1.5.8: its blast extras
+        if (ft > 0) out.area = areaExtra({ ft: clampNum(ft, 1, LIMITS.maxBlastFt), shape: SHAPES[it.area.shape] ? it.area.shape : 'circle', name: cutText(it.area.name, LIMITS.label) }, it.area, gmView);   // F4c1: every control character (as a copy's); 1.5.8: its blast extras (1.5.9: its fragmentation in the GM's view alone)
     }
     if (gmView) {   // formula/skill text is GM-only on the wire
         var dmg = cleanFormulaText(it.damage); out.damage = dmg === null ? '' : dmg;
@@ -1549,7 +1549,15 @@ function cleanCombat(c, resIds, fieldIds, secretIds, F, viewKinds, pl, fl) {   /
 //            a critical failure goes off at the shooter's feet; 'none': it spends the round and goes nowhere; absent: a miss by its margin),
 //            stop ('past': a round that flies straight passes the characters before the target it missed; 'walls': it stops at walls alone;
 //            absent: at the first wall or character) and glance (true: a character it stops on is not struck directly)
-var BLAST_FALL = Object.freeze({ blastdamage: 1, blastdistance: 1, blastdice: 1, direct: 1, centre: 1 });   // Centre: 1 for a token in the blast's own cell
+//   frag     1.5.9 (the book's (es), docs/BOOK_ES_ET_PLAN.md section 2): how an item's fragmentation is rolled, each part absent for the plan's
+//            reading where the book is open: reach (how far it reaches in yards, read with FragDice, the dice it rolls, alone, no dice; absent:
+//            the blast's own radius, and never less), type (the damage type's key of a fragmentation whose item names none; absent: the blast's),
+//            cover ('total': only total cover stops it, and a token partly behind cover takes it all; absent: the system's cover outcomes, as
+//            the blast), each (true: each token rolls its own; absent: one roll for every token, H5), direct (true: the token struck directly
+//            takes a hit of its own roll; absent: it takes the same roll as the others) and ad (true: the item's armour divisor counts against
+//            it too; absent: none, H6)
+var FRAG_NAMES = Object.freeze({ fragdice: 1 });
+var BLAST_FALL =Object.freeze({ blastdamage: 1, blastdistance: 1, blastdice: 1, direct: 1, centre: 1 });   // Centre: 1 for a token in the blast's own cell
 function blastFormula(text, F, names, dice) {
     var t = cleanFormulaText(text); if (!t) return '';
     if (!F || typeof F.parse !== 'function') return '';
@@ -1563,6 +1571,12 @@ function cleanBlastRules(v, F) {
     if (fa) out.fall = fa; if (ro) out.roll = ro; if (sc) out.scatter = sc; if (mx) out.max = mx; if (mn) out.min = mn; if (hd) out.hand = hd;
     if (v.ways === 6 || v.ways === 8) out.ways = v.ways; if (v.fuse === 'turn') out.fuse = 'turn';
     if (isObj(v.launch)) { var lo = {}; if (v.launch.now === true) lo.now = true; if (v.launch.fumble === 'feet' || v.launch.fumble === 'none') lo.fumble = v.launch.fumble; if (v.launch.stop === 'past' || v.launch.stop === 'walls') lo.stop = v.launch.stop; if (v.launch.glance === true) lo.glance = true; if (Object.keys(lo).length) out.launch = lo; }   // 1.5.9 (es): what a launched round's miss does where the book is open
+    if (isObj(v.frag)) {   // 1.5.9 (es): how an explosive's fragmentation is rolled and whom it reaches
+        var fo = {}, frc = blastFormula(v.frag.reach, F, FRAG_NAMES, false); if (frc) fo.reach = frc;
+        if (typeof v.frag.type === 'string' && STAT_KEY.test(v.frag.type) && v.frag.type.length <= 24) fo.type = v.frag.type;
+        if (v.frag.cover === 'total') fo.cover = 'total'; if (v.frag.each === true) fo.each = true; if (v.frag.direct === true) fo.direct = true; if (v.frag.ad === true) fo.ad = true;
+        if (Object.keys(fo).length) out.frag = fo;
+    }
     return Object.keys(out).length ? out : null;
 }
 // 1.5.9 (es): a launcher list's Flies at most (spec.chamber.reach): the yards a round that flies straight goes, a formula of the launcher row's
@@ -1572,14 +1586,17 @@ function cleanReach(text, F) { return blastFormula(text, F, null, false); }
 // going off uses one up (use, true only), whether it is placed, not thrown (place, true only: a mine), and the trigger radius in yards (trig,
 // 0.5 to 100 to the tenth, only beside place), and its armour divisor (ad, 0.1 to 100 to the tenth, never 1). 1.5.9 (es): how a round fired
 // from a launcher lands when the roll misses (flight: 'scatter', as a missed throw; 'line', straight on to the first wall or character; never
-// beside place; absent: the GM places it). The same in both views (none of it is secret: the damage formula is)
-function areaExtra(out, src) {
+// beside place; absent: the GM places it). The same in both views (none of it is secret: the damage formula is). 1.5.9 (the book's (es),
+// docs/BOOK_ES_ET_PLAN.md section 2): its fragmentation (frag: a dice formula's text, as the damage's) and that fragmentation's damage type
+// (fragType, a key, only beside frag), kept in the GM's view alone (gmView), as the damage formula is: only the host rolls it
+function areaExtra(out, src, gmView) {
     if (!isObj(out) || !isObj(src)) return out;
     if (typeof src.type === 'string' && STAT_KEY.test(src.type) && src.type.length <= 24) out.type = src.type;
     if (src.use === true) out.use = true;
     if (typeof src.ad === 'number' && fin(src.ad) && src.ad > 0) { var adv = Math.max(0.1, Math.min(100, Math.round(src.ad * 10) / 10)); if (adv !== 1) out.ad = adv; }
     if (src.place === true) { out.place = true; var tg = typeof src.trig === 'number' && fin(src.trig) && src.trig > 0 ? Math.max(0.5, Math.min(100, Math.round(src.trig * 10) / 10)) : 0; if (tg) out.trig = tg; }
     else if (src.flight === 'scatter' || src.flight === 'line') out.flight = src.flight;   // 1.5.9 (es): a placed mine is never launched
+    if (gmView === true) { var fg = cleanFormulaText(src.frag); if (fg) { out.frag = fg; if (typeof src.fragType === 'string' && STAT_KEY.test(src.fragType) && src.fragType.length <= 24) out.fragType = src.fragType; } }   // 1.5.9 (es) fragmentation: the GM's view alone
     return out;
 }
 // Item 19 H1 (the owner's answer, 2026-09-30: a rule of the system's): the system's height rules (combat.height) — rule 'clears'
@@ -3102,7 +3119,7 @@ function cleanRowDef(d, gmView) {   // an item's definition carried on a row, by
     if (!isObj(d)) return null;
     var vis = d.vis === 'gm' ? 'gm' : 'all';
     var out = { name: cutText(d.name, LIMITS.name) || 'Item', category: cutText(d.category, LIMITS.category), icon: cleanIcon(d.icon), notes: str(d.notes, LIMITS.text).replace(CTRL_RE_G, ' '), vis: vis };
-    if (isObj(d.area) && (gmView || vis === 'all')) { var ft = cleanNum(d.area.ft, 0) | 0; if (ft > 0) out.area = areaExtra({ ft: clampNum(ft, 1, LIMITS.maxBlastFt), shape: SHAPES[d.area.shape] ? d.area.shape : 'circle', name: cutText(d.area.name, LIMITS.label) }, d.area); }
+    if (isObj(d.area) && (gmView || vis === 'all')) { var ft = cleanNum(d.area.ft, 0) | 0; if (ft > 0) out.area = areaExtra({ ft: clampNum(ft, 1, LIMITS.maxBlastFt), shape: SHAPES[d.area.shape] ? d.area.shape : 'circle', name: cutText(d.area.name, LIMITS.label) }, d.area, gmView); }
     if (gmView && RM_MODES[d.rm] === 1) { out.rm = d.rm; var rmm = cutText(d.rmMsg, LIMITS.rmMsg); if (rmm) out.rmMsg = rmm; }   // Stage 6: secret, the GM's copy only
     if (gmView && RM_MODES[d.eq] === 1) { out.eq = d.eq; var eqm = cutText(d.eqMsg, LIMITS.rmMsg); if (eqm) out.eqMsg = eqm; }   // F4b: the equip lock, as secret
     if (gmView || vis === 'all') { var rk = cleanItemKey(d.key); if (rk) out.key = rk; }   // F4b: a GM-only copy's key stays the GM's (critic 2)
@@ -5272,6 +5289,7 @@ function validateSystem(sys, F) {
     });
     (Array.isArray(sys.items) ? sys.items : []).forEach(function(it) {   // item damage = a roll (dice ok); cost = a definition (no dice)
         if (it.damage) checkFormula({ id: it.id, key: it.id }, 'damage', it.damage, true, it.vis);
+        if (isObj(it.area) && typeof it.area.frag === 'string' && it.area.frag) checkFormula({ id: it.id, key: it.id }, 'frag', it.area.frag, true, it.vis);   // 1.5.9 (es): its fragmentation, a roll as its damage is
         if (it.cost) checkFormula({ id: it.id, key: it.id }, 'cost', it.cost, false, it.vis);
         if (it.throwSkill && !ix[lower(it.throwSkill)]) warnings.push({ id: it.id, prop: 'throwSkill', message: 'Throw skill "' + it.throwSkill + '" is not a field.' });
     });

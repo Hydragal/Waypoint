@@ -404,7 +404,7 @@ function modsBox(form, e) {
 function readForm() {
     var g = function(id) { var n = ui('libF_' + id); return n ? n.value : ''; }, e = current(), stats = {};
     Array.prototype.forEach.call(document.querySelectorAll('#libForm [data-stat]'), function(n) { stats[n.dataset.stat] = n.value; });
-    var typed = entryFromForm({ id: e.id, name: g('name'), key: g('key'), category: g('category'), icon: g('icon'), vis: g('vis'), lvl: g('lvl'), stats: stats, notes: g('notes'), desc: g('desc'), lvls: g('lvls'), lvlsWas: e.lvls, tags: g('tags'), ref: g('ref'), damage: g('damage'), cost: g('cost'), throwSkill: g('throwSkill'), areaFt: g('areaFt'), areaShape: e.area && e.area.shape, areaName: e.area && e.area.name, areaType: g('areaType'), areaUse: g('areaUse'), areaPlace: g('areaPlace'), areaTrig: g('areaTrig'), areaAd: g('areaAd'), areaFlight: g('areaFlight'), gmNotes: g('gmNotes'), rm: g('rm'), rmMsg: g('rmMsg'), eq: g('eq'), eqMsg: g('eqMsg'), mods: st.fmFor === e.id && st.fm ? st.fm : e.mods, modsOn: ui('libF_modsOn') ? ui('libF_modsOn').checked : e.modsOn === true, opens: st.foFor === e.id && st.fo ? st.fo : e.opens, needs: st.fnFor === e.id && st.fn ? st.fn : e.needs, needsIf: g('needsIf'), needsFrom: g('needsFrom'), needsMsg: g('needsMsg') });
+    var typed = entryFromForm({ id: e.id, name: g('name'), key: g('key'), category: g('category'), icon: g('icon'), vis: g('vis'), lvl: g('lvl'), stats: stats, notes: g('notes'), desc: g('desc'), lvls: g('lvls'), lvlsWas: e.lvls, tags: g('tags'), ref: g('ref'), damage: g('damage'), cost: g('cost'), throwSkill: g('throwSkill'), areaFt: g('areaFt'), areaShape: e.area && e.area.shape, areaName: e.area && e.area.name, areaType: g('areaType'), areaUse: g('areaUse'), areaPlace: g('areaPlace'), areaTrig: g('areaTrig'), areaAd: g('areaAd'), areaFlight: g('areaFlight'), areaFrag: g('areaFrag'), areaFragType: g('areaFragType'), gmNotes: g('gmNotes'), rm: g('rm'), rmMsg: g('rmMsg'), eq: g('eq'), eqMsg: g('eqMsg'), mods: st.fmFor === e.id && st.fm ? st.fm : e.mods, modsOn: ui('libF_modsOn') ? ui('libF_modsOn').checked : e.modsOn === true, opens: st.foFor === e.id && st.fo ? st.fo : e.opens, needs: st.fnFor === e.id && st.fn ? st.fn : e.needs, needsIf: g('needsIf'), needsFrom: g('needsFrom'), needsMsg: g('needsMsg') });
     var out = clone(e), eqShown = !!ui('libF_eq'); FORM_KEYS.forEach(function(k) { if (eqShown || (k !== 'eq' && k !== 'eqMsg')) delete out[k]; }); return Object.assign(out, typed);   // a switch lock the form does not show (no list has a switch) is kept
 }
 // 1.5.8: an entry's blast extras beside its radius: its damage type (a key of the Combat card's types, or none), whether going off uses one
@@ -423,16 +423,20 @@ function blastBox(form, a) {
     field(form, 'areaTrig', 'Trigger radius (yd)', num(a.trig), { max: 6, title: 'For a placed blast only: it goes off when a token comes this many yards from it' });
     field(form, 'areaAd', 'Armour divisor', num(a.ad), { max: 6, title: 'Armour is divided by this number against its damage. Blank or 1: none' });
     field(form, 'areaFlight', 'On a miss, launched', a.flight === 'scatter' || a.flight === 'line' ? a.flight : '', { pairs: [['', 'You place it'], ['scatter', 'It scatters, as a throw'], ['line', 'It flies straight']], title: 'How a round fired from a launcher lands when the roll misses. One that scatters lands as a missed throw does. One that flies straight goes off on the first wall or character in its path, or at its farthest' });   // 1.5.9 (es)
+    field(form, 'areaFrag', 'Fragmentation', typeof a.frag === 'string' ? a.frag : '', { title: 'Its fragmentation, a dice roll such as 1d6. When the blast goes off the host rolls it for the characters it reaches, as the Combat card says. Blank: none' });   // 1.5.9 (es)
+    field(form, 'areaFragType', 'Fragmentation type', typeof a.fragType === 'string' ? a.fragType : '', { pairs: [['', 'As the Combat card says']].concat(dmgTypePairs(a.fragType).slice(1)), title: 'The damage type of its fragmentation, one of the Combat card\u2019s damage types' });
 }
 // what the cleaner left out of the blast's extras, said in fixed words (an empty text: nothing)
 function blastDrops(raw, c) {
     var f = raw && raw.area, k = c && c.area, out = [], g = function(id) { var n = ui('libF_' + id); return n ? String(n.value).trim() : ''; };
-    if (!f) { if (g('areaType') || g('areaUse') || g('areaPlace') || g('areaTrig') || g('areaAd') || g('areaFlight')) out.push('the blast\u2019s other settings, which need a blast radius'); }
+    if (!f) { if (g('areaType') || g('areaUse') || g('areaPlace') || g('areaTrig') || g('areaAd') || g('areaFlight') || g('areaFrag') || g('areaFragType')) out.push('the blast\u2019s other settings, which need a blast radius'); }
     else {
         if (f.type && !(k && k.type)) out.push('the damage type');
         if (g('areaTrig') && !(k && k.trig)) out.push(f.place === true ? 'the trigger radius, which must be a number above 0' : 'the trigger radius, which needs Placed, not thrown');
         if (g('areaAd') && !(k && k.ad) && Number(g('areaAd')) !== 1) out.push('the armour divisor, which must be a number above 0');
         if (g('areaFlight') && !(k && k.flight)) out.push('how it lands on a miss, which a placed blast never does');   // 1.5.9 (es)
+        if (g('areaFrag') && !(k && k.frag)) out.push('the fragmentation, which must be a formula');   // 1.5.9 (es)
+        if (g('areaFragType') && !(k && k.fragType)) out.push(g('areaFrag') ? 'the fragmentation type' : 'the fragmentation type, which needs a fragmentation');
     }
     return out.length ? 'Not kept: ' + out.join(', ') + '.' : '';
 }

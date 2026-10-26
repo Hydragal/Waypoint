@@ -178,6 +178,7 @@ export function entryFromForm(f) {
         var tg = nb(f.areaTrig); if (tg !== '') ar.trig = tg;
         var dv = nb(f.areaAd); if (dv !== '') ar.ad = dv;
         var fl = s(f.areaFlight).trim(); if (fl) ar.flight = fl;   // 1.5.9 (es): how a launched round lands on a miss (the cleaner keeps scatter or line, never beside Placed)
+        var fg = s(f.areaFrag).trim(); if (fg) { ar.frag = fg; var fgt = s(f.areaFragType).trim(); if (fgt) ar.fragType = fgt; }   // 1.5.9 (es): its fragmentation and that fragmentation's type (the cleaner keeps them in the GM's copy alone)
     }
     if (f.rm === 'bound' || f.rm === 'curse') { out.rm = f.rm; if (s(f.rmMsg).trim()) out.rmMsg = s(f.rmMsg); }   // L2b: a player's removal (bound / curse on contact) and its message, as the Items tab has them
     if (f.eq === 'bound' || f.eq === 'curse') { out.eq = f.eq; if (s(f.eqMsg).trim()) out.eqMsg = s(f.eqMsg); }   // and switching it off

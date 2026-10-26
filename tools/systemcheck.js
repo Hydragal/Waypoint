@@ -14232,6 +14232,160 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             jm([msgR('Row.Far + 1d6'), msgR('Row.Far')]));
     }
     // [systemcheck:launchmiss-tests-end]
+    // [systemcheck:fragtests-start]
+    /* ---- 1.5.9 (docs/BOOK_ES_ET_PLAN.md section 2, its frag half, the book's (es)): an explosive's fragmentation, rolled by the host as the blast goes
+       off and taken by the characters it reaches, as the Combat card says; what the book has not ruled (H5, H6) is the card's to choose ---- */
+    {
+        const BCf = await import(url('blastcore.js')), jf = JSON.stringify;
+        // the cleaners, in both views
+        const rawF = (area, blast) => ({ v: 1, name: 'FR', fields: [{ id: 'f_hp', key: 'HP', kind: 'number', vis: 'all' }], rolls: [], sheet: { sections: [] },
+            items: [{ id: 'i_sp', name: 'Spark Grenade', vis: 'all', damage: '2d6', area: Object.assign({ ft: 6, name: 'Spark burst' }, area) }], combat: { blastAuto: 'full', damage: { pool: 'f_hp', types: [{ key: 'cut', label: 'Cutting', mult: 1.5 }] }, blast: blast } });
+        const arF = (area, gm) => cleanSystem(rawF(area), { F, gmView: gm !== false }).items[0].area;
+        const gmA = arF({ frag: '1d6', fragType: 'cut' }), plA = arF({ frag: '1d6', fragType: 'cut' }, false);
+        const rdG = S.cleanRowDef({ name: 'Spark Grenade', vis: 'all', area: { ft: 6, frag: '1d6', fragType: 'cut' } }, true), rdP = S.cleanRowDef({ name: 'Spark Grenade', vis: 'all', area: { ft: 6, frag: '1d6', fragType: 'cut' } }, false);
+        const gmFix = cleanSystem(rawF({ frag: '1d6', fragType: 'cut' }), { F, gmView: true }), plFix = cleanSystem(rawF({ frag: '1d6', fragType: 'cut' }), { F, gmView: false });
+        check('1.5.9 (es) fragmentation through the cleaners: an item\'s area keeps its fragmentation (frag, a formula\'s text) and that fragmentation\'s damage type (fragType, a key, only beside frag) in the GM\'s view alone, last in the area, and the players\' view holds neither, as it holds no damage formula; a row\'s own copy alike; a type with no fragmentation, a type that is no key, a fragmentation that is no text or holds a control character are no key; each view is a fixed point, and an item with none keeps its area as before',
+            jf(gmA) === jf({ ft: 6, shape: 'circle', name: 'Spark burst', frag: '1d6', fragType: 'cut' }) && jf(plA) === jf({ ft: 6, shape: 'circle', name: 'Spark burst' })
+            && jf(rdG.area) === jf({ ft: 6, shape: 'circle', name: '', frag: '1d6', fragType: 'cut' }) && jf(rdP.area) === jf({ ft: 6, shape: 'circle', name: '' })
+            && arF({ fragType: 'cut' }).fragType === undefined && arF({ frag: '1d6', fragType: '1x' }).fragType === undefined && arF({ frag: 7 }).frag === undefined && arF({ frag: '1d6\u0007' }).frag === undefined && arF({ frag: '   ' }).frag === undefined
+            && jf(cleanSystem(gmFix, { F, gmView: true })) === jf(gmFix) && jf(cleanSystem(plFix, { F, gmView: false })) === jf(plFix) && jf(arF({})) === jf({ ft: 6, shape: 'circle', name: 'Spark burst' }),
+            jf([gmA, plA, rdG && rdG.area, rdP && rdP.area]));
+        const frC = v => S.cleanBlastRules({ frag: v }, F);
+        check('1.5.9 (es) the Combat card\'s fragmentation rules (systemcore cleanBlastRules\' frag): reach a formula of FragDice alone with no dice, type a key, cover only as total, each, direct and ad only as true, in that order after the card\'s other rules; anything else is no key and a frag with nothing left is none (the plan\'s reading: the blast\'s radius, the blast\'s type, the cover outcomes, one roll shared, the direct target alike, no armour divisor); the players\' view has no blast rules at all',
+            jf(frC({ reach: '5 * FragDice', type: 'cut', cover: 'total', each: true, direct: true, ad: true, more: 1 })) === jf({ frag: { reach: '5 * FragDice', type: 'cut', cover: 'total', each: true, direct: true, ad: true } })
+            && frC({ reach: '5 * FragDice + 1d6' }) === null && frC({ reach: 'BlastDice * 5' }) === null && frC({ reach: '((' }) === null && frC({ type: '1x', cover: 'half', each: 'yes', direct: 1, ad: 'true' }) === null && frC({}) === null && frC('frag') === null && frC([true]) === null
+            && jf(Object.keys(S.cleanBlastRules({ frag: { each: true }, launch: { now: true }, ways: 8 }, F))) === jf(['ways', 'launch', 'frag']) && jf(frC({ reach: 'fragdice * 3' })) === jf({ frag: { reach: 'fragdice * 3' } })
+            && (cleanSystem(rawF({}, { frag: { each: true } }), { F, gmView: false }).combat || {}).blast === undefined && jf(cleanSystem(rawF({}, { frag: { each: true } }), { F, gmView: true }).combat.blast) === jf({ frag: { each: true } }));
+        const vF = S.validateSystem(cleanSystem(Object.assign(rawF({ frag: '1d6 +' }), {}), { F, gmView: true }), F), vOk = S.validateSystem(cleanSystem(rawF({ frag: '1d6 + 1' }), { F, gmView: true }), F);
+        check('1.5.9 (es) the validator reads an item\'s fragmentation as a roll, as its damage: one that does not read is an error under the item, named frag, and one that reads, dice and all, is none',
+            vF.errors.some(e => e.id === 'i_sp' && e.prop === 'frag') && !vOk.errors.some(e => e.prop === 'frag'), jf([vF.errors, vOk.errors]));
+        // the pure half
+        const rowsT = [{ id: 't_a', d: 0 }, { id: 't_b', d: 2 }, { id: 't_c', d: 5 }, { id: 't_d', d: 8 }, { id: 't_b', d: 1 }, null, { id: '', d: 0 }, { id: '__proto__', d: 1 }];
+        check('1.5.9 (es) blastcore fragTargets (run for real): the tokens within the reach, each once in the rows\' order, every one taking the shared roll; with each, every one its own; with own, the token struck directly its own wherever it stands and the others the shared one; a row that is no token, a token past the reach and junk left out; and a mine keeps its fragmentation and that fragmentation\'s type (blastcore cleanMine), a type only beside it',
+            jf(BCf.fragTargets(rowsT, 5, {})) === jf([{ id: 't_a', own: false }, { id: 't_b', own: false }, { id: 't_c', own: false }, { id: '__proto__', own: false }])
+            && jf(BCf.fragTargets(rowsT, 2, { each: true })) === jf([{ id: 't_a', own: true }, { id: 't_b', own: true }, { id: '__proto__', own: true }])
+            && jf(BCf.fragTargets([{ id: 't_a', d: 9 }, { id: 't_b', d: 1 }], 2, { direct: 't_a', own: true })) === jf([{ id: 't_a', own: true }, { id: 't_b', own: false }])
+            && jf(BCf.fragTargets([{ id: 't_a', d: 9 }, { id: 't_b', d: 1 }], 2, { direct: 't_a' })) === jf([{ id: 't_b', own: false }]) && jf(BCf.fragTargets('rows', 5)) === '[]' && jf(BCf.fragTargets(rowsT, NaN)) === jf([{ id: 't_a', own: false }])
+            && jf(BCf.cleanMine({ ft: 6, frag: ' 1d6 ', fragType: 'cut' })) === jf({ ft: 6, trig: 2, frag: '1d6', fragType: 'cut' }) && jf(BCf.cleanMine({ ft: 6, fragType: 'cut' })) === jf({ ft: 6, trig: 2 }) && BCf.cleanMine({ ft: 6, frag: '1d6', fragType: '<x>' }).fragType === undefined);
+        // the host's pass, run for real: whiteboard.js applyBlastDamage and fragPass with the real damage step (each call it gets recorded), the real
+        // blastcore and the real cleaner, a dice core of the suite's own that hands each fragmentation roll its own figure
+        const wbF = fs.readFileSync(path.join(app, 'scripts', 'whiteboard.js'), 'utf8').replace(/\r\n/g, '\n'), abF = wbF.slice(wbF.indexOf('  var _lastThrowTx = null;'), wbF.indexOf('  // Undo the last full-auto throw'));
+        const BOOKF = 'if(or(Direct, Centre), BlastDamage, if(BlastDistance > 2 * BlastDice, 0, floor(BlastDamage / (3 * max(1, BlastDistance)))))';
+        const sysFr = (blast, o) => cleanSystem({ v: 1, name: 'BF', rolls: [], fields: [{ id: 'f_hp', key: 'HP', label: 'HP', kind: 'resource', vis: 'all', maxFormula: '20' }],
+            combat: Object.assign({ blastAuto: 'full', hpResource: 'f_hp', blast: blast }, o && o.noStep ? {} : { damage: { pool: 'f_hp', types: [{ key: 'cr', label: 'Crushing', mult: 1 }, { key: 'cut', label: 'Cutting', mult: 1.5 }, { key: 'pi', label: 'Piercing', mult: 1 }] } }, o && o.cover ? { cover: o.cover } : {}) }, { F, gmView: true });
+        const runF = (blast, b, o) => { o = o || {};
+            const out = { toasts: [], cards: [], rolls: [], qs: [] }, camp = { system: sysFr(blast, o), chars: {} }, ks = ['a', 'b', 'c', 'd'];
+            ks.forEach(k => { camp.chars['c_' + k] = { id: 'c_' + k, values: { f_hp: { cur: 20 } } }; });
+            const toks = ks.map((k, i) => ({ id: 't_' + k, isChar: true, charId: 'c_' + k, x: i * 100, y: 0 })), dd = { t_a: 0, t_b: 2, t_c: 5, t_d: 8 }, seq = (o.rolls || [4]).slice();
+            const win = { wpSystemCore: Object.assign({}, S, { damageStep: (sy, ch, q, FF) => { out.qs.push(Object.assign({ ch: ch.id }, q)); return S.damageStep(sy, ch, q, FF); } }), wpFormula: F, wpBlastCore: BCf,
+                wpFog: { coverAt: (x, y, t) => (o.cover && o.coverAt && o.coverAt[t.id]) || null }, wpNet: { damageCard: (c, lines) => out.cards.push([c.id, lines[0]]) },
+                wpDice: { rollFor: (cid, expr, label, op) => { out.rolls.push([cid, expr, label, jf(op)]); return o.fail ? { error: 'No dice.' } : { ok: true, value: seq.length > 1 ? seq.shift() : seq[0] }; } } };
+            let api = null; try { api = new Function('getActiveCampaign', 'getActiveMap', 'blastRadiusYd', 'blastDistances', 'save', 'syncBlastMenu', 'toast', 'window', 'stanceOn', 'tokenElevation', 'shapeHolds', 'tokenCentre', 'state', 'hexCellOf', "'use strict';\n" + abF + '\nreturn { apply: applyBlastDamage, last: function() { return _lastThrowTx; } };')(
+                () => camp, () => ({ whiteboard: toks }), () => 2, () => toks.map(t => ({ tok: t, d: dd[t.id] })), () => {}, () => {}, t => out.toasts.push(t), win, () => false, () => 0, () => true, t => ({ x: t.x + 30, y: t.y + 26 }), { gridType: 'square' }, () => ({ q: 0, r: 0 })); } catch (e) { return { err: String(e) }; }
+            try { api.apply(Object.assign({ x: 30, y: 26, bid: 'b_f', dmgExpr: '2d6', direct: 't_a', dtype: 'cr', name: 'Spike', frag: { expr: '1d6', by: 'c_thr', gm: false } }, b || {}), o.total !== undefined ? o.total : 12, 'f_hp'); } catch (e) { return { err: String(e && e.stack || e) }; }
+            out.hp = ks.map(k => camp.chars['c_' + k].values.f_hp.cur); out.tx = api.last(); out.fq = out.qs.filter(q => q.amt !== 12 && q.amt !== 2 || q.type !== 'cr'); return out; };
+        const R5 = { fall: BOOKF, frag: { reach: '5 * FragDice', type: 'cut' } };
+        const fA = runF(R5), fEach = runF({ fall: BOOKF, frag: { reach: '5 * FragDice', type: 'cut', each: true } }, null, { rolls: [2, 4, 6] }), fDir = runF({ fall: BOOKF, frag: { reach: '5 * FragDice', type: 'cut', direct: true } }, null, { rolls: [2, 4] });
+        const fRad = runF({ fall: BOOKF, frag: { type: 'cut' } }), fFar = runF({ fall: BOOKF, frag: { reach: '20 * FragDice', type: 'cut' } }), fNear = runF({ fall: BOOKF, frag: { reach: '0 * FragDice', type: 'cut' } });
+        check('1.5.9 (es) a blast\'s fragmentation, rolled and taken as it goes off (whiteboard.js applyBlastDamage and fragPass, run for real with the real damage step): one roll of the thrower\'s character, a damage card already applied and as private as the item, that every token within the reach takes, 5 times FragDice here, beside its share of the blast, through the damage step by the card\'s type (Cutting\'s 1.5: 4 is 6); one Undo entry a character, holding what it had before the blast first wrote, a token hurt by the fragmentation alone among them; its card to the GM and its player; the notice counts the hits; with each a roll for every token, with direct a roll of its own for the token struck directly; with no reach the blast\'s own radius, a reach past it takes more in and one short of it never less',
+            !fA.err && jf(fA.hp) === jf([2, 12, 14, 20]) && jf(fA.rolls) === jf([['c_thr', '1d6', 'Spike fragmentation', jf({ gmOnly: false, dmg: true, used: true })]])
+            && fA.tx && jf(fA.tx.hits.map(h => h.charId)) === jf(['c_a', 'c_b', 'c_c']) && fA.tx.hits.every(h => h.prevs.f_hp.cur === 20)
+            && jf(fA.cards) === jf([['c_a', 'Spike:'], ['c_b', 'Spike:'], ['c_a', 'Spike fragmentation:'], ['c_b', 'Spike fragmentation:'], ['c_c', 'Spike fragmentation:']])
+            && fA.toasts[0] === 'Blast damage applied to 2 tokens by distance · 2 too far to be hurt · fragmentation hit 3 tokens. Undo last throw is in the Radius options.'
+            && !fEach.err && jf(fEach.hp) === jf([5, 12, 11, 20]) && fEach.rolls.length === 3 && !fDir.err && jf(fDir.hp) === jf([5, 12, 14, 20]) && fDir.rolls.length === 2
+            && jf(fRad.hp) === jf([2, 12, 20, 20]) && jf(fFar.hp) === jf([2, 12, 14, 14]) && jf(fNear.hp) === jf([2, 12, 20, 20]),
+            jf([fA.err, fA.hp, fA.rolls, fA.tx, fA.cards, fA.toasts, fEach.hp, fEach.rolls.length, fDir.hp, fRad.hp, fFar.hp, fNear.hp]));
+        const covOn = { on: true, style: 'graded', area: { half: 'half', total: 'none' } }, covAt = { t_b: { name: 'Total cover', block: true }, t_c: { name: 'Half cover', block: false } };
+        const fTot = runF({ fall: BOOKF, frag: { reach: '5 * FragDice', type: 'cut', cover: 'total' } }, null, { cover: { on: true, style: 'graded' }, coverAt: covAt }), fCov = runF(R5, null, { cover: covOn, coverAt: covAt });
+        check('1.5.9 (es) cover and fragmentation (run for real): with Only full cover a token behind total cover takes none and one partly behind cover takes it all; with cover as the blast each takes the system\'s outcome, total cover none and half cover half (4 is 2, Cutting 3), the blast\'s own shares as before; the notice counts those shielded, never a name',
+            !fTot.err && jf(fTot.hp) === jf([2, 18, 14, 20]) && /· 1 shielded from fragmentation\. Undo/.test(fTot.toasts[0]) && !fCov.err && jf(fCov.hp) === jf([2, 20, 17, 20]) && /1 shielded by cover/.test(fCov.toasts[0]) && /1 shielded from fragmentation/.test(fCov.toasts[0]),
+            jf([fTot.err, fTot.hp, fTot.toasts, fCov.err, fCov.hp, fCov.toasts]));
+        const fTyI = runF(R5, { frag: { expr: '1d6', by: 'c_thr', gm: true, type: 'pi' }, ad: 2 }), fTyB = runF({ fall: BOOKF, frag: { reach: '5 * FragDice', ad: true } }, { ad: 2 }), fFail = runF(R5, null, { fail: true }), fNone = runF(R5, { frag: undefined });
+        const fqOf = r => r.qs.slice(2).map(q => [q.ch, q.amt, q.type || '', q.ad || 0]);
+        check('1.5.9 (es) the fragmentation\'s own parts (run for real): the item\'s fragmentation type before the card\'s, and the blast\'s own type where neither names one; the item\'s armour divisor only where the card says it counts; a GM-only item\'s roll kept the GM\'s; a roll that fails hurts no one and the blast\'s own shares stand; a blast with none rolls nothing and says what it always said',
+            jf(fqOf(fTyI)) === jf([['c_a', 4, 'pi', 0], ['c_b', 4, 'pi', 0], ['c_c', 4, 'pi', 0]]) && JSON.parse(fTyI.rolls[0][3]).gmOnly === true && jf(fTyI.hp) === jf([4, 14, 16, 20])
+            && jf(fqOf(fTyB)) === jf([['c_a', 4, 'cr', 2], ['c_b', 4, 'cr', 2], ['c_c', 4, 'cr', 2]]) && jf(fqOf(fA)) === jf([['c_a', 4, 'cut', 0], ['c_b', 4, 'cut', 0], ['c_c', 4, 'cut', 0]])
+            && jf(fFail.hp) === jf([8, 18, 20, 20]) && fFail.tx.hits.length === 2 && !/fragmentation/.test(fFail.toasts.join(' '))
+            && fNone.rolls.length === 0 && jf(fNone.hp) === jf([8, 18, 20, 20]) && fNone.toasts[0] === 'Blast damage applied to 2 tokens by distance · 2 too far to be hurt. Undo last throw is in the Radius options.',
+            jf([fqOf(fTyI), fTyI.hp, fqOf(fTyB), fFail.hp, fFail.toasts, fNone.toasts]));
+        const fFlat = runF({ frag: { reach: '5 * FragDice' } }, null, { noStep: true }), fOnly = runF(R5, null, { total: 0 });
+        check('1.5.9 (es) fragmentation with no damage step and with no blast damage (run for real): with no falloff and no damage step every token takes the whole roll off the damage resource and the fragmentation comes off it too, its figure as rolled; a blast that hurt no one still hurts those its fragmentation reaches, its Undo holding them',
+            !fFlat.err && jf(fFlat.hp) === jf([4, 4, 4, 8]) && fFlat.qs.length === 0 && !fOnly.err && jf(fOnly.hp) === jf([14, 14, 14, 20]) && fOnly.tx && fOnly.tx.hits.length === 3 && /^No blast damage · 4 too far to be hurt · fragmentation hit 3 tokens\. Undo/.test(fOnly.toasts[0]),
+            jf([fFlat.err, fFlat.hp, fOnly.err, fOnly.hp, fOnly.toasts]));
+        // every way a blast goes off carries it: a throw and a set-off blast (placeThrownBlast), resolveThrow's notices, a mine (placeMine, mineOff),
+        // a launched round (launchAt)
+        const ptF = wbF.slice(wbF.indexOf('  function placeThrownBlast('), wbF.indexOf('  window.wpPlaceThrownBlast = placeThrownBlast;'));
+        const runP = (opts, pre) => { const out = { b: null, sent: null };
+            new Function('getActiveMap', 'seatBlast', 'pushBlast', 'renderMeasures', 'syncBlastMenu', 'blastDistances', 'blastRadiusYd', 'toast', 'resolveThrow', 'tokenAtPoint', 'tokenElevation', 'groundAt', 'window', 'throwPrep', 'getActiveCampaign', "'use strict';\n" + ptF + '\nreturn placeThrownBlast;')(
+                () => ({ id: 'mp', whiteboard: [] }), () => {}, () => {}, () => {}, () => {}, () => [], () => 2, () => {}, bb => { out.b = bb; }, () => null, () => 0, () => 0, { wpNet: { active: true, role: 'host', broadcastBlast: p => { out.sent = p; } } }, () => pre, () => null)(opts);
+            return out; };
+        const preT = { land: { x: 10, y: 10 }, direct: null, said: '', tr: null, area: { ft: 6, frag: '1d6', fragType: 'cut' }, def: { notes: '', icon: '' } };
+        const pT = runP({ x: 10, y: 10, ft: 6, name: 'Spike', charId: 'c_thr', damage: '2d6' }, preT), pG = runP({ goOff: true, x: 10, y: 10, ft: 6, name: 'Spike', charId: 'c_m', damage: '2d6', gmOnly: true, frag: '2d6', fragType: 'pi' }, { land: { x: 10, y: 10 }, said: '' }), pN = runP({ x: 10, y: 10, ft: 6, name: 'Spike', damage: '2d6' }, Object.assign({}, preT, { area: { ft: 6 } }));
+        const rtF = wbF.slice(wbF.indexOf('  function resolveThrow('), wbF.indexOf('  var _lastThrowTx = null;'));
+        const runR = (auto, b, opts, dice) => { const out = { toasts: [], applied: 0 }, camp = { system: { combat: { blastAuto: auto, hpResource: 'f_hp' } } };
+            new Function('getActiveCampaign', 'window', 'toast', 'applyBlastDamage', "'use strict';\n" + rtF + '\nreturn resolveThrow;')(() => camp, { wpVtt: { on: k => k !== 'dice' || dice !== false }, wpDice: { rollFor: () => ({ ok: true, value: 7 }) } }, t => out.toasts.push(t), () => { out.applied++; })(b, opts, 1);
+            return out; };
+        const rM = runR('measure', { frag: {} }, { name: 'Spike', damage: '2d6' }), rD = runR('full', { frag: {} }, { name: 'Spike', damage: '2d6' }, false), rRo = runR('roll', { frag: {} }, { name: 'Spike', damage: '2d6' }), rNo = runR('full', { frag: {} }, { name: 'Spike' }), rPlain = runR('measure', {}, { name: 'Spike', damage: '2d6' }), rFull = runR('full', { frag: {} }, { name: 'Spike', damage: '2d6' });
+        check('1.5.9 (es) a throw and a blast set off carry their fragmentation (placeThrownBlast and resolveThrow, run for real): a thrown item\'s area gives the blast its fragmentation, its type, the thrower and whether it is the GM\'s, and a set-off blast its own; none of it goes to the table; a blast with none carries none; where nothing is rolled the GM is told the fragmentation was not, under Measure only, with dice off and for an item with no damage roll, and under Roll to chat that it is rolled with Apply to all in the blast; full auto applies it',
+            jf(pT.b.frag) === jf({ expr: '1d6', by: 'c_thr', gm: false, type: 'cut' }) && jf(Object.keys(pT.sent)) === jf(['x', 'y', 'ft', 'name', 'elev', 'by']) && jf(pG.b.frag) === jf({ expr: '2d6', by: 'c_m', gm: true, type: 'pi' }) && pN.b.frag === undefined
+            && rM.toasts[0] === 'Blast automation is Measure only, so the fragmentation of Spike was not rolled.' && rD.toasts[0] === 'Dice are off, so the fragmentation of Spike was not rolled.' && rRo.toasts[0] === 'The fragmentation of Spike is rolled when you press Apply to all in the blast.'
+            && rNo.toasts[0] === 'Spike has no damage roll, so its fragmentation was not rolled.' && rPlain.toasts.length === 0 && rFull.applied === 1 && rFull.toasts.length === 0 && rRo.applied === 0,
+            jf([pT.b && pT.b.frag, pT.sent, pG.b && pG.b.frag, rM.toasts, rD.toasts, rRo.toasts, rNo.toasts]));
+        const exF = wbF.slice(wbF.indexOf('  // [systemcheck:explosives-start]'), wbF.indexOf('  // [systemcheck:explosives-end]'));
+        const placedF = [], mapMn = { id: 'mp', whiteboard: [] }, winMn = { wpSystemCore: S, wpFormula: F, wpBlastCore: BCf };
+        const MN = new Function('window', 'getActiveCampaign', 'getActiveMap', 'toast', 'save', 'render', 'uid', 'mapMeasureConfig', 'cellYards', 'placeThrownBlast', 'tokenCentre', "'use strict';\n" + exF + '\nreturn { placeMine: placeMine, mineOff: mineOff };')(
+            winMn, () => ({ system: { combat: {} }, chars: {} }), () => mapMn, () => {}, () => {}, () => {}, () => 'x1', () => ({ cellPx: 50 }), () => 1, (po, m) => { placedF.push(po); return po; }, t => ({ x: t.x, y: t.y }));
+        const zF = MN.placeMine({ x: 100, y: 100, charId: 'c_m', fieldId: 'f_gear', rowId: 'w_1', name: 'Kael Mine', by: 'Kael' }, { def: { name: 'Kael Mine', damage: '2d6', area: { ft: 6, place: true, trig: 2, frag: '1d6', fragType: 'cut' } } }, mapMn);
+        const zN = MN.placeMine({ x: 300, y: 100, charId: 'c_m', name: 'Pebble Mine' }, { def: { name: 'Pebble Mine', damage: '1d6', area: { ft: 6, place: true, trig: 2 } } }, mapMn);
+        MN.mineOff(mapMn, zF, 't_x'); MN.mineOff(mapMn, zN, null);
+        check('1.5.9 (es) a mine keeps its fragmentation (placeMine and mineOff, run for real): the trigger zone\'s mine holds its fragmentation and that fragmentation\'s type, and going off hands both to the blast; a mine with none holds and hands on none',
+            !!zF && zF.mine.frag === '1d6' && zF.mine.fragType === 'cut' && !!zN && zN.mine.frag === undefined && placedF.length === 2 && placedF[0].frag === '1d6' && placedF[0].fragType === 'cut' && placedF[0].direct === 't_x' && placedF[1].frag === undefined,
+            jf([zF && zF.mine, zN && zN.mine, placedF]));
+        const lnF = wbF.slice(wbF.indexOf('  // [systemcheck:launch-start]'), wbF.indexOf('  // [systemcheck:launch-end]')), placedL = [];
+        const sysL = gm => cleanSystem({ v: 1, name: 'L', rolls: [], sheet: { sections: [] }, fields: [{ id: 'f_gear', key: 'Gear', label: 'Gear', kind: 'item-list', vis: 'all', list: { multi: true, chamber: { from: 'f_gear', cap: 2 } } }],
+            items: [{ id: 'i_tube', name: 'Spark Tube', vis: 'all' }, { id: 'i_fz', name: 'Fizz Grenade', vis: 'all', damage: '3d6', area: { ft: 6, name: 'Fizz burst', frag: '1d6', fragType: 'cut' } }] }, { F, gmView: gm });
+        const campL = { system: sysL(true), items: { m_1: { id: 'm_1', type: 'map', whiteboard: [] } }, chars: { c_k: { id: 'c_k', name: 'Kael', values: { f_gear: [{ id: 'w_t', defId: 'i_tube', qty: 1, fd: { defId: 'i_fz' } }] } } } };
+        const winL = { wpSystemCore: S, wpFormula: F, wpBlastCore: BCf };
+        new Function('window', 'getActiveCampaign', 'getActiveMap', 'toast', 'tokenAtPoint', 'tokenCentre', 'placeThrownBlast', 'wbWrap', 'document', 'yardsOn', "'use strict';\nvar _armedThrow = null;\n" + lnF)(
+            winL, () => campL, () => campL.items.m_1, () => {}, () => null, t => t, (po, m) => { placedL.push(po); return po; }, { style: {} }, { body: { classList: { add() {} } } }, () => 1);
+        winL.wpLaunchAt({ charId: 'c_k', fieldId: 'f_gear', rowId: 'w_t', x: 100, y: 100 }, campL.items.m_1);
+        check('1.5.9 (es) a launched round carries its own fragmentation (launchAt, run for real with the real core): the blast it puts down holds the round\'s fragmentation and its type, from the GM\'s view; the players\' view of that round holds neither',
+            placedL.length === 1 && placedL[0].frag === '1d6' && placedL[0].fragType === 'cut' && placedL[0].goOff === true && sysL(false).items.find(i => i.id === 'i_fz').area.frag === undefined,
+            jf(placedL));
+        // the System editor: the Combat card's fragmentation (sheets.js blastBox, onBlastChange, onBlastInput and fragSays, sliced by the blastbox
+        // markers and run for real), the Items tab's two controls, and both release notes and Help
+        const shF = fs.readFileSync(path.join(app, 'scripts', 'sheets.js'), 'utf8').replace(/\r\n/g, '\n'), fbA = shF.indexOf('// [systemcheck:blastbox-start]'), fbZ = shF.indexOf('// [systemcheck:blastbox-end]'), fbSrc = fbA >= 0 && fbZ > fbA ? shF.slice(fbA, fbZ) : '';
+        const elF = (tag, cls, txt) => ({ tag: tag, className: cls || '', textContent: txt || '', kids: [], dataset: {}, appendChild(k) { this.kids.push(k); return k; } });
+        const selF = (cls, cap, opts, val, title) => { const l = elF('label', 'sys-combat-item'); l.sel = { cls: cls, cap: cap, opts: opts, val: val, title: title }; return l; };
+        let FB = null, fbErr = '', draftF = { combat: {} }; const linesF = [];
+        try { FB = new Function('el', 'input', 'lineUnder', 'labeledSelect', 'ui', 'F', 'markDirty', 'getDraft', 'window', "'use strict';\nvar draft = getDraft();\n" + fbSrc + '\nreturn { box: blastBox, change: function(t) { draft = getDraft(); return onBlastChange(t); }, input: function(t) { draft = getDraft(); return onBlastInput(t); }, says: fragSays };')(
+            elF, (cls, v, title, ph) => { const i = elF('input', cls); i.value = v; i.title = title; i.placeholder = ph; return i; }, (b, t) => { linesF.push(t); }, selF, () => null, () => F, () => {}, () => draftF, { wpSystemCore: S }); } catch (e) { fbErr = String(e); }
+        const drawnF = cm => { const b = elF('div'); linesF.length = 0; FB.box(b, cm); const inp = b.kids.map(k => k.kids && k.kids.find(x => x.tag === 'input' && /sys-combat-fgreach/.test(x.className))).filter(Boolean)[0], err = b.kids.find(k => k.className === 'sys-blast-err' && k.dataset.fk === 'reach');
+            return { lists: b.kids.filter(k => k.sel && /sys-combat-fg/.test(k.sel.cls)).map(k => [k.sel.cls, k.sel.cap, k.sel.val, k.sel.opts.map(o => o[0]).join('|')]), reach: inp ? [inp.value, inp.placeholder] : null, err: err ? err.textContent : null, lines: linesF.slice(-6) }; };
+        const chF = (cls, v) => { FB.change({ className: cls, value: v }); return jf(draftF.combat); };
+        const g0 = fbErr ? null : drawnF({ damage: { types: [{ key: 'cut', label: 'Cutting' }] } }), g1 = fbErr ? null : drawnF({ damage: { types: [] }, blast: { frag: { reach: '1d6', type: 'gone', cover: 'total', each: true, direct: true, ad: true } } });
+        const k1 = fbErr ? '' : chF('sys-combat-fgcover', 'total'), k2 = fbErr ? '' : (chF('sys-combat-fgeach', 'each'), chF('sys-combat-fgdirect', 'own'), chF('sys-combat-fgad', 'yes'), chF('sys-combat-fgtype', 'cut'));
+        const k3 = fbErr ? false : FB.input({ className: 'sys-combat-fgreach field', value: ' 5 * FragDice ', dataset: { fk: 'reach' } }), k4 = jf(draftF.combat);
+        const k5 = fbErr ? '' : (chF('sys-combat-fgcover', ''), chF('sys-combat-fgeach', ''), chF('sys-combat-fgdirect', 'odd'), chF('sys-combat-fgad', ''), chF('sys-combat-fgtype', ''), FB.input({ className: 'sys-combat-fgreach field', value: '', dataset: { fk: 'reach' } }), jf(draftF.combat));
+        const plainF = (g0 ? g0.lines : []).every(l => typeof l === 'string' && /\.$/.test(l) && !/[()\[\];—–]| - /.test(l));
+        check('1.5.9 (es) the Combat card\'s fragmentation (sheets.js blastBox, onBlastChange, onBlastInput and fragSays, run for real): a box for how far it reaches with what Save does said under it, a list of the card\'s damage types with the blast\'s own first, and four lists in fixed words whose first choice is the plan\'s reading, each with one line of plain words under it, drawn from what is stored and a stored type the card no longer lists kept; a pick or a typed reach stores what the cleaner keeps, the first choice takes it off, and a frag with nothing left goes with the blast rules; another class is not theirs',
+            !fbErr && jf(g0.lists) === jf([['sys-combat-fgtype', 'Fragmentation type', '', '|cut'], ['sys-combat-fgcover', 'Fragmentation is stopped by', '', '|total'], ['sys-combat-fgeach', 'Fragmentation is rolled', '', '|each'], ['sys-combat-fgdirect', 'The character struck directly', '', '|own'], ['sys-combat-fgad', 'An armour divisor', '', '|yes']])
+            && jf(g0.reach) === jf(['', 'e.g. 5 * FragDice']) && g0.err === '' && g0.lines.length === 6 && plainF
+            && jf(g1.lists.map(x => x[2])) === jf(['gone', 'total', 'each', 'own', 'yes']) && g1.lists[0][3] === '|gone' && g1.reach[0] === '1d6' && g1.err === 'Save drops it: it may read only FragDice, with no dice.'
+            && k1 === jf({ blast: { frag: { cover: 'total' } } }) && k3 === true && k4 === jf({ blast: { frag: { cover: 'total', each: true, direct: true, ad: true, type: 'cut', reach: '5 * FragDice' } } }) && k5 === jf({})
+            && FB.change({ className: 'sys-combat-fgnope', value: 'x' }) === false && FB.says('5 * FragDice') === '' && jf(S.cleanBlastRules(JSON.parse(k4).blast, F)) === jf({ frag: { reach: '5 * FragDice', type: 'cut', cover: 'total', each: true, direct: true, ad: true } }),
+            fbErr || jf([g0, g1, k1, k4, k5]));
+        const ixF = fs.readFileSync(path.join(app, 'index.html'), 'utf8').replace(/\r\n/g, '\n'), wnF = fs.readFileSync(path.join(app, '..', '..', 'WHATSNEW.txt'), 'utf8').replace(/\r\n/g, '\n'), wnF2 = fs.readFileSync(path.join(app, 'assets', 'whatsnew.txt'), 'utf8').replace(/\r\n/g, '\n');
+        const dcF = fs.readFileSync(path.join(app, 'scripts', 'dice.js'), 'utf8').replace(/\r\n/g, '\n');
+        check('1.5.9 (es) the Items tab\'s Fragmentation and its type are wired, the dice roller hands a roll\'s used word on to the host\'s roll as this machine\'s own, and Help and both release notes say it',
+            dcF.includes("used: opts.used === true ? true : undefined } : null;") && dcF.includes("blast: more ? more.blast : undefined, used: more && more.used === true ? true : undefined });")
+            && shF.includes("area.appendChild(input('sys-item-afrag field', typeof it.area.frag === 'string' ? it.area.frag : ''") && shF.includes("if (dtys.length) area.appendChild(select('sys-item-afragtype',")
+            && shF.includes("else if (/(^| )sys-item-afrag( |$)/.test(ic)) { if (!it.area) return; if (t.value.trim()) it.area.frag = t.value.slice(0, LIMITS.formula); else { delete it.area.frag; delete it.area.fragType; } }")
+            && shF.includes("if (c.indexOf('sys-item-afragtype') >= 0) { if (iit.area) { if (t.value) iit.area.fragType = t.value; else delete iit.area.fragType; } markDirty(); patchErrors(); return; }")
+            && ixF.includes('<li>An explosive can carry <b>fragmentation</b>. When it goes off the host rolls it, and each character it reaches takes it beside its share of the blast.</li>')
+            && wnF.includes('Explosives\n- An explosive can carry fragmentation, a dice roll of its own. When it\n') && wnF2.includes('Explosives\n- An explosive can carry fragmentation, a dice roll of its own. When it\n'));
+    }
+    // [systemcheck:fragtests-end]
     // [systemcheck:rolled-tests-start]
     /* ---- 1.5.9 (docs/BOOK_ES_ET_PLAN.md section 0; the owner: "it should operate in a way that enables the handbook rules to be expressed accurately"): a change
        ticked Rolled may roll dice in its amount, which only the host rolls (applyAct's D), and its line says what it drew ---- */

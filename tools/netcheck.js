@@ -3783,6 +3783,30 @@ pendingChecks.push((async () => {
         a2_hid.every(([n, r]) => r.ret.ok && r.ret.priv === true && j(r.pushed) === j([['whisper', 'gm']]) && r.table.length === 0 && r.toasts.length === 1 && r.toasts[0].indexOf('Kept private: that roll uses a GM-only value (') === 0 && r.toasts[0].indexOf(n) > 0)
         && a2_pub.ret.ok && a2_pub.ret.priv === false && j(a2_pub.pushed) === j([['global', '']]) && a2_pub.table.length === 1 && a2_pub.toasts.length === 0, j([a2_hid.map(([n, r]) => [n, r.pushed, r.toasts]), a2_pub.pushed]));
 })());
+// 1.5.9 (the book's (es), docs/BOOK_ES_ET_PLAN.md section 2): a blast's fragmentation is a damage roll applied as it is rolled. The host's own
+// word for it (net.diceRoll's used, which only a roll of this machine's names) marks the card Applied, so no Apply to target is offered for it
+// again; the record the table is sent carries no such key once a player's app has cleaned it (net.diceRoll sliced and run for real)
+pendingChecks.push((async () => {
+    const url = f => 'file:///' + path.resolve(path.join(__dirname, '..', 'system', 'app', 'scripts', f)).split(String.fromCharCode(92)).join('/');
+    const Sx = await import(url('systemcore.js')), Fx = await import(url('formula.js')), Dx = await import(url('dicecore.js'));
+    const fu_line = k => { const i = src.indexOf(k); if (i < 0) throw new Error('netcheck: ' + k + ' not found'); return src.slice(i, src.indexOf('\n', i)); };
+    const fu_helpers = ['function own(', 'function peerProfileId(', 'function fxLib(', 'function itemLib(', 'function diceFrom('].map(fu_line).join('\n') + '\n';
+    const fu_drSrc = between('// [netcheck:diceroll-start]', '// [netcheck:diceroll-end]', 'diceroll');
+    const fu_sys = Sx.cleanSystem({ v: 1, name: 'FU', rolls: [], fields: [{ id: 'f_st', key: 'ST', label: 'ST', kind: 'number', vis: 'all', def: 12 }] }, { F: Fx, gmView: true });
+    const fu_run = o => { const out = { pushed: [], table: [] };
+        const camp = { id: 'k', system: fu_sys, chars: { c_a: { id: 'c_a', name: 'Pebbles', ownerId: 'u_a', npc: false, values: {} } } };
+        const net = { active: true, role: 'host', stream: false, conns: [], roster: {}, syncCharDelta() {} };
+        const dr = new Function('net', 'DC', 'SC', 'window', 'getActiveCampaign', 'getProfile', 'toast', 'ui', 'sendFailed', 'sendTable', 'pushRoll', 'logEvent', 'save', 'var _dicePending = null;\n' + fu_helpers + fu_drSrc + '\nreturn net.diceRoll;')(
+            net, () => Dx, () => Sx, { wpFormula: Fx, wpVtt: { on: () => true }, wpSheets: { tokenCtxFor: () => null, charChanged() {} } }, () => camp, () => ({ id: 'u_gm', name: 'GM' }), () => {}, () => null, e => { throw e; },
+            rec => { packCheck(rec); out.table.push(JSON.parse(JSON.stringify(rec))); }, rec => out.pushed.push(JSON.parse(JSON.stringify(rec))), () => {}, () => {});
+        out.ret = dr('1d6', Object.assign({ charId: 'c_a', label: 'Spike fragmentation' }, o)); return out; };
+    const fuUsed = fu_run({ dmg: true, used: true }), fuDmg = fu_run({ dmg: true }), fuOnly = fu_run({ used: true }), fuWord = fu_run({ dmg: true, used: 'yes' });
+    const seen = fuUsed.table[0] ? Dx.cleanRoll(fuUsed.table[0]) : null;
+    check('1.5.9 (es) a blast\'s fragmentation card is already applied (net.diceRoll, run for real as the host): a damage roll this machine marks used is drawn Applied on the host\'s own card, a damage roll with no such word, a roll that is no damage roll and a word that is not true mark nothing, and the record a player\'s app cleans holds no such key',
+        fuUsed.ret.ok && fuUsed.pushed[0] && fuUsed.pushed[0].dmg === 1 && fuUsed.pushed[0].dmgUsed === 1 && !!seen && seen.dmg === 1 && seen.dmgUsed === undefined
+        && fuDmg.pushed[0].dmg === 1 && fuDmg.pushed[0].dmgUsed === undefined && fuOnly.pushed[0].dmg === undefined && fuOnly.pushed[0].dmgUsed === undefined && fuWord.pushed[0].dmgUsed === undefined,
+        j([fuUsed.pushed, seen, fuDmg.pushed, fuOnly.pushed]));
+})());
 // owed review F5b: the GM's own roll on a row while hosting (net.diceRoll sliced and run for real) — a column reading a GM-only value, a choice's
 // option naming one, a column a GM-only effect moves (one and two columns deep), twelve columns deep (a list's most) to a choice or to that effect, a visible item's row
 // on a GM-only list, and a curse the GM keeps on while its owner sees it off each stay the GM's, with a toast, and nothing reaches the table; a plain

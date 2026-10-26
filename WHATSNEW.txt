@@ -63,6 +63,18 @@ Launchers and rounds
   nothing set, or with no target, your GM places a missed round with the
   row's Launch.
 
+Explosives
+- An explosive can carry fragmentation, a dice roll of its own. When it
+  goes off the host rolls it, and each character it reaches takes it
+  beside its share of the blast. An item sets it in the Items tab, a
+  library entry in its form, each with its damage type.
+- The Combat card says how far fragmentation reaches, its type, and
+  whether only full cover stops it. What the rules leave open is its to
+  choose too: one roll for everyone or one each, a roll of its own for
+  the target struck directly, and whether an armour divisor counts. A
+  thrown explosive, a mine and a launched round all carry it, and Undo
+  last throw puts it back.
+
 Voice chat
 - Talk with everyone at the table. Press the microphone in the top row,
   then Join voice. It shows only while you are at a table. The GM's

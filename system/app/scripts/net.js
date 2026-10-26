@@ -8955,6 +8955,7 @@ net.diceRoll = function(expr, o) {
     if ((entR && entR.dmg === true) || o.dmg === true) rec.dmg = 1;   // chat cards: a damage roll (its entry; or this machine's own word, a thrown item's damage — never over the wire)
     if (rec.dmg === 1 && entR && SR && typeof SR.dmgTypeOf === 'function' && campR && campR.system) { var dtR = SR.dmgTypeOf(campR.system, entR, varsR, F); if (dtR) rec.dtype = dtR; }   // 1.5.7: the damage type the roll names, for Apply to target
     if (rec.dmg === 1 && typeof o.blast === 'string' && /^b_[a-z0-9]{1,16}$/.test(o.blast)) rec.blast = o.blast;   // 1.5.8 explosives: the blast this damage is for (this machine's own word): the card's Apply to all in the blast
+    if (rec.dmg === 1 && o.used === true) rec.dmgUsed = 1;   // 1.5.9 (es): this machine's own word, a damage roll already applied as it is rolled (a blast's fragmentation): its card says Applied (the cleaner of a player's app keeps no such key)
     if (res.breakdown && res.breakdown.names && res.breakdown.names.length) { var nmR = D.cleanNames(res.breakdown.names); if (!nmR) return { error: 'That roll could not be recorded.' }; if (nmR.length) rec.names = nmR; }
     if (rec.names && SR && typeof SR.rollMods === 'function' && typeof varsR === 'function') { var mdR = SR.rollMods(varsR, rec.names); if (mdR) rec.mods = mdR; }   // 1.5.8 (handoff 90 Part B): what changed the values it reads
     if (o.label) rec.label = String(o.label).slice(0, D.LIMITS.label);

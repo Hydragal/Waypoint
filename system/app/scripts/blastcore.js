@@ -109,7 +109,7 @@ function firstBox(a, b, boxes, after) {
 // that placed it and the row, its maker's name, whether it is the GM's alone, and the item's notes. Anything else is no key; null where no
 // blast is left
 var MINE_ID = /^c_[A-Za-z0-9_]{1,24}$/, MINE_FIELD = /^[A-Za-z0-9_]{1,64}$/, MINE_ROW = /^w_[A-Za-z0-9_]{1,24}$/, MINE_TYPE = /^[A-Za-z][A-Za-z0-9_]{0,23}$/;
-function cleanMine(m) {
+function cleanMine(m) {   // 1.5.9 (es): and its fragmentation (frag, a formula's text) with that fragmentation's type (fragType, a key, only beside frag)
     if (!isObj(m)) return null;
     var ft = fin(m.ft) ? Math.round(m.ft) : 0; if (!(ft >= 1)) return null;
     var out = { ft: Math.min(3000, ft) };
@@ -125,6 +125,24 @@ function cleanMine(m) {
     if (m.unarmed === true) out.unarmed = true;   // planted with a failed roll: it lies there and never goes off by a step (its planter knows)
     if (fin(m.ad) && m.ad > 0 && m.ad !== 1) out.ad = Math.max(0.1, Math.min(100, Math.round(m.ad * 10) / 10));
     var nt = text(m.notes, 800); if (nt) out.notes = nt;
+    var fg = text(m.frag, 1200); if (fg) { out.frag = fg; if (typeof m.fragType === 'string' && MINE_TYPE.test(m.fragType)) out.fragType = m.fragType; }   // 1.5.9 (es): its fragmentation, rolled when it goes off
+    return out;
+}
+// 1.5.9 (the book's (es), docs/BOOK_ES_ET_PLAN.md section 2): who takes a blast's fragmentation, and by which roll. rows: [{ id, d }], each
+// character token's id and its yards from the blast's centre, height counted; reach: how far the fragmentation reaches, in yards; o: direct
+// (the token struck directly, or none), own (true: that token takes a hit of its own roll, wherever it stands) and each (true: every token
+// rolls its own). The answer, in the rows' order and each token once: [{ id, own }], own where the token rolls its own, else it takes the one
+// roll the others share. A row that is no token or stands past the reach is left out
+function fragTargets(rows, reach, o) {
+    if (!Array.isArray(rows)) return [];
+    o = isObj(o) ? o : {};
+    var R = fin(reach) ? Math.max(0, reach) : 0, dir = typeof o.direct === 'string' && o.direct ? o.direct : null, out = [], seen = Object.create(null);
+    for (var i = 0; i < rows.length && i < 4000; i++) {
+        var r = rows[i]; if (!isObj(r) || typeof r.id !== 'string' || !r.id || seen[r.id] === 1) continue;
+        var isDir = dir !== null && r.id === dir && o.own === true;
+        if (!isDir && !(fin(r.d) && r.d <= R + 1e-9)) continue;
+        seen[r.id] = 1; out.push({ id: r.id, own: o.each === true || isDir });
+    }
     return out;
 }
 // Whether a token stands in a mine's trigger: its centre within the trigger radius of the zone's centre, in yards (yardsBetween: the map's own
@@ -140,6 +158,6 @@ var STAND_INS = Object.freeze({
     grenade: Object.freeze(['M12 9a6 6 0 1 0 0 12 6 6 0 0 0 0-12z', 'M10 9V6h4v3', 'M14 7l4-3', 'M9.5 13.5h5M9.5 16.5h5']),
     mine: Object.freeze(['M4 15c0-2.5 3.6-4 8-4s8 1.5 8 4-3.6 4-8 4-8-1.5-8-4z', 'M12 11V7', 'M7.5 11.5L6 8.5M16.5 11.5L18 8.5', 'M10 7h4'])
 });
-var API = { VERSION: VERSION, SCATTER_WAYS: SCATTER_WAYS, SCATTER_TURN: SCATTER_TURN, SCATTER_WAYS6: SCATTER_WAYS6, SCATTER_TURN6: SCATTER_TURN6, diceCount: diceCount, fallShare: fallShare, throwOutcome: throwOutcome, scatterPoint: scatterPoint, bookScatterYd: bookScatterYd, missOf: missOf, flightEnd: flightEnd, firstBox: firstBox, cleanMine: cleanMine, inTrigger: inTrigger, STAND_INS: STAND_INS };
+var API = { VERSION: VERSION, SCATTER_WAYS: SCATTER_WAYS, SCATTER_TURN: SCATTER_TURN, SCATTER_WAYS6: SCATTER_WAYS6, SCATTER_TURN6: SCATTER_TURN6, diceCount: diceCount, fallShare: fallShare, throwOutcome: throwOutcome, scatterPoint: scatterPoint, bookScatterYd: bookScatterYd, missOf: missOf, flightEnd: flightEnd, firstBox: firstBox, fragTargets: fragTargets, cleanMine: cleanMine, inTrigger: inTrigger, STAND_INS: STAND_INS };
 if (typeof window !== 'undefined') window.wpBlastCore = API;
-export { VERSION, SCATTER_WAYS, SCATTER_TURN, SCATTER_WAYS6, SCATTER_TURN6, diceCount, fallShare, throwOutcome, scatterPoint, bookScatterYd, missOf, flightEnd, firstBox, cleanMine, inTrigger, STAND_INS };
+export { VERSION, SCATTER_WAYS, SCATTER_TURN, SCATTER_WAYS6, SCATTER_TURN6, diceCount, fallShare, throwOutcome, scatterPoint, bookScatterYd, missOf, flightEnd, firstBox, fragTargets, cleanMine, inTrigger, STAND_INS };

@@ -213,7 +213,7 @@ var _rollMore = null;   // 1.5.8 explosives: what rollFor hands the next roll be
 function rollFor(charId, expr, label, opts) {
     opts = opts || {};
     var s = ui('diceChar'); if (s && panelOpen()) { syncChars(); if (Array.prototype.some.call(s.options, function(o) { return o.value === charId; })) s.value = charId; }
-    _rollMore = opts.range || opts.blast ? { range: opts.range || undefined, blast: opts.blast || undefined } : null;   // 1.5.8 explosives: a throw's range to its aim, the blast a damage roll is for (this machine's own words)
+    _rollMore = opts.range || opts.blast || opts.used === true ? { range: opts.range || undefined, blast: opts.blast || undefined, used: opts.used === true ? true : undefined } : null;   // 1.5.8 explosives: a throw's range to its aim, the blast a damage roll is for (this machine's own words); 1.5.9: a damage roll already applied as it is rolled (a blast's fragmentation)
     var r = roll(expr, { priv: !!opts.priv, gmOnly: !!opts.gmOnly, charId: charId, label: label, source: opts.source || 'sheet', row: opts.row || undefined, act: opts.act || undefined, mod: opts.mod || undefined, adv: opts.adv || undefined, dmg: opts.dmg === true ? true : undefined });   // row (F5b): a roll on a list's row; act/mod/adv (R1): a roll with consequences   // gmOnly: a roll made of GM-only data (net.diceRoll keeps it the host's)
     if (r.error) toast(r.error);
     return r;
@@ -281,7 +281,7 @@ function roll(expr, opts) {
     lastSource = opts.source || 'panel';
     var clean = cleanExpr(expr);
     if (!clean) return { error: 'Type a formula, for example 2d6 + 3 (up to ' + LIMITS.expr + ' characters).' };
-    var r = n.diceRoll(clean, { priv: !!opts.priv, gmOnly: !!opts.gmOnly, charId: opts.charId || undefined, label: opts.label || undefined, row: opts.row || undefined, act: opts.act || undefined, mod: opts.mod || undefined, adv: opts.adv || undefined, dmg: opts.dmg === true ? true : undefined, range: more ? more.range : undefined, blast: more ? more.blast : undefined });   // dmg: this machine's own word (a thrown item's damage); the wire never carries it
+    var r = n.diceRoll(clean, { priv: !!opts.priv, gmOnly: !!opts.gmOnly, charId: opts.charId || undefined, label: opts.label || undefined, row: opts.row || undefined, act: opts.act || undefined, mod: opts.mod || undefined, adv: opts.adv || undefined, dmg: opts.dmg === true ? true : undefined, range: more ? more.range : undefined, blast: more ? more.blast : undefined, used: more && more.used === true ? true : undefined });   // dmg: this machine's own word (a thrown item's damage); the wire never carries it
     if (!r.error && !opts.row) remember(clean);   // Stage 6 F5b: a row roll is not remembered (its Row.* names need its row)
     return r;
 }

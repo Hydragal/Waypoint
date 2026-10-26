@@ -4179,6 +4179,7 @@ window.wpFitToGrid = fitToGrid;
           var nts = opts.goOff ? opts.notes : pre.def && !opts.gmOnly ? pre.def.notes : ''; if (typeof nts === 'string' && nts.trim()) b.notes = nts.trim().slice(0, 800);
           var ico = opts.goOff ? opts.icon : pre.def ? pre.def.icon : ''; if (typeof ico === 'string' && ico) b.icon = ico;
           var adB = opts.goOff ? opts.ad : pre.area && pre.area.ad; if (typeof adB === 'number' && isFinite(adB) && adB > 0) b.ad = adB;
+          var fgB = opts.goOff ? opts.frag : pre.area && pre.area.frag; if (typeof fgB === 'string' && fgB) { b.frag = { expr: fgB.slice(0, 1200), by: typeof opts.charId === 'string' ? opts.charId : '', gm: !!opts.gmOnly }; var fgT = opts.goOff ? opts.fragType : pre.area && pre.area.fragType; if (typeof fgT === 'string' && fgT) b.frag.type = fgT; }   // 1.5.9 (es): its fragmentation, rolled as it goes off (the host's memory alone: broadcastBlast names none of it)
       }
       if (onScreen) seatBlast(b);
       var thrB = opts.charId ? (map.whiteboard || []).filter(function(w) { return w.charId === opts.charId; }).sort(function(p, q) { return (q.isChar ? 1 : 0) - (p.isChar ? 1 : 0); })[0] : null;   // cover follow-ups (owner, answer 5): the thrower's token on this map
@@ -4198,14 +4199,14 @@ window.wpFitToGrid = fitToGrid;
   // The damage half of a throw (host/solo only): roll the item's damage, and in full-auto apply it to every in-range token as one undoable
   // transaction. blastAuto: full = roll+apply, roll = roll to chat (its card can apply it to all in the blast, once), measure = neither
   function resolveThrow(b, opts, nInRange, mapIn) {
-      var camp = getActiveCampaign(), sys = camp && camp.system; if (!sys || !opts || !opts.damage) return;
+      var camp = getActiveCampaign(), sys = camp && camp.system, fgN = b && b.frag ? (opts && opts.name || 'The blast') : ''; if (!sys || !opts || !opts.damage) { if (fgN && sys && opts) toast(fgN + ' has no damage roll, so its fragmentation was not rolled.'); return; }   // 1.5.9 (es): fragmentation rides on the blast's damage
       var combat = sys.combat || {}, auto = combat.blastAuto || 'full';
-      if (auto === 'measure') return;
-      if (window.wpVtt && !window.wpVtt.on('dice')) return;
+      if (auto === 'measure') { if (fgN) toast('Blast automation is Measure only, so the fragmentation of ' + fgN + ' was not rolled.'); return; }
+      if (window.wpVtt && !window.wpVtt.on('dice')) { if (fgN) toast('Dice are off, so the fragmentation of ' + fgN + ' was not rolled.'); return; }
       if (!window.wpDice || !window.wpDice.rollFor) return;
       var dr = window.wpDice.rollFor(opts.charId, opts.damage, (opts.name || 'Blast') + ' damage', { gmOnly: !!opts.gmOnly, dmg: true, blast: b && b.bid });   // a GM-only item's damage stays the GM's; chat cards: a damage card (an item's damage is damage by nature, as on his reference sheets)
       var total = dr && dr.ok && typeof dr.value === 'number' ? dr.value : null;
-      if (auto !== 'full' || total === null) return;
+      if (auto !== 'full' || total === null) { if (fgN && auto === 'roll' && total !== null) toast('The fragmentation of ' + fgN + ' is rolled when you press Apply to all in the blast.'); return; }
       applyBlastDamage(b, total, combat.hpResource, mapIn);
   }
   var _lastThrowTx = null;
@@ -4292,13 +4293,62 @@ window.wpFitToGrid = fitToGrid;
       var hit = rows.filter(function(x) { return /^torso$/i.test(x.name); })[0] || rows.filter(function(x) { return /torso/i.test(x.name); })[0] || rows[0];
       return hit ? hit.id : '';
   }
+  // 1.5.9 (the book's (es), docs/BOOK_ES_ET_PLAN.md section 2): a blast's fragmentation, after its shares and in the same pass. It reaches
+  // the Combat card's frag.reach in yards (read with FragDice, the dice it rolls), else the blast's own radius, and never less; who rolls what is
+  // blastcore fragTargets: one roll every token shares, or one each under frag.each, and the token struck directly a roll of its own under
+  // frag.direct. Only total cover stops it under frag.cover 'total', where a token partly behind cover takes it all; else the system's cover
+  // outcomes, as the blast. Each hit is rolled with the thrower's character (a damage card already applied, kept as private as the item) and
+  // goes through the damage step where the system has one, at the default location, by the item's fragmentation type, else the card's, else
+  // the blast's, with no falloff and the item's armour divisor only under frag.ad; else off the damage resource. write: the pass's own writer,
+  // which keeps what each character held first for the Undo. { hit, shielded } or null where the blast carries none
+  function fragPass(b, map, camp, sys, hpId, write) {
+      var S = window.wpSystemCore, F = window.wpFormula, BC = window.wpBlastCore, fg = b && b.frag && typeof b.frag === 'object' ? b.frag : null;
+      if (!fg || typeof fg.expr !== 'string' || !fg.expr || !S || !F || !BC || typeof BC.fragTargets !== 'function' || !window.wpDice || typeof window.wpDice.rollFor !== 'function') return null;
+      var rules = blastRules(sys), fr = rules && rules.frag && typeof rules.frag === 'object' ? rules.frag : {}, dice = BC.diceCount(fg.expr), rad = blastRadiusYd(b);
+      var rch = fr.reach ? blastFig(fr.reach, function(n) { return String(n).toLowerCase() === 'fragdice' ? dice : undefined; }, false) : null;
+      var reach = typeof rch === 'number' && isFinite(rch) ? Math.max(rad, Math.min(10000, rch)) : rad;
+      var dr = blastDistances(b, map).filter(function(r) { return r && r.tok && typeof r.tok.charId === 'string' && !(typeof b.spare === 'string' && r.tok.id === b.spare); }), byId = Object.create(null);
+      dr.forEach(function(r) { if (!byId[r.tok.id]) byId[r.tok.id] = r; });
+      var who = BC.fragTargets(dr.map(function(r) { return { id: r.tok.id, d: r.d }; }), reach, { direct: typeof b.direct === 'string' ? b.direct : null, own: fr.direct === true, each: fr.each === true });
+      var dstep = !!(sys.combat && sys.combat.damage && typeof S.damageStep === 'function'), types = dstep && Array.isArray(sys.combat.damage.types) ? sys.combat.damage.types : [];
+      var ty = [fg.type, fr.type, b.dtype].filter(function(t) { return typeof t === 'string' && t; })[0] || '', tyOk = !!(ty && types.some(function(y) { return y && typeof y.key === 'string' && y.key.toLowerCase() === ty.toLowerCase(); }));
+      var label = (b.name || 'Blast') + ' fragmentation', shared, rollOne = function() { var r = window.wpDice.rollFor(fg.by, fg.expr, label, { gmOnly: fg.gm === true, dmg: true, used: true }); return r && r.ok && typeof r.value === 'number' && isFinite(r.value) ? r.value : null; };
+      var elevOn = stanceOn('elevation'), hit = 0, shielded = 0;
+      who.forEach(function(w) {
+          var r = byId[w.id], ch = r && camp.chars && Object.prototype.hasOwnProperty.call(camp.chars, r.tok.charId) ? camp.chars[r.tok.charId] : null; if (!ch) return;   // own ids only
+          var tierF = window.wpFog && window.wpFog.coverAt ? window.wpFog.coverAt(b.x, b.y, r.tok, map, elevOn ? (b.elev || 0) : 0, elevOn ? tokenElevation(r.tok, map, b.thrown === true) : 0) : null;
+          if (fr.cover === 'total' ? !!(tierF && tierF.block) : S.coverOutcome && S.coverOutcome(sys, tierF) === 'none') { shielded++; return; }   // stopped before anything is rolled for it
+          var amt = w.own ? rollOne() : (shared === undefined ? (shared = rollOne()) : shared); if (amt === null) return;
+          if (fr.cover !== 'total' && S.coverDamage) amt = S.coverDamage(sys, tierF, amt);
+          amt = Math.floor(amt); if (!(amt > 0)) return;
+          var vals = null, lines = null;
+          if (dstep) {
+              var q = { amt: amt }, loc = typeof torsoOf === 'function' ? torsoOf(sys, ch) : ''; if (loc) q.loc = loc; if (tyOk) q.type = ty; if (fr.ad === true && typeof b.ad === 'number' && b.ad > 0) q.ad = b.ad;
+              var st = S.damageStep(sys, ch, q, F); if (!st || !st.ok) return; vals = st.values; lines = st.lines;
+          } else if (hpId) {
+              var all = S.resolveAll(sys, ch, F), e = all[hpId]; if (!e) return;
+              var res = S.applyEdit(sys, ch, hpId, { cur: (typeof e.value === 'number' ? e.value : 0) - amt }, F, {}); if (!res.ok) return;
+              vals = {}; vals[hpId] = res.value;
+          } else return;
+          write(ch, r.tok.charId, vals); hit++;
+          if (lines && window.wpNet && typeof window.wpNet.damageCard === 'function') window.wpNet.damageCard(ch, [label + ':'].concat(lines));   // what it did, to the GM and the character's player
+      });
+      return { hit: hit, shielded: shielded };
+  }
   function applyBlastDamage(b, total, hpId, mapIn) {
       var camp = getActiveCampaign(), sys = camp && camp.system, S = window.wpSystemCore, F = window.wpFormula, map = mapIn || getActiveMap();
       if (!sys || !S || !F || !map) return;
       var rules = typeof blastRules === 'function' ? blastRules(sys) : null, BC = window.wpBlastCore, fall = rules && rules.fall && BC ? rules.fall : '', step = !!(fall && sys.combat && sys.combat.damage && typeof S.damageStep === 'function');
-      if (!hpId && !step) { toast('Full auto is on, but no damage resource is set (System editor ▸ Items ▸ Damage subtracts from).'); return; }
-      var hits = [], applied = 0, halved = 0, shielded = 0, spared = 0, dice = fall ? BC.diceCount(b.dmgExpr || '') : 0, types = step && Array.isArray(sys.combat.damage.types) ? sys.combat.damage.types : [];
+      if (!hpId && !step && !(b && b.frag && sys.combat && sys.combat.damage)) { toast('Full auto is on, but no damage resource is set (System editor ▸ Items ▸ Damage subtracts from).'); return; }
+      var byChar = Object.create(null), hits = [], applied = 0, halved = 0, shielded = 0, spared = 0, dice = fall ? BC.diceCount(b.dmgExpr || '') : 0, types = step && Array.isArray(sys.combat.damage.types) ? sys.combat.damage.types : [];
       var typeOk = !!(b.dtype && types.some(function(y) { return y && typeof y.key === 'string' && y.key.toLowerCase() === String(b.dtype).toLowerCase(); }));
+      var write = function(ch, charId, vals) {   // one entry a character for the Undo, holding what it had before the blast first wrote each field (1.5.9: its fragmentation writes too)
+          var h = byChar[charId]; if (!h) { h = byChar[charId] = { charId: charId, prevs: {} }; hits.push(h); }
+          Object.keys(vals).forEach(function(fid) { if (!Object.prototype.hasOwnProperty.call(h.prevs, fid)) h.prevs[fid] = ch.values && Object.prototype.hasOwnProperty.call(ch.values, fid) ? JSON.parse(JSON.stringify(ch.values[fid])) : undefined; });
+          ch.values = ch.values || {}; Object.keys(vals).forEach(function(fid) { ch.values[fid] = vals[fid]; }); ch.updated = Date.now();
+          if (window.wpNet && window.wpNet.active && window.wpNet.role === 'host' && window.wpNet.syncCharDelta && Object.keys(vals).length) window.wpNet.syncCharDelta(charId, vals);
+          if (window.wpSheets && window.wpSheets.charChanged) window.wpSheets.charChanged(charId);
+      };
       blastDistances(b, map).forEach(function(r) {
           if (!shapeHolds(b, r) || !r.tok.charId) return;   // what a blast holds is asked in one place: its radius, a ring's inner distance, a cone's angle, and the token an explosion spares
           var ch = camp.chars && typeof r.tok.charId === 'string' && Object.prototype.hasOwnProperty.call(camp.chars, r.tok.charId) ? camp.chars[r.tok.charId] : null; if (!ch) return;   // own ids only: a token from a file naming '__proto__' writes no damage onto a prototype
@@ -4319,16 +4369,13 @@ window.wpFitToGrid = fitToGrid;
               vals = {}; vals[hpId] = res.value;
           }
           if (ocC === 'half' && dmgC < share) halved++;
-          var prevs = {}; Object.keys(vals).forEach(function(fid) { prevs[fid] = ch.values && Object.prototype.hasOwnProperty.call(ch.values, fid) ? JSON.parse(JSON.stringify(ch.values[fid])) : undefined; });
-          ch.values = ch.values || {}; Object.keys(vals).forEach(function(fid) { ch.values[fid] = vals[fid]; }); ch.updated = Date.now();
-          hits.push({ charId: r.tok.charId, prevs: prevs });
-          if (window.wpNet && window.wpNet.active && window.wpNet.role === 'host' && window.wpNet.syncCharDelta && Object.keys(vals).length) window.wpNet.syncCharDelta(r.tok.charId, vals);
-          if (window.wpSheets && window.wpSheets.charChanged) window.wpSheets.charChanged(r.tok.charId);
+          write(ch, r.tok.charId, vals);
           if (lines && window.wpNet && typeof window.wpNet.damageCard === 'function') window.wpNet.damageCard(ch, (b.name ? [b.name + ':'] : []).concat(lines, b.notes ? ['Notes: ' + b.notes] : []));   // what it did, to the GM and the character's player
           applied++;
       });
-      var coverNote = (halved ? ' · ' + halved + ' behind cover took less' : '') + (shielded ? ' · ' + shielded + ' shielded by cover' : '') + (spared ? ' · ' + spared + ' too far to be hurt' : '');   // counts only: never a name (a hidden token counts too)
-      if (applied) { _lastThrowTx = { hits: hits }; save(); syncBlastMenu(); if (b.notes) toast((b.name || 'The blast') + ': ' + b.notes); toast((fall ? 'Blast damage applied to ' + applied + ' token' + (applied === 1 ? '' : 's') + ' by distance' : '−' + total + ' to ' + applied + ' token' + (applied === 1 ? '' : 's')) + coverNote + '. Undo last throw is in the Radius options.'); }
+      var fp = typeof fragPass === 'function' ? fragPass(b, map, camp, sys, hpId, write) : null, fragNote = fp ? (fp.hit ? ' · fragmentation hit ' + fp.hit + ' token' + (fp.hit === 1 ? '' : 's') : '') + (fp.shielded ? ' · ' + fp.shielded + ' shielded from fragmentation' : '') : '';   // 1.5.9 (es)
+      var coverNote = (halved ? ' · ' + halved + ' behind cover took less' : '') + (shielded ? ' · ' + shielded + ' shielded by cover' : '') + (spared ? ' · ' + spared + ' too far to be hurt' : '') + fragNote;   // counts only: never a name (a hidden token counts too)
+      if (applied || (fp && fp.hit)) { _lastThrowTx = { hits: hits }; save(); syncBlastMenu(); if (b.notes) toast((b.name || 'The blast') + ': ' + b.notes); toast((!applied ? 'No blast damage' : fall ? 'Blast damage applied to ' + applied + ' token' + (applied === 1 ? '' : 's') + ' by distance' : '−' + total + ' to ' + applied + ' token' + (applied === 1 ? '' : 's')) + coverNote + '. Undo last throw is in the Radius options.'); }
       else if (shielded && !spared) toast('No damage: ' + shielded + ' token' + (shielded === 1 ? '' : 's') + ' shielded by cover.');
       else if (shielded || spared) toast('No damage:' + coverNote.replace(/^ ·/, '') + '.');
   }
@@ -4369,11 +4416,11 @@ window.wpFitToGrid = fitToGrid;
           if (pck && !pck.pass && pck.crit === 'fumble') {   // the book: a critical failure sets it off in the planter's cell
               var plT = throwerOf(map, opts.charId), plC = plT ? tokenCentre(plT) : { x: opts.x, y: opts.y };
               if (area.use === true) useOneUp(camp, tr);
-              return placeThrownBlast({ goOff: true, x: plC.x, y: plC.y, ft: area.ft, name: opts.name || def.name, by: opts.by || '', charId: opts.charId, damage: def.damage || '', gmOnly: !!opts.gmOnly, dtype: area.type, ad: area.ad, notes: opts.gmOnly ? '' : def.notes, icon: def.icon }, map);
+              return placeThrownBlast({ goOff: true, x: plC.x, y: plC.y, ft: area.ft, name: opts.name || def.name, by: opts.by || '', charId: opts.charId, damage: def.damage || '', gmOnly: !!opts.gmOnly, dtype: area.type, ad: area.ad, notes: opts.gmOnly ? '' : def.notes, icon: def.icon, frag: area.frag, fragType: area.fragType }, map);
           }
           var unarmed = !!(pck && !pck.pass);   // the book: a failure leaves it unarmed, and the planter knows
       }
-      var mine = BC.cleanMine({ ft: area.ft, name: opts.name || def.name, damage: def.damage || '', type: area.type, ad: area.ad, trig: area.trig, charId: opts.charId, fieldId: opts.fieldId, rowId: opts.rowId, by: opts.by, gmOnly: !!opts.gmOnly, notes: opts.gmOnly ? '' : def.notes, unarmed: typeof unarmed === 'boolean' ? unarmed : false });
+      var mine = BC.cleanMine({ ft: area.ft, name: opts.name || def.name, damage: def.damage || '', type: area.type, ad: area.ad, trig: area.trig, charId: opts.charId, fieldId: opts.fieldId, rowId: opts.rowId, by: opts.by, gmOnly: !!opts.gmOnly, notes: opts.gmOnly ? '' : def.notes, unarmed: typeof unarmed === 'boolean' ? unarmed : false, frag: area.frag, fragType: area.fragType });   // 1.5.9 (es): and its fragmentation
       if (!mine) return null;
       var amM = getActiveMap(), pxYd = amM && amM.id === map.id ? mapMeasureConfig().cellPx / cellYards() : 50, r = Math.max(10, mine.trig * pxYd);
       var z = { id: 'wb' + uid() + Math.random().toString(36).slice(2, 5), type: 'trigger', shape: 'circle', x: Math.round(opts.x - r), y: Math.round(opts.y - r), w: Math.round(r * 2), h: Math.round(r * 2), color: 'transparent', eventMessage: '', hidden: true, name: (mine.name || 'Mine') + ' (mine)', mine: mine };
@@ -4390,7 +4437,7 @@ window.wpFitToGrid = fitToGrid;
       var at = map.whiteboard.indexOf(zone); if (at < 0) return null;
       var m = zone.mine, cx = (Number(zone.x) || 0) + (Number(zone.w) || 0) / 2, cy = (Number(zone.y) || 0) + (Number(zone.h) || 0) / 2;
       map.whiteboard.splice(at, 1); save(); render();
-      return placeThrownBlast({ goOff: true, x: cx, y: cy, ft: m.ft, name: m.name || 'Mine', by: m.by || '', charId: m.charId, damage: m.damage || '', gmOnly: !!m.gmOnly, direct: direct || null, dtype: m.type, ad: m.ad, notes: m.notes, icon: zone.mineIcon }, map);
+      return placeThrownBlast({ goOff: true, x: cx, y: cy, ft: m.ft, name: m.name || 'Mine', by: m.by || '', charId: m.charId, damage: m.damage || '', gmOnly: !!m.gmOnly, direct: direct || null, dtype: m.type, ad: m.ad, notes: m.notes, icon: zone.mineIcon, frag: m.frag, fragType: m.fragType }, map);
   }
   // A character token that stepped in (the host's own map: the GM's drag, a player's drop): every mine whose trigger it stands in now and did
   // not stand in where the gesture began goes off, the token struck directly. Never on a player's app or in the stream window
@@ -4474,7 +4521,7 @@ window.wpFitToGrid = fitToGrid;
       var x = Number(opts.x), y = Number(opts.y); if (!isFinite(x) || !isFinite(y)) return null;
       var lr = launchRowOf(camp, opts); if (!lr) { toast('Nothing to put down there: no round fired or chambered on that row has a blast.'); return null; }
       var hasD = Object.prototype.hasOwnProperty.call(opts, 'direct'), aimT = hasD ? null : tokenAtPoint(map, x, y, true), aim = aimT ? tokenCentre(aimT) : { x: x, y: y }, d = lr.def, a = lr.area, gm = d.vis === 'gm' || lr.f.vis === 'gm';   // the character token clicked, else the point; 1.5.9 (es): a miss names its own point and whom it strikes
-      var dir = hasD ? (typeof opts.direct === 'string' ? opts.direct : null) : aimT ? aimT.id : null, po = { goOff: true, launched: true, x: aim.x, y: aim.y, ft: a.ft, name: a.name || d.name || '', by: lr.ch.name || '', charId: opts.charId, fieldId: lr.f.id, rowId: opts.rowId, damage: d.damage || '', gmOnly: gm, direct: dir, dtype: a.type, ad: a.ad, notes: gm ? '' : d.notes, icon: d.icon };
+      var dir = hasD ? (typeof opts.direct === 'string' ? opts.direct : null) : aimT ? aimT.id : null, po = { goOff: true, launched: true, x: aim.x, y: aim.y, ft: a.ft, name: a.name || d.name || '', by: lr.ch.name || '', charId: opts.charId, fieldId: lr.f.id, rowId: opts.rowId, damage: d.damage || '', gmOnly: gm, direct: dir, dtype: a.type, ad: a.ad, notes: gm ? '' : d.notes, icon: d.icon, frag: a.frag, fragType: a.fragType };   // 1.5.9 (es): the round's own fragmentation
       if (typeof opts.said === 'string' && opts.said) po.said = opts.said; if (opts.fuse === true) po.fuseOk = true;
       return placeThrownBlast(po, map);
   }
