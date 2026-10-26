@@ -1543,8 +1543,9 @@ function cleanCombat(c, resIds, fieldIds, secretIds, F, viewKinds, pl, fl) {   /
 //   hand     where a throw's critical failure goes off in the thrower's hand, read with Natural (its dice) alone, no dice; else it drops
 //            at the thrower's feet
 //   max, min how far and how near a thing may be thrown, in yards: the thrower's sheet and the item's row (Row.) read, no dice
-//   launch   1.5.9 (the book's (es), docs/BOOK_ES_ET_PLAN.md section 1): how a launched round that misses lands, where the book has not ruled
-//            yet, each part absent for the plan's reading: fuse (true: a round that scatters waits for the fuse, as a throw), fumble ('feet':
+//   launch   1.5.9 (the book's (es), docs/BOOK_ES_ET_PLAN.md section 1): how a launched round that misses lands, each part absent for the
+//            book's reading where it has ruled (fix log (eu), H1) and the plan's where it has not: now (true: a round that scatters goes off
+//            where it lands at once; absent: it waits for the fuse, on a thrown grenade's timing, as the book rules), fumble ('feet':
 //            a critical failure goes off at the shooter's feet; 'none': it spends the round and goes nowhere; absent: a miss by its margin),
 //            stop ('past': a round that flies straight passes the characters before the target it missed; 'walls': it stops at walls alone;
 //            absent: at the first wall or character) and glance (true: a character it stops on is not struck directly)
@@ -1561,7 +1562,7 @@ function cleanBlastRules(v, F) {
     var out = {}, fa = blastFormula(v.fall, F, BLAST_FALL, false), ro = blastFormula(v.roll, F, null, true), sc = blastFormula(v.scatter, F, { margin: 1, throwdistance: 1 }, true), mx = blastFormula(v.max, F, null, false), mn = blastFormula(v.min, F, null, false), hd = blastFormula(v.hand, F, { natural: 1 }, false);
     if (fa) out.fall = fa; if (ro) out.roll = ro; if (sc) out.scatter = sc; if (mx) out.max = mx; if (mn) out.min = mn; if (hd) out.hand = hd;
     if (v.ways === 6 || v.ways === 8) out.ways = v.ways; if (v.fuse === 'turn') out.fuse = 'turn';
-    if (isObj(v.launch)) { var lo = {}; if (v.launch.fuse === true) lo.fuse = true; if (v.launch.fumble === 'feet' || v.launch.fumble === 'none') lo.fumble = v.launch.fumble; if (v.launch.stop === 'past' || v.launch.stop === 'walls') lo.stop = v.launch.stop; if (v.launch.glance === true) lo.glance = true; if (Object.keys(lo).length) out.launch = lo; }   // 1.5.9 (es): what a launched round's miss does where the book is open
+    if (isObj(v.launch)) { var lo = {}; if (v.launch.now === true) lo.now = true; if (v.launch.fumble === 'feet' || v.launch.fumble === 'none') lo.fumble = v.launch.fumble; if (v.launch.stop === 'past' || v.launch.stop === 'walls') lo.stop = v.launch.stop; if (v.launch.glance === true) lo.glance = true; if (Object.keys(lo).length) out.launch = lo; }   // 1.5.9 (es): what a launched round's miss does where the book is open
     return Object.keys(out).length ? out : null;
 }
 // 1.5.9 (es): a launcher list's Flies at most (spec.chamber.reach): the yards a round that flies straight goes, a formula of the launcher row's
@@ -1918,6 +1919,8 @@ function cleanListSpec(v, gmView, F) {   // F (F4c1): the engine, for a stat key
         var chF = typeof v.chamber.from === 'string' && FIELD_ID.test(v.chamber.from) ? v.chamber.from : '';
         if (chF) {
             var chN = typeof v.chamber.cap === 'number' && fin(v.chamber.cap) ? Math.round(v.chamber.cap) : 1, cho = { from: chF, cap: Math.max(1, Math.min(CHAMBER_CAP, chN)) };
+            var chCb = typeof v.chamber.capBy === 'string' ? lower(statKey(v.chamber.capBy.trim(), F)) : '';   // 1.5.9 (the review of fold 2, docs/BOOK_ES_ET_PLAN.md: "Chambers from's cap should be able to come from the ROW"): a number stat of this list, spelled as it is; a row whose figure there is 1 or more holds that many (chamberCap)
+            (out.stats || []).forEach(function(s) { if (!cho.capBy && chCb && s.kind !== 'pick' && lower(s.key) === chCb) cho.capBy = s.key; });
             var chBy = typeof v.chamber.by === 'string' ? statKey(v.chamber.by.trim(), F) : '', chTo = typeof v.chamber.to === 'string' ? statKey(v.chamber.to.trim(), F) : '', chByS = '';
             (out.stats || []).forEach(function(s) { if (!chByS && chBy && lower(s.key) === lower(chBy)) chByS = s.key; });
             if (chByS && chTo) { cho.by = chByS; cho.to = chTo; }
@@ -3134,10 +3137,18 @@ function cleanRd(e, items, chSpec) {
     var r = cleanRow(x, items, isObj(chSpec) ? chSpec : null); if (!r) return null;
     delete r.id; delete r.qty; delete r.on; delete r.ct; delete r.hid; delete r.keptOn; return r;
 }
-function chamberCap(spec) { var c = isObj(spec) && isObj(spec.chamber) ? spec.chamber.cap : 1; return typeof c === 'number' && fin(c) ? Math.max(1, Math.min(CHAMBER_CAP, Math.round(c))) : 1; }
+// how many rounds a row holds: the list's Holds, or, where the list says the row holds as one of its number stats reads (capBy) and the row's
+// figure there is 1 or more, that figure (whole, CHAMBER_CAP at most), as the site reads a launcher's own Shots (launcherCapacity). Without a
+// row (or a system to read it by), the list's Holds
+function chamberCap(spec, sys, row) {
+    var ch = isObj(spec) && isObj(spec.chamber) ? spec.chamber : null, c = ch ? ch.cap : 1, base = typeof c === 'number' && fin(c) ? Math.max(1, Math.min(CHAMBER_CAP, Math.round(c))) : 1;
+    if (!ch || typeof ch.capBy !== 'string' || !ch.capBy || !isObj(sys) || !isObj(row)) return base;
+    var d = rowDef(sys, row), n = d ? rowStat(spec, d.def, ch.capBy) : null;
+    return typeof n === 'number' && fin(n) && n >= 1 ? Math.min(CHAMBER_CAP, Math.floor(n)) : base;
+}
 function withRd(o, e, items, spec, chSpec) {
     if (!isObj(spec) || !isObj(spec.chamber) || o.qty !== 1 || o.hid === 1) return o;
-    var cap = chamberCap(spec), rd = []; (Array.isArray(e.rd) ? e.rd : []).forEach(function(x) { if (rd.length >= cap) return; var c = cleanRd(x, items, chSpec); if (c) rd.push(c); });
+    var cap = typeof spec.chamber.capBy === 'string' && spec.chamber.capBy ? CHAMBER_CAP : chamberCap(spec), rd = []; (Array.isArray(e.rd) ? e.rd : []).forEach(function(x) { if (rd.length >= cap) return; var c = cleanRd(x, items, chSpec); if (c) rd.push(c); });
     if (rd.length) o.rd = rd;
     var fd = isObj(e.fd) ? cleanRd(e.fd, items, chSpec) : null; if (fd) o.fd = fd;
     return o;
@@ -3788,7 +3799,7 @@ function rowChamber(sys, char, f, list, spec, q, opts, at, vo, F) {
     var hi = at(q.rowId); if (hi < 0 || !isObj(list[hi]) || list[hi].hid === 1) return { ok: false, reason: 'missing' };
     var h = list[hi]; if ((h.qty | 0) !== 1) return { ok: false, reason: 'value' };   // a stack of them is not one
     var sl = isObj(sf.list) ? sf.list : null, sList = same ? list : JSON.parse(JSON.stringify(isObj(char) && isObj(char.values) && Array.isArray(char.values[sf.id]) ? char.values[sf.id] : []));
-    var cap = chamberCap(spec), rd = Array.isArray(h.rd) ? h.rd.slice() : [], name = '';
+    var cap = chamberCap(spec, sys, h), rd = Array.isArray(h.rd) ? h.rd.slice() : [], name = '';   // the review of fold 2: the row's own Holds where the list reads it from a stat
     if (q.op === 'chamber') {
         var chN = playerNeeds(sys, f.id, spec, opts, 'chamber'); if (!chamberHolds(sys, char, f, h, F, chN)) return { ok: false, reason: 'needs', msg: rollNeedsSays(chN) };   // Chambers only where: this row takes no round now (the GM's hand too: it is what the row is)
         if (rd.length >= cap) return { ok: false, reason: 'value', msg: 'It is full: it holds ' + cap + ' at most.' };

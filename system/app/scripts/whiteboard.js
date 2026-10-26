@@ -4456,7 +4456,8 @@ window.wpFitToGrid = fitToGrid;
   // how it lands on a miss (its area's flight) is put down by the host on a miss too (wpLaunchMiss): one that scatters lands as a missed throw does,
   // a yard a point missed and never more than half the distance fired, by the Combat card's own scatter where it names one; one that flies straight
   // goes on along its line, past the aim, and goes off on the first wall or character in its path, or at its farthest (the launcher list's Flies at
-  // most, else the board's edge). What the book has not ruled yet is the Combat card's to say (combat.blast.launch). The host's alone, never on a
+  // most, else the board's edge). One that scatters goes off on a thrown grenade's timing, so it waits for the fuse where the card sets one (the
+  // book's fix log (eu), H1). What the book has not ruled yet is the Combat card's to say (combat.blast.launch). The host's alone, never on a
   // player's app
   function launchRowOf(camp, opts) {   // the launcher's row on this machine's own copy and the round it puts down: { ch, f, row, def, area }
       var S = window.wpSystemCore, sys = camp && camp.system; if (!S || !sys || !opts || typeof opts.charId !== 'string' || typeof opts.fieldId !== 'string' || typeof opts.rowId !== 'string') return null;
@@ -4511,13 +4512,13 @@ window.wpFitToGrid = fitToGrid;
       var dYd = typeof yardsOn === 'function' ? yardsOn(map, sc, aim) : Math.hypot(aim.x - sc.x, aim.y - sc.y) / 50, dPx = Math.hypot(aim.x - sc.x, aim.y - sc.y), px = dYd > 1e-9 && dPx > 0 ? dPx / dYd : 50;   // board pixels to a yard on that map, as it reads the distance fired
       var lenW = function(yd) { return typeof rulerLen === 'function' && typeof rulerUnitNow === 'function' ? rulerLen(yd, rulerUnitNow()) : Math.round(yd * 10) / 10 + ' yd'; };
       if (o.crit === 'fumble' && ln.fumble === 'none') { toast('A critical failure: ' + nm + ' misfires and goes nowhere. The round is spent.'); return null; }
-      if (o.crit === 'fumble' && ln.fumble === 'feet') return launchAt(Object.assign(base, { x: sc.x, y: sc.y, direct: null, said: ' A critical failure: it goes off at the shooter\u2019s feet.', fuse: ln.fuse === true && fl === 'scatter' }), map);
+      if (o.crit === 'fumble' && ln.fumble === 'feet') return launchAt(Object.assign(base, { x: sc.x, y: sc.y, direct: null, said: ' A critical failure: it goes off at the shooter\u2019s feet.', fuse: ln.now !== true && fl === 'scatter' }), map);
       if (fl === 'scatter') {   // as a missed throw: from the aim along the line it was fired on, by the Combat card's scatter (Margin, ThrowDistance: the distance fired), else the book's
           var syd = null;
           if (typeof bl.scatter === 'string' && bl.scatter && F) { var sv = F.evaluate(bl.scatter, { vars: function(n) { var l = String(n).toLowerCase(); return l === 'margin' ? mg : l === 'throwdistance' ? dYd : undefined; } }); syd = sv && sv.ok ? (typeof sv.value === 'boolean' ? (sv.value ? 1 : 0) : sv.value) : null; }
           syd = typeof syd === 'number' && isFinite(syd) ? Math.max(0, Math.min(1000, syd)) : BC.bookScatterYd(mg, dYd);
           var nW = bl.ways === 8 ? 8 : 6, sp = BC.scatterPoint(aim, sc, syd, Math.floor(Math.random() * nW), px, nW); if (!sp) return null;   // the way rolled as a throw's is
-          return launchAt(Object.assign(base, { x: Math.max(0, sp.x), y: Math.max(0, sp.y), direct: null, said: ' A miss by ' + mg + ': it lands ' + lenW(syd) + ' ' + sp.words.toLowerCase() + ' of the aim.', fuse: ln.fuse === true }), map);
+          return launchAt(Object.assign(base, { x: Math.max(0, sp.x), y: Math.max(0, sp.y), direct: null, said: ' A miss by ' + mg + ': it lands ' + lenW(syd) + ' ' + sp.words.toLowerCase() + ' of the aim.', fuse: ln.now !== true }), map);   // the review of fold 2: on a thrown grenade's timing unless the card says at once (the book's (eu), H1)
       }
       var rf = lr.f.list && lr.f.list.chamber && typeof lr.f.list.chamber.reach === 'string' ? lr.f.list.chamber.reach : '', reach = null;   // straight on: as far as Flies at most, from the launcher row's own names, else to the board's edge
       if (rf && S && F && typeof S.makeResolver === 'function') { var R = S.makeResolver(camp.system, lr.ch, F), rowR = R && typeof R.row === 'function' ? R.row(lr.f.id, o.rowId) : null, rv = rowR ? F.evaluate(rf, { vars: rowR, random: function() { return NaN; } }) : null; if (rv && rv.ok && typeof rv.value === 'number' && isFinite(rv.value) && rv.value > 0) reach = rv.value; }

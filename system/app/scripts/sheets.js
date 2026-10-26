@@ -2785,7 +2785,7 @@ function chamberCtl(host, entry, c, f, spec, editable, sysI, gm, canThrow, okC) 
     if (!spec || !spec.chamber || typeof spec.chamber !== 'object' || !entry || entry.hid === 1) return;
     if (okC === false && !(Array.isArray(entry.rd) && entry.rd.length)) return;   // Chambers only where: a row that takes no round, and holds none, shows nothing
     var sys = sysI || systemOf(getActiveCampaign()), sf = sys ? fieldById(sys, spec.chamber.from) : null; if (!sf || sf.kind !== 'item-list') return;
-    var rd = Array.isArray(entry.rd) ? entry.rd : [], cap = typeof chamberCap === 'function' ? chamberCap(spec) : 1, lb = spec.chamber.label || 'Chamber', ln = sf.label || sf.key || 'its list';
+    var rd = Array.isArray(entry.rd) ? entry.rd : [], cap = typeof chamberCap === 'function' ? chamberCap(spec, sys, entry) : 1, lb = spec.chamber.label || 'Chamber', ln = sf.label || sf.key || 'its list';
     var nx = rd[0] ? rowDef(sys, rd[0]) : null, nxN = nx && nx.def && nx.def.name ? nx.def.name : 'A round';
     var w = el('span', 'sheet-chip sheet-item-load sheet-item-chamber' + (rd.length ? '' : ' sheet-item-load-none')); w.title = rd.length ? 'Next to fire: ' + nxN : 'Nothing chambered from ' + ln;
     w.appendChild(el('span', 'sheet-item-ctl', rd.length + ' of ' + cap + ' chambered'));
@@ -5257,6 +5257,8 @@ function refreshErrors() {
             var cBy = typeof chr.by === 'string' ? chr.by.trim().toLowerCase() : '', cTo = typeof chr.to === 'string' ? chr.to.trim() : '';
             if ((cBy && !cTo) || (!cBy && cTo)) errs.push({ message: 'Matched by needs a stat of this list and a stat of the round\u2019s list. Save drops it.' });
             else if (cBy && !stsC.some(function(x) { return x && typeof x.key === 'string' && x.key.toLowerCase() === cBy; })) errs.push({ message: 'Matched by names no stat of this list. Save drops it.' });
+            var cCb = typeof chr.capBy === 'string' ? chr.capBy.trim().toLowerCase() : '';   // the review of fold 2, as the cleaner reads it
+            if (cCb && !stsC.some(function(x) { return x && typeof x.key === 'string' && x.kind !== 'pick' && x.key.toLowerCase() === cCb; })) errs.push({ message: 'The row\u2019s Holds names no number stat of this list. Save drops it.' });
             if (Array.isArray(chr.cats) && chr.cats.length > LIMITS.listCats) errs.push({ message: 'Chambers from takes at most ' + LIMITS.listCats + ' categories. Save keeps the first ' + LIMITS.listCats + '.' });
             if (typeof chr.reach === 'string' && chr.reach.trim() && typeof cleanReach === 'function' && !cleanReach(chr.reach, F())) errs.push({ message: 'Flies at most does not read as a formula with no dice. Save drops it.' });   // 1.5.9 (es), as the cleaner reads it
         }
@@ -6070,6 +6072,12 @@ function listCard(f, allCats, targets, acts) {   // acts (turn-based combat T1):
             var capC = typeof chS.cap === 'number' && isFinite(chS.cap) ? Math.max(1, Math.min(CHAMBER_CAP || 8, Math.round(chS.cap))) : 1;
             for (var hc = 1; hc <= (CHAMBER_CAP || 8); hc++) { var ho = el('option', null, 'Holds ' + hc); ho.value = String(hc); if (capC === hc) ho.selected = true; hsl.appendChild(ho); }
             crw.appendChild(hsl);
+            var hbs = el('select', 'sys-list-chamberholdsby'), hbN = (Array.isArray(sp.stats) ? sp.stats : []).filter(function(s) { return s && typeof s === 'object' && typeof s.key === 'string' && s.key && s.kind !== 'pick'; }), hbC = typeof chS.capBy === 'string' ? chS.capBy.toLowerCase() : '', hbHit = false;   // the review of fold 2: a row may hold as many as one of its stats reads
+            hbs.title = 'Where the row\u2019s figure in this stat is 1 or more, the row holds that many, ' + (CHAMBER_CAP || 8) + ' at most, as a mortar holds four. Else it holds as set';
+            var hbo = el('option', null, 'Every row holds as set'); hbo.value = ''; hbs.appendChild(hbo);
+            hbN.forEach(function(s) { var o = el('option', null, 'Or as many as the row\u2019s ' + (s.label || s.key)); o.value = s.key; if (!hbHit && hbC && s.key.toLowerCase() === hbC) { o.selected = true; hbHit = true; } hbs.appendChild(o); });
+            if (hbC && !hbHit) { var hbx = el('option', null, chS.capBy + ' (not a number stat of this list)'); hbx.value = chS.capBy; hbx.selected = true; hbs.appendChild(hbx); }
+            crw.appendChild(hbs);
             crw.appendChild(input('sys-list-chambercats field', Array.isArray(chS.cats) ? chS.cats.join(', ') : '', 'The categories of that list a row may chamber, separated by commas. Blank: any of its rows', 'Categories it takes (blank: any)'));
             crw.appendChild(input('sys-list-chamberreach field', typeof chS.reach === 'string' ? chS.reach : '', 'The yards a round that flies straight goes, from the row\u2019s own names (Row.*), no dice, such as Row.MaxRange. Blank: to the map\u2019s edge', 'Flies at most (blank: to the map\u2019s edge)'));   // 1.5.9 (es)
             crw.appendChild(input('sys-list-chamberneeds field', typeof chS.needs === 'string' ? chS.needs : '', 'A formula a row must meet to chamber, read with its own names (Row.*), no dice. Blank: every row. A row that does not meet it shows no chamber, and one that still holds rounds can only unchamber them', 'Chambers only where (blank: every row)'));
@@ -6227,8 +6235,8 @@ function blastBox(box, cm) {
     });
     box.appendChild(labeledSelect('sys-combat-bways', 'Ways a miss goes', [['6', 'Six, a d6 (the sides of a hex)'], ['8', 'Eight']], bl.ways === 8 ? '8' : '6', 'How many ways a miss may scatter from its aim, rolled as a die'));
     box.appendChild(labeledSelect('sys-combat-bfuse', 'A thrown explosive goes off', [['', 'At once, where it lands'], ['turn', 'At the start of the next turn in a fight']], bl.fuse === 'turn' ? 'turn' : '', 'With a fight on its map, a fused explosive lies there until the next turn starts. Outside a fight it goes off at once'));
-    var lnB = bl.launch && typeof bl.launch === 'object' && !Array.isArray(bl.launch) ? bl.launch : {};   // 1.5.9 (es): a launched round's miss, where the book has not ruled; each first choice is the plan's reading
-    box.appendChild(labeledSelect('sys-combat-blfuse', 'A launched round that misses', [['', 'Goes off where it lands, at once'], ['fuse', 'Waits for the fuse, as a throw']], lnB.fuse === true ? 'fuse' : '', 'For a round whose item scatters on a miss. With the fuse set to the next turn and a fight on its map, it lies there until the next turn starts'));
+    var lnB = bl.launch && typeof bl.launch === 'object' && !Array.isArray(bl.launch) ? bl.launch : {};   // 1.5.9 (es): a launched round's miss; each first choice is the book's reading where it has ruled (the fuse, (eu) H1), else the plan's
+    box.appendChild(labeledSelect('sys-combat-blfuse', 'A launched round that misses', [['', 'Waits for the fuse, as a throw'], ['now', 'Goes off where it lands, at once']], lnB.now === true ? 'now' : '', 'For a round whose item scatters on a miss. With the fuse set to the next turn and a fight on its map, it lies there until the next turn starts, as a thrown grenade does'));
     box.appendChild(labeledSelect('sys-combat-blfumble', 'Its critical failure', [['', 'Misses by its margin'], ['feet', 'Goes off at the shooter\u2019s feet'], ['none', 'Spends the round and goes nowhere']], lnB.fumble === 'feet' || lnB.fumble === 'none' ? lnB.fumble : '', 'What a launched round does when its roll is a critical failure'));
     box.appendChild(labeledSelect('sys-combat-blstop', 'A round that flies straight stops at', [['', 'The first wall or character'], ['past', 'The first wall, or a character past its target'], ['walls', 'The first wall only']], lnB.stop === 'past' || lnB.stop === 'walls' ? lnB.stop : '', 'For a round whose item flies straight on a miss. With nothing in its path it goes off at its farthest'));
     box.appendChild(labeledSelect('sys-combat-blglance', 'A character it stops on', [['', 'Is struck directly'], ['glance', 'Is not struck directly']], lnB.glance === true ? 'glance' : '', 'Whether a character a straight round stops on takes the blast as its direct target'));
@@ -6238,7 +6246,7 @@ function onBlastChange(t) {   // the lists of the Blasts and throws part
     var cm = draft.combat || (draft.combat = { blastAuto: 'full', blastRoller: 'owner', hpResource: '' }), bl = cm.blast && typeof cm.blast === 'object' && !Array.isArray(cm.blast) ? cm.blast : (cm.blast = {});
     if (lk) {   // 1.5.9 (es): a launched round's miss, kept only off the plan's reading
         var lo = bl.launch && typeof bl.launch === 'object' && !Array.isArray(bl.launch) ? bl.launch : (bl.launch = {}), lv = t.value;
-        if (lk[2] === 'fuse') { if (lv === 'fuse') lo.fuse = true; else delete lo.fuse; } else if (lk[2] === 'glance') { if (lv === 'glance') lo.glance = true; else delete lo.glance; }
+        if (lk[2] === 'fuse') { if (lv === 'now') lo.now = true; else delete lo.now; } else if (lk[2] === 'glance') { if (lv === 'glance') lo.glance = true; else delete lo.glance; }
         else if (lk[2] === 'fumble') { if (lv === 'feet' || lv === 'none') lo.fumble = lv; else delete lo.fumble; } else { if (lv === 'past' || lv === 'walls') lo.stop = lv; else delete lo.stop; }
         if (!Object.keys(lo).length) delete bl.launch;
     }
@@ -7671,6 +7679,7 @@ function onChange(e) {
         else if (c.indexOf('sys-list-loadfrom') >= 0) { if (t.value) { var ld0 = lsc.load && typeof lsc.load === 'object' ? lsc.load : {}, ct0 = Array.isArray(lsc.counters) && lsc.counters[0] && typeof lsc.counters[0].key === 'string' ? lsc.counters[0].key : ''; lsc.load = { from: t.value, ct: typeof ld0.ct === 'string' && ld0.ct ? ld0.ct : ct0 }; if (Array.isArray(ld0.cats)) lsc.load.cats = ld0.cats; } else delete lsc.load; }   // 1.5.8 Loads from
         else if (c.indexOf('sys-list-chamberfrom') >= 0) { if (t.value) { var ch0 = lsc.chamber && typeof lsc.chamber === 'object' ? lsc.chamber : {}; lsc.chamber = Object.assign({}, ch0, { from: t.value }); if (typeof lsc.chamber.cap !== 'number') lsc.chamber.cap = 1; } else delete lsc.chamber; }   // 1.5.9 Chambers from
         else if (c.indexOf('sys-list-chambercap') >= 0) { if (lsc.chamber && typeof lsc.chamber === 'object') lsc.chamber.cap = Math.max(1, Math.min(CHAMBER_CAP || 8, parseInt(t.value, 10) || 1)); }
+        else if (c.indexOf('sys-list-chamberholdsby') >= 0) { if (lsc.chamber && typeof lsc.chamber === 'object') { if (t.value) lsc.chamber.capBy = t.value; else delete lsc.chamber.capBy; } }   // the review of fold 2: Holds as the row's stat reads (Save keeps it only as a number stat of this list)
         else if (c.indexOf('sys-list-loadct') >= 0) { if (lsc.load && typeof lsc.load === 'object') { if (t.value) lsc.load.ct = t.value; else delete lsc.load.ct; } }
         else if (c.indexOf('sys-list-once') >= 0) {   // 1.5.8 Counted once (Save keeps it only with a group stat and a Higher by, each of this list)
             var oKey = c.indexOf('sys-list-onceby') >= 0 ? 'by' : c.indexOf('sys-list-oncerank') >= 0 ? 'rank' : c.indexOf('sys-list-oncecost') >= 0 ? 'cost' : c.indexOf('sys-list-oncefree') >= 0 ? 'free' : ''; if (!oKey) return;
