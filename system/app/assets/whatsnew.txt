@@ -35,6 +35,9 @@ System editor
   stats, such as a medkit's wear. Used up to 0, the row goes, and its
   notice offers Undo for a few seconds, as the sheet's minus does.
 - A list can carry up to 32 stats, up from 24.
+- An action or a roll used on someone next to you can read their figures,
+  as On. and a name. So a medpac can say Not on a droid, with its needs
+  not(On.Droid). Used on yourself, it reads your own.
 
 Using an item on someone next to you
 - When the GM rolls it, an amount that reads a GM-only value keeps the

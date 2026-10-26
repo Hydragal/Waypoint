@@ -14945,6 +14945,24 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         check('1.6.0 cleanRowGone keeps a character\'s id and 1 to 8 rows by list and row id, nothing else, and refuses anything malformed whole',
             JSON.stringify(okR) === JSON.stringify({ charId: 'c_a', items: [{ f: 'f_kit', r: 'w_1' }] }) && [null, {}, { charId: 'x', items: [{ f: 'f_kit', r: 'w_1' }] }, { charId: 'c_a', items: [] }, { charId: 'c_a', items: many }, { charId: 'c_a', items: [{ f: 'bad', r: 'w_1' }] }, { charId: 'c_a', items: [{ f: 'f_kit', r: 'x_1' }] }, { charId: 'c_a', items: 'w_1' }].every(m => S.cleanRowGone(m) === null), JSON.stringify(okR));
     }
+    {   // 1.6.0 (the owner, by prompt: "On.<name>"): an entry used on an adjacent character reads that character's figures
+        const J = JSON.stringify, rawO = { v: 1, name: 'T', fields: [{ id: 'f_hp', key: 'HP', kind: 'number', def: 8 }, { id: 'f_dr', key: 'Droid', kind: 'toggle' }, { id: 'f_sec', key: 'Sec', kind: 'number', vis: 'gm', def: 5 }],
+            rolls: [{ id: 'r_med', label: 'Medpac', apply: [{ f: 'f_hp', formula: '2 + On.HP', add: true }], needs: 'not(On.Droid)', needsText: 'Not on a droid', to: 'near' }, { id: 'r_sec', label: 'S', apply: [{ f: 'f_hp', formula: 'On.Sec', add: true }], to: 'near' },
+                { id: 'r_plain', label: 'P', apply: [{ f: 'f_hp', formula: 'On.HP', add: true }] }] };
+        const gO = cleanSystem(rawO, { F, gmView: true }), pO = cleanSystem(rawO, { F, gmView: false }), med = gO.rolls[0];
+        const user = { id: 'u', values: { f_hp: 5 } }, droid = { id: 'd', values: { f_hp: 3, f_dr: true } }, man = { id: 'm', values: { f_hp: 4 } }, vu = S.makeResolver(gO, user, F, null);
+        const onD = S.applyAct(gO, user, med, S.withOnSelf(vu, false, S.makeResolver(gO, droid, F, null)), F, null, null, undefined, null, { char: droid });
+        const onM = S.applyAct(gO, user, med, S.withOnSelf(vu, false, S.makeResolver(gO, man, F, null)), F, null, null, undefined, null, { char: man });
+        const self = S.applyAct(gO, user, med, S.withOnSelf(vu, true), F), noOn = S.applyAct(gO, user, med, S.withOnSelf(vu, false), F, null, null, undefined, null, { char: man });
+        const msgO = S.validateSystem(gO, F).errors.map(e => e.id + ': ' + e.message);
+        check('1.6.0 On.<name> (withOnSelf, run for real): an entry\'s needs and amounts read the figures of the one it is used on (Medpac refused on a droid in its own words; on another, 2 + their HP), on oneself one\'s own, and with no resolver of the other nothing (the press fails); readsOn tells such a formula; the GM-only judges read On.Sec as Sec; the players\' view drops an entry whose On. name is GM-only; the editor knows On. only where the entry Applies to an adjacent character',
+            onD.ok === false && onD.message === 'Not on a droid' && J(onM.onValues) === J({ f_hp: 10 }) && J(self.values) === J({ f_hp: 12 }) && noOn.ok === false
+            && S.readsOn('not(On.Droid)', F) === true && S.readsOn('not(Droid)', F) === false && S.readsOn('OnSelf', F) === false && J(S.gmOnlyNames(gO, [{ name: 'On.Sec' }, { name: 'On.HP' }])) === J(['On.Sec'])
+            && J(pO.rolls.map(r => r.id)) === J(['r_med', 'r_plain']) && J(msgO) === J(['r_plain: "On.HP" reads the one it is used on, so it is known only in a roll or an action that Applies to the user or an adjacent character.']), J([onD, onM, self.values, noOn, pO.rolls.map(r => r.id), msgO]));
+        const shO = fs.readFileSync(path.join(app, 'scripts', 'sheets.js'), 'utf8');
+        check('1.6.0 On.<name> on the sheet (source): a button whose needs read the one it is used on never greys by them (the host judges them once the press names someone), on a roll and on an action; the GM\'s press reads On. through the system with the target in its own token\'s context',
+            (shO.match(/&& !\(r\.to === 'near' && typeof readsOn === 'function' && readsOn\(r\.needs, F\(\)\)\)\) \{/g) || []).length === 2 && shO.includes('vv = withOnSelf(vv, !onT, onT ? makeResolver(sys, onT.ch, F(),'));
+    }
     summed = true;
     console.log(NL + pass + ' passed, ' + fail + ' failed.');
     if (fail) process.exit(1);
