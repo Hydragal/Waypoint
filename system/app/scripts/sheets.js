@@ -8,7 +8,7 @@ import { getActiveCampaign } from './models.js';
 import { save, toast, toastAction } from './io.js';
 import { picRef } from './safecore.js';
 import { showConfirm, showPrompt } from './dialogs.js';
-import { cleanDamageRules, loadFits, chamberTakes, chamberCap, CHAMBER_CAP, cleanReach, openSync, moneyBoxes, moneyHeld, rowOpMoney, onceOf, catHome, catPlace, cleanPlaceCats, catSplits, cleanFieldUnit, unitTail, heightWords, measureWords, unitWords, unitHead, listWords, unitOf, textWords, measureStore, rollNeedsOk, rollNeedsSays, timeRuleRun, ruleRunCtx, chainsShallow, makeResolver, hasDice, figText, cleanEvery, cleanInFight, droppedCounts, validPageId, LIMITS, KINDS, showsIf, rowRollNames, gmOnlyNames, applyAct, withOnSelf, applyScope, applyRound, dueActs, combatChars, roundSecs, fxLeftNow, lastsSecs, APPLY_KINDS, TURN_UNITS, LIGHT_UNITS, RANGE_UNITS, HEIGHT_UNITS, TIME_WORDS, STORED, DEF_PROP, BAND_KINDS, IDENTITY_KINDS, LEDGER_KINDS, headerEntry, captionParts, emptySystem, uid, validKey, cleanSystem, cleanChar, validateSystem, resolveAll, hoverLines, autoLayout, applyEdit, applyStyle, cleanLooks, lookOf, lookFor, lookRule, applyEffectOp, fxText, fmtNum, budgetsOf, budgetWatch, budgetSays, needsMet, needsSays, initRoll, applyProposal, cleanUploads, sideOf, threatArc, facingCtx, facingNow, setAimSource, stanceCtx, tokenCtx, POSTURE_IDS, POSTURE_NAMES, DEFAULT_POSTURES, postureList, postureAt, autoEffectsOn, initTie, charTokenOn, cycleThreat, valueTone, TONES, activeCharOf, playableChars, ownedTokenPlan, applyOwnerOps, migrateBindings, capExpr, cleanValue, fieldById, valueOpts, applyRowOp, rowIdOf, rowDef, orphanRows, stampRows, cleanRowDef, projectRows, STAT_KEY, PALETTE_KEYS, GLYPHS, glyphPath, headerEdits, pinTargets, pinTargetsAll, hudView, hudHasContent, resetTargets, cleanListSpec, statKey, rowStat, plusText, rowPaid, itemReach, gmDerivedNames, labelGmNames, gmEffectNames, labelNames, withRound, rangeCtx, withRange, rowLvl, rowOn, cleanItemKey, charForView, secretFieldIds, gmViewFields } from './systemcore.js';
+import { cleanDamageRules, postureFx, loadFits, chamberTakes, chamberCap, CHAMBER_CAP, cleanReach, openSync, moneyBoxes, moneyHeld, rowOpMoney, onceOf, catHome, catPlace, cleanPlaceCats, catSplits, cleanFieldUnit, unitTail, heightWords, measureWords, unitWords, unitHead, listWords, unitOf, textWords, measureStore, rollNeedsOk, rollNeedsSays, timeRuleRun, ruleRunCtx, chainsShallow, makeResolver, hasDice, figText, cleanEvery, cleanInFight, droppedCounts, validPageId, LIMITS, KINDS, showsIf, rowRollNames, gmOnlyNames, applyAct, withOnSelf, applyScope, applyRound, dueActs, combatChars, roundSecs, fxLeftNow, lastsSecs, APPLY_KINDS, TURN_UNITS, LIGHT_UNITS, RANGE_UNITS, HEIGHT_UNITS, TIME_WORDS, STORED, DEF_PROP, BAND_KINDS, IDENTITY_KINDS, LEDGER_KINDS, headerEntry, captionParts, emptySystem, uid, validKey, cleanSystem, cleanChar, validateSystem, resolveAll, hoverLines, autoLayout, applyEdit, applyStyle, cleanLooks, lookOf, lookFor, lookRule, applyEffectOp, fxText, fmtNum, budgetsOf, budgetWatch, budgetSays, needsMet, needsSays, initRoll, applyProposal, cleanUploads, sideOf, threatArc, facingCtx, facingNow, setAimSource, stanceCtx, tokenCtx, POSTURE_IDS, POSTURE_NAMES, DEFAULT_POSTURES, postureList, postureAt, autoEffectsOn, initTie, charTokenOn, cycleThreat, valueTone, TONES, activeCharOf, playableChars, ownedTokenPlan, applyOwnerOps, migrateBindings, capExpr, cleanValue, fieldById, valueOpts, applyRowOp, rowIdOf, rowDef, orphanRows, stampRows, cleanRowDef, projectRows, STAT_KEY, PALETTE_KEYS, GLYPHS, glyphPath, headerEdits, pinTargets, pinTargetsAll, hudView, hudHasContent, resetTargets, cleanListSpec, statKey, rowStat, plusText, rowPaid, itemReach, gmDerivedNames, labelGmNames, gmEffectNames, labelNames, withRound, rangeCtx, withRange, rowLvl, rowOn, cleanItemKey, charForView, secretFieldIds, gmViewFields } from './systemcore.js';
 import { fileBase, charToJson, charFromJson, sheetToMarkdown, isCharFile } from './sheetexport.js';
 import { lvlsFromBox, lvlsToText } from './librarycore.js';
 import { dieNode, DIE_LABELS } from './dieicons.js';   // 1.5.8, backlog 149: the dice drawings (pure)
@@ -368,13 +368,42 @@ function afterCharChange(c, whole, values) {
     c.updated = Date.now();
     if (typeof window !== 'undefined' && window.wpFog && window.wpFog.sensesForget) window.wpFog.sensesForget();   // the fog's kept senses are read again from the sheet
     if (typeof lookPrune === 'function') lookPrune(c);   // item 35: a look whose text is no longer its own goes before the save
+    var posA = typeof postureFollow === 'function' ? postureFollow(c, camp) : [];   // 1.5.9: an effect that came on lays its token down, in this very save
     syncOwners(camp);
     save(true);
     var n = net();
     if (n && n.active && n.role === 'host') { if (whole || !values) n.syncChar(c.id); else n.syncCharDelta(c.id, values); }
+    if (posA.length && n && n.active && n.role === 'host' && n.broadcastItemFiltered) posA.forEach(function(mid) { n.broadcastItemFiltered(camp.id, mid); });   // 1.5.9: the maps whose tokens it moved
     if (window.appRender) window.appRender();
     renderViews(c.id);   // HUD frame (HF2a): the sheet and every HUD of this character
 }
+// [systemcheck:fxposture-start]
+// 1.5.9 (docs/BOOK_ES_ET_PLAN.md; the owner's O6: "An effect can set posture", so Down lays its token prone the moment it applies; the book (eu):
+// Down's prone lasts after healing): on the machine that owns the campaign, after every change of a character, the effects that set a posture
+// and have just come on lay each token of the character down in it, on every map of the campaign, as the stance menu sets a posture; one that has
+// just ended and is ticked to put it back gives a token the posture it had before, only where it still stands as the effect set it (a posture
+// changed since, by hand or by another effect, stays). What was on is kept in this machine's memory alone; the first look at a character only
+// notes it, so a load, a reload or a campaign opened moves nobody. With Token posture off nothing moves. Answers the ids of the maps it changed
+var _postOn = Object.create(null), _postWas = Object.create(null);
+function postureFollow(c, camp) {
+    if (!c || typeof c.id !== 'string' || !camp || !camp.system || isClient() || !canWrite() || !F() || typeof postureFx !== 'function') return [];
+    var sys = camp.system, now = postureFx(sys, c, F()), key = (camp.id || '') + '|' + c.id, was = _postOn[key]; _postOn[key] = now;
+    if (!was) return [];
+    var vt = window.wpVtt; if (vt && !(vt.rulesOn ? vt.rulesOn('posture') : vt.on('posture'))) return [];
+    var came = Object.keys(now).filter(function(id) { return !was[id]; }), went = Object.keys(was).filter(function(id) { return !now[id] && was[id].back; }); if (!came.length && !went.length) return [];
+    var S = window.wpSystemCore, seat = function(t, p) { var at = S && S.postureAt ? S.postureAt(sys, p) : null; if (at && at.i > 0 && at.p) t.posture = at.p.id; else delete t.posture; }, maps = [];
+    Object.keys(camp.items || {}).forEach(function(mid) {
+        var m = camp.items[mid]; if (!m || m.type !== 'map' || !Array.isArray(m.whiteboard)) return; var did = false;
+        m.whiteboard.forEach(function(t) {
+            if (!t || typeof t !== 'object' || !t.isChar || t.waiting || t.charId !== c.id || typeof t.id !== 'string') return;
+            went.forEach(function(id) { var wk = key + '|' + t.id + '|' + id; if (!Object.prototype.hasOwnProperty.call(_postWas, wk)) return; var back = _postWas[wk]; delete _postWas[wk]; if ((t.posture || '') !== was[id].p) return; seat(t, back); did = true; });
+            came.forEach(function(id) { var wk = key + '|' + t.id + '|' + id; _postWas[wk] = typeof t.posture === 'string' ? t.posture : ''; if ((t.posture || '') === now[id].p) return; seat(t, now[id].p); did = true; });
+        });
+        if (did) maps.push(mid);
+    });
+    return maps;
+}
+// [systemcheck:fxposture-end]
 // [systemcheck:sheetdelete-start]
 // Delete on the sheet itself (the owner, 2026-10-04: a player who joined from a second computer had two sheets under one name and the only
 // Delete was a small x on a row of the System editor's Characters tab: "both I and the player should be able to just delete these"). The GM
@@ -5103,6 +5132,7 @@ function charChanged(id) {
     if (typeof window !== 'undefined' && window.wpFog && window.wpFog.sensesForget) window.wpFog.sensesForget();   // the fog's kept senses are read again from the sheet
     if (typeof lookPrune === 'function') lookPrune(id);   // item 35: a change from the table (a player's edit, a time rule) that left a look without its text
     if (typeof openSyncOne === 'function') openSyncOne(id);   // 1.5.8: a change from the table (a Form a player switched on) that opens or closes rows
+    if (typeof postureFollow === 'function' && typeof id === 'string') { var campP = getActiveCampaign(), cP = charById(id, campP), mpP = cP ? postureFollow(cP, campP) : []; if (mpP.length) { var nP = net(), wasP = nP ? nP.applyingRemote : false; if (nP) nP.applyingRemote = true; try { save(true); } finally { if (nP) nP.applyingRemote = wasP; } if (nP && nP.active && nP.role === 'host' && nP.broadcastItemFiltered) mpP.forEach(function(mid) { nP.broadcastItemFiltered(campP.id, mid); }); } }   // 1.5.9: a change from the table (a player's edit, a time rule) that brought on an effect that sets a posture; never a step of the GM's undo
     var lost = {};   // HUD frame (HF2a): one notice per character, however many of its views close
     if (sheetOpen && isClient() && (id === null || sheetOpen === id)) { var gone = charById(sheetOpen); if (gone && (gone.partial || gone.ownerId !== myId())) { var nmG = gone.name; lost[gone.id] = 1; closeSheet(); toast(nmG + ' is no longer your character.'); var nG = net(); if (nG && nG.dropPending) nG.dropPending(gone.id); } }
     if (isClient()) Object.keys(huds).forEach(function(hid) { if (id !== null && id !== undefined && hid !== id) return; var gh = charById(hid); if (gh && !gh.partial && gh.ownerId === myId()) return; closeHud(hid); if (!lost[hid]) { lost[hid] = 1; toast((gh ? gh.name : 'That character') + ' is no longer your character.'); var nH = net(); if (nH && nH.dropPending) nH.dropPending(hid); } });
@@ -5871,6 +5901,7 @@ function effectRow(d) {
     var flags = el('div', 'sys-flags');
     flags.appendChild(input('sys-fx-notes field', d.notes, 'Notes shown as the effect\u2019s tooltip on the sheet', 'Notes'));
     flags.appendChild(select('sys-fx-vis', [['all', 'Visible to players'], ['gm', 'GM only']], d.vis || 'all', 'GM only: off the players\u2019 list until you apply it to their character'));
+    var psL = typeof postureList === 'function' ? postureList(draft) : []; if (psL.length) { flags.appendChild(select('sys-fx-posture', [['', 'Sets no posture']].concat(psL.map(function(p) { return [p.id, 'Sets ' + p.name]; })), typeof d.posture === 'string' ? d.posture : '', 'The posture each token of the character takes the moment the effect comes on, as Down lays a token prone. It stays after the effect ends unless Back when it ends is ticked')); if (d.posture) { var pbL = el('label', 'sys-hover'), pbC = el('input'); pbC.type = 'checkbox'; pbC.className = 'sys-fx-postureback'; pbC.checked = d.postureBack === true; pbL.appendChild(pbC); pbL.appendChild(document.createTextNode(' Back when it ends')); pbL.title = 'When the effect ends, a token still in that posture goes back to the posture it had before'; flags.appendChild(pbL); } }   // 1.5.9 (the owner's O6)
     flags.appendChild(btnRow([['up', 'Move up', '&#9650;'], ['down', 'Move down', '&#9660;'], ['dup', 'Duplicate', '&#10697;'], ['del', 'Delete this effect', '&times;']]));
     row.appendChild(top); row.appendChild(mods); row.appendChild(flags);
     var auR = el('div', 'sys-flags sys-fx-autorow'), auI = input('sys-fx-auto field', typeof d.auto === 'string' ? d.auto : '', 'A formula: while it is true, or a number other than 0, the effect is on by itself for every character, as HP <= 0 turns on Unconscious. It reads the character\u2019s own values with the effects applied by hand (never another automatic effect, and a token\u2019s names read 0). Only a visible effect reading only what players can read applies itself', 'Applies itself when\u2026 (e.g. HP <= 0)'); auI.maxLength = LIMITS.formula; auR.appendChild(auI); row.appendChild(auR);   // conditions C4
@@ -7794,6 +7825,8 @@ function onChange(e) {
     if (fxc) {
         if (c.indexOf('sys-fx-tone') >= 0) { fxc.tone = t.value; markDirty(); patchErrors(); return; }
         if (c.indexOf('sys-fx-vis') >= 0) { fxc.vis = t.value; markDirty(); patchErrors(); return; }
+        if (c.indexOf('sys-fx-postureback') >= 0) { if (t.checked) fxc.postureBack = true; else delete fxc.postureBack; markDirty(); patchErrors(); return; }   // 1.5.9
+        if (c.indexOf('sys-fx-posture') >= 0) { if (t.value) fxc.posture = t.value; else { delete fxc.posture; delete fxc.postureBack; } markDirty(); renderAll(); return; }   // 1.5.9 (the owner's O6): the posture it sets
         if (c.indexOf('sys-fx-target') >= 0) {
             var tln = t.closest('.sys-fx-mod'), tm = tln ? (fxc.mods || [])[+tln.dataset.mi] : null;
             if (tm) { var tp = t.value.split('|'); tm.f = tp[0]; if (tp[1] === 'on') { tm.op = 'on'; delete tm.v; delete tm.part; } else { tm.op = 'add'; if (typeof tm.v !== 'number') tm.v = 1; if (tp[1] === 'max') tm.part = 'max'; else delete tm.part; } rowAimSet(tm, draft, t.value); markDirty(); renderAll(); }

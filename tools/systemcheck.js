@@ -11049,7 +11049,7 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             && J(rc) === J([[null, 5], [{ f_name: BOLD, f_bio: LINKED }, 5], [{ f_name: BOLD }, 99], [null, 99], [{ f_name: BOLD, f_bio: LINKED }, 99]])
             && J(pruned) === J({ byChar: [KEEP1, ONE, false, KEEP1, ONE, 0, 0], byId: [KEEP1, ONE, false, KEEP1, ONE, 0, 0], all: [KEEP1, 'null', false, KEEP1, 'null', 0, 0], allNull: [KEEP1, 'null', false, KEEP1, 'null', 0, 0], stands: [BOTH, ONE, false, BOTH, ONE, 0, 0],
                 client: [RAWL, ONE, false, RAWL, ONE, 0, 0], noCamp: [RAWL, ONE, false, RAWL, ONE, 0, 0], noSuch: [RAWL, ONE, false, BOTH, ONE, 0, 0], proto: [RAWL, ONE, false, BOTH, ONE, 0, 0] })
-            && /function afterCharChange\(c, whole, values\) \{\n[^\n]*\n    c\.updated = Date\.now\(\);\n[^\n]*sensesForget\(\);[^\n]*\n    if \(typeof lookPrune === 'function'\) lookPrune\(c\);[^\n]*\n    syncOwners\(camp\);\n    save\(true\);/.test(shL) && /function charChanged\(id\) \{\n[^\n]*sensesForget\(\);[^\n]*\n    if \(typeof lookPrune === 'function'\) lookPrune\(id\);/.test(shL) && shL.split('lookPrune(').length === 4
+            && /function afterCharChange\(c, whole, values\) \{\n[^\n]*\n    c\.updated = Date\.now\(\);\n[^\n]*sensesForget\(\);[^\n]*\n    if \(typeof lookPrune === 'function'\) lookPrune\(c\);[^\n]*\n(    var posA = typeof postureFollow === 'function' \? postureFollow\(c, camp\) : \[\];[^\n]*\n)?    syncOwners\(camp\);\n    save\(true\);/.test(shL) && /function charChanged\(id\) \{\n[^\n]*sensesForget\(\);[^\n]*\n    if \(typeof lookPrune === 'function'\) lookPrune\(id\);/.test(shL) && shL.split('lookPrune(').length === 4
             && shL.includes('editResult: editResult, styleResult: styleResult, commitLook: commitLook, sheetOpen:') && shL.split('commitLook(').length === 4,
             J([st1, st4, st2, quiet, client, says, rc, pruned]));
         // the look of a text as it stands, and a look for a text from a box's format (lookOf, lookFor)
@@ -14742,6 +14742,37 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             && rS.ok === true && J(rS.values) === J({ f_hp: { cur: 14 } }) && !('onValues' in rS) && !('onLines' in rS);
         check('1.5.9 Applies to an adjacent character in the core: the cleaner keeps to near only as that very word on a system roll, an apply action and a list\'s action, never on the initiative roll, alike in both views and cleaned twice alike; OnSelf reads 1 on oneself and 0 on another and a field keyed OnSelf keeps its own; applyAct with on lands the field\'s change on a copy of that character (Bo\'s HP 5 + 4), keeps a row\'s counter on the user (Uses 3 - 1) with OnSelf 0 in its amount (2 + 0), answers onValues and onLines, leaves the character it was handed untouched, and without on answers as before',
             clOk && osOk && onOk, J([clOk, osOk, onOk, rolOf(gm, 'r_odd'), rA, rW, rS]));
+    }
+    // 1.5.9 (docs/BOOK_ES_ET_PLAN.md; the owner's O6: "An effect can set posture"; the book (eu): Down's prone lasts after healing): an effect's
+    // posture in the core, and sheets.js postureFollow sliced by its fxposture markers and run for real with the real core
+    {
+        const J = JSON.stringify, NLp = '\n';
+        const base = { v: 1, name: 'P', fields: [{ id: 'f_hp', key: 'HP', label: 'HP', kind: 'resource', maxFormula: '10', def: 'max', min: -30 }, { id: 'f_fx', key: 'FX', label: 'Effects', kind: 'effects' }],
+            effects: [{ id: 'e_down', name: 'Down', auto: 'HP <= 0', posture: 'lying-prone' }, { id: 'e_sit', name: 'Rest', posture: 'sitting', postureBack: true }, { id: 'e_odd', name: 'Odd', posture: 'flying', postureBack: true }, { id: 'e_nb', name: 'NB', postureBack: true }] };
+        const gm = S.cleanSystem(base, { F, gmView: true }), pl = S.cleanSystem(base, { F, gmView: false }), eOf = (s, id) => s.effects.filter(e => e.id === id)[0] || {};
+        const clOk = eOf(gm, 'e_down').posture === 'lying-prone' && !('postureBack' in eOf(gm, 'e_down')) && eOf(gm, 'e_sit').posture === 'sitting' && eOf(gm, 'e_sit').postureBack === true
+            && !('posture' in eOf(gm, 'e_odd')) && !('postureBack' in eOf(gm, 'e_odd')) && !('postureBack' in eOf(gm, 'e_nb')) && J(gm.effects) === J(pl.effects) && J(S.cleanSystem(gm, { F, gmView: true })) === J(gm);
+        const pfx = c => J(S.postureFx(gm, c, F));
+        const fxOk = pfx({ id: 'c', values: { f_hp: { cur: 5 } } }) === '{}' && pfx({ id: 'c', values: { f_hp: { cur: 0 } } }) === J({ e_down: { p: 'lying-prone', back: false } })
+            && pfx({ id: 'c', values: { f_hp: { cur: 5 }, f_fx: [{ id: 'x1', ref: 'e_sit' }] } }) === J({ e_sit: { p: 'sitting', back: true } }) && pfx({ id: 'c', values: { f_hp: { cur: 5 }, f_fx: [{ id: 'x1', ref: 'e_sit', on: false }] } }) === '{}'
+            && J(S.postureFx({ v: 1, fields: [], effects: [] }, { id: 'c', values: {} }, F)) === '{}';
+        const shP = fs.readFileSync(path.join(app, 'scripts', 'sheets.js'), 'utf8').replace(/\r\n/g, NLp), pa = shP.indexOf('// [systemcheck:fxposture-start]'), pz = shP.indexOf('// [systemcheck:fxposture-end]');
+        const mk = o => { o = o || {};
+            const tA = { id: 't1', isChar: true, charId: 'c_a', ownerId: 'u_a' }, tB = { id: 't2', isChar: true, charId: 'c_a' }, tW = { id: 't3', isChar: true, charId: 'c_a', waiting: 1 }, tO = { id: 't4', isChar: true, charId: 'c_b' };
+            const c = { id: 'c_a', name: 'Ana', values: { f_hp: { cur: 5 } } }, camp = { id: 'k', system: gm, chars: { c_a: c }, items: { m1: { id: 'm1', type: 'map', whiteboard: [tA, tW, tO] }, m2: { id: 'm2', type: 'map', whiteboard: [tB] }, p1: { id: 'p1', type: 'page' } } };
+            const run = new Function('isClient', 'canWrite', 'F', 'postureFx', 'window', shP.slice(pa, pz) + NLp + 'return postureFollow;')(() => !!o.client, () => o.write !== false, () => F, S.postureFx, { wpVtt: { on: k => k !== 'posture' || o.posture !== false }, wpSystemCore: S });
+            return { tA, tB, tW, tO, c, camp, go: () => run(c, camp) };
+        };
+        const w = mk(), steps = [];
+        steps.push(J(w.go()));   // the first look only notes
+        w.c.values.f_hp = { cur: 0 }; steps.push(J(w.go()), w.tA.posture, w.tB.posture, J(w.tW), J(w.tO));   // Down comes on: every token of hers lies prone
+        w.c.values.f_hp = { cur: 3 }; steps.push(J(w.go()), w.tA.posture);   // healed: Down ends, its prone stays
+        w.c.values.f_fx = [{ id: 'x1', ref: 'e_sit' }]; steps.push(J(w.go()), w.tA.posture, w.tB.posture);   // Rest comes on: sitting
+        w.tB.posture = 'kneeling'; w.c.values.f_fx = [{ id: 'x1', ref: 'e_sit', on: false }]; steps.push(J(w.go()), w.tA.posture, w.tB.posture);   // Rest ends: back where still sitting, the hand's kneeling stays
+        const want = ['[]', J(['m1', 'm2']), 'lying-prone', 'lying-prone', J({ id: 't3', isChar: true, charId: 'c_a', waiting: 1 }), J({ id: 't4', isChar: true, charId: 'c_b' }), '[]', 'lying-prone', J(['m1', 'm2']), 'sitting', 'sitting', J(['m1']), 'lying-prone', 'kneeling'];
+        const offs = [mk({ client: true }), mk({ write: false }), mk({ posture: false })].map(x => { x.go(); x.c.values.f_hp = { cur: 0 }; return [J(x.go()), x.tA.posture === undefined]; });
+        check('1.5.9 an effect can set its token\'s posture (the owner\'s O6; cleanSystem, postureFx, and sheets.js postureFollow run for real): the cleaner keeps a posture of the list by its id and Back when it ends only beside one, alike in both views; postureFx names the effects on that set one, by hand or by themselves; the first look at a character only notes, so a load moves nobody; Down coming on lays every token of the character prone on every map, never a waiting token or another character\'s; healed, its prone stays as the book says; an effect ticked Back when it ends puts back the posture its token had, only where it still stands as the effect set it; a player\'s app, a campaign this machine may not write and Token posture off move nothing',
+            clOk && fxOk && J(steps) === J(want) && offs.every(x => x[0] === '[]' && x[1]), J([clOk, fxOk, steps, offs]));
     }
     summed = true;
     console.log(NL + pass + ' passed, ' + fail + ' failed.');

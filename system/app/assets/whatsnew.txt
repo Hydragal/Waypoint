@@ -28,6 +28,8 @@ Character sheets
 - A change a roll or an action makes can be Rolled. Its amount may then
   roll dice, such as 1d6 for a heal, and the host rolls it each time. The
   card in chat shows the dice it drew.
+- An effect can set a posture, so Down lays a token prone the moment it
+  comes on. Tick Back when it ends to stand the token up again after.
 - A roll can be due at its character's turn, or each round, in a
   fight. A reminder then lands in chat with a Roll button, for its
   player or for you.
