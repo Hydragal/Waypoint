@@ -982,6 +982,14 @@
   #noMapState .nm-title { font-size: 15px; font-weight: 600; color: var(--text); }
   #noMapState .nm-line { font-size: 12px; color: var(--dim); max-width: 360px; line-height: 1.5; }
   #noMapState #noMapNewBtn { margin-top: 6px; }
+  /* 1.6.0: the Restore points window's list (campsafe.js), inside the app's question */
+  .cs-list { display: flex; flex-direction: column; gap: 4px; max-height: 50vh; overflow-y: auto; margin: 0 0 12px; }
+  .cs-lead, .cs-none { font-size: 11px; color: var(--dim); line-height: 1.5; margin-bottom: 4px; }
+  .cs-row { display: flex; align-items: center; gap: 8px; font-size: 11.5px; padding: 3px 0; border-top: 1px solid var(--edge); }
+  .cs-row .cs-when { flex: 1 1 auto; min-width: 0; }
+  .cs-row .cs-kind { color: var(--dim); white-space: nowrap; }
+  .cs-row.mine .cs-kind { color: var(--gold); }
+  .cs-row .cs-back { flex: none; padding: 2px 8px; }
   #canvasWrap { flex: 1; position: relative; overflow: hidden; background: var(--bg2); user-select: none; touch-action: none; }
   #canvas { position: relative; width: 30000px; height: 30000px; background-image: url("data:image/svg+xml,%3Csvg width='20' height='20' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='2' cy='2' r='1' fill='%233a3a4a'/%3E%3C/svg%3E"); transform-origin: top left; transform: scale(1); flex-shrink: 0; }
   

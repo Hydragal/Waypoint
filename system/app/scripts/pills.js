@@ -17,14 +17,15 @@ import { getActiveMap } from './models.js';
 import { state } from './state.js';
 
 // [lookcheck:pills-start]
-var PILLS = ['tablePill', 'pausedPill', 'roundPill', 'viewPill'];   // every pill made here, by its id, in the order the row has them
+var PILLS = ['tablePill', 'pausedPill', 'roundPill', 'viewPill', 'trialPill'];   // every pill made here, by its id, in the order the row has them
 var PILL_NAME = 24;   // a name on a pill is cut to this many characters
 function pillCut(s) { var a = Array.from(typeof s === 'string' ? s.trim() : ''); return a.length > PILL_NAME ? a.slice(0, PILL_NAME - 1).join('') + '\u2026' : a.join(''); }
 function pillCount(v) { return typeof v === 'number' && isFinite(v) && v > 0 ? Math.min(Math.floor(v), 9999) : 0; }
 // What each pill says, for the state the row is in. st: { gm, play, fog: 'on' | 'off' | none, hosting, players, paused, round, turn, preview,
 // previewName }. A pill that has nothing to say is null. Nothing shows on a screen that is not the GM's
 function pillsModel(st) {
-    var out = { tablePill: null, pausedPill: null, roundPill: null, viewPill: null }; if (!st || st.gm !== true) return out;
+    var out = { tablePill: null, pausedPill: null, roundPill: null, viewPill: null, trialPill: null }; if (!st || st.gm !== true) return out;
+    if (st.trial === true) out.trialPill = { text: 'Trial run', tip: 'A trial run is on for this campaign. Press to end it: keep the changes or put the campaign back as it was.' };   // 1.6.0 (campsafe.js)
     var play = st.play === true, hosting = st.hosting === true;
     if (hosting) { var n = pillCount(st.players); out.tablePill = { text: 'Table \u00b7 ' + n, tip: 'You are hosting. ' + (n === 1 ? '1 player is' : (n ? n : 'No') + ' players are') + ' connected. Opens Multiplayer.' }; }
     if (hosting && st.paused === true) out.pausedPill = { text: 'Paused', tip: 'The table is paused. Press to resume it.' };
@@ -56,6 +57,7 @@ function pillsState(w, am, view, fogBtn) {
     var ros = st.hosting && net.roster ? net.roster : {};
     st.players = Object.keys(ros).filter(function(k) { return !!ros[k] && typeof ros[k].id === 'string'; }).length;
     st.paused = st.hosting && net.paused === true;
+    st.trial = !!(w.wpCampSafe && typeof w.wpCampSafe.trialOn === 'function' && w.wpCampSafe.trialOn() === true);   // 1.6.0: a trial run of the campaign on screen
     var c = !st.hosting || !isMap ? null : typeof w.wpStripFight === 'function' ? w.wpStripFight(am.id) : (typeof net.combatFor === 'function' ? net.combatFor(am.id) : null);   // fold 2 (backlog 152): the fight the strip shows on this map
     if (c && Array.isArray(c.rows)) { var cur = c.rows[c.turn]; st.round = c.round; st.turn = cur && typeof cur.name === 'string' ? cur.name : ''; }
     st.preview = fog && typeof fog.preview === 'function' ? fog.preview() : 'off';
@@ -68,6 +70,7 @@ function pillPress(id, doc, w, am) {
     if (id === 'tablePill') return press('netBtn');
     if (id === 'pausedPill') return w.wpNet && w.wpNet.paused === true ? press('sessionPauseBtn') : '';   // never a press that would pause a table that runs
     if (id === 'roundPill') { if (!am || typeof w.wpOpenCombat !== 'function') return ''; w.wpOpenCombat(am.id, {}); return 'combat'; }
+    if (id === 'trialPill') { if (!w.wpCampSafe || typeof w.wpCampSafe.endTrial !== 'function') return ''; w.wpCampSafe.endTrial(); return 'trial'; }
     if (id === 'viewPill') { if (!w.wpFog || typeof w.wpFog.setPreview !== 'function') return ''; w.wpFog.setPreview('off'); var sel = doc.getElementById('fogPreview'); if (sel) sel.value = 'off'; return 'preview'; }
     return '';
 }

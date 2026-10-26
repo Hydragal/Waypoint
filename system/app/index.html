@@ -69,6 +69,8 @@
 <script type="module" src="scripts/trade.js"></script>
 <script type="module" src="scripts/blastcore.js"></script>
 <script type="module" src="scripts/tutorial.js"></script>
+<script type="module" src="scripts/campsafecore.js"></script>
+<script type="module" src="scripts/campsafe.js"></script>
 <script type="module" src="scripts/devconsole.js"></script>
 <script src="scripts/tooltips.js"></script>
 <script src="assets/vendor/peerjs.min.js"></script>
@@ -96,6 +98,10 @@
           <button class="rm-row" id="renameCampBtn" title="Rename Campaign"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 4l5 5L9 19.5 3.5 21 5 15.5 14.5 4zM12.5 6l5 5"/></svg><span>Rename</span></button>
           <button class="rm-row" id="systemBtn" title="System &mdash; this campaign&rsquo;s attributes, formulas and rolls (character sheets)"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h14v18H5zM9 8h6M9 12h6M9 16h4"/></svg><span>System</span><small>Sheets and rolls</small></button>
           <div class="rm-rule"></div>
+          <button class="rm-row" id="pointsCampBtn" title="Restore points: make one, or roll this campaign back to one"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17zM12 7.5V12l-3 2.2"/></svg><span>Restore points&hellip;</span></button>
+          <button class="rm-row" id="trialCampBtn" title="Try something out. End it to keep the changes or put the campaign back"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3M17.6 2.8v4.2h-4.2"/></svg><span>Trial run&hellip;</span></button>
+          <button class="rm-row" id="testCopyCampBtn" title="Copy this campaign as a test copy and open it"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 3.5h11v14h-11zM5 7v13.5h11M11.5 8h5M11.5 11.5h5"/></svg><span>Make a test copy</span></button>
+          <div class="rm-rule"></div>
           <button class="rm-row danger" id="delCampBtn" title="Delete Campaign"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 4h4M6.5 7l1 13h9l1-13M9.8 10.5v6M12 10.5v6M14.2 10.5v6"/></svg><span>Delete campaign</span></button>
         </div>
         <select id="campaignSelect" class="map-select" aria-label="Select Campaign" hidden></select>
@@ -121,6 +127,7 @@
       <button class="pill hot" id="pausedPill" hidden title="The table is paused. Press to resume it."><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></svg><span class="pill-txt">Paused</span></button>
       <button class="pill on" id="roundPill" hidden title="A fight is on this map. Opens the turn order."><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v14H5zM9 9h.01M15 9h.01M12 12h.01M9 15h.01M15 15h.01"/></svg><span class="pill-txt"></span></button>
       <button class="pill on" id="viewPill" hidden title="The fog is drawn as a player sees it. Press to end the preview."><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12c2.5-4.5 6-7 10-7s7.5 2.5 10 7c-2.5 4.5-6 7-10 7s-7.5-2.5-10-7zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg><span class="pill-txt"></span></button>
+      <button class="pill hot" id="trialPill" hidden title="A trial run is on. Press to end it."><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3M17.6 2.8v4.2h-4.2"/></svg><span class="pill-txt"></span></button>
     </div>
     <div class="header-group">
       <span id="visualTools" style="display:none;"><input type="file" id="imgFileIn" accept="image/*" hidden></span>
@@ -311,6 +318,7 @@
                                   <li><b>Paused</b> is filled while the table is paused. Press it to resume.</li>
                                   <li><b>Round</b> and a name say the fight on this map and whose turn it is. It opens the turn order.</li>
                                   <li><b>Viewing as</b> shows while the fog is drawn as a player sees it. Press it to end the preview.</li>
+                                  <li><b>Trial run</b> is filled while a trial run of this campaign is on. Press it to end the trial.</li>
                                   <li>The pills are the GM&rsquo;s. The clock, Review and Update stand beside them as before.</li>
                               </ul>
                           </li>
@@ -406,6 +414,16 @@
                       <ul>
                           <li>Everything autosaves to <b>saves/data.json</b> a moment after each change. There is no save button to forget.</li>
                           <li>To back up or move your campaign, copy the <b>saves</b> folder. That's the whole thing.</li>
+                          <li><b>Restore points:</b> try something out without keeping it. The campaign menu has three ways.
+                              <ul>
+                                  <li><b>Restore points</b> lists the snapshots of your save. <b>Roll back</b> puts this campaign as it was then. Other campaigns stay as they are.</li>
+                                  <li>A roll back first makes a restore point of the campaign as it is now. So it can be undone the same way.</li>
+                                  <li><b>Trial run</b> makes a restore point and starts. End it from its pill to keep the changes or to put the campaign back.</li>
+                                  <li><b>Make a test copy</b> copies the campaign with <code>(test)</code> after its name, and opens it. Its library packs are copied too.</li>
+                                  <li>A test copy shares the pictures and sounds of the original and starts with an empty Journal.</li>
+                                  <li>A roll back waits until you end your table. Each step is written to <b>saves/error.log</b>.</li>
+                              </ul>
+                          </li>
                           <li><b>Export As</b> makes shareable files at any scope: the open map or planner, all the maps, play maps or planners of the campaign, or everything. <b>Save Map as Picture</b> draws the open map as one picture file. An export that uses images arrives as a <b>.zip</b> with the pictures bundled in. A campaign export, and Everything, also carry the campaign&rsquo;s sounds and its <b>videos</b>, whole. An export has no size limit: files are read from disk and written in parts. A zip past 4 GB is written as ZIP64, which any current unzip tool opens. When the videos and music together pass 1 GB, the export asks where to save it and writes straight to that file. It then reads the file back and checks every file in it before it calls the export done.</li>
                           <li><b>Import</b> accepts those zips and plain .json files. It merges by id or replaces. It reads the file in pieces and checks every bundled file against its checksum before copying it. A damaged file is counted as failed and never written.</li>
                       </ul>
