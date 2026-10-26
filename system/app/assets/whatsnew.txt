@@ -80,9 +80,9 @@ Explosives
   roll, and a failure puts the effect on, for its Lasts or its own time.
 - An affliction reaches those the blast hurt, or everyone in the blast.
   Its Only where can leave some out. The Combat card says whether a wound
-  after DR or any share counts as hurt. An item with no damage roll still
-  puts its afflictions on everyone in the blast, and Undo last throw takes
-  the effects off again.
+  after DR or any share counts as hurt. An item with no damage roll hurts
+  no one, so only an affliction that reaches everyone in the blast goes
+  on. Undo last throw takes the effects off again.
 
 Voice chat
 - Talk with everyone at the table. Press the microphone in the top row,

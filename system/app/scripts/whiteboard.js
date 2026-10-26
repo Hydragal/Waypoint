@@ -4382,7 +4382,8 @@ window.wpFitToGrid = fitToGrid;
               if (!rs) { owed.push(String(ch.name || 'A character').slice(0, 60)); return; }
               var rr = window.wpDice.rollFor(cid, rs.replace(/\bResist\b/gi, function() { return '(' + a.vs + ')'; }), nm ? nm + ' resist' : 'Resist', { gmOnly: b.gm === true, priv: ch.npc === true || !ch.ownerId });
               var ck = rr && rr.ok && window.wpNet ? window.wpNet.rollCheck : null; if (!ck || typeof ck.pass !== 'boolean') { odd++; return; }   // a resist roll that is no check puts nothing on
-              var vsW = typeof ck.total === 'number' && isFinite(ck.total) && typeof ck.target === 'number' && isFinite(ck.target) ? ', ' + ck.total + ' against ' + ck.target : '', head = (nm || 'Affliction') + ':';
+              var bare = (rr.priv === true || b.gm === true) && ch.npc !== true && !!ch.ownerId;   // the review of fold 4: a resist roll kept the GM's (a GM-only item, a GM-only value it read) keeps its figures off its player's card
+              var vsW = !bare && typeof ck.total === 'number' && isFinite(ck.total) && typeof ck.target === 'number' && isFinite(ck.target) ? ', ' + ck.total + ' against ' + ck.target : '', head = (nm || 'Affliction') + ':';
               if (ck.pass) { out.resisted++; if (window.wpNet && typeof window.wpNet.damageCard === 'function') window.wpNet.damageCard(ch, [head, 'Resisted' + vsW + '.']); return; }
               var secs = 0, lw = '';
               if (a.lasts && typeof a.lasts.n === 'string' && typeof S.affLastsSecs === 'function') { var lr = F.evaluate(a.lasts.n, { vars: vars }), ln = lr && lr.ok && typeof lr.value === 'number' && isFinite(lr.value) ? lr.value : 0; if (ln > 0) { secs = S.affLastsSecs(sys, ln, a.lasts.u); if (secs > 0) lw = lastsWords(sys, ln, a.lasts.u); } }   // rolled as the victim
