@@ -605,6 +605,7 @@ function cleanRollDef(r, gmView) {
     var rmf = cleanFormulaText(r.malf); if (rmf) out.malf = rmf;   // Stage 6 HUD R3: its malfunction threshold (a natural total at or past it)
     rollNeedsInto(out, r);   // 1.5.4: what it needs before it may be rolled
     var rCost = costKey(r.cost); if (rCost) out.cost = rCost;   // turn-based combat T1: the action it costs
+    var rEa = r.each === 'round' || r.each === 'turn' ? r.each : ''; if (rEa && out.init !== true && (r.by === 'gm' || r.by === 'owner')) { out.each = rEa; out.by = r.by; }   // 1.5.9 (book es/et plan 4b; the owner: "Reminder card"): a roll is also due each round or at its turn's start, as a reminder card with its roll button for the GM or its player; a roll never runs by itself, and the initiative roll never carries it
     var rEv = cleanEvery(r.every, out.needs); if (rEv) out.every = rEv;   // item 20 K5: it also runs by the campaign's clock (1.5.5: Only while its needs hold, beside its needs)
     fightRuleInto(out, r, gmView);   // backlog 152: and in a fight, and whether its runs wait for the GM's word
     if (r.to === 'near' && out.init !== true) out.to = 'near';   // 1.5.9 (book es/et plan, section 3): Applies to the user or an adjacent character; the initiative roll is always its own character's
@@ -2772,7 +2773,7 @@ function applyAct(sys, char, act, vars, F, tctx, rowCtx, same, D, on) {   // row
 // resets its tallies): the apply actions ticked Each round, which the host runs by itself on every character in a combat each time its round
 // changes (the combat's start, Next turn past the last, a step back past the first); pressed, one is his "Sweep now"
 function roundActs(sys, kind) { var k = kind === 'turn' ? 'turn' : 'round'; return (sys && Array.isArray(sys.rolls) ? sys.rolls : []).filter(function(r) { return isObj(r) && r.each === k && !r.by && Array.isArray(r.apply) && r.apply.length > 0; }); }   // T2b: kind — each round (the default) or at its turn's start; those that run automatically
-function dueActs(sys, kind) { var k = kind === 'turn' ? 'turn' : 'round'; return (sys && Array.isArray(sys.rolls) ? sys.rolls : []).filter(function(r) { return isObj(r) && r.each === k && (r.by === 'gm' || r.by === 'owner') && Array.isArray(r.apply) && r.apply.length > 0; }); }   // T2b: those that wait for a press
+function dueActs(sys, kind) { var k = kind === 'turn' ? 'turn' : 'round'; return (sys && Array.isArray(sys.rolls) ? sys.rolls : []).filter(function(r) { return isObj(r) && r.each === k && (r.by === 'gm' || r.by === 'owner') && ((Array.isArray(r.apply) && r.apply.length > 0) || (!Array.isArray(r.apply) && typeof r.formula === 'string' && r.formula !== '')); }); }   // T2b: those that wait for a press; 1.5.9: a roll due too (its reminder rolls it)
 // the characters a combat holds: each row's token on the combat's map (a hidden one too: it is fighting), a character once (its first token)
 // — [{ charId, tok }]
 function combatChars(mp, combat, chars) {

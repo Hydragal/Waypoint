@@ -238,9 +238,10 @@ function cleanDue(rec) {
     var lb = cleanLabel(rec.label); if (lb === null) return null; if (lb) out.label = lb;
     var as = cleanLabel(rec.as); if (as === null) return null; if (as) out.as = as;
     if (rec.theirs !== undefined) { if (rec.theirs !== 1) return null; out.theirs = 1; }
+    if (rec.roll !== undefined) { if (rec.roll !== 1) return null; out.roll = 1; }   // 1.5.9 (book es/et plan 4b): a roll that is due, whose button rolls it
     return out;
 }
-function dueText(rec) { return !rec ? '' : (rec.label || 'An action') + (rec.as ? ' for ' + rec.as : '') + ' is due (' + (rec.why === 'turn' ? 'the start of its turn' : 'round ' + rec.round) + ')'; }
+function dueText(rec) { return !rec ? '' : (rec.label || (rec.roll === 1 ? 'A roll' : 'An action')) + (rec.as ? ' for ' + rec.as : '') + ' is due (' + (rec.why === 'turn' ? 'the start of its turn' : 'round ' + rec.round) + ')'; }
 // Stage 6 HUD H7: an apply card as one line (a toast, the session log): who, as whom, the action, each change as "FP \u22123 \u2192 0"
 function applyText(rec) {
     if (!rec || !rec.from || !Array.isArray(rec.lines)) return '';

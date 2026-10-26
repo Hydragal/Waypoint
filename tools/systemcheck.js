@@ -3631,7 +3631,7 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             NF(nfSys([{ label: 'Hit ({Arc.front})' }])) === true && NF(nfSys([{ label: 'Hit ({' + PM8 + 'Posture})' }])) === true && NF(nfSys([{ label: 'Hit ({A})' }])) === false && NF(nfSys([{ label: 'Hit' }])) === false && NF(nfSys([])) === false && NF({ fields: [{ key: 'A', formula: 'A' }] }) === false
             && NF(nfSys([{ label: '{Facing}' }], [{ key: 'Facing', kind: 'number' }])) === false && NF({ fields: [{ key: 'X', formula: 'Facing + 1' }], rolls: [] }) === true);
         check('HUD frame HF5a (source): both roll buttons (the band and a section) are drawn with the system and the render\'s resolver, and nothing else builds one; the initiative roll resolves its label and its privacy the same way; the privacy check is the host\'s alone; the label input says so; Help describes it',
-            /rollNode\(rollById\[q\.roll\], c, sys, all\.vars\)/.test(sh8) && /rollNode\(rollById\[pl\.roll\], c, sys, all\.vars\)/.test(sh8) && (sh8.match(/rollNode\(/g) || []).length === 3
+            /rollNode\(rollById\[q\.roll\], c, sys, all\.vars\)/.test(sh8) && /rollNode\(rollById\[pl\.roll\], c, sys, all\.vars\)/.test(sh8) && (sh8.match(/rollNode\(/g) || []).length === 4 && /var nodeR = rollNode\(rl, c, sys, null\)/.test(sh8)
             && /lbI = allI \? rollLabel\(r, sys, c, allI\.vars\) : r\.label, whyI = allI \? labelSecret\(sys, allI\.vars, r\.label\) : ''/.test(sh8) && /rollFor\(charId, r\.formula, lbI \|\| 'Initiative', \{ source: 'combat', priv: !!whyI \|\| !!\(opts && opts\.priv === true\), gmOnly: r\.vis === 'gm' \}\)/.test(sh8)
             && /if \(isClient\(\) \|\| !\(n && n\.active && n\.role === 'host'\)/.test(sh8) && /import \{[^}]*labelGmNames, gmEffectNames, labelNames[^}]*\} from '\.\/systemcore\.js';/.test(sh8) && sh8.indexOf('{formula} shows a value: Attack ({' + BS8 + 'u00b1AtkBonus})') > 0
             && /<b>Values in labels<\/b>: a roll&rsquo;s label can carry <code>\{formula\}<\/code> values like a caption/.test(fs.readFileSync(path.join(app, 'index.html'), 'utf8')));
@@ -5111,6 +5111,37 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         const tF2 = [hookF2(true, 'turn'), hookF2(false, 'turn'), hookF2(true, 'round'), hookF2(false, 'round')];
         check('1.5.5 (the release trace, F2) the round and turn hooks judge a player\'s character by what its player sees (timedHook, run for real with net.js\'s own aimsOf): an NPC that targets Ana through Target as while it is hidden from her is no threat to an Also at its turn\'s start action that reads Threats, to a reminder whose needs read it, or to an Also each round action; shown, it is a threat to all three',
             j(tF2) === j([[1, [], 1], [1, ['c_a:r_warn:turn:2'], 2], [1, [], 10], [1, [], 11]]), j(tF2));
+        // 1.5.9 (docs/BOOK_ES_ET_PLAN.md 4b; the owner: "Reminder card"): a roll may be due each round or at its turn's start, a reminder card with its
+        // roll button for its player or the GM, never rolled by itself and never on the initiative roll; timedHook and runDue run for real
+        const sysF6 = { v: 1, name: 'T', fields: [{ id: 'f_dn', key: 'Down', kind: 'toggle' }], rolls: [
+            { id: 'r_ht', label: 'Stay awake', formula: '3d6 <= 10', each: 'turn', by: 'owner', needs: 'Down' }, { id: 'r_auto', label: 'Auto', formula: '1d6', each: 'turn' },
+            { id: 'r_ini', label: 'Init', formula: '1d6', init: true, each: 'turn', by: 'gm' }, { id: 'r_rd', label: 'Each round', formula: '1d6', each: 'round', by: 'gm' }, { id: 'r_odd', label: 'Odd', formula: '1d6', each: 'now', by: 'gm' }] };
+        const gF6 = cleanSystem(sysF6, { F, gmView: true }), pF6 = cleanSystem(sysF6, { F, gmView: false }), rF6 = (s, id) => s.rolls.filter(r => r.id === id)[0] || {};
+        const clF6 = rF6(gF6, 'r_ht').each === 'turn' && rF6(gF6, 'r_ht').by === 'owner' && rF6(gF6, 'r_rd').each === 'round' && rF6(gF6, 'r_rd').by === 'gm'
+            && !('each' in rF6(gF6, 'r_auto')) && !('by' in rF6(gF6, 'r_auto')) && !('each' in rF6(gF6, 'r_ini')) && !('each' in rF6(gF6, 'r_odd'))
+            && j(gF6.rolls.map(r => [r.each, r.by])) === j(pF6.rolls.map(r => [r.each, r.by])) && j(cleanSystem(gF6, { F, gmView: true })) === j(gF6)
+            && j(S.dueActs(gF6, 'turn').map(r => r.id)) === j(['r_ht']) && j(S.dueActs(gF6, 'round').map(r => r.id)) === j(['r_rd']) && S.roundActs(gF6, 'turn').length === 0;
+        const hookF6 = (down) => {
+            const posted = [], tok = { id: 't1', isChar: true, charId: 'c_a', ownerId: 'u_a', x: 0, y: 0, w: 50, h: 50 };
+            const chars = { c_a: { id: 'c_a', name: 'Ana', ownerId: 'u_a', npc: false, values: { f_dn: !!down } } }, camp = { items: { m1: { id: 'm1', type: 'map', meta: { gridType: 'square' }, whiteboard: [tok] } }, chars, system: gF6 };
+            const n = { role: 'host', active: true, syncCharDelta() {}, postDue: (c, a, k, rd, own) => posted.push(c.id + ':' + a.id + ':' + k + ':' + rd + ':' + own) };
+            const hooks = new Function('getActiveCampaign', 'systemOf', 'net', 'F', 'window', 'combatChars', 'charsOf', 'charById', 'withRound', 'tokenCtx', 'tokenFlags', 'applyRound', 'dueActs', 'resolveAll', 'renderViews', 'save', 'rollNeedsOk', hk5 + NL + 'return { turnHook: turnHook, roundHook: roundHook };')(
+                () => camp, c => c.system, () => n, () => F, { wpVtt: { on: () => true } }, S.combatChars, c => c.chars, (id, c) => c.chars[id] || null, S.withRound, S.tokenCtx, () => ({ turning: true }), S.applyRound, S.dueActs, S.resolveAll, () => {}, () => {}, S.rollNeedsOk);
+            hooks.turnHook('m1', { rows: [{ tokId: 't1' }], turn: 0, round: 3 }); hooks.roundHook('m1', { rows: [{ tokId: 't1' }], turn: 0, round: 3 });
+            return posted;
+        };
+        const hkF6 = [hookF6(true), hookF6(false)];
+        const runDueF6 = (canR, disabled) => { const out = { clicks: 0, toasts: [], applied: 0 }, c = { id: 'c_a', name: 'Ana', values: {} }, camp = { system: gF6, chars: { c_a: c } };
+            const btn = { disabled: !!disabled, title: 'Not now — it needs Down', click() { out.clicks++; } };
+            const rd = new Function('getActiveCampaign', 'systemOf', 'charById', 'canRoll', 'rollNode', 'toast', 'canApply', 'applyAction', hk5 + NL + 'return runDue;')(
+                () => camp, x => x.system, (id, k) => k.chars[id] || null, () => !!canR, () => ({ querySelector: s => (s === 'button.sheet-roll' ? btn : null) }), t => out.toasts.push(t), () => true, () => { out.applied++; });
+            out.ret = rd('c_a', 'r_ht'); return out; };
+        const dF6 = [runDueF6(true, false), runDueF6(false, false), runDueF6(true, true)];
+        check('1.5.9 a roll due at its turn\'s start or each round (the owner: "Reminder card"; cleanSystem, dueActs, and timedHook and runDue run for real): the cleaner keeps each with its by on a roll, the same in both views, and drops a roll\'s each with no by, on the initiative roll or by a word it does not know; dueActs lists a due roll by its kind, roundActs never a roll; the turn hook posts the roll\'s reminder for its player at its turn\'s start only while its needs hold, the round hook the GM\'s at each round; the reminder\'s button presses the roll\'s own sheet button, and says why where it cannot be rolled or is not theirs',
+            clF6 && j(hkF6) === j([['c_a:r_ht:turn:3:true', 'c_a:r_rd:round:3:false'], ['c_a:r_rd:round:3:false']])
+            && dF6[0].ret === true && dF6[0].clicks === 1 && dF6[0].applied === 0 && dF6[1].ret === false && dF6[1].clicks === 0 && /not yours to roll/.test(dF6[1].toasts[0] || '')
+            && dF6[2].ret === false && dF6[2].clicks === 0 && /needs Down/.test(dF6[2].toasts[0] || ''),
+            j([clF6, hkF6, dF6.map(d => [d.ret, d.clicks, d.toasts])]));
         // a roll by the clock: not rolled while held
         const sys6 = cleanSystem({ v: 1, name: 'K', fields: [{ id: 'f_hp', key: 'HP', kind: 'number', def: 10 }, { id: 'f_st', key: 'Stunned', kind: 'toggle' }],
             rolls: [{ id: 'r_rec', label: 'Recover', formula: '3d6 <= 30', then: [{ f: 'f_hp', formula: '1', add: true }], every: { n: 1, u: 'hour' }, needs: 'not(Stunned) and HP < 12' }] }, { F, gmView: true });
@@ -5542,7 +5573,7 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         check('G10 + T2b the editor (source): an apply action\'s Runs menu (only when pressed, each round, at its turn\'s start) and, once set, its By menu (automatically, the GM, its player); back to a Roll drops them; the button says when it runs; Help says so (fold 3 of backlog 152, moved on purpose: once for each round the fight reaches)',
             /if \(isApply\) \{ var ea0 = r\.each === 'round' \|\| r\.each === 'turn' \? r\.each : r\.round === true \? 'round' : ''; top\.appendChild\(select\('sys-roll-each', \[\['', 'Only when pressed'\], \['round', 'Also each round'\], \['turn', 'Also at its turn\\u2019s start'\]\], ea0,/.test(shG)
             && /if \(ea0\) top\.appendChild\(select\('sys-roll-by', \[\['', 'automatically'\], \['gm', 'when the GM presses it'\], \['owner', 'when its player presses it'\]\]/.test(shG)
-            && /else if \(c\.indexOf\('sys-roll-each'\) >= 0\) \{ delete r\.round; if \(t\.value === 'round' \|\| t\.value === 'turn'\) r\.each = t\.value; else \{ delete r\.each; delete r\.by; \} markDirty\(\); renderAll\(\); return; \}/.test(shG)
+            && /else if \(c\.indexOf\('sys-roll-each'\) >= 0\) \{ delete r\.round; if \(t\.value === 'round' \|\| t\.value === 'turn'\) \{ r\.each = t\.value; if \(!Array\.isArray\(r\.apply\) && r\.by !== 'gm' && r\.by !== 'owner'\) r\.by = 'owner'; \} else \{ delete r\.each; delete r\.by; \} markDirty\(\); renderAll\(\); return; \}/.test(shG)
             && /else if \(c\.indexOf\('sys-roll-by'\) >= 0\) \{ if \(t\.value === 'gm' \|\| t\.value === 'owner'\) r\.by = t\.value; else delete r\.by; \}/.test(shG) && /else \{ delete r\.apply; delete r\.round; delete r\.each; delete r\.by; \} markDirty\(\); renderAll\(\); return; \}/.test(shG)
             && /\(r\.each \? ' \\u2014 also ' \+ \(r\.by \? 'due' : 'by itself'\)/.test(shG) && /An apply action can also run by itself during a combat\. <b>Also each round<\/b> runs it on every character with a token in the fight once for each round the fight reaches\./.test(hmG) && /<b>Also at its turn&rsquo;s start<\/b> runs it on its character only, when its turn begins\./.test(hmG));
     }

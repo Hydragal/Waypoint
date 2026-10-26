@@ -28,6 +28,9 @@ Character sheets
 - A change a roll or an action makes can be Rolled. Its amount may then
   roll dice, such as 1d6 for a heal, and the host rolls it each time. The
   card in chat shows the dice it drew.
+- A roll can be due at its character's turn, or each round, in a
+  fight. A reminder then lands in chat with a Roll button, for its
+  player or for you.
 - A roll or an action can apply to an adjacent character, as a healing
   kit does. Pressed next to someone, it asks who it is for, your target
   first. Its changes go on that character's sheet, and a row's own

@@ -123,12 +123,12 @@ function renderDue(m) {
     if (rec.as) { wrap.appendChild(document.createTextNode(' ')); wrap.appendChild(el('span', 'chat-tag', 'for ' + rec.as)); }
     wrap.appendChild(el('span', 'chat-time', chatTime(rec.ts)));
     wrap.appendChild(el('br'));
-    wrap.appendChild(el('div', 'roll-expr', (rec.label || 'An action') + ' \u2014 ' + (rec.why === 'turn' ? 'the start of its turn' : 'round ' + rec.round)));
+    wrap.appendChild(el('div', 'roll-expr', (rec.label || (rec.roll === 1 ? 'A roll' : 'An action')) + ' \u2014 ' + (rec.why === 'turn' ? 'the start of its turn' : 'round ' + rec.round)));
     if (rec.theirs) wrap.appendChild(el('div', 'chat-due-note', 'Its player presses it.'));
     else if (m.done) wrap.appendChild(el('div', 'chat-due-note', 'Pressed.'));
     else if (!window.wpPopout) {
-        var b = el('button', 'tool chat-due-run', 'Run'); b.type = 'button'; b.title = 'Apply it now, as its button on the sheet does';
-        b.addEventListener('click', function() { if (m.done) return; m.done = true; b.disabled = true; b.textContent = 'Pressed'; var ok = window.wpSheets && window.wpSheets.runDue ? window.wpSheets.runDue(rec.charId, rec.act) : false; if (!ok) { m.done = false; b.disabled = false; b.textContent = 'Run'; } });   // done first: the press's own card redraws the chat
+        var runW = rec.roll === 1 ? 'Roll' : 'Run', b = el('button', 'tool chat-due-run', runW); b.type = 'button'; b.title = rec.roll === 1 ? 'Roll it now, as its button on the sheet does' : 'Apply it now, as its button on the sheet does';   // 1.5.9: a roll that is due
+        b.addEventListener('click', function() { if (m.done) return; m.done = true; b.disabled = true; b.textContent = 'Pressed'; var ok = window.wpSheets && window.wpSheets.runDue ? window.wpSheets.runDue(rec.charId, rec.act) : false; if (!ok) { m.done = false; b.disabled = false; b.textContent = runW; } });   // done first: the press's own card redraws the chat
         wrap.appendChild(b);
     }
     return wrap;
