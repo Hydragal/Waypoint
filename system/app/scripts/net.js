@@ -6493,6 +6493,7 @@ function handleMessage(msg, conn) {
         toast(backS ? 'Reconnected ✓' : webJ ? 'Campaign synced from host.' : 'Campaign synced from host. Your own campaigns come back when you leave.');   // security (2026-10-01): a reconnect is said when the table is taken — once per connection, in place of the synced notice (the app shows one notice at a time) — never for a connection that merely opened (whoever answers at the code could raise it at every dial)
         if (window.wpVtt) window.wpVtt.joined();   // seed this table's off-list and queue the join notice
         net.videoWake();   // item 21 V2: a video the GM is showing, offered before this snapshot, is asked for now
+        if (window.wpVoice) { try { window.wpVoice.tableReady(); } catch (e) {} }   // voice chat: a player who was in voice before a reconnect is back in it
     } else if (msg.type === 'item') {
         if (net.role === 'host') {
             // [netcheck:itempatch-start]
@@ -7653,6 +7654,15 @@ function handleMessage(msg, conn) {
         // a showing is live with them in its audience, and reads nothing else from it
         videoUp(msg, conn);
         // [netcheck:videoup-end]
+    } else if (msg.type === 'voice' && net.role === 'client') {
+        // voice chat: the GM's word about this player's voice link (an offer, a candidate, a bye) — from the synced host only, after the
+        // snapshot, never in the stream window; voice.js cleans what it carries. A host has no branch for it.
+        if (!net.foreign || conn.peer !== net.syncedPeer || net.stream || !window.wpVoice) return;
+        window.wpVoice.fromHost(msg);
+    } else if (msg.type === 'voice-up' && net.role === 'host') {
+        // voice chat: a player's word about their voice link (join, leave, answer, ice): admitted (the gate above); voice.js reads nothing else from it
+        if (!window.wpVoice) return;
+        window.wpVoice.fromPlayer(msg, conn);
     } else if (msg.type === 'blast' && net.role === 'client') {
         // a thrown blast's shared template from the synced host, for the player's current map (item library, 1.5.0)
         if (!net.foreign || conn.peer !== net.syncedPeer || net.stream || !window.wpRenderSharedBlast || !msg.blast) return;
@@ -8035,6 +8045,7 @@ function wireConn(conn) {
         if (typeof fogForgetConn === 'function') fogForgetConn(conn.peer);   // fold M5: and what its copies held
         if (p && p.id && net.role === 'host' && typeof tradeConnGone === 'function' && !net.conns.some(function(c) { return c.open && net.roster[c.peer] && net.roster[c.peer].id === p.id; })) tradeConnGone(p.id);   // 1.5.6: their last connection: their trades end, the other side told
         if (net.role === 'host' && typeof videoHang === 'function') { videoHang(conn.peer); videoTold(); }   // item 21 V2: and the call that showed it a video
+        if (net.role === 'host' && window.wpVoice) { try { window.wpVoice.connGone(conn.peer); } catch (e) {} }   // voice chat: and its voice link, gone from everyone else's voice
         renderRoster();
         if (net.role === 'host') {
             if (p) toast((p.name || 'A player') + ' left' + (p.location ? ' — their character stays on ' + (((getActiveCampaign() || {}).items || {})[p.location] || { meta: {} }).meta.title + '.' : '.'));
@@ -8058,6 +8069,7 @@ function wireConn(conn) {
                 if (window.wpMusic && window.wpMusic.tableLeft) window.wpMusic.tableLeft(true);   // else a take-control track plays forever and per-map auto-play stays wedged (controlled=true)
                 if (window.wpSound && window.wpSound.tableLeft) window.wpSound.tableLeft(true);
                 videoOver(); if (window.wpVideo && window.wpVideo.tableLeft) window.wpVideo.tableLeft();   // item 21 V2: and a video the GM was showing
+                if (window.wpVoice) { try { window.wpVoice.tableLeft(); } catch (e) {} }   // voice chat: and the voice link
                 stopHeartbeat(); setIndicator(null);
                 net.roster = Object.create(null); net.away = Object.create(null);   // the old table's players never carry into this machine's own campaign
                 net.combats = {};   // fold 0's live check: and its fights (the strip, the pill and the Calendar would read the GM's fights on this machine's own campaign)
@@ -8153,6 +8165,7 @@ function peerOpts() {
     return { config: { iceServers: iceServers() } };   // relay-only means nothing without a relay
 }
 // [netcheck:relay-end]
+net.rtcConfig = function() { return peerOpts().config; };   // voice chat (voice.js): its links take the table's own ICE servers and relay rule
 /* Try the configured relay: gather with relay-only ICE and see whether a relay candidate
    arrives. Resolves { ok, detail }. Used by the Test button in Settings. */
 net.testRelay = function() {
@@ -8482,6 +8495,7 @@ function leaveSession(silent) {
     if (!silent) cancelReconnect();
     if (window.wpVideo && window.wpVideo.tableLeft) { try { window.wpVideo.tableLeft(); } catch (e) {} }   // item 21 V2: a showing stops while the table still hears it; a player's panel closes
     net.videoStop(); videoOver();
+    if (window.wpVoice) { try { window.wpVoice.tableLeft(); } catch (e) {} }   // voice chat: every voice link closes with the table
     var peerL = net.peer; net.peer = null; if (peerL) { try { peerL.destroy(); } catch (e) {} }   // transport: let go of first — destroy() says "disconnected" on its way down, and a peer this table has let go of is never registered again
     net.conns = []; net.roster = Object.create(null); if (!silent) net.away = Object.create(null); net.active = false; net.role = null; net.code = null; net.roomPeer = null; net.lastStage = null;   // a reconnect retry (silent) keeps the away map: tokens stay on their last-known maps while it retries
     diceSessionReset(!silent);   // a deliberate leave or end clears the chat panel too; a retry keeps it
