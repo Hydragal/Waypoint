@@ -34,6 +34,7 @@ System editor
 - A list's change can set the row's own quantity, or one of its own number
   stats, such as a medkit's wear. Used up to 0, the row goes, and its
   notice offers Undo for a few seconds, as the sheet's minus does.
+- A list can carry up to 32 stats, up from 24.
 
 Using an item on someone next to you
 - When the GM rolls it, an amount that reads a GM-only value keeps the
