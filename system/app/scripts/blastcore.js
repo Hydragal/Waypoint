@@ -65,6 +65,45 @@ function bookScatterYd(margin, thrownYd) {
     var m = fin(margin) ? Math.max(0, Math.min(100, Math.floor(margin))) : 1, half = fin(thrownYd) ? Math.max(0, thrownYd / 2) : m;
     return Math.min(m, half);
 }
+// 1.5.9 (the book's (es), docs/BOOK_ES_ET_PLAN.md section 1): a launched round that misses. missOf: how far a check missed, as a throw's miss reads
+// it, at least 1 and at most 100; null for a verdict that is no failed check (dicecore verdictOf: a miss's margin is 0 or below). A critical
+// failure is read by its margin too: what else it does is the Combat card's to say
+function missOf(vd) {
+    if (!isObj(vd) || vd.kind !== 'check' || vd.pass !== false) return null;
+    var m = fin(vd.margin) ? Math.floor(Math.abs(vd.margin)) : 1;
+    return Math.max(1, Math.min(100, m));
+}
+// Where a round that flies straight would end with nothing in its way: on the ray from 'from' through 'aim', reach board pixels from 'from' (a
+// number above 0), else on to the board's edge, and never past it (a square board of 'board' pixels from 0); null where the two points are one
+function flightEnd(from, aim, reach, board) {
+    if (!isObj(from) || !isObj(aim) || !fin(from.x) || !fin(from.y) || !fin(aim.x) || !fin(aim.y)) return null;
+    var dx = aim.x - from.x, dy = aim.y - from.y, len = Math.hypot(dx, dy); if (!(len > 1e-6)) return null;
+    var B = fin(board) && board > 0 ? board : 30000, ux = dx / len, uy = dy / len, edge = Infinity;
+    if (ux > 1e-12) edge = Math.min(edge, (B - from.x) / ux); else if (ux < -1e-12) edge = Math.min(edge, -from.x / ux);
+    if (uy > 1e-12) edge = Math.min(edge, (B - from.y) / uy); else if (uy < -1e-12) edge = Math.min(edge, -from.y / uy);
+    var go = Math.max(0, Math.min(fin(reach) && reach > 0 ? reach : Infinity, edge)); if (!isFinite(go)) return null;
+    return { x: Math.round((from.x + ux * go) * 100) / 100, y: Math.round((from.y + uy * go) * 100) / 100 };
+}
+// Of the boxes handed in ({ id, x, y, w, h }), the one the segment from a to b enters first and where along it (t, 0 to 1), at or after 'after'
+// (0 to 1: a box first met before it is passed by); a box that holds a already is met at 0. null where it meets none. Pure geometry: the first
+// of two met at once is the first in the list
+function firstBox(a, b, boxes, after) {
+    if (!isObj(a) || !isObj(b) || !fin(a.x) || !fin(a.y) || !fin(b.x) || !fin(b.y) || !Array.isArray(boxes)) return null;
+    var dx = b.x - a.x, dy = b.y - a.y, from = fin(after) ? Math.max(0, Math.min(1, after)) : 0, best = null;
+    for (var i = 0; i < boxes.length && i < 4000; i++) {
+        var q = boxes[i]; if (!isObj(q) || typeof q.id !== 'string' || !fin(q.x) || !fin(q.y) || !fin(q.w) || !fin(q.h) || !(q.w > 0) || !(q.h > 0)) continue;
+        var t0 = 0, t1 = 1, ok = true;
+        [[dx, a.x, q.x, q.x + q.w], [dy, a.y, q.y, q.y + q.h]].forEach(function(s) {
+            if (!ok) return;
+            if (Math.abs(s[0]) < 1e-12) { if (s[1] < s[2] || s[1] > s[3]) ok = false; return; }
+            var u = (s[2] - s[1]) / s[0], v = (s[3] - s[1]) / s[0]; if (u > v) { var w = u; u = v; v = w; }
+            t0 = Math.max(t0, u); t1 = Math.min(t1, v); if (t0 > t1) ok = false;
+        });
+        if (!ok || t0 < from - 1e-9) continue;
+        if (!best || t0 < best.t - 1e-12) best = { id: q.id, t: Math.round(t0 * 1e6) / 1e6 };
+    }
+    return best;
+}
 // A placed mine as its trigger zone carries it (the GM's own: a hidden zone travels to no player, and wireWbItem drops the key from every
 // copy). What it holds: its blast (ft, a name, the damage formula's text, the damage type's key), the trigger radius in yards, the character
 // that placed it and the row, its maker's name, whether it is the GM's alone, and the item's notes. Anything else is no key; null where no
@@ -101,6 +140,6 @@ var STAND_INS = Object.freeze({
     grenade: Object.freeze(['M12 9a6 6 0 1 0 0 12 6 6 0 0 0 0-12z', 'M10 9V6h4v3', 'M14 7l4-3', 'M9.5 13.5h5M9.5 16.5h5']),
     mine: Object.freeze(['M4 15c0-2.5 3.6-4 8-4s8 1.5 8 4-3.6 4-8 4-8-1.5-8-4z', 'M12 11V7', 'M7.5 11.5L6 8.5M16.5 11.5L18 8.5', 'M10 7h4'])
 });
-var API = { VERSION: VERSION, SCATTER_WAYS: SCATTER_WAYS, SCATTER_TURN: SCATTER_TURN, SCATTER_WAYS6: SCATTER_WAYS6, SCATTER_TURN6: SCATTER_TURN6, diceCount: diceCount, fallShare: fallShare, throwOutcome: throwOutcome, scatterPoint: scatterPoint, bookScatterYd: bookScatterYd, cleanMine: cleanMine, inTrigger: inTrigger, STAND_INS: STAND_INS };
+var API = { VERSION: VERSION, SCATTER_WAYS: SCATTER_WAYS, SCATTER_TURN: SCATTER_TURN, SCATTER_WAYS6: SCATTER_WAYS6, SCATTER_TURN6: SCATTER_TURN6, diceCount: diceCount, fallShare: fallShare, throwOutcome: throwOutcome, scatterPoint: scatterPoint, bookScatterYd: bookScatterYd, missOf: missOf, flightEnd: flightEnd, firstBox: firstBox, cleanMine: cleanMine, inTrigger: inTrigger, STAND_INS: STAND_INS };
 if (typeof window !== 'undefined') window.wpBlastCore = API;
-export { VERSION, SCATTER_WAYS, SCATTER_TURN, SCATTER_WAYS6, SCATTER_TURN6, diceCount, fallShare, throwOutcome, scatterPoint, bookScatterYd, cleanMine, inTrigger, STAND_INS };
+export { VERSION, SCATTER_WAYS, SCATTER_TURN, SCATTER_WAYS6, SCATTER_TURN6, diceCount, fallShare, throwOutcome, scatterPoint, bookScatterYd, missOf, flightEnd, firstBox, cleanMine, inTrigger, STAND_INS };

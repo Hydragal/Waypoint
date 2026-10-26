@@ -4188,7 +4188,7 @@ window.wpFitToGrid = fitToGrid;
       if (window.wpNet && window.wpNet.active && window.wpNet.role === 'host' && window.wpNet.broadcastBlast) window.wpNet.broadcastBlast({ x: b.x, y: b.y, ft: b.ft, name: opts.gmOnly ? '' : b.name, elev: b.elev, by: b.by }, map.id);   // a GM-only item's blast reaches players unnamed
       var n = blastDistances(b, map).filter(function(r) { return r.d <= blastRadiusYd(b) + 1e-9; }).length;
       var rw = typeof blastSize === 'function' && typeof rulerUnitNow === 'function' ? blastSize({ ft: b.ft }, rulerUnitNow(), typeof rulerImpNow === 'function' ? rulerImpNow() : '') : 'Radius ' + b.ft + ' ft';   // in the ruler's unit, as its label (1.5.4): in metres as the sheet says a measure
-      toast((opts.goOff ? (b.name || 'A mine') + ' goes off' : (b.by ? b.by + ' throws ' : 'Thrown: ') + (b.name || 'a blast')) + ', ' + rw.charAt(0).toLowerCase() + rw.slice(1) + '. ' + n + ' token' + (n === 1 ? '' : 's') + ' in range.' + (pre ? pre.said : '') + (seatB ? ' It went off in front of the wall or door it hit.' : '') + (onScreen ? '' : ' It went off on ' + (map.title || 'another map') + '.'));
+      toast((opts.goOff ? (b.name || 'A mine') + (pre && pre.fuse ? ' lands' : ' goes off') : (b.by ? b.by + ' throws ' : 'Thrown: ') + (b.name || 'a blast')) + ', ' + rw.charAt(0).toLowerCase() + rw.slice(1) + '. ' + n + ' token' + (n === 1 ? '' : 's') + ' in range.' + (pre ? pre.said : '') + (seatB ? ' It went off in front of the wall or door it hit.' : '') + (onScreen ? '' : ' It went off on ' + (map.title || 'another map') + '.'));
       if (pre && pre.area && pre.area.use === true && pre.tr && typeof useOneUp === 'function') useOneUp(getActiveCampaign(), pre.tr);
       if (pre && pre.fuse && typeof fuseSet === 'function') { fuseSet(map, b, opts, n); return b; }   // 1.5.8: it goes off at the start of the next turn
       resolveThrow(b, opts, n, map);
@@ -4260,8 +4260,8 @@ window.wpFitToGrid = fitToGrid;
       if (area && area.place === true) return { mine: placeMine(opts, tr, map) };   // a mine is placed, never thrown
       var thrB = throwerOf(map, opts.charId), thrC = thrB ? tokenCentre(thrB) : null;
       var aimT = opts.goOff ? null : tokenAtPoint(map, opts.x, opts.y, true), aim = aimT ? tokenCentre(aimT) : { x: opts.x, y: opts.y };   // the aim: the character token clicked, else the point
-      var out = { land: { x: aim.x, y: aim.y }, direct: opts.goOff ? (opts.direct || null) : aimT ? aimT.id : null, said: '', tr: tr, area: area, def: def };
-      var fz = !opts.goOff && rules && rules.fuse === 'turn' && window.wpNet && typeof window.wpNet.combatFor === 'function' ? window.wpNet.combatFor(map.id) : null; if (fz) out.fuse = true;   // a fuse: a fight on its map
+      var out = { land: { x: aim.x, y: aim.y }, direct: opts.goOff ? (opts.direct || null) : aimT ? aimT.id : null, said: opts.goOff && typeof opts.said === 'string' ? opts.said.slice(0, 400) : '', tr: tr, area: area, def: def };   // 1.5.9 (es): a launched round's miss says where it went
+      var fz = (!opts.goOff || opts.fuseOk === true) && rules && rules.fuse === 'turn' && window.wpNet && typeof window.wpNet.combatFor === 'function' ? window.wpNet.combatFor(map.id) : null; if (fz) out.fuse = true;   // a fuse: a fight on its map
       if (opts.goOff || !rules || !thrC || !tr || !S || !F) return out;
       var R = S.makeResolver(sys, tr.ch, F), rowR = R && typeof R.row === 'function' ? R.row(tr.f.id, opts.rowId) : null, dYd = yardsOn(map, thrC, aim);
       var lenW = function(yd) { return typeof rulerLen === 'function' && typeof rulerUnitNow === 'function' ? rulerLen(yd, rulerUnitNow()) : Math.round(yd * 10) / 10 + ' yd'; };
@@ -4452,7 +4452,12 @@ window.wpFitToGrid = fitToGrid;
   // no throw. Its blast goes off where it is put, with none of a throw's outcomes: no throw roll, no scatter, no drop at the feet, nothing going
   // off in the hand. It is the round last fired, else the next one (Row.fired), and its damage, type, armour divisor, notes and icon are the
   // round's own. On a hit the host puts it on the roller's target (net.js, wpLaunchHit); the GM's Launch puts it where the GM clicks (wpArmLaunch),
-  // as for a round that misses: where a missed launched round lands is not ruled yet. The host's alone, never on a player's app
+  // as for a round that misses where its item says nothing. 1.5.9 (the book's (es), docs/BOOK_ES_ET_PLAN.md section 1): a round whose item says
+  // how it lands on a miss (its area's flight) is put down by the host on a miss too (wpLaunchMiss): one that scatters lands as a missed throw does,
+  // a yard a point missed and never more than half the distance fired, by the Combat card's own scatter where it names one; one that flies straight
+  // goes on along its line, past the aim, and goes off on the first wall or character in its path, or at its farthest (the launcher list's Flies at
+  // most, else the board's edge). What the book has not ruled yet is the Combat card's to say (combat.blast.launch). The host's alone, never on a
+  // player's app
   function launchRowOf(camp, opts) {   // the launcher's row on this machine's own copy and the round it puts down: { ch, f, row, def, area }
       var S = window.wpSystemCore, sys = camp && camp.system; if (!S || !sys || !opts || typeof opts.charId !== 'string' || typeof opts.fieldId !== 'string' || typeof opts.rowId !== 'string') return null;
       var ch = camp.chars && Object.prototype.hasOwnProperty.call(camp.chars, opts.charId) ? camp.chars[opts.charId] : null; if (!ch) return null;
@@ -4467,8 +4472,10 @@ window.wpFitToGrid = fitToGrid;
       var camp = getActiveCampaign(), map = mapIn || getActiveMap(); if (!camp || !map || !opts) return null;
       var x = Number(opts.x), y = Number(opts.y); if (!isFinite(x) || !isFinite(y)) return null;
       var lr = launchRowOf(camp, opts); if (!lr) { toast('Nothing to put down there: no round fired or chambered on that row has a blast.'); return null; }
-      var aimT = tokenAtPoint(map, x, y, true), aim = aimT ? tokenCentre(aimT) : { x: x, y: y }, d = lr.def, a = lr.area, gm = d.vis === 'gm' || lr.f.vis === 'gm';   // the character token clicked, else the point
-      return placeThrownBlast({ goOff: true, launched: true, x: aim.x, y: aim.y, ft: a.ft, name: a.name || d.name || '', by: lr.ch.name || '', charId: opts.charId, fieldId: lr.f.id, rowId: opts.rowId, damage: d.damage || '', gmOnly: gm, direct: aimT ? aimT.id : null, dtype: a.type, ad: a.ad, notes: gm ? '' : d.notes, icon: d.icon }, map);
+      var hasD = Object.prototype.hasOwnProperty.call(opts, 'direct'), aimT = hasD ? null : tokenAtPoint(map, x, y, true), aim = aimT ? tokenCentre(aimT) : { x: x, y: y }, d = lr.def, a = lr.area, gm = d.vis === 'gm' || lr.f.vis === 'gm';   // the character token clicked, else the point; 1.5.9 (es): a miss names its own point and whom it strikes
+      var dir = hasD ? (typeof opts.direct === 'string' ? opts.direct : null) : aimT ? aimT.id : null, po = { goOff: true, launched: true, x: aim.x, y: aim.y, ft: a.ft, name: a.name || d.name || '', by: lr.ch.name || '', charId: opts.charId, fieldId: lr.f.id, rowId: opts.rowId, damage: d.damage || '', gmOnly: gm, direct: dir, dtype: a.type, ad: a.ad, notes: gm ? '' : d.notes, icon: d.icon };
+      if (typeof opts.said === 'string' && opts.said) po.said = opts.said; if (opts.fuse === true) po.fuseOk = true;
+      return placeThrownBlast(po, map);
   }
   window.wpLaunchAt = launchAt;
   window.wpArmLaunch = function(ctx) {   // the sheet's Launch (the GM's): the next click on the map puts the round's blast there
@@ -4485,6 +4492,43 @@ window.wpFitToGrid = fitToGrid;
       var map = camp.items && Object.prototype.hasOwnProperty.call(camp.items, o.mapId) ? camp.items[o.mapId] : null; if (!map || !Array.isArray(map.whiteboard)) return null;
       var t = map.whiteboard.filter(function(w) { return w && w.id === o.tid && !w.hidden; })[0]; if (!t) return null;
       var c = tokenCentre(t); return launchAt({ charId: o.charId, fieldId: o.fieldId, rowId: o.rowId, x: c.x, y: c.y }, map);
+  };
+  var LAUNCH_BOARD = 30000;   // the board's own size, in board pixels (the style sheet's #whiteboard)
+  // net.js on the host: a launched round that missed (o: charId, fieldId, rowId, tid and mapId, the roller's target, margin, the verdict's, and crit,
+  // 'fumble' for a critical failure). Where its item says nothing of a miss, nothing: the GM places it with Launch, as before
+  window.wpLaunchMiss = function(o) {
+      var camp = getActiveCampaign(), BC = window.wpBlastCore, S = window.wpSystemCore, F = window.wpFormula; if (!camp || !BC || !o || typeof o !== 'object') return null;
+      if (window.wpNet && window.wpNet.active && window.wpNet.role === 'client') return null;
+      var lr = launchRowOf(camp, o); if (!lr) return null;
+      var fl = lr.area.flight; if (fl !== 'scatter' && fl !== 'line') return null;
+      var nm = lr.area.name || lr.def.name || 'the round', has = function(ob, k) { return !!ob && Object.prototype.hasOwnProperty.call(ob, k); };
+      var map = typeof o.mapId === 'string' && has(camp.items, o.mapId) ? camp.items[o.mapId] : null, wb = map && Array.isArray(map.whiteboard) ? map.whiteboard : [];
+      var t = typeof o.tid === 'string' ? wb.filter(function(w) { return w && w.id === o.tid && !w.hidden; })[0] : null;
+      var sh = t ? wb.filter(function(w) { return w && w.charId === o.charId && !w.waiting; }).sort(function(p, q) { return (q.isChar ? 1 : 0) - (p.isChar ? 1 : 0); })[0] : null;
+      if (!t || !sh) { toast(nm.charAt(0).toUpperCase() + nm.slice(1) + ' missed, with no target and shooter on one map to tell where it went. Place it with Launch on the sheet.'); return null; }
+      var bl = camp.system && camp.system.combat && camp.system.combat.blast && typeof camp.system.combat.blast === 'object' ? camp.system.combat.blast : {}, ln = bl.launch && typeof bl.launch === 'object' ? bl.launch : {};
+      var sc = tokenCentre(sh), aim = tokenCentre(t), mg = BC.missOf({ kind: 'check', pass: false, margin: o.margin }) || 1, base = { charId: o.charId, fieldId: o.fieldId, rowId: o.rowId };
+      var dYd = typeof yardsOn === 'function' ? yardsOn(map, sc, aim) : Math.hypot(aim.x - sc.x, aim.y - sc.y) / 50, dPx = Math.hypot(aim.x - sc.x, aim.y - sc.y), px = dYd > 1e-9 && dPx > 0 ? dPx / dYd : 50;   // board pixels to a yard on that map, as it reads the distance fired
+      var lenW = function(yd) { return typeof rulerLen === 'function' && typeof rulerUnitNow === 'function' ? rulerLen(yd, rulerUnitNow()) : Math.round(yd * 10) / 10 + ' yd'; };
+      if (o.crit === 'fumble' && ln.fumble === 'none') { toast('A critical failure: ' + nm + ' misfires and goes nowhere. The round is spent.'); return null; }
+      if (o.crit === 'fumble' && ln.fumble === 'feet') return launchAt(Object.assign(base, { x: sc.x, y: sc.y, direct: null, said: ' A critical failure: it goes off at the shooter\u2019s feet.', fuse: ln.fuse === true && fl === 'scatter' }), map);
+      if (fl === 'scatter') {   // as a missed throw: from the aim along the line it was fired on, by the Combat card's scatter (Margin, ThrowDistance: the distance fired), else the book's
+          var syd = null;
+          if (typeof bl.scatter === 'string' && bl.scatter && F) { var sv = F.evaluate(bl.scatter, { vars: function(n) { var l = String(n).toLowerCase(); return l === 'margin' ? mg : l === 'throwdistance' ? dYd : undefined; } }); syd = sv && sv.ok ? (typeof sv.value === 'boolean' ? (sv.value ? 1 : 0) : sv.value) : null; }
+          syd = typeof syd === 'number' && isFinite(syd) ? Math.max(0, Math.min(1000, syd)) : BC.bookScatterYd(mg, dYd);
+          var nW = bl.ways === 8 ? 8 : 6, sp = BC.scatterPoint(aim, sc, syd, Math.floor(Math.random() * nW), px, nW); if (!sp) return null;   // the way rolled as a throw's is
+          return launchAt(Object.assign(base, { x: Math.max(0, sp.x), y: Math.max(0, sp.y), direct: null, said: ' A miss by ' + mg + ': it lands ' + lenW(syd) + ' ' + sp.words.toLowerCase() + ' of the aim.', fuse: ln.fuse === true }), map);
+      }
+      var rf = lr.f.list && lr.f.list.chamber && typeof lr.f.list.chamber.reach === 'string' ? lr.f.list.chamber.reach : '', reach = null;   // straight on: as far as Flies at most, from the launcher row's own names, else to the board's edge
+      if (rf && S && F && typeof S.makeResolver === 'function') { var R = S.makeResolver(camp.system, lr.ch, F), rowR = R && typeof R.row === 'function' ? R.row(lr.f.id, o.rowId) : null, rv = rowR ? F.evaluate(rf, { vars: rowR, random: function() { return NaN; } }) : null; if (rv && rv.ok && typeof rv.value === 'number' && isFinite(rv.value) && rv.value > 0) reach = rv.value; }
+      var end = BC.flightEnd(sc, aim, reach !== null ? reach * px : null, LAUNCH_BOARD); if (!end) return null;
+      var aimAt = Math.hypot(end.x - sc.x, end.y - sc.y) > 1e-6 ? Math.min(1, dPx / Math.hypot(end.x - sc.x, end.y - sc.y)) : 1;
+      var wall = window.wpFog && typeof window.wpFog.flightWall === 'function' ? window.wpFog.flightWall(map, sc, end) : null;
+      var boxes = ln.stop === 'walls' ? [] : wb.filter(function(w) { return w && w.isChar && !w.hidden && !w.waiting && w.id !== sh.id && w.id !== t.id; }).map(function(w) { return { id: w.id, x: Number(w.x), y: Number(w.y), w: w.w || 60, h: w.h || 52 }; });
+      var hb = BC.firstBox(sc, end, boxes, ln.stop === 'past' ? aimAt : 0);
+      if (hb && (!wall || hb.t < wall.at)) { var ht = wb.filter(function(w) { return w && w.id === hb.id; })[0], hc = tokenCentre(ht); return launchAt(Object.assign(base, { x: hc.x, y: hc.y, direct: ln.glance === true ? null : hb.id, said: ' A miss: it flies straight on and strikes a character in its path.' }), map); }
+      if (wall) return launchAt(Object.assign(base, { x: wall.x, y: wall.y, direct: null, said: ' A miss: it flies straight on into a wall.' }), map);
+      return launchAt(Object.assign(base, { x: end.x, y: end.y, direct: null, said: reach !== null ? ' A miss: it flies straight on and goes off at its farthest.' : ' A miss: it flies straight on to the edge of the map.' }), map);
   };
   // [systemcheck:launch-end]
   // [systemcheck:explode-start]

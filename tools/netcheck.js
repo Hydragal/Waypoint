@@ -3154,6 +3154,59 @@ pendingChecks.push((async () => {
         j([gWin.vals, gWin.deltas, gOff.vals, gNo.vals]));
 })());
 
+// 1.5.9 (docs/BOOK_ES_ET_PLAN.md section 1, the book's (es)): a round fired by a roll's Then lands by the roll's verdict. The host's roll-req branch
+// and the GM's own net.diceRoll, each sliced and run for real: a hit calls the board's wpLaunchHit with the roller's target, a miss its wpLaunchMiss
+// with the verdict's margin and whether it was a critical failure, never both, a jam neither; the board decides where a miss lands
+pendingChecks.push((async () => {
+    const url = f => 'file:///' + path.resolve(path.join(__dirname, '..', 'system', 'app', 'scripts', f)).split(String.fromCharCode(92)).join('/');
+    const Sx = await import(url('systemcore.js')), Fx = await import(url('formula.js')), Dx = await import(url('dicecore.js'));
+    const srcL = fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', 'net.js'), 'utf8').replace(/\r\n/g, '\n');
+    const line = k => { const i = srcL.indexOf(k); if (i < 0) throw new Error('netcheck: ' + k + ' not found'); return srcL.slice(i, srcL.indexOf('\n', i)); };
+    const helpers = ['function own(', 'function peerProfileId(', 'function fxLib(', 'function itemLib(', 'function diceFrom('].map(line).join('\n') + '\n';
+    const paSrc = between('// [netcheck:postapply-start]', '// [netcheck:postapply-end]', 'postapply');
+    const rqSrc = (ordersSrc + '\n' + between('// [netcheck:rollreq-start]', '// [netcheck:rollreq-end]', 'rollreq')), drSrc = between('// [netcheck:diceroll-start]', '// [netcheck:diceroll-end]', 'diceroll');
+    const sysL = Sx.cleanSystem({ v: 1, name: 'L', combat: { blastAuto: 'full', blastRoller: 'owner', hpResource: '', checks: 'under3d6' }, fields: [
+        { id: 'f_gear', key: 'Gear', label: 'Gear', kind: 'item-list', vis: 'all', edit: 'owner', list: { multi: true, chamber: { from: 'f_gear', cats: ['Round'], cap: 2 },
+            rolls: [{ label: 'Shoot', formula: '3d6 <= 10', then: [{ fire: true }] }, { label: 'Careful', formula: '3d6 <= 10', then: [{ fire: true, when: 'hit' }] }] } }],
+        items: [{ id: 'i_tube', name: 'Spark Tube', category: 'Launcher', vis: 'all' }, { id: 'i_fizz', name: 'Fizz Grenade', category: 'Round', vis: 'all', damage: '3d6', area: { ft: 6, flight: 'scatter' } }], sheet: { sections: [] } }, { F: Fx, gmView: true });
+    const rowsL = () => [{ id: 'w_t', defId: 'i_tube', qty: 1, rd: [{ defId: 'i_fizz' }, { defId: 'i_fizz' }] }];
+    const fixedF = v => Object.assign({}, Fx, { evaluate: (t, o) => Fx.evaluate(t, o && o.random ? o : Object.assign({}, o, { random: () => v })) });
+    const callsOf = () => { const c = { hit: [], miss: [] }; return { c, win: { wpLaunchHit: o => { c.hit.push(JSON.parse(JSON.stringify(o))); return null; }, wpLaunchMiss: o => { c.miss.push(JSON.parse(JSON.stringify(o))); return null; } } }; };
+    const runQ = (ri, fv, aimed) => {
+        const camp = { id: 'k', activeItemId: 'm1', system: sysL, chars: { c_a: { id: 'c_a', name: 'Kael', ownerId: 'u_a', npc: false, values: { f_gear: rowsL() } } }, items: { m1: { id: 'm1', type: 'map', whiteboard: [{ id: 't_a', isChar: true, charId: 'c_a', ownerId: 'u_a', x: 0, y: 100 }, { id: 't_foe', isChar: true, charId: 'c_foe', x: 300, y: 100 }] } } };
+        const conn = { peer: 'pA', open: true, send(m) { packCheck(m); } }, { c, win } = callsOf();
+        const net = { active: true, role: 'host', paused: false, conns: [conn], roster: { pA: { id: 'u_a', name: 'Pebbles', location: 'm1' } }, combats: {}, syncCharDelta() {} };
+        Object.assign(win, { wpFormula: fixedF(fv), wpSheets: { playerSystem: cc => Sx.cleanSystem(cc.system, { F: Fx, gmView: false }), charChanged() {} }, wpVtt: { on: () => true, rulesOn: () => true } });
+        let err = '';
+        try { new Function('msg', 'conn', 'net', 'DC', 'SC', 'window', 'getActiveCampaign', 'peerPaused', 'sendFailed', 'sendTable', 'pushRoll', 'logEvent', 'saveRemoteSoon', 'pushChat', 'applyLine', 'rangeTo', 'var diceLimit = null, _diceSlowSaid = {};\n' + helpers + paSrc + '\n' + rqSrc)(
+            { type: 'roll-req', rid: 'q1', charId: 'c_a', expr: '3d6 <= 10', row: { f: 'f_gear', r: 'w_t', i: ri } }, conn, net, () => Dx, () => Sx, win, () => camp, () => false, e => { throw e; }, () => {}, () => {}, () => {}, () => {}, () => {}, r => Dx.applyText(r),
+            aimed ? () => ({ mod: 0, dist: 6, tid: 't_foe', mapId: 'm1' }) : () => null); } catch (e) { err = String(e && e.stack || e).slice(0, 400); }
+        return { err, c, fd: camp.chars.c_a.values.f_gear[0].fd ? 1 : 0 }; };
+    const qHit = runQ(0, 3, true), qMiss = runQ(0, 5, true), qFum = runQ(0, 6, true), qNoAim = runQ(0, 5, false), qHitOnly = runQ(1, 5, true);
+    check('1.5.9 (es) a launched round lands by the roll\'s verdict on the host (the roll-req branch, run for real with the real core and dice core): a hit that fires a chambered round calls the board\'s wpLaunchHit with the roller\'s target, and never wpLaunchMiss; a miss that fires calls wpLaunchMiss with the round fired, the roller\'s target and map and the verdict\'s own margin (15 against 10: -5), and never wpLaunchHit; a critical failure says fumble; a miss with no target pointed at still calls it, with no target, so the board says to place it; a Then that fires on a hit alone fires nothing on a miss and calls neither',
+        !qHit.err && qHit.c.hit.length === 1 && qHit.c.miss.length === 0 && j(qHit.c.hit[0]) === j({ charId: 'c_a', fieldId: 'f_gear', rowId: 'w_t', tid: 't_foe', mapId: 'm1' })
+        && !qMiss.err && qMiss.c.hit.length === 0 && j(qMiss.c.miss) === j([{ charId: 'c_a', fieldId: 'f_gear', rowId: 'w_t', tid: 't_foe', mapId: 'm1', margin: -5, crit: '' }]) && qMiss.fd === 1
+        && qFum.c.hit.length === 0 && qFum.c.miss.length === 1 && qFum.c.miss[0].crit === 'fumble' && qFum.c.miss[0].margin === -8
+        && qNoAim.c.hit.length === 0 && j(qNoAim.c.miss) === j([{ charId: 'c_a', fieldId: 'f_gear', rowId: 'w_t', tid: '', mapId: '', margin: -5, crit: '' }])
+        && !qHitOnly.err && qHitOnly.c.hit.length === 0 && qHitOnly.c.miss.length === 0 && qHitOnly.fd === 0,
+        j([qHit, qMiss, qFum, qNoAim, qHitOnly]));
+    // the GM's own roll on an NPC's launcher: net.diceRoll, the same lines
+    const runG = (fv) => { const { c, win } = callsOf();
+        const camp = { id: 'k', system: sysL, chars: { c_a: { id: 'c_a', name: 'Kael', npc: true, values: { f_gear: rowsL() } } } };
+        const net = { active: true, role: 'host', stream: false, conns: [], roster: {}, syncCharDelta() {}, postApplyCard() {} };
+        Object.assign(win, { wpFormula: fixedF(fv), wpVtt: { on: () => true }, wpSheets: { tokenCtxFor: () => ({ range: { mod: 0, dist: 6, tid: 't_foe', mapId: 'm1' } }), charChanged() {} } });
+        let err = '', ret = null;
+        try { const dr = new Function('net', 'DC', 'SC', 'window', 'getActiveCampaign', 'getProfile', 'toast', 'ui', 'sendFailed', 'sendTable', 'pushRoll', 'logEvent', 'save', 'var _dicePending = null;\n' + helpers + drSrc + '\nreturn net.diceRoll;')(
+            net, () => Dx, () => Sx, win, () => camp, () => ({ id: 'u_gm', name: 'GM' }), () => {}, () => null, e => { throw e; }, () => {}, () => {}, () => {}, () => {});
+            ret = dr('3d6 <= 10', { charId: 'c_a', row: { f: 'f_gear', r: 'w_t', i: 0 } }); } catch (e) { err = String(e && e.stack || e).slice(0, 400); }
+        return { err, ret, c }; };
+    const gHit = runG(3), gMiss = runG(5);
+    check('1.5.9 (es) a launched round lands by the GM\'s own roll\'s verdict (net.diceRoll, run for real): a hit that fires calls wpLaunchHit alone, a miss wpLaunchMiss alone with the verdict\'s margin; wired after the hit\'s line in both places, through typeof',
+        !gHit.err && gHit.c.hit.length === 1 && gHit.c.miss.length === 0 && !gMiss.err && gMiss.c.hit.length === 0 && gMiss.c.miss.length === 1 && gMiss.c.miss[0].margin === -5 && gMiss.c.miss[0].tid === 't_foe'
+        && (srcL.match(/typeof window\.wpLaunchMiss === 'function'\) window\.wpLaunchMiss\(/g) || []).length === 2,
+        j([gHit, gMiss]));
+})());
+
 // 1.5.9 (docs/BOOK_ES_ET_PLAN.md section 0): a change ticked Rolled rolls its amount on the host, with the host's own dice, never from a player's
 // word. char-apply, the roll-req branch's Then and the GM's own net.diceRoll, each sliced and run for real: the amount drawn by the host's dice, the
 // card's line saying the dice, a Then that drew dice saying them on an apply card of its own kept as private as the roll, and a player's message that
@@ -13129,7 +13182,7 @@ pendingChecks.push((async () => {
             && Sx.fieldById(campPN.system, 'f_gear').list.chamber.needs === 'Row.ammo = 5',
             j([n1, n2.answer, n3.answer, gN3, q1, q2, sentN]));
         const rq = between('// [netcheck:rollreq-start]', '// [netcheck:rollreq-end]', 'rollreq'), dr = between('// [netcheck:diceroll-start]', '// [netcheck:diceroll-end]', 'diceroll');
-        check('1.5.9 Chambers from, a launched round (net.js, pinned): after a roll\'s Then is applied, a round it fired on a hit, not a jam, goes off at the roller\'s target through the board\'s wpLaunchHit, asked through typeof, in the host\'s roll branch and the GM\'s own roll; a miss places nothing',
+        check('1.5.9 Chambers from, a launched round (net.js, pinned): after a roll\'s Then is applied, a round it fired on a hit, not a jam, goes off at the roller\'s target through the board\'s wpLaunchHit, asked through typeof, in the host\'s roll branch and the GM\'s own roll; a miss goes to the board\'s wpLaunchMiss instead (1.5.9 (es), moved on purpose: before, a miss placed nothing)',
             rq.includes("if (taQ && taQ.ok && taQ.fired && !mfHitQ && vdQ && vdQ.kind === 'check' && vdQ.pass === true && tcQ && tcQ.range && typeof tcQ.range.tid === 'string' && typeof window.wpLaunchHit === 'function') window.wpLaunchHit({ charId: q.charId, fieldId: taQ.fired.f, rowId: taQ.fired.r, tid: tcQ.range.tid, mapId: tcQ.range.mapId });")
             && dr.includes("if (taR && taR.ok && taR.fired && !mfHitR && vdR && vdR.kind === 'check' && vdR.pass === true && tcR && tcR.range && typeof tcR.range.tid === 'string' && typeof window.wpLaunchHit === 'function') window.wpLaunchHit({ charId: chR.id, fieldId: taR.fired.f, rowId: taR.fired.r, tid: tcR.range.tid, mapId: tcR.range.mapId });"));
     }

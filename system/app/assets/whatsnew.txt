@@ -45,9 +45,18 @@ Launchers and rounds
 - Chambers only where is a formula a row must meet before it may chamber.
   A row that does not meet it shows no chamber, and one that still holds
   rounds can only unchamber them.
-- A round with a blast is launched, not thrown: no throw roll and no
-  scatter. When the Attack that fired it hits the roller's target, its
-  blast goes off there. Your GM places a round that misses, with the
+- A round with a blast is launched, not thrown: no throw roll. When the
+  Attack that fired it hits the roller's target, its blast goes off there
+  at once.
+- An item's On a miss, launched says where a round lands when the Attack
+  misses. One that scatters lands as a missed throw does, a yard a point
+  missed and never more than half the distance fired. One that flies
+  straight goes off on the first wall or character in its path, or at its
+  farthest: the launcher list's Flies at most, else the map's edge.
+- What the rules leave open is the Combat card's to choose: whether a
+  missed round waits for the fuse, what a critical failure does, and
+  whether a straight round passes the characters before its target. With
+  nothing set, or with no target, your GM places a missed round with the
   row's Launch.
 
 Voice chat

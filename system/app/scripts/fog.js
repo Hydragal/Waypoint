@@ -542,6 +542,15 @@ function blastSeat(map, x, y, tx, ty) {
     var cs = coverSetsFor(map, grid, true); if (!cs || !cs.hard) return null;   // never inside a barrier ticked Stops blasts either
     return C.openSeat(x, y, tx, ty, grid, cs.hard);
 }
+// 1.5.9 (the book's (es)): where a round that flies straight from a to b meets a wall: the last open point before the first cell or thin wall of
+// the hard set a BLAST reads (walls, closed doors, barriers ticked Stops blasts), by fogcore lineFirst; null where the line is clear, the map has
+// no grid (the fog reads walls by cells) or no wall. Read whether or not cover is on. The host's alone (whiteboard.js wpLaunchMiss)
+function flightWall(map, a, b) {
+    var C = core(); if (!C || !C.lineFirst || !map) return null;
+    var grid = gridForMap(map); if (!grid) return null;
+    var cs = coverSetsFor(map, grid, true); if (!cs || !cs.hard) return null;
+    return C.lineFirst(a, b, grid, cs.hard);
+}
 function coverOn(sys) { return !!(sys && sys.combat && sys.combat.cover && sys.combat.cover.on === true); }
 // Turn-based combat T3a (D11): whether a token's straight move from (fx, fy) to (tx, ty) — its stored top-left — lands in or crosses a cell a
 // sight-blocker occupies on this map (the same blocker cells fog uses: a closed door blocks, an open one or a hidden item never), or one a
@@ -2165,7 +2174,7 @@ window.wpFogRedraw = redraw;
 setTimeout(sync, 0);
 window.wpFog = {
     // host enforcement (net.js)
-    fogDropIds: fogDropIds, fogLitFor: fogLitFor, canSeePoint: canSeePoint, coverAt: coverAt, blastSeat: blastSeat, moveBlocked: moveBlocked, arrivalOk: arrivalOk, moveCells: moveCells, moveCost: moveCost, invalidateVision: invalidateVision, invalidateSeen: invalidateSeen, seenKeyOf: seenKeyOf, lightMoves: lightMoves, sightSigFor: sightSigFor, tokenSightCells: tokenSightCells, coverBetween: coverBetween,
+    fogDropIds: fogDropIds, fogLitFor: fogLitFor, canSeePoint: canSeePoint, coverAt: coverAt, blastSeat: blastSeat, flightWall: flightWall, moveBlocked: moveBlocked, arrivalOk: arrivalOk, moveCells: moveCells, moveCost: moveCost, invalidateVision: invalidateVision, invalidateSeen: invalidateSeen, seenKeyOf: seenKeyOf, lightMoves: lightMoves, sightSigFor: sightSigFor, tokenSightCells: tokenSightCells, coverBetween: coverBetween,
     PARTY: PARTY, fogPartyCells: fogPartyCells,   // R2 #14: the stream window's standpoint (the players' tokens together) and the cells it draws by, for its copy (net.js fogPartyCopy)
     // GM tools
     handNote: handNote,   // 1.5.4: what to say when a piece's fog mark cannot show yet (inspector.js, whiteboard.js)

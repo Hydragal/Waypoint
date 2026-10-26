@@ -14081,6 +14081,134 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             && netX.indexOf('rec.blast = o.blast') > netX.indexOf('if (dtR) rec.dtype = dtR;'));
     }
     // [systemcheck:explosives-tests-end]
+    // [systemcheck:launchmiss-tests-start]
+    /* ---- 1.5.9 (docs/BOOK_ES_ET_PLAN.md section 1, the book's (es)): a launched round that misses lands as its item says, scattering as a missed
+       throw does or flying straight on to the first wall or character in its path; what the book has not ruled is the Combat card's to say ---- */
+    {
+        const BCm = await import(url('blastcore.js')), FCm = await import(url('fogcore.js')), jm = JSON.stringify;
+        // the cleaners, in both views
+        const rawM = (extra) => ({ v: 1, name: 'M', fields: [{ id: 'f_hp', key: 'HP', kind: 'number', vis: 'gm' }, { id: 'f_gear', key: 'Gear', label: 'Gear', kind: 'item-list', vis: 'all', edit: 'owner', list: Object.assign({ multi: true, stats: [{ key: 'Far', label: 'Far' }], chamber: Object.assign({ from: 'f_gear', cats: ['Round'], cap: 2 }, extra || {}) }) }],
+            items: [{ id: 'i_tube', name: 'Spark Tube', category: 'Launcher', vis: 'all', stats: { Far: 10 } },
+                { id: 'i_sc', name: 'Fizz Grenade', category: 'Round', vis: 'all', damage: '3d6', area: { ft: 6, name: 'Fizz burst', flight: 'scatter' } },
+                { id: 'i_ln', name: 'Pebble Rocket', category: 'Round', vis: 'all', damage: '4d6', area: { ft: 3, name: 'Rocket burst', flight: 'line' } },
+                { id: 'i_pl', name: 'Pop Charge', category: 'Round', vis: 'all', damage: '1d6', area: { ft: 3 } },
+                { id: 'i_mn', name: 'Kael Mine', category: 'Round', vis: 'all', area: { ft: 6, place: true, trig: 2, flight: 'line' } },
+                { id: 'i_jk', name: 'Junk', category: 'Round', vis: 'all', area: { ft: 6, flight: 'Line' } }], sheet: { sections: [] } });
+        const gmM = cleanSystem(rawM({ reach: 'Row.Far' }), { F, gmView: true }), plM = cleanSystem(rawM({ reach: 'Row.Far' }), { F, gmView: false }), arM = (s, id) => s.items.find(i => i.id === id).area;
+        const reachOf = (rc, gm) => cleanSystem(rawM({ reach: rc }), { F, gmView: gm }).fields.find(f => f.id === 'f_gear').list.chamber.reach;
+        const noneM = cleanSystem(rawM(), { F, gmView: true });
+        check('1.5.9 (es) the cleaners, in both views: an item\'s area keeps flight only as scatter or line and never beside Placed, not thrown, the same in both views; a launcher list\'s Flies at most (chamber.reach) is kept as a formula with no dice, the same in both views, dropped where it rolls dice or does not read, and dropped from the players\' view where it names a GM-only value; each view is a fixed point, and a system that sets none of it keeps no such key',
+            arM(gmM, 'i_sc').flight === 'scatter' && arM(gmM, 'i_ln').flight === 'line' && arM(gmM, 'i_pl').flight === undefined && arM(gmM, 'i_mn').flight === undefined && arM(gmM, 'i_mn').place === true && arM(gmM, 'i_jk').flight === undefined
+            && jm(gmM.items.map(i => i.area)) === jm(plM.items.map(i => i.area)) && jm(Object.keys(arM(gmM, 'i_sc'))) === jm(['ft', 'shape', 'name', 'flight'])
+            && reachOf('Row.Far', true) === 'Row.Far' && reachOf('Row.Far', false) === 'Row.Far' && reachOf('Row.Far + 1d6', true) === undefined && reachOf('((', true) === undefined && reachOf('', true) === undefined && reachOf(5, true) === undefined
+            && reachOf('HP * 2', true) === 'HP * 2' && reachOf('HP * 2', false) === undefined
+            && jm(cleanSystem(gmM, { F, gmView: true })) === jm(gmM) && jm(cleanSystem(plM, { F, gmView: false })) === jm(plM)
+            && !/"reach"|"flight"/.test(jm(cleanSystem(Object.assign(rawM(), { items: rawM().items.map(i => ({ id: i.id, name: i.name, category: i.category, vis: i.vis, area: i.area && { ft: i.area.ft } })) }), { F, gmView: true }))) && noneM.fields.find(f => f.id === 'f_gear').list.chamber.reach === undefined,
+            jm([gmM.items.map(i => i.area), gmM.fields.find(f => f.id === 'f_gear').list.chamber, plM.fields.find(f => f.id === 'f_gear').list.chamber]));
+        const lnC = v => S.cleanBlastRules({ launch: v }, F);
+        check('1.5.9 (es) the Combat card\'s launch rules (systemcore cleanBlastRules): fuse and glance only as true, fumble only as feet or none, stop only as past or walls, written after the card\'s other rules; anything else is no key, and a launch with nothing left is none (the plan\'s reading); the players\' view has no blast rules at all',
+            jm(lnC({ fuse: true, fumble: 'feet', stop: 'walls', glance: true, more: 1 })) === jm({ launch: { fuse: true, fumble: 'feet', stop: 'walls', glance: true } }) && jm(lnC({ fumble: 'none', stop: 'past' })) === jm({ launch: { fumble: 'none', stop: 'past' } })
+            && lnC({ fuse: 'yes', glance: 1, fumble: 'Feet', stop: 'all' }) === null && lnC({}) === null && lnC('fuse') === null && lnC([true]) === null
+            && jm(Object.keys(S.cleanBlastRules({ launch: { fuse: true }, fuse: 'turn', ways: 8 }, F))) === jm(['ways', 'fuse', 'launch'])
+            && (cleanSystem(Object.assign(rawM(), { combat: { blastAuto: 'full', blast: { launch: { fuse: true } } } }), { F, gmView: false }).combat || {}).blast === undefined);
+        // the pure half
+        const fb = (a, b, boxes, after) => BCm.firstBox(a, b, boxes, after), bx = (id, x, y) => ({ id: id, x: x, y: y, w: 10, h: 10 });
+        check('1.5.9 (es) blastcore missOf, flightEnd and firstBox (run for real): missOf is how far a failed check missed, at least 1 and at most 100, and nothing for a success, a value or no verdict; flightEnd is the point on the ray past the aim at the reach, else at the board\'s edge, never past the edge, and nothing where the two points are one; firstBox is the box the segment enters first and where, at or after its after, a box holding the start met at 0, a box off the line, junk and a box of no size passed over',
+            BCm.missOf({ kind: 'check', pass: false, margin: -3 }) === 3 && BCm.missOf({ kind: 'check', pass: false, margin: 0 }) === 1 && BCm.missOf({ kind: 'check', pass: false, margin: -250 }) === 100 && BCm.missOf({ kind: 'check', pass: false }) === 1
+            && BCm.missOf({ kind: 'check', pass: true, margin: 2 }) === null && BCm.missOf({ kind: 'value', value: 3 }) === null && BCm.missOf(null) === null
+            && jm(BCm.flightEnd({ x: 100, y: 100 }, { x: 200, y: 100 }, null, 1000)) === jm({ x: 1000, y: 100 }) && jm(BCm.flightEnd({ x: 100, y: 100 }, { x: 200, y: 100 }, 300, 1000)) === jm({ x: 400, y: 100 })
+            && jm(BCm.flightEnd({ x: 100, y: 100 }, { x: 200, y: 100 }, 5000, 1000)) === jm({ x: 1000, y: 100 }) && jm(BCm.flightEnd({ x: 500, y: 500 }, { x: 400, y: 400 }, null, 1000)) === jm({ x: 0, y: 0 })
+            && jm(BCm.flightEnd({ x: 100, y: 900 }, { x: 100, y: 800 }, -5, 1000)) === jm({ x: 100, y: 0 }) && BCm.flightEnd({ x: 1, y: 1 }, { x: 1, y: 1 }, null, 1000) === null && BCm.flightEnd(null, { x: 1, y: 1 }) === null
+            && jm(fb({ x: 0, y: 0 }, { x: 100, y: 0 }, [bx('a', 50, -5), bx('b', 20, -5)])) === jm({ id: 'b', t: 0.2 }) && jm(fb({ x: 0, y: 0 }, { x: 100, y: 0 }, [bx('a', 50, -5), bx('b', 20, -5)], 0.3)) === jm({ id: 'a', t: 0.5 })
+            && jm(fb({ x: 0, y: 0 }, { x: 100, y: 0 }, [bx('h', -5, -5), bx('a', 50, -5)])) === jm({ id: 'h', t: 0 }) && fb({ x: 0, y: 0 }, { x: 100, y: 0 }, [bx('o', 50, 20), { id: 'z', x: 30, y: -5, w: 0, h: 10 }, null, { id: 4, x: 1, y: -1, w: 5, h: 5 }]) === null
+            && jm(fb({ x: 0, y: 0 }, { x: 0, y: 100 }, [bx('v', -5, 60)])) === jm({ id: 'v', t: 0.6 }) && fb({ x: 0, y: 0 }, { x: 100, y: 0 }, 'boxes') === null);
+        // the host's half: whiteboard.js wpLaunchMiss beside launchAt, sliced by the launch markers and run for real with the real core, the real
+        // blastcore and the real fogcore's lineFirst over the map's walls
+        const wbM = fs.readFileSync(path.join(app, 'scripts', 'whiteboard.js'), 'utf8').replace(/\r\n/g, '\n'), mA = wbM.indexOf('  // [systemcheck:launch-start]'), mZ = wbM.indexOf('  // [systemcheck:launch-end]'), mSrc = mA >= 0 && mZ > mA ? wbM.slice(mA, mZ) : '';
+        const gridM = FCm.squareGrid(50), hard = m => { const o = {}; m.whiteboard.filter(w => w.blocksSight && !w.isChar && !w.hidden).forEach(w => FCm.cellsUnderRect(w.x, w.y, w.w, w.h, gridM).forEach(c => { o[FCm.cellKey(c, gridM)] = 1; })); return o; };
+        const sysWith = (reach, blast) => { const s = cleanSystem(rawM(reach ? { reach: reach } : null), { F, gmView: true }); if (blast) s.combat = Object.assign({}, s.combat || {}, { blast: S.cleanBlastRules(blast, F) }); return s; };
+        const rows = () => [{ id: 'w_sc', defId: 'i_tube', qty: 1, fd: { defId: 'i_sc' } }, { id: 'w_ln', defId: 'i_tube', qty: 1, fd: { defId: 'i_ln' } }, { id: 'w_pl', defId: 'i_tube', qty: 1, fd: { defId: 'i_pl' } }];
+        const outM = { placed: [], toasts: [] };
+        const runM = (o, setup) => {
+            const camp = { system: sysWith(setup && setup.reach, setup && setup.blast), items: { m_1: { id: 'm_1', type: 'map', whiteboard: [{ id: 't_kael', isChar: true, charId: 'c_kael', x: 0, y: 100 }, { id: 't_foe', isChar: true, charId: 'c_foe', x: 300, y: 100 }].concat(setup && setup.more || []) }, m_2: { id: 'm_2', type: 'map', whiteboard: [{ id: 't_foe2', isChar: true, charId: 'c_foe', x: 300, y: 100 }] } },
+                chars: { c_kael: { id: 'c_kael', name: 'Kael', values: { f_gear: rows() } } } };
+            const win = { wpSystemCore: S, wpFormula: F, wpBlastCore: BCm, wpFog: { flightWall: (m, a, b) => FCm.lineFirst(a, b, gridM, hard(m)) }, wpNet: setup && setup.net || null };
+            const centre = t => ({ x: t.x + (t.w || 60) / 2, y: t.y + (t.h || 52) / 2 }), atPt = (m, x, y, shown) => m.whiteboard.filter(w => w.isChar && (!shown || !w.hidden) && x >= w.x && x <= w.x + 60 && y >= w.y && y <= w.y + 52).pop() || null;
+            let err = '';
+            try { new Function('window', 'getActiveCampaign', 'getActiveMap', 'toast', 'tokenAtPoint', 'tokenCentre', 'placeThrownBlast', 'wbWrap', 'document', 'yardsOn', "'use strict';\nvar _armedThrow = null;\n" + mSrc)(
+                win, () => camp, () => camp.items.m_1, t => outM.toasts.push(t), atPt, centre, (po, m) => { outM.placed.push([po, m && m.id]); return po; }, { style: {} }, { body: { classList: { add() {} } } }, (m, a, b) => Math.hypot(b.x - a.x, b.y - a.y) / 50); } catch (e) { err = String(e); }
+            outM.placed.length = 0; outM.toasts.length = 0;
+            const rnd0 = Math.random; Math.random = () => (setup && typeof setup.rnd === 'number' ? setup.rnd : 0);
+            let r = null; try { r = err ? null : win.wpLaunchMiss(Object.assign({ charId: 'c_kael', fieldId: 'f_gear', rowId: 'w_sc', tid: 't_foe', mapId: 'm_1', margin: -3, crit: '' }, o)); } catch (e) { err = String(e && e.stack || e); } finally { Math.random = rnd0; }
+            const p = outM.placed[0] ? outM.placed[0][0] : null;
+            return { err: err, r: r === null ? null : 'placed', n: outM.placed.length, map: outM.placed[0] ? outM.placed[0][1] : null, at: p ? [p.x, p.y] : null, direct: p ? p.direct : undefined, said: p ? p.said : undefined, fuse: p ? p.fuseOk === true : undefined, name: p ? p.name : undefined, goOff: p ? p.goOff === true && p.launched === true : undefined, toasts: outM.toasts.slice() };
+        };
+        const tok = (id, x, y, more) => Object.assign({ id: 't_' + id, isChar: true, charId: 'c_' + id, x: x, y: y }, more || {}), wallP = (x) => ({ id: 'wl' + x, type: 'rect', x: x, y: 0, w: 50, h: 300, blocksSight: true });
+        const sc3 = runM({}), sc1 = runM({ margin: -1 }), sc9 = runM({ margin: -9 }), scS = runM({}, { rnd: 0.5 }), scC = runM({ margin: -1 }, { blast: { scatter: 'Margin * 2' } }), sc8 = runM({}, { rnd: 0.99, blast: { ways: 8 } });
+        const scF = runM({}, { blast: { fuse: 'turn', launch: { fuse: true } } }), scOn = runM({}, { more: [tok('by', 440, 100)] });
+        const fuMiss = runM({ crit: 'fumble', margin: -6 }), fuFeet = runM({ crit: 'fumble' }, { blast: { launch: { fumble: 'feet' } } }), fuNone = runM({ crit: 'fumble' }, { blast: { launch: { fumble: 'none' } } }), fuNoneLn = runM({ rowId: 'w_ln', crit: 'fumble' }, { blast: { launch: { fumble: 'none' } } });
+        check('1.5.9 (es) a launched round that scatters on a miss (whiteboard.js wpLaunchMiss and launchAt, run for real with the real core and blastcore): it lands from the aim along the line it was fired on, a yard a point missed (3 yards: 150 board pixels on a map of 50 to the yard) and never more than half the distance fired (6 yards fired: 3 at most), the way rolled as a throw\'s, by the Combat card\'s own scatter where it names one (Margin and ThrowDistance) and its eight ways; it goes off there at once, as the round\'s own blast that goes off, striking no one directly and never moved onto a token it lands on, its notice saying the miss; with the card\'s fuse and its launch fuse it waits for the fuse; a critical failure misses by its margin, or goes off at the shooter\'s feet, or goes nowhere with the round spent, as the card says',
+            !sc3.err && sc3.r === 'placed' && sc3.n === 1 && sc3.map === 'm_1' && jm(sc3.at) === jm([480, 126]) && sc3.direct === null && sc3.goOff === true && sc3.name === 'Fizz burst' && sc3.said === ' A miss by 3: it lands 3 yd long of the aim.' && sc3.fuse === false
+            && jm(sc1.at) === jm([380, 126]) && jm(sc9.at) === jm([480, 126]) && sc9.said === ' A miss by 9: it lands 3 yd long of the aim.' && jm(scS.at) === jm([180, 126]) && / short of the aim\.$/.test(scS.said)
+            && jm(scC.at) === jm([430, 126]) && jm(sc8.at) === jm([223.93, 19.93]) && / short and to the left of the aim\.$/.test(sc8.said) && scF.fuse === true && jm(scOn.at) === jm([480, 126]) && scOn.direct === null
+            && jm(fuMiss.at) === jm([480, 126]) && jm(fuFeet.at) === jm([30, 126]) && fuFeet.direct === null && fuFeet.said === ' A critical failure: it goes off at the shooter’s feet.'
+            && fuNone.n === 0 && fuNone.r === null && jm(fuNone.toasts) === jm(['A critical failure: Fizz burst misfires and goes nowhere. The round is spent.']) && fuNoneLn.n === 0,
+            jm([sc3, sc1, sc9, scS, scC, sc8, scF, scOn, fuMiss, fuFeet, fuNone]));
+        const L = o => Object.assign({ rowId: 'w_ln' }, o || {});
+        const lnEdge = runM(L()), lnFar = runM(L(), { reach: 'Row.Far' }), lnBy = runM(L(), { reach: 'Row.Far', more: [tok('by', 400, 100)] }), lnGl = runM(L(), { reach: 'Row.Far', more: [tok('by', 400, 100)], blast: { launch: { glance: true } } });
+        const lnMid = runM(L(), { reach: 'Row.Far', more: [tok('mid', 150, 100), tok('by', 400, 100)] }), lnPast = runM(L(), { reach: 'Row.Far', more: [tok('mid', 150, 100), tok('by', 400, 100)], blast: { launch: { stop: 'past' } } });
+        const lnWalls = runM(L(), { reach: 'Row.Far', more: [tok('mid', 150, 100), tok('by', 400, 100)], blast: { launch: { stop: 'walls' } } }), lnHid = runM(L(), { reach: 'Row.Far', more: [tok('hid', 400, 100, { hidden: true }), tok('wt', 420, 100, { waiting: true })] });
+        const lnWall = runM(L(), { reach: 'Row.Far', more: [wallP(450)] }), lnWallBy = runM(L(), { reach: 'Row.Far', more: [wallP(450), tok('by', 400, 100)] }), lnWallFar = runM(L(), { reach: 'Row.Far', more: [wallP(450), tok('by', 520, 100)] });
+        const lnFuse = runM(L(), { blast: { fuse: 'turn', launch: { fuse: true } } });
+        check('1.5.9 (es) a launched round that flies straight on a miss (whiteboard.js wpLaunchMiss, run for real): it goes on along the line from the shooter through the target it missed, past it, to the launcher list\'s Flies at most worked out from the row\'s own names (Row.Far of 10 yards: 500 pixels on), else to the board\'s edge, and goes off on the first character in its path, struck directly unless the card says it glances, or in front of the first wall, whichever comes first, else at its farthest; the target it missed, a hidden token and a waiting one never stop it; the card may have it pass the characters before its target or stop at walls alone; it never waits for the fuse',
+            !lnEdge.err && jm(lnEdge.at) === jm([30000, 126]) && lnEdge.said === ' A miss: it flies straight on to the edge of the map.' && lnEdge.name === 'Rocket burst' && lnEdge.direct === null
+            && jm(lnFar.at) === jm([530, 126]) && lnFar.said === ' A miss: it flies straight on and goes off at its farthest.'
+            && jm(lnBy.at) === jm([430, 126]) && lnBy.direct === 't_by' && lnBy.said === ' A miss: it flies straight on and strikes a character in its path.' && jm(lnGl.at) === jm([430, 126]) && lnGl.direct === null
+            && jm(lnMid.at) === jm([180, 126]) && lnMid.direct === 't_mid' && jm(lnPast.at) === jm([430, 126]) && lnPast.direct === 't_by' && jm(lnWalls.at) === jm([530, 126]) && lnWalls.direct === null && jm(lnHid.at) === jm([530, 126])
+            && jm(lnWall.at) === jm([430, 126]) && lnWall.said === ' A miss: it flies straight on into a wall.' && lnWall.direct === null && lnWallBy.direct === 't_by' && jm(lnWallFar.at) === jm([430, 126]) && lnWallFar.direct === null
+            && lnFuse.fuse === false,
+            jm([lnEdge, lnFar, lnBy, lnGl, lnMid, lnPast, lnWalls, lnHid, lnWall, lnWallBy, lnWallFar, lnFuse].map(x => [x.err, x.at, x.direct, x.fuse])));
+        const noFl = runM({ rowId: 'w_pl' }), noTid = runM({ tid: '' }), hidT = runM({ tid: 't_hid' }, { more: [tok('hid', 300, 300, { hidden: true })] }), offMap = runM({ tid: 't_foe2', mapId: 'm_2' }), protoM = runM({ mapId: '__proto__' }), client = runM({}, { net: { active: true, role: 'client' } });
+        check('1.5.9 (es) a launched round\'s miss that cannot be judged (whiteboard.js wpLaunchMiss, run for real): a round whose item says nothing of a miss lands nowhere and says nothing, as before (the GM places it); with no target, a hidden target, a target on a map the shooter is not on or a map that is not there, nothing lands and the GM is told to place it with Launch; nothing on a player\'s app',
+            !noFl.err && noFl.n === 0 && noFl.r === null && noFl.toasts.length === 0 && noTid.n === 0 && noTid.toasts.length === 1 && /Place it with Launch on the sheet\.$/.test(noTid.toasts[0]) && /^Fizz burst missed/.test(noTid.toasts[0])
+            && hidT.n === 0 && hidT.toasts.length === 1 && offMap.n === 0 && offMap.toasts.length === 1 && protoM.n === 0 && protoM.toasts.length === 1 && client.n === 0 && client.toasts.length === 0,
+            jm([noFl, noTid, hidT, offMap, protoM, client]));
+        check('1.5.9 (es) a hit still goes off at once (whiteboard.js, pinned): a launched round that hits goes through launchAt with no fuse, and a blast that goes off waits for the fuse only where the launch asks it (fuseOk), its notice saying it lands where it waits; launchAt hands a miss\'s own point, whom it strikes and its words on',
+            wbM.includes("var c = tokenCentre(t); return launchAt({ charId: o.charId, fieldId: o.fieldId, rowId: o.rowId, x: c.x, y: c.y }, map);") && wbM.includes("var fz = (!opts.goOff || opts.fuseOk === true) && rules && rules.fuse === 'turn'")
+            && wbM.includes("said: opts.goOff && typeof opts.said === 'string' ? opts.said.slice(0, 400) : ''") && wbM.includes("(opts.goOff ? (b.name || 'A mine') + (pre && pre.fuse ? ' lands' : ' goes off')")
+            && wbM.includes("if (typeof opts.said === 'string' && opts.said) po.said = opts.said; if (opts.fuse === true) po.fuseOk = true;"));
+        // the System editor: the Combat card's four lists (sheets.js blastBox and onBlastChange, sliced by the blastbox markers and run for real), the
+        // Items tab's list and the Lists tab's Flies at most with what Save says of it (refreshErrors run for real with the cleaner)
+        const shM = fs.readFileSync(path.join(app, 'scripts', 'sheets.js'), 'utf8').replace(/\r\n/g, '\n'), bbA = shM.indexOf('// [systemcheck:blastbox-start]'), bbZ = shM.indexOf('// [systemcheck:blastbox-end]'), bbSrc = bbA >= 0 && bbZ > bbA ? shM.slice(bbA, bbZ) : '';
+        const elB = (tag, cls, txt) => ({ tag: tag, className: cls || '', textContent: txt || '', kids: [], dataset: {}, appendChild(k) { this.kids.push(k); return k; } });
+        const selB = (cls, cap, opts, val) => { const l = elB('label', 'sys-combat-item'); l.sel = { cls: cls, cap: cap, opts: opts, val: val }; return l; };
+        let BB = null, bbErr = '', draftB = { combat: {} };
+        try { BB = new Function('el', 'input', 'lineUnder', 'labeledSelect', 'ui', 'F', 'markDirty', 'getDraft', 'window', "'use strict';\nvar draft = getDraft();\n" + bbSrc + '\nreturn { box: blastBox, change: function(t) { draft = getDraft(); return onBlastChange(t); } };')(elB, (cls, v) => { const i = elB('input', cls); i.value = v; return i; }, () => {}, selB, () => null, () => F, () => {}, () => draftB, { wpSystemCore: S }); } catch (e) { bbErr = String(e); }
+        const drawn = cm => { const b = elB('div'); BB.box(b, cm); return b.kids.filter(k => k.sel && /sys-combat-bl/.test(k.sel.cls)).map(k => [k.sel.cls, k.sel.cap, k.sel.val, k.sel.opts.map(o => o[0]).join('|')]); };
+        const ch = (cls, v) => { BB.change({ className: cls, value: v }); return jm(draftB.combat); };
+        const d0 = bbErr ? null : drawn({}), d1 = bbErr ? null : drawn({ blast: { launch: { fuse: true, fumble: 'none', stop: 'walls', glance: true } } });
+        const c1 = bbErr ? '' : ch('sys-combat-blfuse', 'fuse'), c2 = bbErr ? '' : ch('sys-combat-blfumble', 'feet'), c3 = bbErr ? '' : ch('sys-combat-blstop', 'past'), c4 = bbErr ? '' : ch('sys-combat-blglance', 'glance');
+        const c5 = bbErr ? '' : (ch('sys-combat-blfuse', ''), ch('sys-combat-blfumble', 'odd'), ch('sys-combat-blstop', ''), ch('sys-combat-blglance', '')), c6 = bbErr ? null : BB.change({ className: 'sys-combat-blah', value: 'x' });
+        check('1.5.9 (es) the Combat card\'s lists for a launched round\'s miss (sheets.js blastBox and onBlastChange, run for real): four lists in fixed words, each first choice the plan\'s reading and drawn so where nothing is set, each drawn from what is stored; a pick stores the one word or tick the cleaner keeps, the first choice takes it off, and a launch with nothing left goes, the blast rules with it; another class is not theirs',
+            !bbErr && jm(d0) === jm([['sys-combat-blfuse', 'A launched round that misses', '', '|fuse'], ['sys-combat-blfumble', 'Its critical failure', '', '|feet|none'], ['sys-combat-blstop', 'A round that flies straight stops at', '', '|past|walls'], ['sys-combat-blglance', 'A character it stops on', '', '|glance']])
+            && jm(d1.map(x => x[2])) === jm(['fuse', 'none', 'walls', 'glance']) && c1 === jm({ blast: { launch: { fuse: true } } }) && c2 === jm({ blast: { launch: { fuse: true, fumble: 'feet' } } })
+            && c4 === jm({ blast: { launch: { fuse: true, fumble: 'feet', stop: 'past', glance: true } } }) && c5 === jm({}) && c6 === false
+            && jm(S.cleanBlastRules(JSON.parse(c4).blast, F)) === jm(JSON.parse(c4).blast),
+            bbErr || jm([d0, d1, c1, c2, c3, c4, c5]));
+        const reM = (() => { const i = shM.indexOf('\nfunction refreshErrors() {'), k = shM.indexOf('\nfunction errorCell(', i); return i >= 0 && k > i ? shM.slice(i, k) : ''; })();
+        const runRe = (draft, withCleaner) => new Function('draft', 'F', 'validKey', 'KINDS', 'cleanItemKey', 'cleanSystem', 'validateSystem', 'statKey', 'LIMITS', 'getActiveCampaign', 'systemOf', 'gmViewFields', 'gmDerivedNames', 'TIME_WORDS', 'cleanFieldUnit', 'unitOf', 'cleanReach',
+            'var errorsById = {}, warningsById = {};\n' + reM + '\nrefreshErrors(); return { e: errorsById, w: warningsById };')(draft, () => F, S.validKey, S.KINDS, S.cleanItemKey, S.cleanSystem, S.validateSystem, S.statKey, S.LIMITS, () => ({ chars: {} }), () => null, S.gmViewFields, S.gmDerivedNames, S.TIME_WORDS, S.cleanFieldUnit, S.unitOf, withCleaner ? S.cleanReach : undefined);
+        const drR = rc => ({ name: 'D', rolls: [], items: [], sheet: { sections: [] }, fields: [{ id: 'f_gear', key: 'Gear', kind: 'item-list', list: { stats: [{ key: 'Far' }], chamber: { from: 'f_gear', cap: 1, reach: rc } } }] });
+        const msgR = (rc, wc) => ((runRe(drR(rc), wc !== false).e['list:f_gear']) || []).map(e => e.message).filter(m => /Flies at most/.test(m));
+        check('1.5.9 (es) the Lists tab\'s Flies at most (sheets.js refreshErrors, run for real): one that rolls dice or does not read is said to be dropped, in the words Save keeps, as the cleaner drops it; one that reads, and an empty box, say nothing; with no cleaner at hand nothing is said; the box, its handler and the Items tab\'s list are wired',
+            jm(msgR('Row.Far + 1d6')) === jm(['Flies at most does not read as a formula with no dice. Save drops it.']) && jm(msgR('((')) === jm(msgR('Row.Far + 1d6')) && msgR('Row.Far').length === 0 && msgR('').length === 0 && msgR('1d6', false).length === 0
+            && S.cleanReach('Row.Far + 1d6', F) === '' && S.cleanReach('Row.Far', F) === 'Row.Far'
+            && shM.includes("crw.appendChild(input('sys-list-chamberreach field', typeof chS.reach === 'string' ? chS.reach : ''") && shM.includes("else if (lcc.indexOf('sys-list-chamberreach') >= 0) { if (!lsp.chamber || typeof lsp.chamber !== 'object') return; if (t.value.trim()) lsp.chamber.reach = t.value.slice(0, LIMITS.formula); else delete lsp.chamber.reach; }")
+            && shM.includes("else area.appendChild(select('sys-item-aflight', [['', 'On a miss, launched: you place it'], ['scatter', 'On a miss, launched: it scatters, as a throw'], ['line', 'On a miss, launched: it flies straight']], it.area.flight === 'scatter' || it.area.flight === 'line' ? it.area.flight : ''")
+            && shM.includes("if (c.indexOf('sys-item-aflight') >= 0) { if (iit.area) { if (t.value === 'scatter' || t.value === 'line') iit.area.flight = t.value; else delete iit.area.flight; }") && shM.includes("if (t.checked) { iit.area.place = true; delete iit.area.flight; }"),
+            jm([msgR('Row.Far + 1d6'), msgR('Row.Far')]));
+    }
+    // [systemcheck:launchmiss-tests-end]
     // [systemcheck:rolled-tests-start]
     /* ---- 1.5.9 (docs/BOOK_ES_ET_PLAN.md section 0; the owner: "it should operate in a way that enables the handbook rules to be expressed accurately"): a change
        ticked Rolled may roll dice in its amount, which only the host rolls (applyAct's D), and its line says what it drew ---- */

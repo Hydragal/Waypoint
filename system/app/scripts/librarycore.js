@@ -177,6 +177,7 @@ export function entryFromForm(f) {
         if (f.areaPlace === 'yes') ar.place = true;
         var tg = nb(f.areaTrig); if (tg !== '') ar.trig = tg;
         var dv = nb(f.areaAd); if (dv !== '') ar.ad = dv;
+        var fl = s(f.areaFlight).trim(); if (fl) ar.flight = fl;   // 1.5.9 (es): how a launched round lands on a miss (the cleaner keeps scatter or line, never beside Placed)
     }
     if (f.rm === 'bound' || f.rm === 'curse') { out.rm = f.rm; if (s(f.rmMsg).trim()) out.rmMsg = s(f.rmMsg); }   // L2b: a player's removal (bound / curse on contact) and its message, as the Items tab has them
     if (f.eq === 'bound' || f.eq === 'curse') { out.eq = f.eq; if (s(f.eqMsg).trim()) out.eqMsg = s(f.eqMsg); }   // and switching it off

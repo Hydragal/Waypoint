@@ -712,10 +712,28 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             && j(bx.readP) === j({ ft: 15, shape: 'circle', name: 'Grenade' }) && j(bx.clP) === j({ ft: 15, shape: 'circle', name: 'Grenade' }) && bx.plainSame === true
             && j(bx.noPlace) === j({ ft: 15, shape: 'circle', name: 'Grenade' }) && bx.noFt === undefined
             && j(bx.pairs) === j([['', 'None'], ['cr', 'Crushing'], ['cut', 'cut'], ['old', 'old']]) && j(bx.pairsNone) === j([['', 'None'], ['cr', 'Crushing'], ['cut', 'cut']])
-            && j(bx.boxed) === j([['areaType', 'old'], ['areaUse', 'yes'], ['areaPlace', ''], ['areaTrig', ''], ['areaAd', '1.5']])
+            && j(bx.boxed) === j([['areaType', 'old'], ['areaUse', 'yes'], ['areaPlace', ''], ['areaTrig', ''], ['areaAd', '1.5'], ['areaFlight', '']])   // 1.5.9 (es): On a miss, launched joins the box last (moved on purpose)
             && bx.say[0] === 'Not kept: the trigger radius, which needs Placed, not thrown.' && bx.say[1] === 'Not kept: the trigger radius, which must be a number above 0.'
             && bx.say[2] === 'Not kept: the blast\u2019s other settings, which need a blast radius.' && bx.say[3] === '' && bx.say[4] === '',
             bxErr || j(bx));
+        // 1.5.9 (es): an entry's On a miss, launched (librarywin.js blastBox and blastDrops beside the real renderForm and readForm, librarycore
+        // entryFromForm and the real cleaner): drawn from the entry, read back and kept; a placed blast keeps none, and Save says so
+        let bf = null, bfErr = '';
+        try {
+            const W4 = formWorld(), fl = (e) => { W4.entries[0] = e; W4.api.renderForm(); const box = W4.byId.libF_areaFlight, rd = W4.api.readForm(); return { box: box ? box.value : null, read: rd.area, kept: (cleanLibEntry(rd, gm) || {}).area }; };
+            const line = fl({ id: 'i_a', name: 'Spark Grenade', vis: 'all', area: { ft: 15, shape: 'circle', name: 'Spark', flight: 'line' } }), sc = fl({ id: 'i_a', name: 'Spark Grenade', vis: 'all', area: { ft: 15, shape: 'circle', name: 'Spark', flight: 'scatter' } });
+            const odd = fl({ id: 'i_a', name: 'Spark Grenade', vis: 'all', area: { ft: 15, shape: 'circle', name: 'Spark', flight: 'zigzag' } });
+            W4.entries[0] = { id: 'i_a', name: 'Pebble Mine', vis: 'all', area: { ft: 6, shape: 'circle', name: 'Mine', place: true, trig: 2 } }; W4.api.renderForm(); W4.byId.libF_areaFlight.value = 'line';
+            const rdP = W4.api.readForm(), clPl = cleanLibEntry(rdP, gm);
+            const bA = winS2.indexOf('function dmgTypePairs(cur) {'), bZ2 = winS2.indexOf('function saveEntry() {'), ids = { libF_areaFlight: { value: 'line' } };
+            const bApi = new Function('camp', 'field', 'ui', '"use strict";\n' + winS2.slice(bA, bZ2) + '\nreturn { blastDrops };')(() => null, () => null, id => ids[id] || null);
+            bf = { line, sc, odd, rdP: rdP.area, clPl: clPl && clPl.area, said: bApi.blastDrops({ area: rdP.area }, { area: clPl && clPl.area }), saidKept: bApi.blastDrops({ area: { ft: 6, flight: 'line' } }, { area: { ft: 6, flight: 'line' } }) };
+        } catch (e) { bfErr = String(e && e.stack || e).slice(0, 600); }
+        check('1.5.9 (es) the Library window\'s form holds how a launched round lands on a miss (librarywin.js blastBox and blastDrops beside the real renderForm and readForm, librarycore entryFromForm and the real cleaner): it scatters or it flies straight is drawn from the entry, read back and kept; a word the list does not hold is drawn as You place it and nothing is kept; a placed blast keeps none, and Save says so in fixed words',
+            !!bf && bf.line.box === 'line' && bf.line.read.flight === 'line' && bf.line.kept.flight === 'line' && bf.sc.box === 'scatter' && bf.sc.kept.flight === 'scatter'
+            && bf.odd.box === '' && bf.odd.kept.flight === undefined && bf.rdP.flight === 'line' && bf.rdP.place === true && bf.clPl.flight === undefined && bf.clPl.place === true
+            && bf.said === 'Not kept: how it lands on a miss, which a placed blast never does.' && bf.saidKept === '',
+            bfErr || j(bf));
         // ... and what the window says of a rule, and what it exports, while a pack of the campaign is not read
         let fq = null, fqErr = '';
         try {

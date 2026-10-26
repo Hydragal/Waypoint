@@ -5406,6 +5406,14 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             && made.indexOf('innerHTML') < 0 && !/innerHTML|insertAdjacentHTML|outerHTML/.test(src)
             && !!hostile && j(hostile.area) === j({ ft: 6, shape: 'circle', name: '', use: true, place: true }) && !!huge && j(huge.area) === j({ ft: 6, shape: 'circle', name: '', ad: 0.1, place: true, trig: 100 }),
             j([opts, inp.map(x => x.value), made, hostile && hostile.area, huge && huge.area]));
+        // 1.5.9 (es): On a miss, launched from a hostile file reaches the form only as a value the list holds, never as markup or a stored word
+        const formF = mk('div'); B.blastBox(formF, { flight: BAD }); const flSel = formF.kids[5] && formF.kids[5].kids[1], flOpts = flSel ? flSel.kids.map(o => [o.value, o.textContent]) : null;
+        const formL = mk('div'); B.blastBox(formL, { flight: 'line' }); const flLine = formL.kids[5] && formL.kids[5].kids[1];
+        const hostF = LCB.cleanLibEntry(LCB.entryFromForm({ id: 'i_h', name: 'Pebble Rocket', vis: 'all', areaFt: '6', areaFlight: BAD }), ctx), keptF = LCB.cleanLibEntry(LCB.entryFromForm({ id: 'i_h', name: 'Pebble Rocket', vis: 'all', areaFt: '6', areaFlight: 'line' }), ctx);
+        check('1.5.9 (es) the Library window\'s On a miss, launched from a hostile campaign (librarywin.js blastBox, run on a page that records every write): its list holds the three fixed choices as values and text, a stored word that is none of them is drawn as You place it, and the cleaner keeps nothing of a hostile word from the form; scatter or line is kept',
+            !!flSel && flSel.tag === 'select' && j(flOpts) === j([['', 'You place it'], ['scatter', 'It scatters, as a throw'], ['line', 'It flies straight']]) && flSel.value === '' && flLine.value === 'line'
+            && made.indexOf('innerHTML') < 0 && !!hostF && hostF.area.flight === undefined && !!keptF && keptF.area.flight === 'line',
+            j([flOpts, flSel && flSel.value, hostF && hostF.area, keptF && keptF.area]));
     }
     {   // voice chat (1.5.9, pull request #1 by Hydragal): a player's name from the roster and a name a hostile host puts in the offer's map reach the
         // voice popover as text alone (voice.js loaded whole on tools/voicedom.js's page of plain objects, which counts every write of markup)
