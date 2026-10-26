@@ -29,6 +29,11 @@ System editor
 - A roll or an apply action can also be due, or run, at the end of its
   character's turn in a fight: Also at its turn's end. A held turn ends
   once it is played, and a step back runs nothing again.
+- A roll's Then, or an apply action, can switch a status effect on or
+  off. Used on someone next to you, the effect goes on them.
+- A list's change can set the row's own quantity, or one of its own number
+  stats, such as a medkit's wear. Used up to 0, the row goes, and its
+  notice offers Undo for a few seconds, as the sheet's minus does.
 
 Using an item on someone next to you
 - When the GM rolls it, an amount that reads a GM-only value keeps the

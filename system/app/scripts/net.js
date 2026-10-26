@@ -5429,7 +5429,7 @@ function allyCard(user, target, onName, label, lines, scope, from, conn, pid) {
     postApply(rec, scope, target, null);
     var sees = scope === 'table' || (scope === 'owner' && !!target.ownerId && !target.npc && target.ownerId === pid);
     if (conn && !sees && net.active && net.role === 'host') {
-        var bare = Object.assign({}, rec, { priv: 'gm', lines: rec.lines.map(function(l, i) { var o = lines[i] && lines[i].set === true ? { n: l.n, s: 1 } : { n: l.n, d: l.d }; if (l.roll) o.roll = l.roll; return o; }) });
+        var bare = Object.assign({}, rec, { priv: 'gm', lines: rec.lines.map(function(l, i) { if (l.fx === 1 || l.fx === 0) return { n: l.n, fx: l.fx }; var o = lines[i] && lines[i].set === true ? { n: l.n, s: 1 } : { n: l.n, d: l.d }; if (l.roll) o.roll = l.roll; return o; }) });
         try { conn.send(bare); } catch (e) { sendFailed(e); }
     }
     return rec;
@@ -6909,12 +6909,13 @@ function handleMessage(msg, conn) {
         styleTake(msg.id, msg.looks, SY.cleanLooks(msg.looks, hbL, campL.system) || {}, campL.system);
         if (window.wpSheets) window.wpSheets.charChanged(msg.id);
         // [netcheck:charstylein-end]
-    } else if ((msg.type === 'chars' || msg.type === 'char' || msg.type === 'charDelta' || msg.type === 'charGone' || msg.type === 'char-ack' || msg.type === 'char-deny') && net.role === 'client') {
+    } else if ((msg.type === 'chars' || msg.type === 'char' || msg.type === 'charDelta' || msg.type === 'charGone' || msg.type === 'char-ack' || msg.type === 'char-deny' || msg.type === 'row-gone') && net.role === 'client') {
         // [netcheck:charin-start]
         // characters from the synced host only (character sheets, 1.5.0): copies are replaced, never merged; every value re-cleaned against the system on hand
         if (!net.foreign || conn.peer !== net.syncedPeer || net.stream || !window.wpSystemCore) return;
         var SC2 = window.wpSystemCore;
         var dropP = function(id) { Object.keys(_charPending).forEach(function(rid) { if (_charPending[rid].charId === id) { clearTimeout(_charPending[rid].timer); delete _charPending[rid]; } }); };   // Onboarding F0: a copy that is no longer ours drops its queued edits
+        if (msg.type === 'row-gone') { var rgC = typeof SC2.cleanRowGone === 'function' ? SC2.cleanRowGone(msg) : null; if (!rgC) return; if (window.wpSheets && typeof window.wpSheets.goneWait === 'function') rgC.items.forEach(function(it) { window.wpSheets.goneWait(rgC.charId, it.f, it.r); }); return; }   // 1.6.0: rows a press of ours used up: their Undo waits for the change
         if (msg.type === 'char-ack' || msg.type === 'char-deny') { if (typeof msg.rid !== 'string' || !Object.prototype.hasOwnProperty.call(_charPending, msg.rid)) return; charPendingDone(msg.rid, msg.type === 'char-ack', SC2.cleanDenyReason(msg.reason), SC2.cleanItemMsg(msg.msg)); return; }   // Stage 6: a bound or cursed item's message, as text
         if (typeof msg.campId !== 'string' || msg.campId !== state.appState.activeCampaignId) return;
         var campC = campOf(msg.campId); if (!campC || !campC.system) return;   // the system always comes first
@@ -7063,13 +7064,14 @@ function handleMessage(msg, conn) {
             if (qa.on) { onA = typeof allyOn === 'function' ? allyOn(campA, mapA, tkA, qa.on, profA.id) : { error: 'missing', message: 'That character is not there.' }; if (onA.error) { denyA('error', onA.message); return; } }
             if (typeof Sa.withOnSelf === 'function') varsA = Sa.withOnSelf(varsA, !onA);   // OnSelf: 1 on themselves, 0 on another
         }
-        var resA = Sa.applyAct(campA.system, chA, actA, varsA, Fa, tcA, qa.row ? { f: qa.row.f, r: qa.row.r } : null, undefined, window.wpDiceCore || null, onA ? { char: onA.ch, tctx: typeof allyCtx === 'function' ? allyCtx(mapA, onA.tok) : null } : null);   // R2b: a list's action may move its row's counters; 1.5.9: the host's dice roll a Rolled amount (never the player's word); and its changes land on the one it is used on
+        var resA = Sa.applyAct(campA.system, chA, actA, varsA, Fa, tcA, qa.row ? { f: qa.row.f, r: qa.row.r } : null, undefined, window.wpDiceCore || null, onA ? { char: onA.ch, tctx: typeof allyCtx === 'function' ? allyCtx(mapA, onA.tok) : null } : null, typeof fxNow === 'function' ? fxNow(qa.charId, onA) : null);   // R2b: a list's action may move its row's counters; 1.5.9: the host's dice roll a Rolled amount (never the player's word); and its changes land on the one it is used on
         if (!resA.ok) { denyA(resA.reason, resA.message); return; }
         var costA = typeof actSpend === 'function' ? actSpend(campA, qa.charId, profA, actA.cost, conn, chA.name) : ''; if (costA) { denyA('error', costA); return; }   // turn-based combat T4: what it costs (worked out first: a press that cannot land spends nothing)
         var ownA = !onA || Object.keys(resA.values).length > 0;   // 1.5.9: a press that moved only the one it was used on writes nothing of the user's
         if (ownA) { chA.values = chA.values || {}; Object.keys(resA.values).forEach(function(k) { chA.values[k] = resA.values[k]; }); chA.updated = Date.now(); }
         saveRemoteSoon();
         try { conn.send({ type: 'char-ack', rid: qa.rid }); } catch (e) { sendFailed(e); }
+        if (resA.gone && typeof rowGoneTell === 'function') rowGoneTell(qa.charId, chA, resA.gone, conn);   // 1.6.0: a row it used up, kept for its Undo and said before the change lands
         if (ownA) { net.syncCharDelta(qa.charId, resA.values); if (window.wpSheets) window.wpSheets.charChanged(qa.charId); }
         var labelA = qa.label || (actA.label.indexOf('{') < 0 ? actA.label : 'Apply');
         if (onA && typeof allyWrite === 'function') allyWrite(onA.ch, resA.onValues);
@@ -7900,8 +7902,8 @@ function handleMessage(msg, conn) {
         if (actQ && actQ.init === true && typeof initIntoFight === 'function') initIntoFight(campQ, locQ, q.charId, pidQ, resQ.value);   // initiative O1: their own initiative roll into the fight on their map, once
         if (actQ && actQ.then) {   // Stage 6 HUD R1: its consequences on the host's copy, through the roller's view, all or nothing (nothing to apply is quiet)
             var mfHitQ = mfQ !== null && Dq.naturalOf(resQ) >= mfQ, vdQ = Dq.verdictOf(resQ, ruleQ), crQ = typeof SQ.thenCrit === 'function' ? SQ.thenCrit(vdQ, mfHitQ) : '', thQ = SQ.thenChanges(actQ, mfHitQ ? false : (vdQ && vdQ.kind === 'check' ? vdQ.pass : null), mfHitQ, crQ);   // R3: a malfunction is a failure, with its own changes; 1.5.8: and a critical, with its own
-            var taQ = thQ.length ? SQ.applyAct(campQ.system, chQ, { apply: thQ }, typeof SQ.withRollCrit === 'function' ? SQ.withRollCrit(varsQ, crQ, typeof SQ.thenMargin === 'function' ? SQ.thenMargin(vdQ, mfHitQ) : 0) : varsQ, Fq, tcQ, q.row ? { f: q.row.f, r: q.row.r } : null, undefined, Dq, onQ ? { char: onQ.ch, tctx: typeof allyCtx === 'function' ? allyCtx(mapQ, onQ.tok) : null } : null) : null;   // 1.5.8: its amounts read RollCrit   // R2b: a list roll may move its row's counters   // 1.5.9: the host's dice roll a Rolled amount, and its field changes land on the one it is used on
-            if (taQ && taQ.ok && (!onQ || Object.keys(taQ.values).length)) { chQ.values = chQ.values || {}; Object.keys(taQ.values).forEach(function(k) { chQ.values[k] = taQ.values[k]; }); chQ.updated = Date.now(); saveRemoteSoon(); net.syncCharDelta(q.charId, taQ.values); if (window.wpSheets) window.wpSheets.charChanged(q.charId); }
+            var taQ = thQ.length ? SQ.applyAct(campQ.system, chQ, { apply: thQ }, typeof SQ.withRollCrit === 'function' ? SQ.withRollCrit(varsQ, crQ, typeof SQ.thenMargin === 'function' ? SQ.thenMargin(vdQ, mfHitQ) : 0) : varsQ, Fq, tcQ, q.row ? { f: q.row.f, r: q.row.r } : null, undefined, Dq, onQ ? { char: onQ.ch, tctx: typeof allyCtx === 'function' ? allyCtx(mapQ, onQ.tok) : null } : null, typeof fxNow === 'function' ? fxNow(q.charId, onQ) : null) : null;   // 1.5.8: its amounts read RollCrit   // R2b: a list roll may move its row's counters   // 1.5.9: the host's dice roll a Rolled amount, and its field changes land on the one it is used on
+            if (taQ && taQ.ok && (!onQ || Object.keys(taQ.values).length)) { chQ.values = chQ.values || {}; Object.keys(taQ.values).forEach(function(k) { chQ.values[k] = taQ.values[k]; }); chQ.updated = Date.now(); saveRemoteSoon(); if (taQ.gone && typeof rowGoneTell === 'function') rowGoneTell(q.charId, chQ, taQ.gone, conn); net.syncCharDelta(q.charId, taQ.values); if (window.wpSheets) window.wpSheets.charChanged(q.charId); }
             if (taQ && taQ.ok && onQ && typeof allyWrite === 'function' && allyWrite(onQ.ch, taQ.onValues)) { saveRemoteSoon(); if (typeof allyCard === 'function') allyCard(chQ, onQ.ch, onQ.tok.charName || onQ.tok.name || onQ.ch.name, String(recQ.label || (typeof actQ.label === 'string' && actQ.label && actQ.label.indexOf('{') < 0 ? actQ.label : 'Then')).slice(0, 60), taQ.onLines, recQ.priv ? 'gm' : SQ.applyScope(campQ.system, onQ.ch, { apply: thQ, vis: actQ.vis }, false, Fq), diceFrom(net.roster[conn.peer], false), conn, pidQ); }   // 1.5.9: what moved on the one it was used on, and its card
             if (taQ && taQ.ok && taQ.drew && taQ.lines.some(function(l) { return !!l.roll; }) && typeof postApply === 'function' && typeof applyLines === 'function') { var raQ = { type: 'apply', id: 'r_' + Math.random().toString(36).slice(2, 10), from: diceFrom(net.roster[conn.peer], false), label: String(recQ.label || (typeof actQ.label === 'string' && actQ.label && actQ.label.indexOf('{') < 0 ? actQ.label : 'Then')).slice(0, 60), lines: applyLines(taQ.lines), ts: Date.now() }; if (chQ.name) raQ.as = String(chQ.name).slice(0, 60); postApply(raQ, recQ.priv ? 'gm' : SQ.applyScope(campQ.system, chQ, { apply: thQ, vis: actQ.vis }, false, Fq), chQ, conn); }   // 1.5.9: a Then whose Rolled amount drew dice says them on a card of its own, kept as private as the roll
             if (taQ && taQ.ok && taQ.fired && !mfHitQ && vdQ && vdQ.kind === 'check' && vdQ.pass === true && tcQ && tcQ.range && typeof tcQ.range.tid === 'string' && typeof window.wpLaunchHit === 'function') window.wpLaunchHit({ charId: q.charId, fieldId: taQ.fired.f, rowId: taQ.fired.r, tid: tcQ.range.tid, mapId: tcQ.range.mapId });   // 1.5.9 Chambers from: a hit puts the round it fired on the roller's target
@@ -8944,7 +8946,28 @@ function postApply(rec, scope, ch, conn) {
     logEvent('char', applyLine(rec));
     if (ch && typeof ch.id === 'string' && typeof bellOut === 'function') bellOut(ch.id, { apply: rec });   // the character's bell here
 }
-function applyLines(lines) { var mxL = (typeof window !== 'undefined' && window && window.wpSystemCore && window.wpSystemCore.LIMITS && window.wpSystemCore.LIMITS.applyChanges) || 8; return (Array.isArray(lines) ? lines : []).slice(0, mxL).map(function(l) {   /* one line a change: systemcore LIMITS.applyChanges (8 since 1.5.4), as dicecore cleanApply takes them */ var cap = function(x) { return Math.max(-1e15, Math.min(1e15, x)); }; var o = { n: String(l.n).slice(0, 60), d: cap(l.d), v: cap(l.v) }; if (typeof l.roll === 'string' && l.roll) o.roll = l.roll.slice(0, 60); return o; }); }   /* 1.5.9: and the dice a Rolled amount drew, as text */   // what the card carries: a label, two numbers (clients refuse past 1e15)
+// [netcheck:rowgone-start]
+// 1.6.0: the clock an effect a change switches on starts its timer by, as a player's own effect starts it (the host's clock, and whether each
+// character is in a fight)
+function fxNow(charId, on) { var ic = function(id) { return !!(typeof id === 'string' && net.charInCombat && net.charInCombat(id)); }; return { now: Date.now(), inCombat: ic(charId), onInCombat: !!(on && on.ch && ic(on.ch.id)) }; }
+// 1.6.0 (the owner: "Row removed, with Undo"): rows a player's press used up. The host keeps each as the sheet's minus keeps one (its Undo's
+// record, judged by the restore op) and tells that connection first, so its notice can offer Undo once the change lands
+function rowGoneTell(charId, ch, gone, conn) {
+    if (!Array.isArray(gone) || !gone.length || !ch || !conn) return 0;
+    var now = Date.now(), S = window.wpSystemCore, ms = S && S.LIMITS && S.LIMITS.undoGraceMs ? S.LIMITS.undoGraceMs : 10000, items = [];
+    gone.slice(0, 8).forEach(function(g) {
+        if (!g || typeof g.f !== 'string' || typeof g.r !== 'string' || !g.row) return;
+        var after = ch.values && Array.isArray(ch.values[g.f]) ? ch.values[g.f] : [];
+        _rowGrace[charId + '|' + g.f + '|' + g.r + '|gone'] = { until: now + ms, added: 0, row: JSON.parse(JSON.stringify(g.row)), at: g.at, after: JSON.stringify(after) };
+        items.push({ f: g.f, r: g.r });
+    });
+    if (!items.length) return 0;
+    try { conn.send({ type: 'row-gone', charId: charId, items: items }); } catch (e) { sendFailed(e); }
+    if (window.wpStepLog) window.wpStepLog('rowgone v1', 'host-kept', { n: items.length });
+    return items.length;
+}
+// [netcheck:rowgone-end]
+function applyLines(lines) { var mxL = (typeof window !== 'undefined' && window && window.wpSystemCore && window.wpSystemCore.LIMITS && window.wpSystemCore.LIMITS.applyChanges) || 8; return (Array.isArray(lines) ? lines : []).slice(0, mxL).map(function(l) {   /* one line a change: systemcore LIMITS.applyChanges (8 since 1.5.4), as dicecore cleanApply takes them */ var cap = function(x) { return Math.max(-1e15, Math.min(1e15, x)); }; if (l.fx === 1 || l.fx === 0) return { n: String(l.n).slice(0, 60), fx: l.fx }; var o = { n: String(l.n).slice(0, 60), d: cap(l.d), v: cap(l.v) }; if (typeof l.roll === 'string' && l.roll) o.roll = l.roll.slice(0, 60); return o; }); }   /* 1.5.9: and the dice a Rolled amount drew, as text */   // what the card carries: a label, two numbers (clients refuse past 1e15)
 // [netcheck:postapply-end]
 // The bell (the HUD's notes, sheets.js): a note for a character's bell on this machine — cid '' finds this player's character named as
 function bellOut(cid, note, as) { try { if (window.wpSheets && window.wpSheets.bellNote) window.wpSheets.bellNote(cid, note, as); } catch (e) { console.error(e); } }
@@ -9107,13 +9130,14 @@ net.diceRoll = function(expr, o) {
     logEvent('dice', D.cardText(rec, res, F, { maxChars: D.LIMITS.logChars, toName: toName, rule: ruleR }));
     if (entR && entR.then && chR && SR && campR && campR.system) {   // Stage 6 HUD R1/R2b: the GM's own roll's consequences, here (a player's are the host's); a list's roll may move its row's counters
         var mfHitR = mfR !== null && D.naturalOf(res) >= mfR, vdR = D.verdictOf(res, ruleR), crR = typeof SR.thenCrit === 'function' ? SR.thenCrit(vdR, mfHitR) : '', thR = SR.thenChanges(entR, mfHitR ? false : (vdR && vdR.kind === 'check' ? vdR.pass : null), mfHitR, crR);   // R3; 1.5.8: and its critical
-        var taR = thR.length ? SR.applyAct(campR.system, chR, { apply: thR }, typeof SR.withRollCrit === 'function' ? SR.withRollCrit(varsR, crR, typeof SR.thenMargin === 'function' ? SR.thenMargin(vdR, mfHitR) : 0) : varsR, F, null, o.row ? { f: o.row.f, r: o.row.r } : null, undefined, D, onR ? { char: onR.ch, tctx: typeof allyCtx === 'function' ? allyCtx(ftR.map, onR.tok) : null } : null) : null;   // 1.5.8: its amounts read RollCrit   // 1.5.9: this machine's dice roll a Rolled amount (it owns the campaign: a player's app sent a roll-req above), and its field changes land on the one it is used on
+        var taR = thR.length ? SR.applyAct(campR.system, chR, { apply: thR }, typeof SR.withRollCrit === 'function' ? SR.withRollCrit(varsR, crR, typeof SR.thenMargin === 'function' ? SR.thenMargin(vdR, mfHitR) : 0) : varsR, F, null, o.row ? { f: o.row.f, r: o.row.r } : null, undefined, D, onR ? { char: onR.ch, tctx: typeof allyCtx === 'function' ? allyCtx(ftR.map, onR.tok) : null } : null, typeof fxNow === 'function' ? fxNow(chR.id, onR) : null) : null;   // 1.5.8: its amounts read RollCrit   // 1.5.9: this machine's dice roll a Rolled amount (it owns the campaign: a player's app sent a roll-req above), and its field changes land on the one it is used on
         var thenGmR = function() {   // 1.6.0 (the review of 96e39ae6): the names the Then's amounts read, judged as the drawn card's below and the GM's press (sheets.js applyAction) judge them
             if (!hosting || !taR || !Array.isArray(taR.names)) return false;
             var nm = taR.names, rp = o.row ? SR.rowRollNames(campR.system, chR, o.row.f, o.row.r, nm, F) : null; if (rp) { if (rp.gm || rp.kept) return true; nm = rp.names; }
             return SR.gmOnlyNames(campR.system, nm).concat(SR.gmDerivedNames(campR.system, F, nm), SR.gmEffectNames(varsR, nm)).length > 0;
         };
         if (taR && taR.ok && onR && typeof allyWrite === 'function' && allyWrite(onR.ch, taR.onValues)) { save(true); if (typeof allyCard === 'function') allyCard(chR, onR.ch, onR.tok.charName || onR.tok.name || onR.ch.name, String(o.label || (typeof entR.label === 'string' && entR.label && entR.label.indexOf('{') < 0 ? entR.label : 'Then')).slice(0, 60), taR.onLines, rec.priv || rec.to ? 'gm' : SR.applyScope(campR.system, onR.ch, { apply: thR, vis: entR.vis }, gmR.length > 0 || thenGmR(), F), diceFrom(getProfile(), true), null, ''); }   // 1.5.9: what moved on the one it was used on, and its card (1.6.0, the review of 96e39ae6: an amount that reads a GM-only value keeps it the GM's)
+        if (taR && taR.ok && taR.gone && window.wpSheets && typeof window.wpSheets.goneLocal === 'function') setTimeout(function() { window.wpSheets.goneLocal(chR.id, taR.gone); }, 0);   // 1.6.0: a row it used up, with its Undo, once the change is stored
         if (taR && taR.ok && (!onR || Object.keys(taR.values).length)) { chR.values = chR.values || {}; Object.keys(taR.values).forEach(function(k) { chR.values[k] = taR.values[k]; }); chR.updated = Date.now(); save(true); if (hosting && net.syncCharDelta) net.syncCharDelta(chR.id, taR.values); if (window.wpSheets && window.wpSheets.charChanged) window.wpSheets.charChanged(chR.id); }
         if (taR && taR.ok && taR.drew && taR.lines.some(function(l) { return !!l.roll; }) && typeof net.postApplyCard === 'function') {   // 1.5.9: a Then whose Rolled amount drew dice says them on a card of its own, kept as private as the roll
             var scT = rec.priv || rec.to ? 'gm' : SR.applyScope(campR.system, chR, { apply: thR, vis: entR.vis }, false, F), nmT = Array.isArray(taR.names) ? taR.names : [], hitT = [];

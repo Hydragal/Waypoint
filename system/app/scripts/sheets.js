@@ -3865,7 +3865,7 @@ function applyAction(r, c, label, row, on) {   // row (H7b): { f, r, i } — a l
     var tc = tokenCtxFor(c.id, camp), vv = resolveAll(sys, c, F(), tc).vars;
     if (row) { vv = vv && typeof vv.row === 'function' ? vv.row(row.f, row.r) : null; if (!vv) { toast('That row cannot be used now.'); return; } }   // H7b: the row's own names (Row.*)
     if (act.to === 'near' && typeof withOnSelf === 'function') vv = withOnSelf(vv, !onT);   // 1.5.9: OnSelf, 1 on its user and 0 on another
-    var res = applyAct(sys, c, act, vv, F(), tc, row ? { f: row.f, r: row.r } : null, undefined, window.wpDiceCore || null, onT ? { char: onT.ch, tctx: n && typeof n.allyCtx === 'function' ? n.allyCtx(ftT.map, onT.tok) : null } : null);   // R2b: a list's action may move its row's counters; 1.5.9: this machine's dice roll a Rolled amount, and a field's change lands on the one it is used on
+    var res = applyAct(sys, c, act, vv, F(), tc, row ? { f: row.f, r: row.r } : null, undefined, window.wpDiceCore || null, onT ? { char: onT.ch, tctx: n && typeof n.allyCtx === 'function' ? n.allyCtx(ftT.map, onT.tok) : null } : null, { now: Date.now(), inCombat: !!(n && n.charInCombat && n.charInCombat(c.id)), onInCombat: !!(onT && n && n.charInCombat && n.charInCombat(onT.ch.id)) });   // R2b: a list's action may move its row's counters; 1.5.9: this machine's dice roll a Rolled amount, and a field's change lands on the one it is used on
     if (!res.ok) { toast(res.reason === 'none' ? 'Nothing to apply.' : res.reason === 'error' ? (res.message || 'That amount could not be worked out.') : 'That action cannot change those values now.'); return; }
     var undoOf = function(ch, vals) { var ks = Object.keys(vals), pv = {}, ex = null; ks.forEach(function(fid) { pv[fid] = ch.values && Object.prototype.hasOwnProperty.call(ch.values, fid) ? clone(ch.values[fid]) : undefined; }); ks.slice(1).forEach(function(fid) { (ex = ex || {})[fid] = pv[fid]; }); return { charId: ch.id, fieldId: ks[0], prev: pv[ks[0]], extra: ex }; };
     var keepUndo = function(ch, vals) { lastChange = undoOf(ch, vals); };   // one Revert: the user's change, or where it moved only the one it was used on, that change
@@ -3880,6 +3880,7 @@ function applyAction(r, c, label, row, on) {   // row (H7b): { f, r, i } — a l
     else if (keptRow && pub) toast('Kept private: its owner sees that item switched off.');
     else if (hit.length && pub) toast('Kept private: that amount uses a GM-only value (' + hit.join(', ') + ').');
     if (n && n.postApplyCard && res.lines.length) n.postApplyCard(c, label, res.lines, scope);
+    if (res.gone) goneLocal(c.id, res.gone);   // 1.6.0: a row it used up, with its Undo
     if (onT && onIds.length && n && typeof n.allyCard === 'function') n.allyCard(c, onT.ch, onT.tok.charName || onT.tok.name || onT.ch.name, label, res.onLines, applyScope(sys, onT.ch, act, hit.length > 0 || gmRow || keptRow, F()));   // 1.5.9: the card of what moved on the one it was used on
 }
 // Stage 6 HUD G10: the host's round hook — on every new round of a combat (net.js combatStep / combatSet), each Each round action on every
@@ -3896,7 +3897,7 @@ function timedHook(mapId, combat, kind) {
         var c = charById(e.charId, camp); if (!c) return;
         var tc = withRound(tokenCtx(mp, e.tok, Object.assign({}, tokenFlags(), { viewer: typeof e.tok.ownerId === 'string' ? e.tok.ownerId : undefined })), combat), vvD = null;   // 1.5.5 (the release trace, F2): a player's character is judged by what its player sees, as turnMoveStart judges it, so an attacker hidden from them counts for nothing
         dues.forEach(function(a) { if (a.needs && typeof rollNeedsOk === 'function') { vvD = vvD || resolveAll(sys, c, F(), tc).vars; if (!rollNeedsOk(a, a.to === 'near' ? withOnSelf(vvD, true) : vvD, F())) return; } if (n.postDue) n.postDue(c, a, kind, combat.round, a.by === 'owner' && a.vis !== 'gm'); });   // 1.5.4: no reminder while its needs are not met
-        var res = applyRound(sys, c, function(w) { return resolveAll(sys, w, F(), tc).vars; }, F(), tc, kind, window.wpDiceCore || null), ids = Object.keys(res.values);   // 1.5.9: the host's dice roll a Rolled amount
+        var res = applyRound(sys, c, function(w) { return resolveAll(sys, w, F(), tc).vars; }, F(), tc, kind, window.wpDiceCore || null, { now: Date.now(), inCombat: true }), ids = Object.keys(res.values);   // 1.5.9: the host's dice roll a Rolled amount
         if (!ids.length) return;
         c.values = c.values || {}; ids.forEach(function(fid) { c.values[fid] = res.values[fid]; }); c.updated = Date.now();
         if (n.active) n.syncCharDelta(c.id, res.values);
@@ -4487,6 +4488,30 @@ function goneNote(c, f, g) {
         commitItem(cN, f, { op: 'restore', rowId: rid, row: g.row, at: g.at });
     }, LIMITS.undoMs);
 }
+// [systemcheck:gonethen-start]
+// 1.6.0 (the owner: "Row removed, with Undo"): a row an action or a roll's Then used up gets the notice with Undo the sheet's minus gives. On
+// the GM's machine at once (goneLocal); on a player's app the host's row-gone word comes first, so the row is taken as this copy holds it
+// (goneWait) and its notice waits for the change that takes it off (goneFire, from charChanged), within a few seconds
+var _goneWait = [];
+function goneLocal(charId, gone) { var camp = getActiveCampaign(), sys = systemOf(camp), c = charById(charId, camp); if (!c || !sys || !Array.isArray(gone)) return 0; var n = 0; gone.forEach(function(g) { var f = g && typeof g.f === 'string' ? fieldById(sys, g.f) : null; if (f && g.row) { goneNote(c, f, { row: g.row, at: g.at }); n++; } }); return n; }
+function goneWait(charId, fid, rid) {
+    var c = charById(charId), rows = c && c.values && Array.isArray(c.values[fid]) ? c.values[fid] : [], at = -1;
+    for (var i = 0; i < rows.length; i++) if (rowIdOf(rows[i]) === rid) { at = i; break; }
+    if (at < 0) return false;
+    _goneWait = _goneWait.filter(function(w) { return w.until > Date.now(); }).slice(-7); _goneWait.push({ charId: charId, f: fid, row: clone(rows[at]), at: at, until: Date.now() + 5000 });
+    return true;
+}
+function goneFire(id) {
+    if (!_goneWait.length) return 0; var camp = getActiveCampaign(), sys = systemOf(camp), now = Date.now(), n = 0;
+    _goneWait = _goneWait.filter(function(w) {
+        if (w.until <= now) return false; if (id !== null && id !== undefined && id !== w.charId) return true;
+        var c = charById(w.charId, camp), f = sys ? fieldById(sys, w.f) : null, rows = c && c.values && Array.isArray(c.values[w.f]) ? c.values[w.f] : [], rid = rowIdOf(w.row);
+        if (!c || !f) return false; if (rows.some(function(r) { return rowIdOf(r) === rid; })) return true;   // the change has not landed yet
+        goneNote(c, f, { row: w.row, at: w.at }); n++; return false;
+    });
+    return n;
+}
+// [systemcheck:gonethen-end]
 // Stage 6: whether the owner's copy of a list is the same before and after (the players' view, the full library for GM-only inline rows)
 function ownerSeesSame(camp, sys, a, b, fid) {
     var pv = playerSystem(camp); if (!pv) return false;
@@ -5212,6 +5237,7 @@ function charChanged(id) {
     if (typeof openSyncOne === 'function') openSyncOne(id);   // 1.5.8: a change from the table (a Form a player switched on) that opens or closes rows
     if (typeof crossFollow === 'function' && typeof id === 'string') { var campX = getActiveCampaign(), cX = charById(id, campX); if (cX) crossFollow(cX, campX); }   // 1.5.9: a change from the table that crossed a step
     if (typeof postureFollow === 'function' && typeof id === 'string') { var campP = getActiveCampaign(), cP = charById(id, campP), mpP = cP ? postureFollow(cP, campP) : []; if (mpP.length) { var nP = net(), wasP = nP ? nP.applyingRemote : false; if (nP) nP.applyingRemote = true; try { save(true); } finally { if (nP) nP.applyingRemote = wasP; } if (nP && nP.active && nP.role === 'host' && nP.broadcastItemFiltered) mpP.forEach(function(mid) { nP.broadcastItemFiltered(campP.id, mid); }); } }   // 1.5.9: a change from the table (a player's edit, a time rule) that brought on an effect that sets a posture; never a step of the GM's undo
+    if (typeof goneFire === 'function') goneFire(id);   // 1.6.0: a row a press of ours used up, now gone from our copy: its Undo
     var lost = {};   // HUD frame (HF2a): one notice per character, however many of its views close
     if (sheetOpen && isClient() && (id === null || sheetOpen === id)) { var gone = charById(sheetOpen); if (gone && (gone.partial || gone.ownerId !== myId())) { var nmG = gone.name; lost[gone.id] = 1; closeSheet(); toast(nmG + ' is no longer your character.'); var nG = net(); if (nG && nG.dropPending) nG.dropPending(gone.id); } }
     if (isClient()) Object.keys(huds).forEach(function(hid) { if (id !== null && id !== undefined && hid !== id) return; var gh = charById(hid); if (gh && !gh.partial && gh.ownerId === myId()) return; closeHud(hid); if (!lost[hid]) { lost[hid] = 1; toast((gh ? gh.name : 'That character') + ' is no longer your character.'); var nH = net(); if (nH && nH.dropPending) nH.dropPending(hid); } });
@@ -5894,16 +5920,31 @@ function applyEditor(r, key) {   // key (R1): 'apply' — an apply action's chan
     list.forEach(function(ch0, i) {
         var ch = ch0 && typeof ch0 === 'object' ? ch0 : {}, rw = el('div', 'sys-flags sys-apply-row'); rw.dataset.ai = String(i); rw.dataset.k = key;
         if (key === 'then') rw.appendChild(select('sys-apply-when', [['', 'Always'], ['hit', 'On success'], ['crit', 'On a critical success'], ['miss', 'On failure'], ['fumble', 'On a critical failure'], ['malf', 'On malfunction']], ch.when || '', 'When the roll makes this change: always, or only when its test succeeds or fails. A critical success is a success too, and a critical failure a failure'));
-        var opts = [['', 'Pick a pool or number\u2026']].concat(targets); if (ch.f && !targets.some(function(o) { return o[0] === ch.f; })) opts.push([ch.f, 'A field that is gone']);
-        rw.appendChild(select('sys-apply-target', opts, ch.f || '', 'What this change moves: a pool\u2019s current value, or a number'));
+        var fxT = []; (Array.isArray(draft.effects) ? draft.effects : []).forEach(function(d) { if (d && typeof d.id === 'string') fxT.push(['fx+:' + d.id, 'Switch on: ' + (d.name || d.id)], ['fx-:' + d.id, 'Switch off: ' + (d.name || d.id)]); });   // 1.6.0: an effect switched on or off
+        var opts = [['', 'Pick a pool, number or effect\u2026']].concat(targets, fxT); if (typeof ch.fx === 'string' && !fxT.some(function(o) { return o[0].slice(4) === ch.fx; })) opts.push([(ch.on === false ? 'fx-:' : 'fx+:') + ch.fx, 'An effect that is gone']); if (ch.f && !targets.some(function(o) { return o[0] === ch.f; })) opts.push([ch.f, 'A field that is gone']);
+        rw.appendChild(select('sys-apply-target', opts, typeof ch.fx === 'string' ? (ch.on === false ? 'fx-:' : 'fx+:') + ch.fx : (ch.f || ''), 'What this change moves: a pool\u2019s current value, a number, or an effect it switches on or off (on the character it is used on)'));
+        if (typeof ch.fx !== 'string') {   // 1.6.0: an effect switched has no amount
         rw.appendChild(select('sys-apply-op', [['sub', 'Subtract'], ['add', 'Add'], ['set', 'Set to']], ch.set ? 'set' : ch.add ? 'add' : 'sub', 'Subtract (a cost, a wound), add (rest, healing) or set it to the amount (back to 0); never past the field\u2019s min and max'));
         var fm = input('sys-apply-formula field', typeof ch.formula === 'string' ? ch.formula : '', 'The amount, worked out when pressed: no dice unless Rolled is ticked (3, FPCost, max(0, Incoming - DR)); below 0 counts as 0', 'Amount'); fm.maxLength = LIMITS.formula; rw.appendChild(fm);
         var rlL = el('label', 'sys-hover'), rlC = el('input'); rlC.type = 'checkbox'; rlC.className = 'sys-apply-rolled'; rlC.checked = ch.roll === true; rlL.appendChild(rlC); rlL.appendChild(el('span', null, ' Rolled')); rlL.title = 'Rolled: the amount may roll dice, such as 1d6. The host rolls it each time, and the card shows the dice'; rw.appendChild(rlL);   // 1.5.9 (book es/et plan, section 0)
+        }
         [['applyup', '\u25b2', 'Move up'], ['applydown', '\u25bc', 'Move down'], ['applydel', '\u00d7', 'Remove this change']].forEach(function(bd) { var bb = el('button', 'tool ghost sys-btn', bd[1]); bb.dataset.act = bd[0]; bb.title = bd[2]; rw.appendChild(bb); });
         box.appendChild(rw);
     });
     var addB = el('button', 'tool ghost sys-btn sys-apply-add', key === 'then' ? '+ Then\u2026' : '+ Change'); addB.dataset.act = 'applyadd'; addB.dataset.k = key; addB.disabled = list.length >= LIMITS.applyChanges; addB.title = addB.disabled ? 'At most ' + LIMITS.applyChanges + ' changes' : key === 'then' ? 'A change this roll makes to the character: always, on success or on failure (a pending hit, spent ammo, a stun cleared)' : 'Another pool or number this button moves (Apply costs: FP and EP together)'; box.appendChild(addB);
     return box;
+}
+// 1.6.0: what a change's target select names, written on the change: a field, a counter (c:), Fire, an effect switched on or off (fx+: / fx-:),
+// the row's quantity (q) or one of its own stats (s:). An effect switched has no amount
+function setChangeTarget(ch, v) {
+    v = String(v || ''); ['f', 'c', 'fire', 'fx', 'on', 'q', 's'].forEach(function(k) { delete ch[k]; });
+    if (v === 'fire') ch.fire = true;
+    else if (v.indexOf('fx+:') === 0 || v.indexOf('fx-:') === 0) { ch.fx = v.slice(4); ch.on = v.charAt(2) === '+'; delete ch.formula; delete ch.add; delete ch.set; delete ch.roll; }
+    else if (v === 'q') ch.q = true;
+    else if (v.indexOf('s:') === 0) ch.s = v.slice(2);
+    else if (v.indexOf('c:') === 0) ch.c = v.slice(2);
+    else ch.f = v;
+    if (typeof ch.fx !== 'string' && typeof ch.formula !== 'string' && ch.fire !== true) ch.formula = '';
 }
 function applyChangeOf(t, r) { var rw = t.closest('.sys-apply-row'), i = rw ? +rw.dataset.ai : -1, k = rw && rw.dataset.k === 'then' ? 'then' : 'apply'; return r && Array.isArray(r[k]) && i >= 0 && i < r[k].length && r[k][i] && typeof r[k][i] === 'object' ? r[k][i] : null; }
 function rollRow(r) {
@@ -6412,9 +6453,12 @@ function listApplyEditor(box, rr, ri, key, sp, targets) {   // key (R2b): 'apply
         var ch = ch0 && typeof ch0 === 'object' ? ch0 : {}, rw = el('div', 'sys-flags sys-list-applyrow'); rw.dataset.ri = String(ri); rw.dataset.ai = String(ai); rw.dataset.k = key;
         if (key === 'then') rw.appendChild(sel('sys-list-applywhen', [['', 'Always'], ['hit', 'On success'], ['crit', 'On a critical success'], ['miss', 'On failure'], ['fumble', 'On a critical failure'], ['malf', 'On malfunction']], ch.when || '', 'When the roll makes this change: always, or only when its test succeeds or fails. A critical success is a success too, and a critical failure a failure'));
         var opts = [['', 'Pick a pool, number or counter\u2026']].concat(targets.map(function(f) { return [f.id, (f.label || f.key || f.id) + (f.kind === 'resource' ? ' (pool)' : '')]; }), ctrs.map(function(t) { return ['c:' + t.key, 'Counter: ' + (t.label || t.key)]; })); if (ch.f && !targets.some(function(f) { return f.id === ch.f; })) opts.push([ch.f, 'A field that is gone']); if (ch.c && !ctrs.some(function(t) { return t.key === ch.c; })) opts.push(['c:' + ch.c, 'A counter that is gone']);
+        (typeof draft !== 'undefined' && draft && Array.isArray(draft.effects) ? draft.effects : []).forEach(function(d) { if (d && typeof d.id === 'string') opts.push(['fx+:' + d.id, 'Switch on: ' + (d.name || d.id)], ['fx-:' + d.id, 'Switch off: ' + (d.name || d.id)]); });   // 1.6.0: an effect switched on or off, the row's quantity, one of its own number stats
+        opts.push(['q', 'This row\u2019s quantity']); (sp && Array.isArray(sp.stats) ? sp.stats : []).forEach(function(t) { if (t && typeof t.key === 'string' && t.key && t.kind !== 'pick') opts.push(['s:' + t.key, 'This row\u2019s ' + (t.label || t.key)]); });
+        if (typeof ch.fx === 'string' && !opts.some(function(o) { return o[0].slice(4) === ch.fx && o[0].indexOf('fx') === 0; })) opts.push([(ch.on === false ? 'fx-:' : 'fx+:') + ch.fx, 'An effect that is gone']); if (typeof ch.s === 'string' && !opts.some(function(o) { return o[0] === 's:' + ch.s; })) opts.push(['s:' + ch.s, 'A stat that is gone']);
         if (key === 'then' && ((sp && sp.chamber && typeof sp.chamber === 'object') || ch.fire === true)) opts.push(['fire', sp && sp.chamber ? 'Fire the next chambered round' : 'Fire, but this list has no Chambers from']);   // 1.5.9 Chambers from
-        rw.appendChild(sel('sys-list-applytarget', opts, ch.fire === true ? 'fire' : ch.c ? 'c:' + ch.c : (ch.f || ''), 'What this change moves: a pool\u2019s current value, a number, or one of the row\u2019s counters. Fire takes the next chambered round out, as the round last fired. A shot that jams fires nothing'));
-        if (ch.fire !== true) {
+        rw.appendChild(sel('sys-list-applytarget', opts, ch.fire === true ? 'fire' : typeof ch.fx === 'string' ? (ch.on === false ? 'fx-:' : 'fx+:') + ch.fx : ch.q === true ? 'q' : typeof ch.s === 'string' ? 's:' + ch.s : ch.c ? 'c:' + ch.c : (ch.f || ''), 'What this change moves: a pool\u2019s current value, a number, or one of the row\u2019s counters. Fire takes the next chambered round out, as the round last fired. A shot that jams fires nothing'));
+        if (ch.fire !== true && typeof ch.fx !== 'string') {
         rw.appendChild(sel('sys-list-applyop', [['sub', 'Subtract'], ['add', 'Add'], ['set', 'Set to']], ch.set ? 'set' : ch.add ? 'add' : 'sub', 'Subtract (a cost) or add; never past the field\u2019s min and max'));
         var fm = input('sys-list-applyformula field', typeof ch.formula === 'string' ? ch.formula : '', 'The amount for the row: no dice unless Rolled is ticked; Row.lvl, Row.<stat>, Row.<column> read the row (Row.FPCost)', 'Amount (Row.FPCost)'); fm.maxLength = LIMITS.formula; rw.appendChild(fm);
         var lrlL = el('label', 'sys-hover'), lrlC = el('input'); lrlC.type = 'checkbox'; lrlC.className = 'sys-list-applyrolled'; lrlC.checked = ch.roll === true; lrlL.appendChild(lrlC); lrlL.appendChild(el('span', null, ' Rolled')); lrlL.title = 'Rolled: the amount may roll dice, such as 1d6. The host rolls it each time, and the card shows the dice'; rw.appendChild(lrlL);   // 1.5.9 (book es/et plan, section 0)
@@ -7992,7 +8036,7 @@ function onChange(e) {
         else if (c.indexOf('sys-list-rollcost') >= 0) { var rcr = t.closest('.sys-list-roll'), rcD = rcr && Array.isArray(lsc.rolls) ? lsc.rolls[+rcr.dataset.ri] : null; if (!rcD || typeof rcD !== 'object') return; if (t.value) rcD.cost = t.value; else delete rcD.cost; }   // turn-based combat T1
         else if (c.indexOf('sys-list-rollkind') >= 0) { var rkr = t.closest('.sys-list-roll'), rkD = rkr && Array.isArray(lsc.rolls) ? lsc.rolls[+rkr.dataset.ri] : null; if (!rkD || typeof rkD !== 'object') return; if (t.value === 'apply') { if (!Array.isArray(rkD.apply)) rkD.apply = [{ f: '', formula: '' }]; } else delete rkD.apply; }   // Stage 6 HUD H7b: Roll | Apply (a formula typed before stays in the draft)
         else if (c.indexOf('sys-list-applyrolled') >= 0) { var arr = t.closest('.sys-list-applyrow'), arR = arr && Array.isArray(lsc.rolls) ? lsc.rolls[+arr.dataset.ri] : null, arK = arr && arr.dataset.k === 'then' ? 'then' : 'apply', arC = arR && Array.isArray(arR[arK]) ? arR[arK][+arr.dataset.ai] : null; if (!arC || typeof arC !== 'object') return; if (t.checked) arC.roll = true; else delete arC.roll; }   // 1.5.9: Rolled (Save keeps it only with a target and an amount)
-        else if (c.indexOf('sys-list-applytarget') >= 0 || c.indexOf('sys-list-applyop') >= 0 || c.indexOf('sys-list-applywhen') >= 0) { var atr = t.closest('.sys-list-applyrow'), atR = atr && Array.isArray(lsc.rolls) ? lsc.rolls[+atr.dataset.ri] : null, atK = atr && atr.dataset.k === 'then' ? 'then' : 'apply', atC = atR && Array.isArray(atR[atK]) ? atR[atK][+atr.dataset.ai] : null; if (!atC || typeof atC !== 'object') return; if (c.indexOf('sys-list-applytarget') >= 0) { if (t.value === 'fire') { atC.fire = true; delete atC.f; delete atC.c; } else if (t.value.indexOf('c:') === 0) { atC.c = t.value.slice(2); delete atC.f; } else { atC.f = t.value; delete atC.c; } if (t.value !== 'fire') delete atC.fire; } else if (c.indexOf('sys-list-applywhen') >= 0) { if (t.value === 'hit' || t.value === 'miss' || t.value === 'malf' || t.value === 'crit' || t.value === 'fumble') atC.when = t.value; else delete atC.when; } else { delete atC.add; delete atC.set; if (t.value === 'add') atC.add = true; else if (t.value === 'set') atC.set = true; } }   // R2b: a counter, a consequence's When
+        else if (c.indexOf('sys-list-applytarget') >= 0 || c.indexOf('sys-list-applyop') >= 0 || c.indexOf('sys-list-applywhen') >= 0) { var atr = t.closest('.sys-list-applyrow'), atR = atr && Array.isArray(lsc.rolls) ? lsc.rolls[+atr.dataset.ri] : null, atK = atr && atr.dataset.k === 'then' ? 'then' : 'apply', atC = atR && Array.isArray(atR[atK]) ? atR[atK][+atr.dataset.ai] : null; if (!atC || typeof atC !== 'object') return; if (c.indexOf('sys-list-applytarget') >= 0) { setChangeTarget(atC, t.value); markDirty(); renderAll(); return; } else if (c.indexOf('sys-list-applywhen') >= 0) { if (t.value === 'hit' || t.value === 'miss' || t.value === 'malf' || t.value === 'crit' || t.value === 'fumble') atC.when = t.value; else delete atC.when; } else { delete atC.add; delete atC.set; if (t.value === 'add') atC.add = true; else if (t.value === 'set') atC.set = true; } }   // R2b: a counter, a consequence's When
         else if (c.indexOf('sys-list-colmetric') >= 0 || c.indexOf('sys-list-statmetric') >= 0) { var mcol = c.indexOf('sys-list-colmetric') >= 0, mrw = t.closest(mcol ? '.sys-list-col' : '.sys-list-stat'), mLs = mcol ? lsc.cols : lsc.stats, mD = mrw && Array.isArray(mLs) ? mLs[+(mcol ? mrw.dataset.ci : mrw.dataset.si)] : null; if (!mD || typeof mD !== 'object') return; if (t.value === 'swap' || t.value === 'bare') mD.unitShow = t.value; else delete mD.unitShow; }   // 1.5.4: how a measure reads under Metric
         else if (c.indexOf('sys-list-loadfrom') >= 0) { if (t.value) { var ld0 = lsc.load && typeof lsc.load === 'object' ? lsc.load : {}, ct0 = Array.isArray(lsc.counters) && lsc.counters[0] && typeof lsc.counters[0].key === 'string' ? lsc.counters[0].key : ''; lsc.load = { from: t.value, ct: typeof ld0.ct === 'string' && ld0.ct ? ld0.ct : ct0 }; if (Array.isArray(ld0.cats)) lsc.load.cats = ld0.cats; } else delete lsc.load; }   // 1.5.8 Loads from
         else if (c.indexOf('sys-list-chamberfrom') >= 0) { if (t.value) { var ch0 = lsc.chamber && typeof lsc.chamber === 'object' ? lsc.chamber : {}; lsc.chamber = Object.assign({}, ch0, { from: t.value }); if (typeof lsc.chamber.cap !== 'number') lsc.chamber.cap = 1; } else delete lsc.chamber; }   // 1.5.9 Chambers from
@@ -8051,7 +8095,7 @@ function onChange(e) {
         else return;
     } else if (r) {
         if (c.indexOf('sys-roll-kind') >= 0) { if (t.value === 'apply') { if (!Array.isArray(r.apply)) r.apply = [{ f: '', formula: '' }]; delete r.init; } else { delete r.apply; delete r.round; delete r.each; delete r.by; } markDirty(); renderAll(); return; }   // Stage 6 HUD H7: Roll | Apply (a formula typed before stays in the draft)
-        else if (c.indexOf('sys-apply-target') >= 0) { var chT = applyChangeOf(t, r); if (!chT) return; chT.f = t.value; }
+        else if (c.indexOf('sys-apply-target') >= 0) { var chT = applyChangeOf(t, r); if (!chT) return; setChangeTarget(chT, t.value); markDirty(); renderAll(); return; }   // 1.6.0: a field, or an effect switched on or off
         else if (c.indexOf('sys-apply-op') >= 0) { var chO = applyChangeOf(t, r); if (!chO) return; delete chO.add; delete chO.set; if (t.value === 'add') chO.add = true; else if (t.value === 'set') chO.set = true; }
         else if (c.indexOf('sys-apply-rolled') >= 0) { var chRl = applyChangeOf(t, r); if (!chRl) return; if (t.checked) chRl.roll = true; else delete chRl.roll; }   // 1.5.9: Rolled (Save keeps it only with a target and an amount)
         else if (c.indexOf('sys-apply-when') >= 0) { var chW = applyChangeOf(t, r); if (!chW) return; if (t.value === 'hit' || t.value === 'miss' || t.value === 'malf' || t.value === 'crit' || t.value === 'fumble') chW.when = t.value; else delete chW.when; }   // R1; 1.5.8: a critical success or failure
@@ -8429,7 +8473,7 @@ function damageFromRoll(fromId, total, done, type) {   // 1.5.7: done, called on
 }
 function damageOn() { var sys = systemOf(); return !!dmgRules(sys) && !isClient() && canWrite(); }   // the cards' Apply to target: the GM's own machine
 // [systemcheck:dmgwin-end]
-window.wpSheets = { bellNote: bellNote, crossSeed: crossSeed, turnEndHook: turnEndHook, postureSeed: function() { return postureSeed(getActiveCampaign()); }, runTimeRules: runTimeRules, startMaking: startMaking, inviteMaking: inviteMaking, applyTokenFace: applyTokenFace, open: open, close: close, playerSystem: playerSystem, readablePages: readablePages, openPage: openPage, sheetRefsChanged: sheetRefsChanged, systemOf: systemOf, save: saveDraft, startFrom: startFrom, sync: sync, roundHook: roundHook, turnHook: turnHook, runDue: runDue, draft: function() { return draft; },
+window.wpSheets = { bellNote: bellNote, crossSeed: crossSeed, turnEndHook: turnEndHook, goneLocal: goneLocal, goneWait: goneWait, postureSeed: function() { return postureSeed(getActiveCampaign()); }, runTimeRules: runTimeRules, startMaking: startMaking, inviteMaking: inviteMaking, applyTokenFace: applyTokenFace, open: open, close: close, playerSystem: playerSystem, readablePages: readablePages, openPage: openPage, sheetRefsChanged: sheetRefsChanged, systemOf: systemOf, save: saveDraft, startFrom: startFrom, sync: sync, roundHook: roundHook, turnHook: turnHook, runDue: runDue, draft: function() { return draft; },
     gmFinder: gmFinder, uploadsChanged: uploadsChanged, approveNote: approveNote, openReview: openReview, readersChanged: readersChanged, emojiSet: EMOJI_SET, applyCharFace: applyCharFace, applyCharFrame: applyCharFrame, applyTokenFrame: applyTokenFrame,
     charsOf: charsOf, charList: charList, charById: charById, newCharacter: newCharacter, addCharacter: addCharacter, askDeleteSheet: askDeleteSheet, deleteCharacter: deleteCharacter, linkToken: linkToken, newFromToken: newFromToken, syncOwners: syncOwners, giveCharacter: giveCharacter, unbindName: unbindName, ownerFromToken: ownerFromToken,
     charSelectHtml: charSelectHtml, wireCharSelect: wireCharSelect, hoverLinesForToken: hoverLinesForToken, hoverLinesForTokenId: hoverLinesForTokenId, tokenFx: tokenFx, tokenFxModel: tokenFxModel, tokenFxCharOp: tokenFxCharOp,

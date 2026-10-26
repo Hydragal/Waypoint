@@ -16792,6 +16792,26 @@ Promise.all(pendingChecks).then(() => {   // the async checks land before the su
             && /if \(nmQ\.length\) recQ\.names = nmQ; \}\n\s*if \(recQ\.names && typeof SQ !== 'undefined' && SQ && typeof SQ\.rollMods === 'function' && typeof varsQ === 'function'\) \{ var mdQ = SQ\.rollMods\(varsQ, recQ\.names\); if \(mdQ\) recQ\.mods = mdQ; \}/.test(flat)
             && (flat.match(/\.mods = md[RQ];/g) || []).length === 2);
     }
+    {   // 1.6.0 (the owner: "Row removed, with Undo"): rows a player's press used up — the host keeps each for its Undo and tells that connection first
+        const rgS = between('// [netcheck:rowgone-start]', '// [netcheck:rowgone-end]', 'rowgone'), sent = [], logs = [], grace = {}, conn = { send: m => sent.push(JSON.parse(JSON.stringify(m))) };
+        const api = new Function('net', '_rowGrace', 'window', 'sendFailed', rgS + '\nreturn { rowGoneTell: rowGoneTell, fxNow: fxNow };')(
+            { charInCombat: id => id === 'c_in' }, grace, { wpSystemCore: { LIMITS: { undoGraceMs: 9000 } }, wpStepLog: (a, s, f) => logs.push([a, s, f]) }, e => { throw e; });
+        const ch = { id: 'c_a', values: { f_kit: [{ id: 'w_2', qty: 1 }] } }, t0 = Date.now();
+        const n1 = api.rowGoneTell('c_a', ch, [{ f: 'f_kit', r: 'w_1', row: { id: 'w_1', qty: 1 }, at: 0 }, { f: 'f_kit', r: 'w_9' }, null], conn), g = grace['c_a|f_kit|w_1|gone'];
+        const n0 = [api.rowGoneTell('c_a', ch, [], conn), api.rowGoneTell('c_a', ch, null, conn), api.rowGoneTell('c_a', null, [{ f: 'f_kit', r: 'w_1', row: {} }], conn)];
+        const fx = [api.fxNow('c_in', null), api.fxNow('c_a', { ch: { id: 'c_in' } }), api.fxNow('c_a', null)];
+        check('1.6.0 a used-up row\'s Undo on the host (rowGoneTell, run for real): the row is kept as the sheet\'s minus keeps one (the row as it was, its place, the list as the press left it, the window), the connection is told the row by list and id only, before the change lands, and the step is logged; nothing for no row, no character or a row with nothing kept; fxNow hands the host\'s clock and whether each character is in a fight',
+            n1 === 1 && !!g && j(g.row) === j({ id: 'w_1', qty: 1 }) && g.at === 0 && g.after === j([{ id: 'w_2', qty: 1 }]) && g.until >= t0 + 9000 && g.added === 0 && Object.keys(grace).length === 1
+            && j(sent) === j([{ type: 'row-gone', charId: 'c_a', items: [{ f: 'f_kit', r: 'w_1' }] }]) && j(logs) === j([['rowgone v1', 'host-kept', { n: 1 }]]) && j(n0) === j([0, 0, 0])
+            && fx[0].inCombat === true && fx[0].onInCombat === false && fx[1].inCombat === false && fx[1].onInCombat === true && fx[2].inCombat === false && typeof fx[2].now === 'number', j([n1, g, sent, logs, fx]));
+        const flatR = src;
+        check('1.6.0 the wiring of a used-up row\'s Undo (source): char-apply tells the presser after its ack and before its delta; a player\'s roll whose Then used a row up the same, before its delta; the GM\'s own roll hands it to the sheet once stored; the three hand applyAct the clock an effect starts by; a player\'s app takes row-gone from the synced host only, cleaned, and hands each row to the sheet; an apply card\'s line may say an effect on or off, here and on the bare copy',
+            /try \{ conn\.send\(\{ type: 'char-ack', rid: qa\.rid \}\); \} catch \(e\) \{ sendFailed\(e\); \}\n        if \(resA\.gone && typeof rowGoneTell === 'function'\) rowGoneTell\(qa\.charId, chA, resA\.gone, conn\);[^\n]*\n        if \(ownA\) \{ net\.syncCharDelta/.test(flatR)
+            && flatR.includes("saveRemoteSoon(); if (taQ.gone && typeof rowGoneTell === 'function') rowGoneTell(q.charId, chQ, taQ.gone, conn); net.syncCharDelta(q.charId, taQ.values);")
+            && flatR.includes("window.wpSheets.goneLocal(chR.id, taR.gone); }, 0);") && (flatR.match(/typeof fxNow === 'function' \? fxNow\(/g) || []).length === 3
+            && flatR.includes("if (msg.type === 'row-gone') { var rgC = typeof SC2.cleanRowGone === 'function' ? SC2.cleanRowGone(msg) : null; if (!rgC) return;") && /msg\.type === 'char-deny' \|\| msg\.type === 'row-gone'\) && net\.role === 'client'\) \{\n        \/\/ \[netcheck:charin-start\]\n[^\n]*\n        if \(!net\.foreign \|\| conn\.peer !== net\.syncedPeer/.test(flatR)
+            && flatR.includes("if (l.fx === 1 || l.fx === 0) return { n: String(l.n).slice(0, 60), fx: l.fx };") && flatR.includes("lines: rec.lines.map(function(l, i) { if (l.fx === 1 || l.fx === 0) return { n: l.n, fx: l.fx };"));
+    }
     summed = true;
     console.log('\n' + pass + ' passed, ' + fail + ' failed.');
     if (fail) process.exit(1);

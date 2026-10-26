@@ -11,6 +11,8 @@
    is read from the snapshot's own copy of the library and written back as a new revision. No DOM, no state: Node runs it (campsafecheck
    in systemcheck). Published as window.wpCampSafeCore. */
 
+import { stepLine } from './steplog.js';   // the one format every feature's step log writes
+
 var VERSION = 1;
 var BACKUP_FILE = /^(data|keep)-[A-Za-z0-9_-]+\.json$/;   // the shell's own rule for a snapshot's name (reqguard BACKUP_NAME)
 var CAMP_ID = /^[A-Za-z0-9_-]{1,80}$/;
@@ -82,15 +84,8 @@ function testCopy(camp, newId, newName, newDir) {
 }
 
 // The words a step of the safety net writes to the app's log (saves/error.log), one line a step: the step's name and the facts that say
-// where it stood — snapshot names, counts, an HTTP status — never a campaign's name or anything of its content
-function logLine(step, facts) {
-    var out = 'campsafe v' + VERSION + ' ' + String(step || '').replace(/[^a-z0-9-]/gi, '').slice(0, 40);
-    if (isObj(facts)) Object.keys(facts).slice(0, 12).forEach(function(k) {
-        var v = facts[k], s = typeof v === 'number' && isFinite(v) ? String(v) : typeof v === 'boolean' ? String(v) : typeof v === 'string' && (BACKUP_FILE.test(v) || /^[a-z0-9_.:-]{0,60}$/i.test(v)) ? v : '?';
-        out += ' ' + String(k).replace(/[^a-z0-9]/gi, '').slice(0, 20) + '=' + s;
-    });
-    return out;
-}
+// where it stood (snapshot names, counts, an HTTP status), never a campaign's name or anything of its content; the shared step log's words
+function logLine(step, facts) { return stepLine('campsafe v' + VERSION, step, facts); }
 
 var API = { VERSION: VERSION, BACKUP_FILE: BACKUP_FILE, LIMITS: LIMITS, cleanNotes: cleanNotes, cleanTrials: cleanTrials, pointLabel: pointLabel, pointRows: pointRows, libRepair: libRepair, testCopy: testCopy, logLine: logLine };
 if (typeof window !== 'undefined') window.wpCampSafeCore = API;

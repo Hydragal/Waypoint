@@ -173,6 +173,12 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
     /* ---- Turn-based combat T2b: a reminder card ---- */
     {
         const J = JSON.stringify, due0 = { type: 'due', id: 'r_d1', from: { id: 'u_gm', name: 'GM', gm: true }, charId: 'c_a', act: 'r_re', label: 'Reaction back', as: 'Ana', why: 'turn', round: 2, ts: 5, extra: 'x' };
+        {   // 1.6.0: an effect switched on or off is a line of its own, with no figure
+            const ap = { id: 'r_ab12cd34', from: { id: 'u_a', name: 'Ana P', gm: false }, lines: [{ n: 'Calm', fx: 1 }, { n: 'Stunned', fx: 0 }, { n: 'HP', d: -2, v: 6 }], ts: 1 }, ca = D.cleanApply(ap);
+            check('1.6.0 an apply card\'s line may say an effect switched on or off (fx 1 or 0, no figure beside it), its text says on or off; any other fx, or one beside a figure, refuses the card',
+                !!ca && JSON.stringify(ca.lines) === JSON.stringify(ap.lines) && D.applyChanges(ca) === 'Calm on, Stunned off, HP \u22122 \u2192 6'
+                && [{ n: 'A', fx: 2 }, { n: 'A', fx: true }, { n: 'A', fx: 1, d: 1 }, { n: 'A', fx: 0, v: 0 }, { n: 'A', fx: 1, s: 1 }].every(l => D.cleanApply(Object.assign({}, ap, { lines: [l] })) === null), JSON.stringify(ca));
+        }
         const cd = D.cleanDue(due0);
         check('T2b cleanDue keeps ids and text only (a char and a roll id, turn or round, a whole round 1..9999, a label and a name, theirs as 1) and refuses anything malformed; dueText says what is due, for whom and when',
             J(cd) === J({ id: 'r_d1', from: { id: 'u_gm', name: 'GM', gm: true }, charId: 'c_a', act: 'r_re', why: 'turn', round: 2, ts: 5, label: 'Reaction back', as: 'Ana' })

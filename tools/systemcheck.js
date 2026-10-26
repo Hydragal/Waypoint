@@ -5406,7 +5406,7 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         check('R2b the sheet and the Lists card (source): a row\'s roll greys with its needs text while its needs fail, and one with consequences or needs names its index; the card has each roll\'s Needs box and its + Then\u2026 editor, a counter among the targets',
             /var nOk = !r\.needs \|\| !\(res && res\.rn && res\.rn\[rid\]\) \|\| res\.rn\[rid\]\[ri\] !== false, withE = /.test(shV) && /if \(!nOk\) \{ b\.disabled = true; b\.title = \(r\.needsText \|\| 'Not now'\)/.test(shV) && /row: withE \? \{ f: f\.id, r: rid, i: ri \} : \{ f: f\.id, r: rid \}/.test(shV)
             && /input\('sys-list-needs field'/.test(shV) && /listApplyEditor\(cb2, rr, ri, 'then', sp, targets\);/.test(shV) && /ctrs\.map\(function\(t\) \{ return \['c:' \+ t\.key, 'Counter: ' \+ \(t\.label \|\| t\.key\)\]; \}\)/.test(shV)
-            && /if \(t\.value\.indexOf\('c:'\) === 0\) \{ atC\.c = t\.value\.slice\(2\); delete atC\.f; \}/.test(shV));
+            && /if \(c\.indexOf\('sys-list-applytarget'\) >= 0\) \{ setChangeTarget\(atC, t\.value\); markDirty\(\); renderAll\(\); return; \}/.test(shV) && /else if \(v\.indexOf\('c:'\) === 0\) ch\.c = v\.slice\(2\);/.test(shV));   /* 1.6.0: one writer of a change's target, setChangeTarget, moved on purpose */
     }
     /* ---- Stage 6 HUD R3: a roll's Malf — a natural total at or past it malfunctions (a failure, with its own changes) ---- */
     {
@@ -14718,7 +14718,7 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             jr([tickOf(boxA, 'sys-apply-rolled'), lblOf(boxA, 'sys-apply-rolled'), findR(cardR, 'sys-list-applyrolled').map(x => x.checked)]));
         // the host's own presses and hooks hand their dice on (pinned): the GM's press, the round and turn hook, a time rule's flood line
         check('1.5.9 Rolled, the host\'s own paths (sheets.js, pinned): the GM\'s press of an apply action hands applyAct this machine\'s dice core, the round and turn hook hands applyRound the same, and a time rule\'s run that drew dice counts as rolled for the flood rule',
-            shRl.includes("var res = applyAct(sys, c, act, vv, F(), tc, row ? { f: row.f, r: row.r } : null, undefined, window.wpDiceCore || null, onT ? { char: onT.ch, tctx: ")   /* 1.5.9 (book es/et plan, section 3): a deliberate change of this pin, the press on an adjacent character */ && shRl.includes("F(), tc, kind, window.wpDiceCore || null), ids = Object.keys(res.values);")
+            shRl.includes("var res = applyAct(sys, c, act, vv, F(), tc, row ? { f: row.f, r: row.r } : null, undefined, window.wpDiceCore || null, onT ? { char: onT.ch, tctx: ")   /* 1.5.9 (book es/et plan, section 3): a deliberate change of this pin, the press on an adjacent character */ && shRl.includes("F(), tc, kind, window.wpDiceCore || null, { now: Date.now(), inCombat: true }), ids = Object.keys(res.values);")   /* 1.6.0: and the clock an effect it switches on starts its timer by */
             && shRl.includes("!(res.rolls.made && ruleDice(rule)) && !(res.drew > 0)) return;"));
     }
     // [systemcheck:rolled-tests-end]
@@ -14893,6 +14893,57 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         check('1.6.0 (the review of 96e39ae6) Revert (run for real) after a press used on an adjacent character takes back both: the user\'s row (Uses 2 back to 3) and the other\'s fields (HP 9 back to 5, Down back on), each sheet stored and sent once, the user\'s first',
             JSON.stringify(chU.values.f_kit) === JSON.stringify([{ id: 'w_1', ct: { Uses: 3 } }]) && JSON.stringify(chT.values) === JSON.stringify({ f_hp: { cur: 5 }, f_dn: true })
             && JSON.stringify(outV) === JSON.stringify([['c_u', { f_kit: [{ id: 'w_1', ct: { Uses: 3 } }] }], ['c_t', { f_hp: { cur: 5 }, f_dn: true }]]), JSON.stringify([chU.values, chT.values, outV]));
+    }
+    {   // 1.6.0: a change may switch an effect on or off, and a list's may set its row's quantity or one of its own number stats
+        const J = JSON.stringify;
+        const rawT = { v: 1, name: 'T', fields: [{ id: 'f_hp', key: 'HP', kind: 'number', def: 8 }, { id: 'f_fx', key: 'Conditions', label: 'Conditions', kind: 'effects' },
+            { id: 'f_kit', key: 'Kit', label: 'Kit', kind: 'item-list', list: { stats: [{ key: 'Wear', label: 'Wear' }, { key: 'Kind', label: 'Kind', kind: 'pick', opts: [{ name: 'A' }] }], rolls: [
+                { label: 'Use', apply: [{ q: true, formula: '1' }, { s: 'Wear', formula: '2', add: true }, { fx: 'e_calm' }] },
+                { label: 'Fix', formula: '3d6 <= 10', then: [{ s: 'Wear', formula: '0', set: true, when: 'hit' }, { fx: 'e_calm', on: false }] },
+                { label: 'Hide', apply: [{ fx: 'e_gm' }] }, { label: 'Bad', apply: [{ s: 'Kind', formula: '1' }, { s: 'Nope', formula: '1' }, { s: '9x', formula: '1' }] }] } }],
+            items: [{ id: 'i_pac', name: 'Medpac', stats: { Wear: 1 } }], effects: [{ id: 'e_calm', name: 'Calm', mods: [], dur: '1 minute' }, { id: 'e_gm', name: 'Secret', vis: 'gm', mods: [] }],
+            rolls: [{ id: 'r_up', label: 'Calm', apply: [{ fx: 'e_calm' }], to: 'near' }, { id: 'r_gm', label: 'G', apply: [{ fx: 'e_gm' }] }, { id: 'r_q', label: 'Q', apply: [{ q: true, formula: '1' }, { s: 'Wear', formula: '1' }, { fx: 'e_calm' }, { fx: 'e_calm', on: false }, { fx: 'bad id' }] }] };
+        const gT = cleanSystem(rawT, { F, gmView: true }), pT = cleanSystem(rawT, { F, gmView: false }), lrT = sx => sx.fields.filter(x => x.id === 'f_kit')[0].list.rolls;
+        check('1.6.0 the cleaner keeps a change that switches an effect on or off (once per effect and when), and a list\'s that sets its row\'s quantity or one of its own stats, alike in both views; a quantity or a row stat on a system roll reads as a change with no target (Pick the pool), and a bad effect id and a second switch of one effect go; the players\' view drops an action that switches a GM-only effect or names a stat the list does not have as a number',
+            J(gT.rolls.filter(r => r.id === 'r_q')[0].apply) === J([{ f: '', formula: '1' }, { f: '', formula: '1' }, { fx: 'e_calm', on: true }]) && J(lrT(gT)[0].apply) === J([{ q: true, formula: '1' }, { s: 'Wear', formula: '2', add: true }, { fx: 'e_calm', on: true }])
+            && J(lrT(gT)[1].then) === J([{ s: 'Wear', formula: '0', set: true, when: 'hit' }, { fx: 'e_calm', on: false }]) && J(lrT(pT).map(r => r.label)) === J(['Use', 'Fix']) && J(pT.rolls.map(r => r.id)) === J(['r_up'])
+            && J(lrT(gT)[3].apply) === J([{ s: 'Kind', formula: '1' }, { s: 'Nope', formula: '1' }]) && J(cleanSystem(gT, { F, gmView: true })) === J(gT), J([gT.rolls, lrT(gT), lrT(pT).map(r => r.label)]));
+        const chT = { id: 'c', values: { f_hp: 8, f_kit: [{ id: 'w_1', defId: 'i_pac', qty: 2 }, { id: 'w_2', qty: 1, def: { name: 'Own kit', stats: { Wear: 4 } } }] } }, rvT = (c, r) => S.makeResolver(gT, c, F, null).row('f_kit', r), useT = lrT(gT)[0];
+        const u1 = S.applyAct(gT, chT, useT, rvT(chT, 'w_1'), F, null, { f: 'f_kit', r: 'w_1' }, undefined, null, null, { now: 1000 }), ch2 = { id: 'c', values: Object.assign({}, chT.values, u1.values) };
+        const u2 = S.applyAct(gT, ch2, useT, rvT(ch2, 'w_1'), F, null, { f: 'f_kit', r: 'w_1' }, undefined, null, null, { now: 2000 });
+        const u3 = S.applyAct(gT, chT, { apply: [{ s: 'Wear', formula: '1' }] }, rvT(chT, 'w_2'), F, null, { f: 'f_kit', r: 'w_2' });
+        const offT = S.applyAct(gT, ch2, { apply: [{ fx: 'e_calm', on: false }] }, S.makeResolver(gT, ch2, F, null), F), noneT = S.applyAct(gT, chT, { apply: [{ fx: 'e_calm', on: false }] }, S.makeResolver(gT, chT, F, null), F);
+        const tgT = { id: 't', values: {} }, nearT = S.applyAct(gT, chT, gT.rolls[0], S.makeResolver(gT, chT, F, null), F, null, null, undefined, null, { char: tgT }, { now: 50, onInCombat: true });
+        check('1.6.0 applyAct: a list\'s action takes its row\'s quantity down (2 to 1), raises its own stat over the entry\'s (Wear 1 + 2, on the row), and switches an effect on with its timer from the clock it is handed; at 0 the row goes, kept whole as it was for its Undo, and a change after it on that row is passed over; a row of its own takes its stat in its own copy; an effect off goes off, and one already as asked moves nothing; on an adjacent character the effect lands on them, in their fight\'s time',
+            J(u1.values.f_kit[0]) === J({ id: 'w_1', defId: 'i_pac', qty: 1, ov: { stats: { Wear: 3 } } }) && J(u1.values.f_fx) === J([{ id: 'x_calm', ref: 'e_calm', on: true, t: { left: 60, at: 1000 } }])
+            && J(u1.lines) === J([{ f: 'f_kit', n: 'Medpac', d: -1, v: 1 }, { f: 'f_kit', n: 'Wear', d: 2, v: 3 }, { f: 'f_fx', n: 'Calm', fx: 1 }]) && !u1.gone
+            && u2.ok && J(u2.values.f_kit.map(r => r.id)) === J(['w_2']) && J(u2.gone) === J([{ f: 'f_kit', r: 'w_1', row: { id: 'w_1', defId: 'i_pac', qty: 1, ov: { stats: { Wear: 3 } } }, at: 0 }]) && u2.lines.length === 1
+            && u3.values.f_kit[1].def.stats.Wear === 3 && chT.values.f_kit[1].def.stats.Wear === 4 && J(offT.values.f_fx) === J([{ id: 'x_calm', ref: 'e_calm', on: false, t: { left: 60, at: 1000 } }]) && J(offT.lines) === J([{ f: 'f_fx', n: 'Calm', fx: 0 }]) && noneT.ok === false && noneT.reason === 'none'
+            && J(nearT.values) === '{}' && J(nearT.onValues.f_fx) === J([{ id: 'x_calm', ref: 'e_calm', on: true, t: { left: 60, at: 0 } }]) && J(nearT.onLines) === J([{ f: 'f_fx', n: 'Calm', fx: 1 }]), J([u1, u2, u3.values, offT, noneT, nearT]));
+        const scT = [S.applyScope(gT, { id: 'c', ownerId: 'u', values: {} }, { vis: 'all', apply: [{ fx: 'e_calm' }] }, false, F), S.applyScope(gT, { id: 'c', ownerId: 'u', values: {} }, { vis: 'all', apply: [{ fx: 'e_gm' }] }, false, F), S.applyScope(gT, { id: 'c', ownerId: 'u', values: {} }, { vis: 'all', apply: [{ q: true, formula: '1' }] }, false, F)];
+        const vT = S.validateSystem(gT, F), msgT = [].concat(vT.errors, vT.warnings).map(e => e.message);
+        check('1.6.0 a card of such a change goes to its owner (the GM alone for a GM-only effect); the editor says an effect that is gone, a GM-only one on a visible entry, a stat the list does not have as a number, and a sheet with no effects list',
+            J(scT) === J(['owner', 'gm', 'owner']) && msgT.includes('"Secret" is GM only: players will not get this.') && S.validateSystem(cleanSystem(Object.assign({}, rawT, { rolls: [{ id: 'r_x', label: 'X', apply: [{ fx: 'e_gone' }] }] }), { F, gmView: true }), F).errors.some(e => e.message === 'Pick the effect this switches: that one is gone.') && msgT.some(m => m.endsWith('Pick the stat this changes: "Kind" is no number stat of this list.')) && msgT.some(m => m.endsWith('Pick the stat this changes: "Nope" is no number stat of this list.'))
+            && S.validateSystem(cleanSystem({ v: 1, name: 'N', fields: [{ id: 'f_hp', key: 'HP', kind: 'number' }], effects: [{ id: 'e_a', name: 'A', mods: [] }], rolls: [{ id: 'r_a', label: 'A', apply: [{ fx: 'e_a' }] }] }, { F, gmView: true }), F).errors.some(e => /has no status effects list/.test(e.message)), J(msgT));
+        // the sheet: a used-up row's notice with Undo, at once on the GM's machine, after the change lands on a player's app
+        const shG = fs.readFileSync(path.join(app, 'scripts', 'sheets.js'), 'utf8').replace(/\r\n/g, '\n'), gS = shG.slice(shG.indexOf('// [systemcheck:gonethen-start]'), shG.indexOf('// [systemcheck:gonethen-end]'));
+        const notes = [], campG = { system: gT, chars: { c: { id: 'c', values: { f_kit: [{ id: 'w_1', defId: 'i_pac', qty: 1 }, { id: 'w_2', qty: 1, def: { name: 'X' } }] } } } };
+        const apiG = new Function('getActiveCampaign', 'systemOf', 'charById', 'fieldById', 'goneNote', 'rowIdOf', 'clone', gS + '\nreturn { goneLocal: goneLocal, goneWait: goneWait, goneFire: goneFire };')(
+            () => campG, k => k.system, (id, k) => (k || campG).chars[id] || null, S.fieldById, (c, f, g) => notes.push([c.id, f.id, g.row.id, g.at]), S.rowIdOf, x => JSON.parse(JSON.stringify(x)));
+        const nL = apiG.goneLocal('c', [{ f: 'f_kit', r: 'w_9', row: { id: 'w_9' }, at: 2 }, { f: 'f_nope', r: 'w_1', row: { id: 'w_1' }, at: 0 }]);
+        const w1 = apiG.goneWait('c', 'f_kit', 'w_1'), w0 = apiG.goneWait('c', 'f_kit', 'w_7'), f0 = apiG.goneFire('c');
+        campG.chars.c.values.f_kit = [{ id: 'w_2', qty: 1, def: { name: 'X' } }]; const f1 = apiG.goneFire('other'), f2 = apiG.goneFire('c'), f3 = apiG.goneFire('c');
+        check('1.6.0 a row used up gets its Undo (sheets.js goneLocal, goneWait and goneFire, run for real): on the GM\'s machine at once, for a list of the system; on a player\'s app the host\'s word takes the row as this copy holds it and the notice waits until the change takes it off, once, and never for a row it does not hold',
+            nL === 1 && w1 === true && w0 === false && f0 === 0 && f1 === 0 && f2 === 1 && f3 === 0 && J(notes) === J([['c', 'f_kit', 'w_9', 2], ['c', 'f_kit', 'w_1', 0]]), J([nL, w1, w0, f0, f1, f2, f3, notes]));
+        check('1.6.0 the editor (source): a change\'s target writes through one function, setChangeTarget (a field, a counter, Fire, an effect on or off, the row\'s quantity or a stat), an effect\'s change shows no amount; the Rolls tab offers each effect on and off, the Lists card each effect, the row\'s quantity and its number stats; the GM\'s press and the round hook hand the clock an effect starts by; charChanged asks goneFire',
+            /function setChangeTarget\(ch, v\) \{/.test(shG) && /if \(typeof ch\.fx !== 'string'\) \{   \/\/ 1\.6\.0: an effect switched has no amount/.test(shG) && /if \(ch\.fire !== true && typeof ch\.fx !== 'string'\) \{/.test(shG)
+            && /fxT\.push\(\['fx\+:' \+ d\.id, 'Switch on: '/.test(shG) && /opts\.push\(\['q', 'This row\\u2019s quantity'\]\)/.test(shG) && /if \(res\.gone\) goneLocal\(c\.id, res\.gone\);/.test(shG) && /if \(typeof goneFire === 'function'\) goneFire\(id\);/.test(shG)
+            && /onInCombat: !!\(onT && n && n\.charInCombat && n\.charInCombat\(onT\.ch\.id\)\) \}\);/.test(shG));
+    }
+    {   // 1.6.0: the host's word that rows were used up, as a player's app cleans it
+        const okR = S.cleanRowGone({ type: 'row-gone', charId: 'c_a', items: [{ f: 'f_kit', r: 'w_1', x: 1 }] }), many = Array.from({ length: 9 }, (_, i) => ({ f: 'f_kit', r: 'w_' + i }));
+        check('1.6.0 cleanRowGone keeps a character\'s id and 1 to 8 rows by list and row id, nothing else, and refuses anything malformed whole',
+            JSON.stringify(okR) === JSON.stringify({ charId: 'c_a', items: [{ f: 'f_kit', r: 'w_1' }] }) && [null, {}, { charId: 'x', items: [{ f: 'f_kit', r: 'w_1' }] }, { charId: 'c_a', items: [] }, { charId: 'c_a', items: many }, { charId: 'c_a', items: [{ f: 'bad', r: 'w_1' }] }, { charId: 'c_a', items: [{ f: 'f_kit', r: 'x_1' }] }, { charId: 'c_a', items: 'w_1' }].every(m => S.cleanRowGone(m) === null), JSON.stringify(okR));
     }
     summed = true;
     console.log(NL + pass + ' passed, ' + fail + ' failed.');
