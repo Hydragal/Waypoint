@@ -37,6 +37,11 @@ Launchers and rounds
   chamber and is kept as the round last fired. Formulas read
   Row.chambered, Row.round.<stat> and Row.fired.<stat>, so a launcher's
   damage can be the fired round's own.
+- A shot that jams fires nothing. Its round stays chambered whatever the
+  Then's When says, On malfunction too, as the rules have it.
+- Chambers only where is a formula a row must meet before it may chamber.
+  A row that does not meet it shows no chamber, and one that still holds
+  rounds can only unchamber them.
 - A round with a blast is launched, not thrown: no throw roll and no
   scatter. When the Attack that fired it hits the roller's target, its
   blast goes off there. Your GM places a round that misses, with the

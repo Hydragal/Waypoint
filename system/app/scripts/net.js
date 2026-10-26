@@ -3429,6 +3429,7 @@ net.charItem = function(charId, fieldId, q) {
     if (window.wpVtt && !window.wpVtt.on('sheets')) return { error: 'Character sheets are off here.' };
     var c = (camp && camp.chars && typeof charId === 'string' && Object.prototype.hasOwnProperty.call(camp.chars, charId) ? camp.chars[charId] : null); if (!c || c.partial || c.npc || !c.ownerId || c.ownerId !== net.myId) return { error: 'That character is not yours.' };
     if (!camp.system) return { error: 'No system at this table.' };
+    if (q.op === 'chamber' && typeof S.chamberSays === 'function') { var chW = S.chamberSays(camp.system, c, fieldId, q.rowId, window.wpFormula); if (chW) return { error: chW }; }   // 1.5.9 Chambers only where: a row that takes no round now is answered at once in its words and nothing is sent (the host judges it as well)
     if (q.op === 'load' || q.op === 'chamber' || q.op === 'unchamber' || (q.op === 'add' && typeof q.pay === 'number') || ((q.op === 'remove' || q.op === 'setQty') && typeof q.get === 'number') || q.op === 'restore') {   // 1.5.6 a purchase or a sale: the host moves the money with the row, and this copy follows its word; 1.5.8 a load (Loads from) moves two lists, and waits alike
         var ridM = 'e' + Math.random().toString(36).slice(2, 10);
         _charPending[ridM] = { charId: charId, fieldId: fieldId, batch: [], kind: 'item', timer: setTimeout(function() { charPendingDone(ridM, false, 'timeout'); }, S.LIMITS.editTimeoutMs) };

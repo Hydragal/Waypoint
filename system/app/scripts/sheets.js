@@ -2654,7 +2654,7 @@ function itemListInto(wrap, f, c, carried, sysI, canThrow, editable, gm, empty, 
         lostBits(line, rd, entry, c, f, gm, chg); needBits(line, sysI, c, entry, rd, gm); gmItemBits(line, def, entry, gm, !!(spec && spec.on)); keyShareChip(line, entry, rd, unseenL); modsBits(line, def, entry, spec, sysI);
         if (typeof onceBits === 'function') onceBits(line, sysI, c, f, carried, entry);   // 1.5.8 Counted once
         var noteLn = null;
-        if (spec) { statChips(line, def, spec, ovc); colChips(line, spec, res && res.cells ? res.cells[rid] : null); ctCtl(line, entry, c, f, spec, editable, res && res.cts ? res.cts[rid] : null); if (typeof loadCtl === 'function') loadCtl(line, entry, c, f, spec, editable, sysI, res && res.ldOk ? res.ldOk[rid] : undefined); if (typeof chamberCtl === 'function') chamberCtl(line, entry, c, f, spec, editable, sysI, gm, canThrow); var lc = lvlCtl(entry, def, c, f, spec, chg && !opnR); if (lc) line.appendChild(lc); var oc = onCtl(entry, c, f, spec, editable, true, res && res.onOk ? res.onOk[rid] : undefined); if (oc) line.appendChild(oc); var pcL = paidCtl(entry, def, c, f, spec, chg, gm, true); if (pcL) line.appendChild(pcL); noteLn = hudRow ? null : noteBits(entry, def, c, f, chg, ovc); }   // F4c1: the stats shown On the row, what one cost
+        if (spec) { statChips(line, def, spec, ovc); colChips(line, spec, res && res.cells ? res.cells[rid] : null); ctCtl(line, entry, c, f, spec, editable, res && res.cts ? res.cts[rid] : null); if (typeof loadCtl === 'function') loadCtl(line, entry, c, f, spec, editable, sysI, res && res.ldOk ? res.ldOk[rid] : undefined); if (typeof chamberCtl === 'function') chamberCtl(line, entry, c, f, spec, editable, sysI, gm, canThrow, res && res.chOk ? res.chOk[rid] : undefined); var lc = lvlCtl(entry, def, c, f, spec, chg && !opnR); if (lc) line.appendChild(lc); var oc = onCtl(entry, c, f, spec, editable, true, res && res.onOk ? res.onOk[rid] : undefined); if (oc) line.appendChild(oc); var pcL = paidCtl(entry, def, c, f, spec, chg, gm, true); if (pcL) line.appendChild(pcL); noteLn = hudRow ? null : noteBits(entry, def, c, f, chg, ovc); }   // F4c1: the stats shown On the row, what one cost
         if (def.area && canThrow && (gm || def.vis !== 'gm') && entry.hid !== 1) line.appendChild(itemThrowBtn(def, c, f, rid));   // a GM-only item: the GM's throw only (a player's copy never carries its area)
         rowRollBtns(line, spec, entry, def, c, f, res);   // F5b: the list's rolls on this row
         if (noteLn) line.appendChild(noteToggle(noteLn, entry, c, f));
@@ -2778,16 +2778,19 @@ function openLoadMenu(anchor, c, f, entry, sf, spec, sys) {
 // [sinkcheck:chamberctl-start]
 // 1.5.9 Chambers from (the owner, by prompt on 2026-10-25: "A cell and a round"): what a row's chamber holds ("2 of 4 chambered"), its button
 // that opens a menu of the rounds that fit, and Unchamber. A play control, as Load is (a locked sheet and the HUD chamber too). Every name from a
-// campaign as text. The GM's Launch places the blast of the round last fired, else the next one, with no throw roll and no scatter
-function chamberCtl(host, entry, c, f, spec, editable, sysI, gm, canThrow) {
+// campaign as text. The GM's Launch places the blast of the round last fired, else the next one, with no throw roll and no scatter. okC (1.5.9,
+// Chambers only where): false where the row does not meet it, so an empty one shows no chamber at all, and one that holds rounds keeps its chip and
+// Unchamber but no Chamber, so that no round is ever stranded
+function chamberCtl(host, entry, c, f, spec, editable, sysI, gm, canThrow, okC) {
     if (!spec || !spec.chamber || typeof spec.chamber !== 'object' || !entry || entry.hid === 1) return;
+    if (okC === false && !(Array.isArray(entry.rd) && entry.rd.length)) return;   // Chambers only where: a row that takes no round, and holds none, shows nothing
     var sys = sysI || systemOf(getActiveCampaign()), sf = sys ? fieldById(sys, spec.chamber.from) : null; if (!sf || sf.kind !== 'item-list') return;
     var rd = Array.isArray(entry.rd) ? entry.rd : [], cap = typeof chamberCap === 'function' ? chamberCap(spec) : 1, lb = spec.chamber.label || 'Chamber', ln = sf.label || sf.key || 'its list';
     var nx = rd[0] ? rowDef(sys, rd[0]) : null, nxN = nx && nx.def && nx.def.name ? nx.def.name : 'A round';
     var w = el('span', 'sheet-chip sheet-item-load sheet-item-chamber' + (rd.length ? '' : ' sheet-item-load-none')); w.title = rd.length ? 'Next to fire: ' + nxN : 'Nothing chambered from ' + ln;
     w.appendChild(el('span', 'sheet-item-ctl', rd.length + ' of ' + cap + ' chambered'));
     if (editable && (entry.qty | 0) === 1) {
-        if (rd.length < cap) { var b = el('button', 'tool ghost sheet-item-ctb sheet-item-chamberb', lb); b.type = 'button'; b.title = lb + ': one from ' + ln + ' goes into the chamber. The first one in fires first'; b.addEventListener('click', function(e) { e.preventDefault(); e.stopPropagation(); openChamberMenu(b, c, f, entry, sf, spec, sys); }); w.appendChild(b); }
+        if (rd.length < cap && okC !== false) { var b = el('button', 'tool ghost sheet-item-ctb sheet-item-chamberb', lb); b.type = 'button'; b.title = lb + ': one from ' + ln + ' goes into the chamber. The first one in fires first'; b.addEventListener('click', function(e) { e.preventDefault(); e.stopPropagation(); openChamberMenu(b, c, f, entry, sf, spec, sys); }); w.appendChild(b); }
         if (rd.length) { var u = el('button', 'tool ghost sheet-item-ctb sheet-item-unchamberb', 'Unchamber'); u.type = 'button'; u.title = 'The last one in goes back to ' + ln; u.addEventListener('click', function(e) { e.preventDefault(); e.stopPropagation(); commitItem(c, f, { op: 'unchamber', rowId: rowIdOf(entry), back: uid('w_') }); }); w.appendChild(u); }
     }
     host.appendChild(w);
@@ -2903,8 +2906,8 @@ function itemTableInto(wrap, f, c, carried, sysI, canThrow, editable, gm, empty,
                 actTd.appendChild(nt);
             }
             ctCtl(actTd, entry, c, f, spec, editable, res && res.cts ? res.cts[rowIdOf(entry)] : null);   // Stage 6 HUD R2: its counters
-            if (typeof loadCtl === 'function') loadCtl(actTd, entry, c, f, spec, editable, sysI);   // 1.5.8 Loads from
-            if (typeof chamberCtl === 'function') chamberCtl(actTd, entry, c, f, spec, editable, sysI, gm, canThrow);   // 1.5.9 Chambers from
+            if (typeof loadCtl === 'function') loadCtl(actTd, entry, c, f, spec, editable, sysI, res && res.ldOk ? res.ldOk[rid] : undefined);   // 1.5.8 Loads from, and Loads only where (1.5.9: in a table too)
+            if (typeof chamberCtl === 'function') chamberCtl(actTd, entry, c, f, spec, editable, sysI, gm, canThrow, res && res.chOk ? res.chOk[rid] : undefined);   // 1.5.9 Chambers from, and Chambers only where
             rowRollBtns(actTd, spec, entry, def, c, f, res);   // F5b: the list's rolls
             if (rrT) actTd.appendChild(editBtn(entry, c, f, rrT, rd.src === 'custom'));   // F4c2: ✎
             if (editable) { var ubT = undoBtn(entry, c, f); if (ubT) actTd.appendChild(ubT); if (chg) actTd.appendChild(itemRmBtn(entry, def, c, f)); }
@@ -6065,9 +6068,11 @@ function listCard(f, allCats, targets, acts) {   // acts (turn-based combat T1):
             for (var hc = 1; hc <= (CHAMBER_CAP || 8); hc++) { var ho = el('option', null, 'Holds ' + hc); ho.value = String(hc); if (capC === hc) ho.selected = true; hsl.appendChild(ho); }
             crw.appendChild(hsl);
             crw.appendChild(input('sys-list-chambercats field', Array.isArray(chS.cats) ? chS.cats.join(', ') : '', 'The categories of that list a row may chamber, separated by commas. Blank: any of its rows', 'Categories it takes (blank: any)'));
+            crw.appendChild(input('sys-list-chamberneeds field', typeof chS.needs === 'string' ? chS.needs : '', 'A formula a row must meet to chamber, read with its own names (Row.*), no dice. Blank: every row. A row that does not meet it shows no chamber, and one that still holds rounds can only unchamber them', 'Chambers only where (blank: every row)'));
             crw.appendChild(input('sys-list-chamberby field', typeof chS.by === 'string' ? chS.by : '', 'A stat of this list. A row chambers only what reads the same figure in the stat below, as a launcher takes only its own kind of round. Blank: anything the categories take', 'Matched by: this list\u2019s stat'));
             crw.appendChild(input('sys-list-chamberto field', typeof chS.to === 'string' ? chS.to : '', 'The stat of the round\u2019s list that must read the same figure', 'and that list\u2019s stat'));
             crw.appendChild(input('sys-list-chamberlabel field', typeof chS.label === 'string' ? chS.label : '', 'The word on the button that chambers a round. Blank: Chamber', 'Button word (blank: Chamber)'));
+            crw.appendChild(input('sys-list-chamberneedstext field', typeof chS.needsText === 'string' ? chS.needsText : '', 'What a refused chamber says', 'Its words'));
         }
         cb2.appendChild(crw);
     }
@@ -6180,7 +6185,7 @@ function listApplyEditor(box, rr, ri, key, sp, targets) {   // key (R2b): 'apply
         if (key === 'then') rw.appendChild(sel('sys-list-applywhen', [['', 'Always'], ['hit', 'On success'], ['crit', 'On a critical success'], ['miss', 'On failure'], ['fumble', 'On a critical failure'], ['malf', 'On malfunction']], ch.when || '', 'When the roll makes this change: always, or only when its test succeeds or fails. A critical success is a success too, and a critical failure a failure'));
         var opts = [['', 'Pick a pool, number or counter\u2026']].concat(targets.map(function(f) { return [f.id, (f.label || f.key || f.id) + (f.kind === 'resource' ? ' (pool)' : '')]; }), ctrs.map(function(t) { return ['c:' + t.key, 'Counter: ' + (t.label || t.key)]; })); if (ch.f && !targets.some(function(f) { return f.id === ch.f; })) opts.push([ch.f, 'A field that is gone']); if (ch.c && !ctrs.some(function(t) { return t.key === ch.c; })) opts.push(['c:' + ch.c, 'A counter that is gone']);
         if (key === 'then' && ((sp && sp.chamber && typeof sp.chamber === 'object') || ch.fire === true)) opts.push(['fire', sp && sp.chamber ? 'Fire the next chambered round' : 'Fire, but this list has no Chambers from']);   // 1.5.9 Chambers from
-        rw.appendChild(sel('sys-list-applytarget', opts, ch.fire === true ? 'fire' : ch.c ? 'c:' + ch.c : (ch.f || ''), 'What this change moves: a pool\u2019s current value, a number, or one of the row\u2019s counters. Fire takes the next chambered round out, as the round last fired'));
+        rw.appendChild(sel('sys-list-applytarget', opts, ch.fire === true ? 'fire' : ch.c ? 'c:' + ch.c : (ch.f || ''), 'What this change moves: a pool\u2019s current value, a number, or one of the row\u2019s counters. Fire takes the next chambered round out, as the round last fired. A shot that jams fires nothing'));
         if (ch.fire !== true) {
         rw.appendChild(sel('sys-list-applyop', [['sub', 'Subtract'], ['add', 'Add'], ['set', 'Set to']], ch.set ? 'set' : ch.add ? 'add' : 'sub', 'Subtract (a cost) or add; never past the field\u2019s min and max'));
         var fm = input('sys-list-applyformula field', typeof ch.formula === 'string' ? ch.formula : '', 'The amount for the row: no dice; Row.lvl, Row.<stat>, Row.<column> read the row (Row.FPCost)', 'Amount (Row.FPCost)'); fm.maxLength = LIMITS.formula; rw.appendChild(fm);
@@ -7466,6 +7471,8 @@ function onInput(e) {
             if (lcc.indexOf('sys-list-needstext') >= 0) { if (t.value.trim()) nR.needsText = t.value.slice(0, LIMITS.label); else delete nR.needsText; }
             else { if (t.value.trim()) nR.needs = t.value.slice(0, LIMITS.formula); else delete nR.needs; }
         }
+        else if (lcc.indexOf('sys-list-chamberneedstext') >= 0) { if (!lsp.chamber || typeof lsp.chamber !== 'object') return; if (t.value.trim()) lsp.chamber.needsText = t.value; else delete lsp.chamber.needsText; }   // 1.5.9 Chambers only where's words
+        else if (lcc.indexOf('sys-list-chamberneeds') >= 0) { if (!lsp.chamber || typeof lsp.chamber !== 'object') return; if (t.value.trim()) lsp.chamber.needs = t.value; else delete lsp.chamber.needs; }   // 1.5.9 Chambers only where (Save cleans it as a list roll's needs)
         else if (lcc.indexOf('sys-list-chambercats') >= 0) { if (!lsp.chamber || typeof lsp.chamber !== 'object') return; var ccv = t.value.split(',').map(function(s) { return s.trim(); }).filter(Boolean); if (ccv.length) lsp.chamber.cats = ccv; else delete lsp.chamber.cats; }   // 1.5.9 Chambers from (Save cleans them)
         else if (lcc.indexOf('sys-list-chamberby') >= 0 || lcc.indexOf('sys-list-chamberto') >= 0 || lcc.indexOf('sys-list-chamberlabel') >= 0) { if (!lsp.chamber || typeof lsp.chamber !== 'object') return; var cKy = lcc.indexOf('sys-list-chamberby') >= 0 ? 'by' : lcc.indexOf('sys-list-chamberto') >= 0 ? 'to' : 'label'; if (t.value.trim()) lsp.chamber[cKy] = cKy === 'label' ? t.value.slice(0, LIMITS.label) : t.value.trim(); else delete lsp.chamber[cKy]; }
         else if (lcc.indexOf('sys-list-loadby') >= 0) { if (!lsp.load || typeof lsp.load !== 'object') return; if (t.value.trim()) lsp.load.by = t.value.trim(); else delete lsp.load.by; }   // 1.5.8 Matched by (Save keeps the pair only where both name a stat)

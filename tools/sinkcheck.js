@@ -4874,6 +4874,14 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             && lab3.length === 1 && lab3[0].value === T + P && PG3.clean() && !HTMLW.test(lcSrc) && !HTMLW.test(lineW('function input(cls, value, title, placeholder) {'))
             && j(typed3) === j({ plus: [T, 'vsenergy', P, X1] }) && j(kept3) === j(['vsEnergy']) && j(runH(' , ,', { plus: ['x'], key: 'DR' })) === j({ key: 'DR' }),
             j([plus3.map(e => [e.tag, e.value, e.maxLength]), PG3.htmlSet, PG3.attrs, typed3, kept3]));
+        // 1.5.9 Chambers only where: a hostile formula and words from a file are the values of their own boxes (listCard run for real on a page that refuses markup)
+        const draftCh = JSON.parse(j(rawW)); draftCh.fields[0].list.chamber = { from: draftCh.fields[0].id, cap: 2, needs: X1 + ' > 0', needsText: T };
+        const PGch = mkPage(), cardCh = new Function('document', 'LIMITS', 'numField', 'priceOptions', 'listApplyEditor', "'use strict';\nvar CHAMBER_CAP = 8;\n" + lineW('function el(tag, cls, text) {') + '\n' + lineW('function input(cls, value, title, placeholder) {') + '\n' + lineW('function checkLabel(cls, on, text, title) {') + lcSrc + '\nreturn listCard;')(
+            PGch.doc, SYw.LIMITS, () => PGch.fake('input'), () => {}, () => {})(draftCh.fields[0], [], [], []);
+        const chNd = PGch.made.filter(e => typeof e.className === 'string' && e.className.split(' ').indexOf('sys-list-chamberneeds') >= 0), chNt = PGch.made.filter(e => typeof e.className === 'string' && e.className.split(' ').indexOf('sys-list-chamberneedstext') >= 0);
+        check('1.5.9 Chambers only where (the System editor\'s box, listCard run for real on a page that refuses markup): a hostile formula and hostile words from a file are each the value of their own box beside the chamber\'s other boxes, nothing of them markup or an attribute',
+            !!cardCh && chNd.length === 1 && chNd[0].tag === 'input' && chNd[0].value === X1 + ' > 0' && chNd[0].children.length === 0 && chNd[0].placeholder === 'Chambers only where (blank: every row)' && chNt.length === 1 && chNt[0].value === T && chNt[0].children.length === 0 && PGch.clean(),
+            j([chNd.map(e => [e.tag, e.value]), chNt.map(e => e.value), PGch.htmlSet, PGch.attrs]));
         const reSrcW = cutW('\nfunction refreshErrors() {', '\nfunction errorCell('), ecSrc = cutW('\nfunction errorCell(id) {', '\nfunction errPrefix(') + '\n' + lineW('function errPrefix(p, warn) {');
         const PG4 = mkPage(), CAMPW = { system: sysW, chars: {} };
         const cell4 = new Function('draft', 'F', 'validKey', 'KINDS', 'cleanItemKey', 'cleanSystem', 'validateSystem', 'statKey', 'LIMITS', 'getActiveCampaign', 'systemOf', 'document', 'formulaTextFor', 'NL',
@@ -5357,6 +5365,12 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
             && launch && /Launch/.test(launch.textContent) && launch.title.indexOf(hostile) > 0 && JSON.stringify(armedC) === JSON.stringify([{ charId: 'c_kael', fieldId: 'f_gear', rowId: 'w_t1', name: hostile }]) && closedC[0] === 'sheet'
             && !/innerHTML|insertAdjacentHTML|outerHTML/.test(chC),
             JSON.stringify([chip && chip.title, rows.length, sent, armedC, h4.children.length]));
+        const h5 = node('div'), h6 = node('div'), h7 = node('div'); CH.chamberCtl(h5, c.values.f_gear[1], c, f, f.list, true, sys, true, true, false); CH.chamberCtl(h6, c.values.f_gear[0], c, f, f.list, true, sys, false, true, false); CH.chamberCtl(h7, c.values.f_gear[1], c, f, f.list, true, sys, false, true, true);
+        const chip6 = h6.children[0], btn6 = chip6 ? chip6.children.map(x => x.className) : [], chip7 = h7.children[0];
+        check('1.5.9 Chambers only where on the sheet (chamberCtl run for real on a page that refuses markup): a row that does not meet it and holds no round shows no chamber at all, no chip and no button; one that still holds a round keeps its chip and Unchamber and has no Chamber; a row that meets it is drawn as before',
+            h5.children.length === 0 && chip6 && chip6.children[0].textContent === '1 of 2 chambered' && btn6.length === 2 && btn6[1].indexOf('sheet-item-unchamberb') >= 0 && !btn6.some(x => x.indexOf('sheet-item-chamberb') >= 0)
+            && chip7 && chip7.children[0].textContent === '0 of 2 chambered' && chip7.children.length === 2 && chip7.children[1].className.indexOf('sheet-item-chamberb') >= 0,
+            JSON.stringify([h5.children.length, btn6, chip7 && chip7.children.length]));
     }
     {   // 1.5.8 Counted once: a row's name from a campaign file reaches the chip as text alone, and the editor's box names a hostile stat as an option's text
         const SYO = await import(modUrl('systemcore.js')), shO = fs.readFileSync(path.join(__dirname, '..', 'system', 'app', 'scripts', 'sheets.js'), 'utf8').replace(/\r\n/g, '\n');
