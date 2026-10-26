@@ -26,6 +26,22 @@ Character sheets
   roll twice and keep the better or worse. Shift-click on the roll still
   does the same.
 
+Launchers and rounds
+- A list in the System editor can have Chambers from: a row of it holds
+  rounds in a chamber, as a launcher holds its grenades. The rounds come
+  from another list or from the same one. You set how many it holds, the
+  categories it takes, Matched by and the button's word.
+- On the sheet the row shows how many are chambered, with Chamber, a menu
+  of the rounds that fit, and Unchamber, which gives the last one back.
+- A list roll's Then can fire the next chambered round. It leaves the
+  chamber and is kept as the round last fired. Formulas read
+  Row.chambered, Row.round.<stat> and Row.fired.<stat>, so a launcher's
+  damage can be the fired round's own.
+- A round with a blast is launched, not thrown: no throw roll and no
+  scatter. When the Attack that fired it hits the roller's target, its
+  blast goes off there. Your GM places a round that misses, with the
+  row's Launch.
+
 Updates
 - An update keeps an outside sheet reader you added to the app folder.
   Before, every update left it behind and Import Character went away

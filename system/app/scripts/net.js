@@ -3429,7 +3429,7 @@ net.charItem = function(charId, fieldId, q) {
     if (window.wpVtt && !window.wpVtt.on('sheets')) return { error: 'Character sheets are off here.' };
     var c = (camp && camp.chars && typeof charId === 'string' && Object.prototype.hasOwnProperty.call(camp.chars, charId) ? camp.chars[charId] : null); if (!c || c.partial || c.npc || !c.ownerId || c.ownerId !== net.myId) return { error: 'That character is not yours.' };
     if (!camp.system) return { error: 'No system at this table.' };
-    if (q.op === 'load' || (q.op === 'add' && typeof q.pay === 'number') || ((q.op === 'remove' || q.op === 'setQty') && typeof q.get === 'number') || q.op === 'restore') {   // 1.5.6 a purchase or a sale: the host moves the money with the row, and this copy follows its word; 1.5.8 a load (Loads from) moves two lists, and waits alike
+    if (q.op === 'load' || q.op === 'chamber' || q.op === 'unchamber' || (q.op === 'add' && typeof q.pay === 'number') || ((q.op === 'remove' || q.op === 'setQty') && typeof q.get === 'number') || q.op === 'restore') {   // 1.5.6 a purchase or a sale: the host moves the money with the row, and this copy follows its word; 1.5.8 a load (Loads from) moves two lists, and waits alike
         var ridM = 'e' + Math.random().toString(36).slice(2, 10);
         _charPending[ridM] = { charId: charId, fieldId: fieldId, batch: [], kind: 'item', timer: setTimeout(function() { charPendingDone(ridM, false, 'timeout'); }, S.LIMITS.editTimeoutMs) };
         if (q.op === 'restore') _charPending[ridM].q = { op: 'restore', rowId: q.rowId };   // 1.5.8: its words, if refused, are the Undo's
@@ -3439,7 +3439,7 @@ net.charItem = function(charId, fieldId, q) {
         return { ok: true, pending: true };
     }
     var res = S.applyRowOp(camp.system, c, fieldId, q, window.wpFormula, { player: true, view: camp.system, lib: net.libEntry, copy: true });   // a player's copy IS the players' view (L3b: a library entry, from what this player fetched)
-    if (!res.ok) return { error: res.why === 'key' ? 'That key is already used in this list.' : res.why === 'badkey' ? 'Not a usable key: a letter, then letters, digits and _ (up to 40).' : res.reason === 'field' ? 'That list cannot be changed that way.' : res.reason === 'long' ? 'This list\u2019s own rows hold all the long text they may.' : res.reason === 'missing' ? 'That item is gone.' : res.reason === 'needs' ? (res.msg || 'Your character does not meet what that needs.') : 'That change is not allowed.' };   // why (F4c3): the local answer's own (a key taken in what they can see, or not a key), never sent; needs (126b): what their own copy says the entry needs
+    if (!res.ok) return { error: res.why === 'key' ? 'That key is already used in this list.' : res.why === 'badkey' ? 'Not a usable key: a letter, then letters, digits and _ (up to 40).' : res.reason === 'field' ? 'That list cannot be changed that way.' : res.reason === 'long' ? 'This list\u2019s own rows hold all the long text they may.' : res.reason === 'missing' ? 'That item is gone.' : res.reason === 'needs' ? (res.msg || 'Your character does not meet what that needs.') : res.reason === 'value' && typeof res.msg === 'string' && res.msg ? res.msg : 'That change is not allowed.' };   // why (F4c3): the local answer's own (a key taken in what they can see, or not a key), never sent; needs (126b): what their own copy says the entry needs
     var rid = 'e' + Math.random().toString(36).slice(2, 10);
     var prev = c.values && Object.prototype.hasOwnProperty.call(c.values, fieldId) ? JSON.parse(JSON.stringify(c.values[fieldId])) : undefined;
     c.values = c.values || {}; c.values[fieldId] = res.value;
@@ -7180,6 +7180,7 @@ function handleMessage(msg, conn) {
         if (!resI.ok) {
             if (resI.reason === 'stays') { itemNotice(chI, resI.name, resI.by ? 'eq-held-try' : resI.moved ? 'eq-move-try' : resI.eq && qi.op === 'set' ? 'eq-bound-try' : 'bound-try', resI.by); try { conn.send({ type: 'char-deny', rid: qi.rid, reason: 'stays', msg: resI.msg || '' }); } catch (e) { sendFailed(e); } return; }   // a bound item: it stays, with the GM's message
             if (resI.reason === 'needs') { try { conn.send({ type: 'char-deny', rid: qi.rid, reason: 'needs', msg: resI.msg || '' }); } catch (e) { sendFailed(e); } return; }   // 126b: what the entry needs, in the GM's own words or by the names a player may know
+            if ((qi.op === 'chamber' || qi.op === 'unchamber' || qi.op === 'load' || qi.op === 'setQty') && resI.msg) { try { conn.send({ type: 'char-deny', rid: qi.rid, reason: Si.cleanDenyReason(resI.reason), msg: String(resI.msg).slice(0, 200) }); } catch (e) { sendFailed(e); } return; }   // 1.5.9: what does not fit, a chamber that is full, in words
             denyI(resI.reason); return;
         }
         var mvI = Si.rowOpMoney ? Si.rowOpMoney(campI.system, chI, qi.fieldId, qi, resI) : null;   // 1.5.6: what a purchase paid, or a sale was paid, moves the money with the row, all or nothing
@@ -7771,6 +7772,7 @@ function handleMessage(msg, conn) {
             var mfHitQ = mfQ !== null && Dq.naturalOf(resQ) >= mfQ, vdQ = Dq.verdictOf(resQ, ruleQ), crQ = typeof SQ.thenCrit === 'function' ? SQ.thenCrit(vdQ, mfHitQ) : '', thQ = SQ.thenChanges(actQ, mfHitQ ? false : (vdQ && vdQ.kind === 'check' ? vdQ.pass : null), mfHitQ, crQ);   // R3: a malfunction is a failure, with its own changes; 1.5.8: and a critical, with its own
             var taQ = thQ.length ? SQ.applyAct(campQ.system, chQ, { apply: thQ }, typeof SQ.withRollCrit === 'function' ? SQ.withRollCrit(varsQ, crQ, typeof SQ.thenMargin === 'function' ? SQ.thenMargin(vdQ, mfHitQ) : 0) : varsQ, Fq, tcQ, q.row ? { f: q.row.f, r: q.row.r } : null) : null;   // 1.5.8: its amounts read RollCrit   // R2b: a list roll may move its row's counters
             if (taQ && taQ.ok) { chQ.values = chQ.values || {}; Object.keys(taQ.values).forEach(function(k) { chQ.values[k] = taQ.values[k]; }); chQ.updated = Date.now(); saveRemoteSoon(); net.syncCharDelta(q.charId, taQ.values); if (window.wpSheets) window.wpSheets.charChanged(q.charId); }
+            if (taQ && taQ.ok && taQ.fired && !mfHitQ && vdQ && vdQ.kind === 'check' && vdQ.pass === true && tcQ && tcQ.range && typeof tcQ.range.tid === 'string' && typeof window.wpLaunchHit === 'function') window.wpLaunchHit({ charId: q.charId, fieldId: taQ.fired.f, rowId: taQ.fired.r, tid: tcQ.range.tid, mapId: tcQ.range.mapId });   // 1.5.9 Chambers from: a hit puts the round it fired on the roller's target (a miss: the GM places it)
         }
         // [netcheck:rollreq-end]
     } else if (msg.type === 'apply' && net.role === 'client') {
@@ -8962,6 +8964,7 @@ net.diceRoll = function(expr, o) {
         var mfHitR = mfR !== null && D.naturalOf(res) >= mfR, vdR = D.verdictOf(res, ruleR), crR = typeof SR.thenCrit === 'function' ? SR.thenCrit(vdR, mfHitR) : '', thR = SR.thenChanges(entR, mfHitR ? false : (vdR && vdR.kind === 'check' ? vdR.pass : null), mfHitR, crR);   // R3; 1.5.8: and its critical
         var taR = thR.length ? SR.applyAct(campR.system, chR, { apply: thR }, typeof SR.withRollCrit === 'function' ? SR.withRollCrit(varsR, crR, typeof SR.thenMargin === 'function' ? SR.thenMargin(vdR, mfHitR) : 0) : varsR, F, null, o.row ? { f: o.row.f, r: o.row.r } : null) : null;   // 1.5.8: its amounts read RollCrit
         if (taR && taR.ok) { chR.values = chR.values || {}; Object.keys(taR.values).forEach(function(k) { chR.values[k] = taR.values[k]; }); chR.updated = Date.now(); save(true); if (hosting && net.syncCharDelta) net.syncCharDelta(chR.id, taR.values); if (window.wpSheets && window.wpSheets.charChanged) window.wpSheets.charChanged(chR.id); }
+        if (taR && taR.ok && taR.fired && !mfHitR && vdR && vdR.kind === 'check' && vdR.pass === true && tcR && tcR.range && typeof tcR.range.tid === 'string' && typeof window.wpLaunchHit === 'function') window.wpLaunchHit({ charId: chR.id, fieldId: taR.fired.f, rowId: taR.fired.r, tid: tcR.range.tid, mapId: tcR.range.mapId });   // 1.5.9 Chambers from: a hit puts the round it fired on the target (a miss: the GM places it)
     }
     net.rollCheck = D.checkOf ? D.checkOf(res, ruleR) : null;   // 1.5.8 explosives: this roll's pass, critical and margin, read by a throw right after it (this machine's own)
     return { ok: true, value: res.value, priv: !!rec.priv };
