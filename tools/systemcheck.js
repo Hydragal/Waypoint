@@ -14791,6 +14791,29 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         check('1.5.9 an effect can set its token\'s posture (the owner\'s O6; cleanSystem, postureFx, and sheets.js postureFollow run for real): the cleaner keeps a posture of the list by its id and Back when it ends only beside one, alike in both views; postureFx names the effects on that set one, by hand or by themselves; the first look at a character only notes, so a load moves nobody; Down coming on lays every token of the character prone on every map, never a waiting token or another character\'s; healed, its prone stays as the book says; an effect ticked Back when it ends puts back the posture its token had, only where it still stands as the effect set it; a player\'s app, a campaign this machine may not write and Token posture off move nothing',
             clOk && fxOk && J(steps) === J(want) && offs.every(x => x[0] === '[]' && x[1]), J([clOk, fxOk, steps, offs]));
     }
+    // 1.6.0 (the campaign build: Down lays a token prone unless it already lies face up): an effect's postureKeep, the postures it leaves alone,
+    // in the core and in sheets.js postureFollow, sliced by its fxposture markers and run for real
+    {
+        const J = JSON.stringify, NLk = '\n';
+        const base = { v: 1, name: 'K', fields: [{ id: 'f_hp', key: 'HP', label: 'HP', kind: 'resource', maxFormula: '10', def: 'max', min: -30 }, { id: 'f_fx', key: 'FX', label: 'Effects', kind: 'effects' }],
+            effects: [{ id: 'e_down', name: 'Down', auto: 'HP <= 0', posture: 'lying-prone', postureBack: true, postureKeep: ['lying-face-up', 'lying-face-up', 'lying-prone', 'flying', 7] },
+                { id: 'e_nk', name: 'No posture', postureKeep: ['sitting'] }, { id: 'e_ek', name: 'Empty', posture: 'sitting', postureKeep: [] }] };
+        const gm = S.cleanSystem(base, { F, gmView: true }), pl = S.cleanSystem(base, { F, gmView: false }), eOf = (s, id) => s.effects.filter(e => e.id === id)[0] || {};
+        const clOk = J(eOf(gm, 'e_down').postureKeep) === J(['lying-face-up']) && !('postureKeep' in eOf(gm, 'e_nk')) && !('postureKeep' in eOf(gm, 'e_ek')) && J(gm.effects) === J(pl.effects) && J(S.cleanSystem(gm, { F, gmView: true })) === J(gm)
+            && J(S.postureFx(gm, { id: 'c', values: { f_hp: { cur: 0 } } }, F)) === J({ e_down: { p: 'lying-prone', back: true, keep: ['lying-face-up'] } });
+        const shK = fs.readFileSync(path.join(app, 'scripts', 'sheets.js'), 'utf8').replace(/\r\n/g, NLk), ka = shK.indexOf('// [systemcheck:fxposture-start]'), kz = shK.indexOf('// [systemcheck:fxposture-end]');
+        const tA = { id: 't1', isChar: true, charId: 'c_a', posture: 'lying-face-up' }, tB = { id: 't2', isChar: true, charId: 'c_a' }, tC = { id: 't3', isChar: true, charId: 'c_a', posture: 'Lying face up' }, tD = { id: 't4', isChar: true, charId: 'c_a', posture: 'kneeling' };
+        const c = { id: 'c_a', name: 'Ana', values: { f_hp: { cur: 5 } } }, camp = { id: 'k', system: gm, chars: { c_a: c }, items: { m1: { id: 'm1', type: 'map', whiteboard: [tA, tB, tC, tD] } } };
+        const run = new Function('isClient', 'canWrite', 'F', 'postureFx', 'window', shK.slice(ka, kz) + NLk + 'return postureFollow;')(() => false, () => true, () => F, S.postureFx, { wpVtt: { on: () => true }, wpSystemCore: S });
+        const steps = [J(run(c, camp))];
+        c.values.f_hp = { cur: 0 }; steps.push(J(run(c, camp)), tA.posture, tB.posture, tC.posture, tD.posture);   // Down: the standing and the kneeling lie prone, those lying face up stay
+        c.values.f_hp = { cur: 4 }; steps.push(J(run(c, camp)), tA.posture, tB.posture, tC.posture, tD.posture);   // Down ends, Back when it ends: the two it laid prone go back, the two it left alone stay as they are
+        const want = ['[]', J(['m1']), 'lying-face-up', 'lying-prone', 'Lying face up', 'lying-prone', J(['m1']), 'lying-face-up', undefined, 'Lying face up', 'kneeling'];
+        const shOk = shK.includes("kc.className = 'sys-fx-posturekeep'") && shK.includes("if (c.indexOf('sys-fx-posturekeep') >= 0)") && shK.indexOf("if (c.indexOf('sys-fx-posturekeep') >= 0)") < shK.indexOf("if (c.indexOf('sys-fx-posture') >= 0)")
+            && shK.includes('delete fxc.posture; delete fxc.postureBack; delete fxc.postureKeep;');
+        check('1.6.0 an effect\'s posture leaves the postures it names alone (postureKeep: the campaign build, Down lays a token prone unless it already lies face up): the cleaner keeps them only beside a posture, each a posture of the list by its id, once, never the posture it sets, alike in both views; postureFx carries them; sheets.js postureFollow, run for real, leaves a token in such a posture as it is, read by its id or its old long name, lays the others in the effect\'s posture, and when the effect ends and is ticked Back when it ends puts back only those it moved; the System editor\'s Unless already ticks, their handler before the posture list\'s, and the list cleared with the posture',
+            clOk && J(steps) === J(want.map(x => x === undefined ? null : x)).replace(/null/g, 'null') && shOk, J([clOk, steps, shOk]));
+    }
     // 1.5.9 (docs/BOOK_ES_ET_PLAN.md 4a; the book (et) and (eu): a death check every time HP falls past -HP or a further multiple, even at a line
     // already rolled; rising above a line re-arms it): crossings in the core, and sheets.js crossFollow and crossSeed sliced by their cross
     // markers and run for real with the real resolver

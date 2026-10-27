@@ -1936,7 +1936,7 @@ function cleanEffectDef(d, fieldKinds, gmView, F) {   // conditions C4: F, for a
     var vis = d.vis === 'gm' ? 'gm' : 'all'; if (!gmView && vis === 'gm') return null;
     var c = cleanEffectCore(d, fieldKinds), o = { id: d.id, name: c.name, icon: c.icon, tone: c.tone, dur: c.dur, notes: c.notes, vis: vis, mods: c.mods };
     var au = vis === 'gm' ? null : cleanFormulaText(d.auto); if (au && autoFormulaOk(au, F)) o.auto = au;   // conditions C4: only a visible effect applies itself (the owner's answer, "Only public ones")
-    var fxP = typeof d.posture === 'string' && (POSTURE_ID.test(d.posture) || POSTURE_IDS.indexOf(d.posture) >= 0) ? d.posture : ''; if (fxP) { o.posture = fxP; if (d.postureBack === true) o.postureBack = true; }   // 1.5.9 (book es/et plan, the owner's O6): the posture its token takes the moment it comes on (a posture of the list by its id), and, ticked, back when it ends; absent, as ever
+    var fxP = typeof d.posture === 'string' && (POSTURE_ID.test(d.posture) || POSTURE_IDS.indexOf(d.posture) >= 0) ? d.posture : ''; if (fxP) { o.posture = fxP; if (d.postureBack === true) o.postureBack = true; if (Array.isArray(d.postureKeep)) { var fxK = []; d.postureKeep.forEach(function(x) { if (fxK.length < LIMITS.postures && typeof x === 'string' && x !== fxP && (POSTURE_ID.test(x) || POSTURE_IDS.indexOf(x) >= 0) && fxK.indexOf(x) < 0) fxK.push(x); }); if (fxK.length) o.postureKeep = fxK; } }   // 1.5.9 (book es/et plan, the owner's O6): the posture its token takes the moment it comes on (a posture of the list by its id), and, ticked, back when it ends; absent, as ever
     return o;
 }
 // Conditions C4: an automatic effect's formula — one that reads, rolls no dice (whether it names a GM-only value is judged over the whole system)
@@ -5271,7 +5271,7 @@ function tokenEffects(sys, char, gm, F) {   // conditions C4: F (the formula eng
 function postureFx(sys, char, F) {
     var out = map(); if (!isObj(sys) || !Array.isArray(sys.effects) || !Array.isArray(sys.fields) || !isObj(char) || !isObj(char.values)) return out;
     var has = function(d) { return isObj(d) && typeof d.posture === 'string' && d.posture !== '' && typeof d.id === 'string'; }; if (!sys.effects.some(has)) return out;
-    var lib = fxLibOf(sys), put = function(d) { out[d.id] = { p: d.posture, back: d.postureBack === true }; };
+    var lib = fxLibOf(sys), put = function(d) { out[d.id] = { p: d.posture, back: d.postureBack === true }; if (Array.isArray(d.postureKeep) && d.postureKeep.length) out[d.id].keep = d.postureKeep.slice(); };   // keep (1.6.0): the postures it leaves a token in
     sys.fields.forEach(function(f) {
         if (!isObj(f) || f.kind !== 'effects' || typeof f.id !== 'string' || !Object.prototype.hasOwnProperty.call(char.values, f.id) || !Array.isArray(char.values[f.id])) return;
         char.values[f.id].forEach(function(r) { if (isObj(r) && r.on !== false && typeof r.ref === 'string' && has(lib[r.ref])) put(lib[r.ref]); });
