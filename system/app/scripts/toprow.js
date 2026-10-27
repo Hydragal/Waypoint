@@ -103,7 +103,7 @@ function rowWraps() { var h = document.querySelector('header'); return !!h && h.
 var FOLD_ORDER = ['helpBtn', 'handoutsBtn', 'soundInd', 'musicInd', 'journalBtn', 'voiceInd'];
 function foldSet(n) {
     FOLD_ORDER.forEach(function(id, i) { var c = document.getElementById(id); if (c) c.classList.toggle('row-fold', i < n); });
-    document.body.classList.toggle('row-narrow', n > 0); var b = document.getElementById('rowTrayBtn'); if (b) b.hidden = !(n > 0);
+    document.body.classList.toggle('row-narrow', n > 0); document.body.classList.toggle('row-squeeze', n >= FOLD_ORDER.length); var b = document.getElementById('rowTrayBtn'); if (b) b.hidden = !(n > 0);
     return n;
 }
 function foldFit() {
