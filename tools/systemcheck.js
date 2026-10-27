@@ -15173,6 +15173,35 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         check('1.6.0 a list\'s roll or action Shown where (showIf: the campaign build, a roll only on the rows it applies to): kept on a roll and an action as a formula, an empty one none, alike in both views but dropped from the players\' view where it reads a GM-only value; resolveAll says each row\'s answer per roll (rs), a formula that fails reading as shown, and adds nothing to a list with none; applyAct refuses a list\'s action on a row where it does not hold and runs it where it does; the validator reads it with the row\'s names; the sheet draws no button where it does not hold and names the roll\'s index so the host judges it; the host\'s roll-req branch and the GM\'s own roll refuse it there, before its needs; the Lists card\'s box and its handler',
             clOk && rsOk && actOk && vOk && srcOk, J([clOk, rs, rsOk, fixA, fixB && fixB.values, vOk, srcOk]));
     }
+    {   // 1.6.0, the campaign build: an entry a list holds once, held again under another name (again: 'name'; a rank held once per organisation)
+        const J = JSON.stringify;
+        const rawA = { v: 1, name: 'A', items: [{ id: 'i_r', name: 'Rank', again: 'name' }, { id: 'i_s', name: 'Badge' }, { id: 'i_x', name: 'Odd', again: 'yes' }],
+            fields: [{ id: 'f_r', key: 'Ranks', label: 'Ranks', kind: 'item-list', edit: 'owner', list: { noQty: true } }], sheet: { sections: [] } };
+        const gA = S.cleanSystem(rawA, { F, gmView: true }), pA = S.cleanSystem(rawA, { F, gmView: false }), iOf = (s, id) => s.items.filter(x => x.id === id)[0] || {};
+        const clOk = iOf(gA, 'i_r').again === 'name' && iOf(pA, 'i_r').again === 'name' && !('again' in iOf(gA, 'i_s')) && !('again' in iOf(gA, 'i_x')) && J(S.cleanSystem(gA, { F, gmView: true })) === J(gA);
+        const wireOk = J(S.cleanCharItem({ charId: 'c_a', f: 'f_r', op: 'add', defId: 'i_r', rowId: 'w_2', qty: 1, name: '  Guild  ' })) === J(S.cleanCharItem({ charId: 'c_a', f: 'f_r', op: 'add', defId: 'i_r', rowId: 'w_2', qty: 1, name: 'Guild' }))
+            && S.cleanCharItem({ charId: 'c_a', f: 'f_r', op: 'add', defId: 'i_r', rowId: 'w_2', qty: 1, name: 5 }) === null && S.cleanCharItem({ charId: 'c_a', f: 'f_r', op: 'add', defId: 'i_r', rowId: 'w_2', qty: 1, name: '   ' }) === null
+            && !('name' in (S.cleanCharItem({ charId: 'c_a', f: 'f_r', op: 'add', defId: 'i_r', rowId: 'w_2', qty: 1 }) || {}));
+        const ch = () => ({ id: 'c_a', ownerId: 'u_a', values: { f_r: [{ id: 'w_1', defId: 'i_r', qty: 1 }, { id: 'w_b', defId: 'i_s', qty: 1 }] } });
+        const add = (c, q, o) => S.applyRowOp(gA, c, 'f_r', Object.assign({ op: 'add', rowId: 'w_n' + Math.random().toString(36).slice(2, 8), qty: 1 }, q), F, o || {});
+        const c1 = ch(), plain = add(c1, { defId: 'i_r' }), named = add(c1, { defId: 'i_r', name: 'Guild' });
+        c1.values.f_r = named.value; const dupG = add(c1, { defId: 'i_r', name: 'guild' }), dupE = add(c1, { defId: 'i_r', name: 'Rank' }), nmB = add(c1, { defId: 'i_s', name: 'Other' }), pl = add(c1, { defId: 'i_r', name: 'Navy' }, { player: true, view: pA });
+        const names = (pl.value || []).map(r => S.rowDef(gA, r).def.name);
+        const opOk = plain.ok === false && named.ok === true && J(named.value[2].ov) === J({ name: 'Guild' }) && named.value[2].defId === 'i_r'
+            && dupG.ok === false && dupG.reason === 'value' && dupG.msg === 'Another Rank already has that name.' && dupE.ok === false && nmB.ok === false && nmB.reason === 'value'
+            && pl.ok === true && J(names) === J(['Rank', 'Badge', 'Guild', 'Navy']);
+        const shA = fs.readFileSync(path.join(app, 'scripts', 'sheets.js'), 'utf8').replace(/\r\n/g, '\n'), lwA = fs.readFileSync(path.join(app, 'scripts', 'librarywin.js'), 'utf8').replace(/\r\n/g, '\n'), lcA = fs.readFileSync(path.join(app, 'scripts', 'librarycore.js'), 'utf8').replace(/\r\n/g, '\n');
+        const srcOk = shA.includes('function againAsk(spec, carried, id, ent, go) {') && shA.includes("if (have[it.id] === 1 && it.again !== 'name') {") && shA.includes("if (typeof againAsk === 'function') againAsk(specI, carried, avA, againEnt(sysI, avA), goA); else goA(null);")
+            && shA.includes("select('sys-item-again', [['', 'Held once'], ['name', 'Held again under another name']]") && shA.includes("if (c.indexOf('sys-item-again') >= 0) { if (t.value === 'name') iit.again = 'name'; else delete iit.again;")
+            && lwA.includes("field(form, 'again', 'Held again',") && lwA.includes("again: g('again'), rm: g('rm'), ") && lcA.includes("if (f.again === 'name') out.again = 'name';");
+        let asked = 0, got = []; const ask = new Function('showPrompt', shA.slice(shA.indexOf('function againAsk('), shA.indexOf('function pickerInto(')) + '\nreturn againAsk;')((t, d, cb) => { asked++; cb(asked === 1 ? '  Guild ' : '  '); });
+        const rows = [{ id: 'w_1', defId: 'i_r' }], ent = { id: 'i_r', name: 'Rank', again: 'name' };
+        ask({ noQty: true }, rows, 'i_r', ent, nm => got.push(nm)); ask({ noQty: true }, rows, 'i_r', ent, nm => got.push(nm)); ask({ noQty: true }, rows, 'i_r', { id: 'i_r', name: 'Rank' }, nm => got.push(nm));
+        ask({ noQty: true }, [], 'i_r', ent, nm => got.push(nm)); ask({ noQty: true, multi: true }, rows, 'i_r', ent, nm => got.push(nm)); ask({ noQty: true }, [{ id: 'w_1', src: 'i_r', def: {} }], 'i_r', ent, nm => got.push(nm));
+        const askOk = J(got) === J(['Guild', null, null, null]) && asked === 3;
+        check('1.6.0 an entry held again under another name (again: the campaign build, a rank held once per organisation): the cleaner keeps it only as the word name, alike in both views; the wire takes a copy\'s name on an add, trimmed, and nothing that is no name; applyRowOp adds such an entry again on a list that holds each once only with a name, as a row of its own whose own name it is, and refuses one with no name, a name another copy of it carries (ignoring case, the first copy by the entry\'s own), and a name on an entry not ticked so, for the GM and a player alike; the sheet\'s againAsk asks for the name only where the entry is ticked and the list already holds it (a player\'s copy by its src), an empty answer adding nothing; the pickers keep it offered; the Items tab and the Library window set it',
+            clOk && wireOk && opOk && srcOk && askOk, J([clOk, wireOk, opOk, plain.ok, named.ok, dupG, nmB.reason, pl.ok, names, srcOk, got, asked]));
+    }
     summed = true;
     console.log(NL + pass + ' passed, ' + fail + ' failed.');
     if (fail) process.exit(1);

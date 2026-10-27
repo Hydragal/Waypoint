@@ -784,7 +784,8 @@ function cleanItemDef(it, F, gmView, keys, picks, kinds) {   // kinds (F6): the 
         var cost = cleanFormulaText(it.cost); out.cost = cost === null ? '' : cost;
         out.throwSkill = (typeof it.throwSkill === 'string' && validKey(it.throwSkill, F)) ? it.throwSkill : '';
     }
-    var opn = cleanOpens(it.opens); if (opn) out.opens = opn;   // 1.5.8: the entries this one opens on another list while its row is on, each from a level (openSync)
+    var opn = cleanOpens(it.opens); if (opn) out.opens = opn;
+    if (it.again === 'name') out.again = 'name';   // 1.6.0: a list that holds it once may hold it again as another row, each copy under a name of its own (applyRowOp's add with a name)   // 1.5.8: the entries this one opens on another list while its row is on, each from a level (openSync)
     // 126b: its needs, the LAST keys of a definition and always in this order (hideNeeds writes them again the same way): a players' view cleaned again reads, and hashes, the same
     var ind = cleanNeeds(it.needs); if (ind) out.needs = ind;   // 126b: what a character must carry before it may take this one, in both views (a player's picker says why)
     var inr = needRule(it.needsIf, F); if (inr) out.needsIf = inr;   // ... its rule, a formula that must be true for the character (a players' view that could not work it out does not hold it: hideNeeds)
@@ -3259,6 +3260,7 @@ function cleanCharItem(msg) {
     if (typeof msg.op !== 'string' || !ROW_OPS[msg.op]) return null;
     var out = { rid: msg.rid, charId: msg.charId, fieldId: msg.fieldId, op: msg.op };
     if (msg.op === 'add') { if (typeof msg.defId !== 'string' || !ITEM_ID.test(msg.defId)) return null; out.defId = msg.defId; }
+    if (msg.op === 'add' && msg.name !== undefined) { if (typeof msg.name !== 'string') return null; var agW = cutText(msg.name, LIMITS.name); if (!agW) return null; out.name = agW; }   // 1.6.0: a copy's own name (an entry held again)
     if (typeof msg.rowId !== 'string' || !ROW_ID.test(msg.rowId)) return null; out.rowId = msg.rowId;
     if (msg.op === 'add' || msg.op === 'setQty' || msg.op === 'undo') { var qty = msg.qty === undefined ? 1 : (cleanNum(msg.qty, NaN) | 0); if (!(qty >= 0)) return null; out.qty = clampNum(qty, 0, LIMITS.maxQty); }
     if (msg.op === 'set') { var fx = cleanFacts(msg.facts); if (!fx) return null; out.facts = fx; }   // F4b
@@ -3748,8 +3750,10 @@ function applyRowOp(sys, char, fieldId, q, F, opts) {
             var missR = nmR.ok ? [] : nmR.missing.map(function(n) { return isObj(n) && n.rule !== undefined && !(isObj(pvE) && pvE.needsIf === n.rule) ? { rule: true } : n; });
             if (!nmR.ok) return { ok: false, reason: 'needs', msg: needsSays(ent, missR, function(id) { var d2 = itemDef(sys, id); if (d2) return valueOpts(opts.view || null).items[id] === 1 ? d2.name : null; var l2 = typeof opts.lib === 'function' ? opts.lib(id) : null; return isObj(l2) && l2.vis !== 'gm' ? l2.name : null; }) };
         }
+        var agN = q.name !== undefined ? cutText(q.name, LIMITS.name) : '';   // 1.6.0: a copy held again under its own name: only for an entry ticked so, never a name another copy of it carries
+        if (q.name !== undefined) { if (ent.again !== 'name' || !agN) return { ok: false, reason: 'value' }; var agL = lower(agN); if (list.some(function(r) { if (!isObj(r) || r.hid === 1 || r.defId !== q.defId) return false; var rdA = rowDef(sys, r); return !!rdA && lower(rdA.def.name) === agL; })) return { ok: false, reason: 'value', msg: 'Another ' + ent.name + ' already has that name.' }; }
         var n = spec && spec.noQty ? 1 : clampNum((q.qty | 0) || 1, 1, LIMITS.maxQty), have = -1;
-        if (!(spec && spec.multi && q.rowId !== undefined)) for (var j = 0; j < list.length; j++) if (isObj(list[j]) && list[j].defId === q.defId && (fromLib || !list[j].snap) && list[j].hid !== 1 && typeof list[j].opn !== 'string' && !isObj(list[j].ld) && !Array.isArray(list[j].rd) && !isObj(list[j].fd)) { have = j; break; }   // never into a kept curse; F4b: a list that takes the same item more than once makes a new row
+        if (!agN && !(spec && spec.multi && q.rowId !== undefined)) for (var j = 0; j < list.length; j++) if (isObj(list[j]) && list[j].defId === q.defId && (fromLib || !list[j].snap) && list[j].hid !== 1 && typeof list[j].opn !== 'string' && !isObj(list[j].ld) && !Array.isArray(list[j].rd) && !isObj(list[j].fd)) { have = j; break; }   // never into a kept curse; F4b: a list that takes the same item more than once makes a new row
         if (have >= 0 && spec && spec.noQty) return { ok: false, reason: 'value' };   // F4b: no quantity — once each
         if (have >= 0) { extra.base = list[have].qty | 0; list[have].qty = clampNum(extra.base + n, 1, LIMITS.maxQty); extra.row = rowIdOf(list[have]); extra.qty = list[have].qty; extra.added = extra.qty - extra.base; }   // the same item again raises its quantity
         else {
@@ -3759,6 +3763,7 @@ function applyRowOp(sys, char, fieldId, q, F, opts) {
                 if (!rowIdFree(list, q.rowId, knownItems(sys, opts))) return { ok: false, reason: 'value' };
                 row = { id: q.rowId, defId: q.defId, qty: n };
             }
+            if (agN) row.ov = { name: agN };   // 1.6.0: the copy's own name, as the GM's own values name a row
             if (spec && isObj(spec.lvl)) row.lvl = lvlClamp(spec.lvl, typeof ent.lvl === 'number' ? ent.lvl : spec.lvl.def);   // F4b: the facts are written as it is added (a later default moves no row)
             if (spec && isObj(spec.on)) row.on = spec.on.def === true;
             if (spec && spec.price) row.paid = clampNum(rowStat(spec, ent, spec.price), 0, LIMITS.statAbs);

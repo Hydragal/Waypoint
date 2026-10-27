@@ -2625,13 +2625,22 @@ function catLead(sel, cat) {
     sel.insertBefore(g, top ? top.nextSibling : kids[0]); return true;
 }
 function catOf(a) { var v = a && a.dataset ? a.dataset.cat : null; return typeof v === 'string' && v ? v : null; }
+// 1.6.0: an entry held again under another name. A pick of an entry the list already holds, on a list that holds each once (or raises a
+// quantity), asks for the copy's name when the entry is ticked Held again: go(name) then adds a row of that name, go(null) adds as ever.
+// A player's row of a library entry names it by src, the GM's by defId; the host judges the name
+function againAsk(spec, carried, id, ent, go) {
+    var held = !(spec && spec.multi) && Array.isArray(carried) && carried.some(function(r) { return !!r && r.hid !== 1 && (r.defId === id || r.src === id); });
+    if (!held || !ent || ent.again !== 'name') { go(null); return; }
+    showPrompt('Another ' + ent.name + ': a name for this one. Each copy needs a name of its own.', '', function(v) { var nm = typeof v === 'string' ? v.trim() : ''; if (nm) go(nm); });
+}
+function againEnt(sys, id) { var a = sys && Array.isArray(sys.items) ? sys.items : []; for (var i = 0; i < a.length; i++) if (a[i] && a[i].id === id) return a[i]; return null; }
 function pickerInto(sel, items, spec, carried, cantOf) {   // cantOf (126b): why this character may not take an item yet, in words; none, or no words: it may
     var cats = Array.isArray(spec.cats) ? spec.cats.map(function(x) { return String(x).toLowerCase(); }) : null, groups = [], byCat = Object.create(null), loose = [], have = Object.create(null), n = 0;
     if (spec.noQty && !spec.multi) carried.forEach(function(r) { if (r && typeof r.defId === 'string' && r.hid !== 1) have[r.defId] = 1; });
     items.forEach(function(it) {
         var cat = String(it.category || '').trim(), lc = cat.toLowerCase();
         if (cats && cats.indexOf(lc) < 0) return;
-        var o = opt(it.id, (iconText(it.icon) ? iconText(it.icon) + ' ' : '') + it.name); if (have[it.id] === 1) { o.disabled = true; o.title = 'Already on the list'; }
+        var o = opt(it.id, (iconText(it.icon) ? iconText(it.icon) + ' ' : '') + it.name); if (have[it.id] === 1 && it.again !== 'name') { o.disabled = true; o.title = 'Already on the list'; }   // 1.6.0: one held again under another name stays offered
         else { var why = typeof cantOf === 'function' ? cantOf(it) : ''; if (typeof why === 'string' && why) { o.disabled = true; o.title = why; } }
         n++;
         if (!cat) { loose.push(o); return; }
@@ -3699,7 +3708,7 @@ function fieldNodeBody(f, c, e, gm, own, sysArg, plc) {   // plc (F4b): the sect
             if (catAt && typeof catLead === 'function') { catLead(add, catAt); add.dataset.cat = catAt; }   // 1.5.5: a placement by category opens its pickers on its first category
             if (libOK) add.appendChild(opt('__lib', '📚 From the library…'));   // L2c: the picker (libpicker.js)
             if (custOK) add.appendChild(opt('__custom', '+ Custom…'));   // F4c3: a blank row of the character's own, its form open on its name (in the view it was chosen in)
-            add.addEventListener('change', function() { if (add.value === '__lib') { add.value = ''; openLibPicker(add, c, f, specI, carried); return; } if (add.value === '__custom') { var nr = uid('w_'); _rowForm = { charId: c.id, fieldId: f.id, rowId: nr, view: vwP, typed: {}, focus: 'name' }; commitItem(c, f, { op: 'custom', rowId: nr, def: catAt ? { category: catAt } : {} }); return; } if (add.value) commitItem(c, f, { op: 'add', defId: add.value, rowId: uid('w_'), qty: 1 }); });   // Stage 6 F4a: a new row's id from here (the host never mints)
+            add.addEventListener('change', function() { if (add.value === '__lib') { add.value = ''; openLibPicker(add, c, f, specI, carried); return; } if (add.value === '__custom') { var nr = uid('w_'); _rowForm = { charId: c.id, fieldId: f.id, rowId: nr, view: vwP, typed: {}, focus: 'name' }; commitItem(c, f, { op: 'custom', rowId: nr, def: catAt ? { category: catAt } : {} }); return; } if (add.value) { var avA = add.value, goA = function(nm) { var cpA = getActiveCampaign(), chA = cpA && cpA.chars ? cpA.chars[c.id] : null, ffA = chA ? fieldById(systemOf(cpA), f.id) : null; if (!chA || !ffA) return; var qA = { op: 'add', defId: avA, rowId: uid('w_'), qty: 1 }; if (nm) qA.name = nm; commitItem(chA, ffA, qA); }; if (typeof againAsk === 'function') againAsk(specI, carried, avA, againEnt(sysI, avA), goA); else goA(null); } });   // 1.6.0: an entry held again asks for its copy's name   // Stage 6 F4a: a new row's id from here (the host never mints)
             if (nPick !== 0 || custOK || libOK) wrap.appendChild(add);   // F4b: none of the list's categories has an item: no picker (F4c3: unless it takes custom rows)
         }
         box.appendChild(wrap); return box;
@@ -3711,11 +3720,11 @@ function fieldNodeBody(f, c, e, gm, own, sysArg, plc) {   // plc (F4b): the sect
 function openLibPicker(anchor, c, f, spec, carried) {
     if (isClient()) { openLibPickerPlayer(anchor, c, f, spec); return; }
     var LB = window.wpLibrary, LP = window.wpLibPicker, camp = getActiveCampaign(); if (!LB || !LP || !camp || !camp.library) return;
-    var once = null; if (spec && spec.noQty && !spec.multi) { once = Object.create(null); carried.forEach(function(r) { if (r && typeof r.defId === 'string' && r.hid !== 1) once[r.defId] = 1; }); }
+    var once = null; if (spec && spec.noQty && !spec.multi) { once = Object.create(null); carried.forEach(function(r) { if (r && typeof r.defId === 'string' && r.hid !== 1) { var oe = LB.entry ? LB.entry(r.defId) : null; if (!(oe && oe.again === 'name')) once[r.defId] = 1; } }); }   // 1.6.0: an entry held again stays offered
     var labels = {}; (spec && Array.isArray(spec.stats) ? spec.stats : []).forEach(function(s) { if (s && typeof s.key === 'string' && s.hide !== true) labels[s.key] = s.label || s.key; });
     LP.open({ anchor: anchor, cat: typeof catOf === 'function' ? catOf(anchor) : null, title: 'Add to ' + (f.label || f.key || 'the list'), cats: spec && Array.isArray(spec.cats) && spec.cats.length ? spec.cats : null, once: once, noQty: !!(spec && spec.noQty), labels: labels, gm: true, needs: function(e) { var cpN = getActiveCampaign(), chN = cpN && cpN.chars ? cpN.chars[c.id] : null, syN = systemOf(cpN); return chN && syN ? needsMet(syN, chN, e, false, F()).missing : []; },   // 126b: the GM is told, never stopped
         source: { packs: function() { return (camp.library && camp.library.packs) || []; }, entries: function(pid) { return LB.entriesOf(pid); } },
-        onAdd: function(ids, qty) { var cp = getActiveCampaign(), ch = cp && cp.chars ? cp.chars[c.id] : null, sy = systemOf(cp), ff = sy ? fieldById(sy, f.id) : null; if (cp !== camp || !ch || !ff) return; ids.forEach(function(id) { commitItem(ch, ff, { op: 'add', defId: id, rowId: uid('w_'), qty: qty }); }); } });
+        onAdd: function(ids, qty) { var cp = getActiveCampaign(), ch = cp && cp.chars ? cp.chars[c.id] : null, sy = systemOf(cp), ff = sy ? fieldById(sy, f.id) : null; if (cp !== camp || !ch || !ff) return; ids.forEach(function(id) { againAsk(ff.list || null, ch.values ? ch.values[ff.id] : null, id, LB.entry ? LB.entry(id) : null, function(nm) { var qL = { op: 'add', defId: id, rowId: uid('w_'), qty: qty }; if (nm) qL.name = nm; commitItem(ch, ff, qL); }); }); } });   // 1.6.0: an entry held again asks for its copy's name
 }
 // Stage 6 library L3b: a player's "From the library…" — the same picker over the packs the host lets them see, loaded over the wire a page at
 // a time (wpNet.libLoad), an entry fetched in full for the preview and before it is added (the pick is judged by the host; what the player
@@ -3737,7 +3746,7 @@ function openLibPickerPlayer(anchor, c, f, spec) {
             var byPack = {}; ids.forEach(function(id) { var pid = packOf && packOf[id]; if (pid) (byPack[pid] = byPack[pid] || []).push(id); });
             for (var pid in byPack) await N.libGet(pid, byPack[pid]);
             var cp = getActiveCampaign(), ch = cp && cp.chars ? cp.chars[c.id] : null, sy = systemOf(cp), ff = sy ? fieldById(sy, f.id) : null; if (cp !== camp || !ch || !ff) return;
-            var miss = 0; ids.forEach(function(id) { if (!N.libEntry(id)) { miss++; return; } commitItem(ch, ff, { op: 'add', defId: id, rowId: uid('w_'), qty: qty }); });
+            var miss = 0; ids.forEach(function(id) { if (!N.libEntry(id)) { miss++; return; } againAsk(ff.list || null, ch.values ? ch.values[ff.id] : null, id, N.libEntry(id), function(nm) { var qP = { op: 'add', defId: id, rowId: uid('w_'), qty: qty }; if (nm) qP.name = nm; commitItem(ch, ff, qP); }); });   // 1.6.0: an entry held again asks for its copy's name
             if (miss) toast(miss === 1 ? 'That entry could not be fetched from the GM.' : miss + ' entries could not be fetched from the GM.');
         } });
 }
@@ -6080,6 +6089,7 @@ function itemRow(it) {
         flags.appendChild(select('sys-item-eqmode', [['', 'A player may switch it off'], ['bound', 'Bound: it stays on'], ['curse', 'Curse on contact: you keep it on']], it.eq || '', 'When a player switches it off (Readied, Equipped\u2026). Bound: it stays on and they see your message; just after it goes on, it still comes off. Curse on contact: it looks off to them but stays on, out of their sight, until you switch it off. Players never see this setting.'));
         var eqIn = input('sys-item-eqtext field', it.eqMsg || '', 'Shown to the player when they try to switch it off (optional)', 'Message on switching off'); eqIn.maxLength = LIMITS.rmMsg; if (!it.eq) eqIn.style.opacity = '0.5'; flags.appendChild(eqIn);
     }
+    flags.appendChild(select('sys-item-again', [['', 'Held once'], ['name', 'Held again under another name']], it.again === 'name' ? 'name' : '', 'On a list that holds each item once, a character may hold this one again as another row. Each copy is asked for a name of its own, and two copies of one name are refused'));   // 1.6.0
     flags.appendChild(input('sys-item-key field', it.key || '', 'A short fixed name for it, once in each list it can be on: a letter, then letters, digits and _. Formulas read its row by it: List.key.lvl, List.key.qty', 'Key (optional)'));
     if (anyL) flags.appendChild(numField('sys-item-lvl', it.lvl, 'The level a new row of it starts at (blank: the list\u2019s default)', 'Level'));
     flags.appendChild(btnRow([['up', 'Move up', '&#9650;'], ['down', 'Move down', '&#9660;'], ['dup', 'Duplicate', '&#10697;'], ['del', 'Delete this item', '&times;']]));
@@ -8038,6 +8048,7 @@ function onChange(e) {
         if (c.indexOf('sys-item-mcol') >= 0) { var icl = t.closest('.sys-item-mod'), icm = icl ? (iit.mods || [])[+icl.dataset.mi] : null; if (icm) { icm.col = t.value; markDirty(); patchErrors(); } return; }   // 1.5.8
         if (c.indexOf('sys-item-mlvl') >= 0) { var ivl = t.closest('.sys-item-mod'), ivm = ivl ? (iit.mods || [])[+ivl.dataset.mi] : null; if (ivm) { if (t.checked) ivm.lvl = true; else delete ivm.lvl; markDirty(); patchErrors(); } return; }
         if (c.indexOf('sys-item-modson') >= 0) { if (t.checked) iit.modsOn = true; else delete iit.modsOn; markDirty(); patchErrors(); return; }
+        if (c.indexOf('sys-item-again') >= 0) { if (t.value === 'name') iit.again = 'name'; else delete iit.again; markDirty(); patchErrors(); return; }   // 1.6.0
         if (c.indexOf('sys-item-rmmode') >= 0) { if (t.value === 'bound' || t.value === 'curse') iit.rm = t.value; else delete iit.rm; markDirty(); renderAll(); return; }   // Stage 6
         if (c.indexOf('sys-item-eqmode') >= 0) { if (t.value === 'bound' || t.value === 'curse') iit.eq = t.value; else delete iit.eq; markDirty(); renderAll(); return; }   // F4b
         if (c.indexOf('sys-item-atype') >= 0) { if (iit.area) { if (t.value) iit.area.type = t.value; else delete iit.area.type; } markDirty(); patchErrors(); return; }   // 1.5.8 explosives
