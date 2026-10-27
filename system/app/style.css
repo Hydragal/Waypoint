@@ -164,10 +164,15 @@
   #moreMenu #saveAsMenu button.menu-item { width: 100%; box-sizing: border-box; border: 0; background: none; color: var(--ink); font: inherit; font-size: 12.5px; text-align: left; white-space: nowrap; cursor: pointer; }   /* a kind is a button, so the keyboard reaches it as it reaches every row of More */
   #moreMenu #saveAsMenu button.menu-item:hover, #moreMenu #saveAsMenu button.menu-item:focus-visible { background: var(--edge); color: var(--ink); outline: none; }
   body.net-client #moreFiles { display: none !important; }   /* a player exports and imports nothing of the GM's: the part goes with its rule */
-  body:not(.row-narrow) #moreFold { display: none; }
-  body.row-narrow header #soundInd, body.row-narrow header #musicInd, body.row-narrow header #voiceInd, body.row-narrow header #handoutsBtn, body.row-narrow header #journalBtn, body.row-narrow header #helpBtn { display: none !important; }
-  #moreMenuBtn.marked::after { content: ''; display: none; position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; border-radius: 50%; background: var(--gold); }   /* a folded control has something to say */
-  body.row-narrow #moreMenuBtn.marked::after { display: block; }
+  header .row-fold { display: none !important; }   /* 1.6.0: an icon that stepped out of the row, one at a time (toprow.js foldFit) */
+  #rowTrayBtn { position: relative; }
+  #rowTrayBtn[hidden] { display: none; }
+  .row-tray-n { position: absolute; right: 1px; bottom: 2px; font-size: 9.5px; line-height: 1; color: var(--dim); }
+  #rowTrayBtn.marked::after { content: ''; position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; border-radius: 50%; background: var(--gold); }   /* a folded icon has something to say */
+  #rowTray { left: auto; right: 0; min-width: 236px; max-width: 300px; flex-direction: row; flex-wrap: wrap; gap: 2px; }
+  #rowTray .rm-label { flex: 1 1 100%; white-space: nowrap; }
+  #rowTray .rm-row { flex-direction: column; gap: 3px; width: 70px; padding: 6px 4px; text-align: center; white-space: normal; font-size: 11px; line-height: 1.2; }   /* the same icons, each with its name under it */
+  #rowTray .rm-row > small { font-size: 10px; }
   .tool.icon{
     width:32px;height:32px;padding:0;display:inline-flex;align-items:center;justify-content:center;
     font-size:14px;line-height:1;
@@ -2530,7 +2535,7 @@
   #voiceInd.no-table { opacity: .45; }
   #soundPop .snd-pop-note { font-size: 11px; color: var(--dim); margin-top: 6px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }   /* 1.6.0: Sound is effects only, and says where music is */   /* 1.6.0: no table open, so voice cannot start yet */
   #voiceInd.mic-off::after { content: ''; position: absolute; left: 4px; right: 4px; top: 50%; height: 2px; margin-top: -1px; background: var(--red); border-radius: 1px; transform: rotate(-45deg); pointer-events: none; }   /* struck through, as a sound off for you is */
-  #moreFold .vc-w { display: none; }   /* More's row for the microphone, while the row is folded: the mic alone, as the icon is out of voice */
+  #rowTray .vc-w { display: none; }   /* the tray's button for the microphone: the mic alone, as the icon is out of voice */
   #voicePop { position: fixed; z-index: 100001; width: 260px; background: var(--panel2); border: 1px solid var(--gold); border-radius: 8px; box-shadow: var(--shadow); padding: 8px 10px; font-size: 12px; color: var(--ink); }
   #voicePop .voice-join { width: 100%; margin: 2px 0; }
   #voicePop .voice-bind { margin-left: auto; padding: 0 8px; font-size: 11px; }

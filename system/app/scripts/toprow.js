@@ -9,14 +9,18 @@
    everything else that hangs on that event, runs as before.
 
    The MORE menu opens from the three dots at the row's right end. It holds Export As, with its kinds in a list beside it, Import, Refresh,
-   About and the way back to the welcome screen. In a narrow window Sound, Music, Voice, Handouts, Journal and Help leave the row: each has a row in
-   More that presses the control itself, which stays in the page with its id and its handler, only out of sight.
+   About and the way back to the welcome screen.
+
+   The TRAY (1.6.0; the owner, by prompt: "A » where they were", and "hiding one at a time as needed is preferable"): in a narrow window the row's
+   icons step out one at a time, the least used first (FOLD_ORDER: Help, Handouts, Sound, Music, Journal, Voice last), only as many as keep
+   the row on one line. A » button after the Journal takes their place, with how many stepped out, and opens a tray that holds a button for
+   each, which presses the control itself: the control stays in the page with its id and its handler, only out of sight.
 
    A list could be worked from the keyboard, so a menu can be too, with the keys the page's Outline menu has: Down on its button opens it, the
    arrow keys, Home and End go through its rows, a letter goes to the next row that begins with it, Enter presses the row that has the focus,
    and Escape puts the menu away. */
 // [lookcheck:toprow-start]
-var MENUS = ['campMenu', 'moreMenu', 'notesMenu'];   // every menu of the row, by its id. Its button is the one whose aria-controls names it. notesMenu: the bell's (notices.js, 1.5.5)
+var MENUS = ['campMenu', 'moreMenu', 'notesMenu', 'rowTray'];   // every menu of the row, by its id. Its button is the one whose aria-controls names it. notesMenu: the bell's (notices.js, 1.5.5)
 var ONE_ROW = 48;   // the row is 36 high while one line holds its controls, and 60 or more once it wraps: this stands between the two
 function menuBtn(id) { return document.querySelector('[aria-controls="' + id + '"]'); }
 function menuShown(id) { var m = document.getElementById(id); return !!m && m.hidden !== true; }
@@ -29,7 +33,7 @@ function menuSet(id, show) {
 function closeMenus(but) { var any = false; MENUS.forEach(function(id) { if (id !== but && menuShown(id)) { menuSet(id, false); any = true; } }); return any; }
 function openMenu(id) {   // one menu of the row is up at a time
     if (MENUS.indexOf(id) < 0) return false;
-    closeMenus(id); if (id === 'campMenu') campDraw(); if (id === 'moreMenu') { foldSync(); markSync(); } if (id === 'notesMenu' && window.wpNotices && typeof window.wpNotices.draw === 'function') window.wpNotices.draw();
+    closeMenus(id); if (id === 'campMenu') campDraw(); if (id === 'rowTray') { foldSync(); markSync(); } if (id === 'notesMenu' && window.wpNotices && typeof window.wpNotices.draw === 'function') window.wpNotices.draw();
     return menuSet(id, true);
 }
 // A menu's rows are its buttons that are on screen, in the order they stand in: a row that is hidden takes no key and no focus
@@ -91,49 +95,56 @@ function campPick(id) {
 }
 // The row's controls do not fit on one line: the header grew past one row
 function rowWraps() { var h = document.querySelector('header'); return !!h && h.offsetHeight > ONE_ROW; }
-// The row is fitted to the window. Sound, Music, Voice, Handouts, Journal and Help fold into More only while that is what keeps the row on one
-// line: it is asked with the fold taken off, then with it on, and nothing is drawn in between. A row that wraps even folded is left whole, on
-// its two lines, since folding would hide six controls and win nothing. The page's body carries the answer as one word, and the style sheet
-// folds the six by it. While the tour's card is up nothing folds, so that a step finds the control it points at. true: folded
+// The row is fitted to the window, one icon at a time (1.6.0): with every icon back it is asked whether it wraps, and while it does the next
+// icon of FOLD_ORDER steps out, until the row holds one line. A row that wraps even with all six out is left whole, on its two lines, since
+// folding would hide six controls and win nothing. Nothing is drawn in between. An icon that stepped out wears row-fold, the style sheet's
+// one word for it, the body carries row-narrow while any did, and the » button shows. While the tour's card is up nothing folds, so that a
+// step finds the control it points at. true: folded
+var FOLD_ORDER = ['helpBtn', 'handoutsBtn', 'soundInd', 'musicInd', 'journalBtn', 'voiceInd'];
+function foldSet(n) {
+    FOLD_ORDER.forEach(function(id, i) { var c = document.getElementById(id); if (c) c.classList.toggle('row-fold', i < n); });
+    document.body.classList.toggle('row-narrow', n > 0); var b = document.getElementById('rowTrayBtn'); if (b) b.hidden = !(n > 0);
+    return n;
+}
 function foldFit() {
-    var cl = document.body.classList, was = cl.contains('row-narrow'), want = false;
-    if (was) cl.remove('row-narrow');
-    if (!cl.contains('tour-on') && rowWraps()) { cl.add('row-narrow'); want = !rowWraps(); if (!want) cl.remove('row-narrow'); }
-    if (want !== was && menuShown('moreMenu')) foldSync();
-    return want;
+    var cl = document.body.classList, n = 0;
+    foldSet(0);
+    if (!cl.contains('tour-on') && rowWraps()) { for (n = 1; n <= FOLD_ORDER.length; n++) { foldSet(n); if (!rowWraps()) break; } if (n > FOLD_ORDER.length) n = foldSet(0); }
+    foldSync();
+    return n > 0;
 }
-// A row of More that stands for a control folded out of the row shows only while that control would show, were the row not folded: one that
-// its own module, the table's role or a feature switched off hides has no row either. So it is asked with the fold taken off for the moment
-// of the question, and nothing is drawn in between. true: at least one row shows
+// A button of the tray stands for an icon that stepped out of the row, and shows only while that icon would show were it in the row: one that
+// its own module, the table's role or a feature switched off hides has none either. So it is asked with its fold taken off for the moment of
+// the question, and nothing is drawn in between. The » button says how many show, and goes where none does. true: at least one shows
 function foldSync() {
-    var rows = Array.prototype.slice.call(document.querySelectorAll('#moreFold [data-press]')), cl = document.body.classList, was = cl.contains('row-narrow'), any = false;
-    if (was) cl.remove('row-narrow');
-    rows.forEach(function(r) { var c = document.getElementById(r.getAttribute('data-press')), on = !!c && getComputedStyle(c).display !== 'none'; r.hidden = !on; if (on) any = true; });
-    if (was) cl.add('row-narrow');
-    return any;
+    var rows = Array.prototype.slice.call(document.querySelectorAll('#rowTray [data-press]')), shown = 0;
+    rows.forEach(function(r) { var c = document.getElementById(r.getAttribute('data-press')), on = false; if (c && c.classList.contains('row-fold')) { c.classList.remove('row-fold'); on = getComputedStyle(c).display !== 'none'; c.classList.add('row-fold'); } r.hidden = !on; if (on) shown++; });
+    var b = document.getElementById('rowTrayBtn'), nb = document.getElementById('rowTrayN'); if (nb) nb.textContent = shown ? String(shown) : ''; if (b && !shown) b.hidden = true;
+    if (!shown && menuShown('rowTray')) menuSet('rowTray', false);
+    return shown > 0;
 }
-// A count that a folded control wears, the Journal's unread pages, is said in More too: on that control's row, and as a dot on More's own
-// button, which the style sheet shows only while the row is narrow. true: there is one to say.
+// A count that a folded control wears, the Journal's unread pages, is said in the tray too: on that control's button, and as a dot on the »
+// button. true: there is one to say.
 // So is what Sound's and Music's icons say in the row: off for you (the icon struck through), off here, or muted (the icon dimmed). Their
 // rows say it in words and wear the icon's look. That is no count, so it puts no dot on More
 function markSync() {
     var any = false;
-    Array.prototype.forEach.call(document.querySelectorAll('#moreMenu [data-badge]'), function(s) {
-        var b = document.getElementById(s.getAttribute('data-badge')), txt = b && b.style.display !== 'none' ? String(b.textContent || '') : '';
-        s.textContent = txt; if (txt) any = true;
+    Array.prototype.forEach.call(document.querySelectorAll('#rowTray [data-badge]'), function(s) {
+        var b = document.getElementById(s.getAttribute('data-badge')), txt = b && b.style.display !== 'none' ? String(b.textContent || '') : '', c = s.parentNode && s.parentNode.getAttribute ? document.getElementById(s.parentNode.getAttribute('data-press')) : null;
+        s.textContent = txt; if (txt && c && c.classList.contains('row-fold')) any = true;   // a dot only for a count the row no longer shows
     });
-    Array.prototype.forEach.call(document.querySelectorAll('#moreMenu [data-state]'), function(s) {
+    Array.prototype.forEach.call(document.querySelectorAll('#rowTray [data-state]'), function(s) {
         var row = s.parentNode, c = row && row.getAttribute ? document.getElementById(row.getAttribute('data-press')) : null, cl = c && c.classList;
         var mine = !!cl && cl.contains('off-mine'), off = !!cl && cl.contains('sound-off'), mute = !!cl && cl.contains('muted');
         s.textContent = mine ? 'Off for you' : off ? 'Off' : mute ? 'Muted' : '';
         if (row && row.classList) { row.classList.toggle('off-mine', mine); row.classList.toggle('dim', !mine && (off || mute)); }
     });
-    var mb = menuBtn('moreMenu'); if (mb) mb.classList.toggle('marked', any);
+    var mb = menuBtn('rowTray'); if (mb) mb.classList.toggle('marked', any);
     return any;
 }
-// Where a control's own pop-up stands: by the control, or by More's button while the control is folded into More and has no box of its own
+// Where a control's own pop-up stands: by the control, or by the » button while the control stepped out of the row and has no box of its own
 function anchorBox(el) {
-    var r = el.getBoundingClientRect(), mb = r.width || r.height ? null : menuBtn('moreMenu');
+    var r = el.getBoundingClientRect(), mb = r.width || r.height ? null : menuBtn('rowTray');
     return mb ? mb.getBoundingClientRect() : r;
 }
 // [lookcheck:toprow-end]
@@ -168,22 +179,23 @@ function wire() {
         closeMenus();
     }, true);
     var sel = document.getElementById('campaignSelect'), hdr = document.querySelector('header'), touring = document.body.classList.contains('tour-on'), due = false;
-    var fitSoon = function() { if (due) return; due = true; requestAnimationFrame(function() { due = false; foldFit(); }); };   // once a frame at most, and before that frame is drawn
+    var fitSoon = function() { if (due) return; due = true; var go = function() { if (!due) return; due = false; foldFit(); }; requestAnimationFrame(go); setTimeout(go, 150); };   // once a frame at most, and before that frame is drawn; 1.6.0: a timer too, since a page out of sight runs no frame, and one held back stopped every later fit
     if (sel) sel.addEventListener('change', campSync);
     if (typeof ResizeObserver === 'function' && hdr) { var ro = new ResizeObserver(fitSoon); ro.observe(hdr); Array.prototype.forEach.call(hdr.children, function(c) { ro.observe(c); }); }   // the window, or anything in the row, changed its size
     else window.addEventListener('resize', fitSoon);
     if (typeof MutationObserver === 'function') {
         if (sel) new MutationObserver(campSync).observe(sel, { childList: true });   // filled again: a new campaign, a rename, a switch that was refused
         new MutationObserver(function() { var now = document.body.classList.contains('tour-on'); if (now !== touring) { touring = now; fitSoon(); } }).observe(document.body, { attributes: true, attributeFilter: ['class'] });   // the tour's card going up or away. The fold's own word on the body is no news
-        Array.prototype.forEach.call(document.querySelectorAll('#moreMenu [data-badge]'), function(s) {   // a count changing on a control that may be folded
+        Array.prototype.forEach.call(document.querySelectorAll('#rowTray [data-badge]'), function(s) {   // a count changing on a control that may be folded
             var bd = document.getElementById(s.getAttribute('data-badge')); if (bd) new MutationObserver(markSync).observe(bd, { attributes: true, attributeFilter: ['style'], childList: true, characterData: true, subtree: true });
         });
-        Array.prototype.forEach.call(document.querySelectorAll('#moreMenu [data-state]'), function(s) {   // Sound or Music muted, or switched off, while it may be folded
+        Array.prototype.forEach.call(document.querySelectorAll('#rowTray [data-state]'), function(s) {   // Sound or Music muted, or switched off, while it may be folded
             var cs = s.parentNode && s.parentNode.getAttribute ? document.getElementById(s.parentNode.getAttribute('data-press')) : null; if (cs) new MutationObserver(markSync).observe(cs, { attributes: true, attributeFilter: ['class'] });
         });
     }
     campSync(); foldFit(); markSync();
 }
+
 // [lookcheck:toprowwire-end]
 
 // [sinkcheck:report-start]

@@ -36,6 +36,13 @@ Voice chat
 - The Voice button stays in the top row when no table is open. It is
   dimmed, and its panel says voice works once you host or join a table.
 
+The top row in a narrow window
+- Icons now step out of the row one at a time, as the window narrows,
+  the least used first: Help, Handouts, Sound, Music, the Journal, and
+  Voice last. Before, all six went into More at once.
+- A small double arrow takes their place and opens a tray of them, with
+  their names and counts. More keeps Export, Import and About.
+
 System editor
 - A roll or an apply action can also be due, or run, at the end of its
   character's turn in a fight: Also at its turn's end. A held turn ends

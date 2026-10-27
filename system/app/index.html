@@ -148,6 +148,18 @@
       <div class="hdr-group" data-label="Journal">
         <button class="tool ghost icon" id="handoutsBtn" title="Handouts &mdash; pictures and written pages to show your players (a place, a face, a letter, a recap)"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 3.5h11v14h-11zM5 7v13.5h11M11.5 8h5M11.5 11.5h5"/></svg></button>
         <button class="tool ghost icon" id="journalBtn" title="Journal &mdash; everything a GM has shown you, with your notes" style="position:relative;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 3.5H18v17H6.5a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2zM4.5 16.5a2 2 0 0 1 2-2H18M10 3.5v6.5l2-1.5 2 1.5V3.5"/></svg><span id="journalBadge" style="display:none; position:absolute; top:-4px; right:-4px; background:var(--gold); color:#1a1408; font-size:9px; min-width:14px; height:14px; line-height:14px; border-radius:7px; text-align:center; padding:0 2px;"></span></button>
+        <div class="row-menu-wrap" id="rowTrayWrap">
+          <button class="tool ghost icon" id="rowTrayBtn" aria-haspopup="true" aria-expanded="false" aria-controls="rowTray" title="Icons that do not fit in the row right now. They come back as the window widens." hidden><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 7l5 5-5 5M12.5 7l5 5-5 5"/></svg><span class="row-tray-n" id="rowTrayN"></span></button>
+          <div class="row-menu row-tray" id="rowTray" hidden>
+            <div class="rm-label">Not in the row right now</div>
+            <button class="rm-row" data-press="soundInd" title="Sound effects. Your volume and mute."><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 9.5H7l5-4v13l-5-4H3.5zM15.5 9.3a4 4 0 0 1 0 5.4M18.2 6.8a8 8 0 0 1 0 10.4"/></svg><span>Sound effects</span><small data-state></small></button>
+            <button class="rm-row" data-press="musicInd" title="Music. Your volume and mute."><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 17.5V6.4l10.5-2.6v11.2M8.5 10.4l10.5-2.6"/><circle cx="6" cy="17.5" r="2.5"/><circle cx="16.5" cy="15" r="2.5"/></svg><span>Music</span><small data-state></small></button>
+            <button class="rm-row" data-press="voiceInd" title="Voice. Talk with the table."><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0v-5a3 3 0 0 0-3-3zM5.5 11a6.5 6.5 0 0 0 13 0M12 17.5v3M8.5 20.5h7"/><path class="vc-w vc-w1" d="M5.5 5.5A8.5 8.5 0 0 0 5.5 16.5M18.5 5.5A8.5 8.5 0 0 1 18.5 16.5"/><path class="vc-w vc-w2" d="M3.6 3.9A11 11 0 0 0 3.6 18.1M20.4 3.9A11 11 0 0 1 20.4 18.1"/></svg><span>Voice</span></button>
+            <button class="rm-row" data-press="handoutsBtn" title="Handouts. Pictures and written pages to show your players."><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 3.5h11v14h-11zM5 7v13.5h11M11.5 8h5M11.5 11.5h5"/></svg><span>Handouts</span></button>
+            <button class="rm-row" data-press="journalBtn" title="Journal. Everything a GM has shown you, with your notes."><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 3.5H18v17H6.5a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2zM4.5 16.5a2 2 0 0 1 2-2H18M10 3.5v6.5l2-1.5 2 1.5V3.5"/></svg><span>Journal</span><small data-badge="journalBadge"></small></button>
+            <button class="rm-row" data-press="helpBtn" title="Help and shortcuts"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17zM9.4 9.6a2.7 2.7 0 1 1 3.9 2.4c-.8.4-1.3 1-1.3 1.9M12 16.9h.01"/></svg><span>Help</span></button>
+          </div>
+        </div>
       </div>
       <div class="hdr-group" data-label="Notices">
         <div class="row-menu-wrap" id="notesMenuWrap">
@@ -192,16 +204,6 @@
             <button class="rm-row" id="aboutBtn" title="About Waypoint"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17zM12 11v5.6M12 7.5h.01"/></svg><span>About Waypoint</span></button>
             <button class="rm-row" data-press="aboutReportLink" title="Report a problem. Opens a new issue page on GitHub in your web browser, with Waypoint&rsquo;s version and what it runs on filled in. Nothing is sent until you send it there."><span class="rm-slot"></span><span>Report a problem</span></button>
             <button class="rm-row" data-press="headerBrand" title="Back to the welcome screen"><img src="icon.ico" alt="" class="rm-mark"><span>Back to the welcome screen</span></button>
-            <div class="rm-part" id="moreFold">
-              <div class="rm-rule"></div>
-              <div class="rm-label">Folded in while the window is narrow</div>
-              <button class="rm-row" data-press="soundInd" title="Sound effects. Your volume and mute."><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 9.5H7l5-4v13l-5-4H3.5zM15.5 9.3a4 4 0 0 1 0 5.4M18.2 6.8a8 8 0 0 1 0 10.4"/></svg><span>Sound effects</span><small data-state></small></button>
-              <button class="rm-row" data-press="musicInd" title="Music. Your volume and mute."><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 17.5V6.4l10.5-2.6v11.2M8.5 10.4l10.5-2.6"/><circle cx="6" cy="17.5" r="2.5"/><circle cx="16.5" cy="15" r="2.5"/></svg><span>Music</span><small data-state></small></button>
-              <button class="rm-row" data-press="voiceInd" title="Voice. Talk with the table."><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0v-5a3 3 0 0 0-3-3zM5.5 11a6.5 6.5 0 0 0 13 0M12 17.5v3M8.5 20.5h7"/><path class="vc-w vc-w1" d="M5.5 5.5A8.5 8.5 0 0 0 5.5 16.5M18.5 5.5A8.5 8.5 0 0 1 18.5 16.5"/><path class="vc-w vc-w2" d="M3.6 3.9A11 11 0 0 0 3.6 18.1M20.4 3.9A11 11 0 0 1 20.4 18.1"/></svg><span>Voice</span></button>
-              <button class="rm-row" data-press="handoutsBtn" title="Handouts. Pictures and written pages to show your players."><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 3.5h11v14h-11zM5 7v13.5h11M11.5 8h5M11.5 11.5h5"/></svg><span>Handouts</span></button>
-              <button class="rm-row" data-press="journalBtn" title="Journal. Everything a GM has shown you, with your notes."><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 3.5H18v17H6.5a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2zM4.5 16.5a2 2 0 0 1 2-2H18M10 3.5v6.5l2-1.5 2 1.5V3.5"/></svg><span>Journal</span><small data-badge="journalBadge"></small></button>
-              <button class="rm-row" data-press="helpBtn" title="Help and shortcuts"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17zM9.4 9.6a2.7 2.7 0 1 1 3.9 2.4c-.8.4-1.3 1-1.3 1.9M12 16.9h.01"/></svg><span>Help</span></button>
-            </div>
           </div>
         </div>
       </div>
@@ -345,7 +347,7 @@
                                   <li>Export As and Import are rows of it. So are Refresh Waypoint and About Waypoint.</li>
                                   <li>Back to the welcome screen is there too. The Waypoint mark at the left does the same.</li>
                                   <li><b>Report a problem</b> is there too, and in About. It opens a new issue page on GitHub in your web browser. Waypoint&rsquo;s version and what it runs on are filled in: the kind of computer, and the desktop app or a web browser. Nothing is sent until you send it there.</li>
-                                  <li>Where the window is too narrow for the row, Sound, Music, Voice, Handouts, Journal and Help move into More. Nothing is cut off.</li>
+                                  <li>Where the window is too narrow for the row, its icons step out one at a time, the least used first: Help, Handouts, Sound, Music, the Journal and Voice last. A » button takes their place and opens a tray of them. Nothing is cut off.</li>
                                   <li>There Sound and Music say when they are muted or off for you, as their icons do in the row.</li>
                               </ul>
                           </li>
