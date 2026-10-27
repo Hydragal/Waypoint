@@ -100,6 +100,8 @@
   header .header-group { gap: 5px; }
   header .hdr-group { gap: 1px; padding: 0; margin-left: 0; border: 0; border-radius: 0; background: none; }
   header .hdr-group::before { content: none; }
+  header .hdr-group[data-label="Notices"]::before { content: ""; position: static; width: 1px; height: 18px; margin: 0 5px 0 4px; padding: 0; background: var(--edge); }   /* 1.6.0: a divider between the tray and the bell, as the row's others */
+  body.row-hidden:not(.tour-on) header .hdr-group[data-label="Notices"]::before { content: none; }
   header .tool.icon { width: 28px; height: 26px; border-color: transparent; background: transparent; color: var(--dim); border-radius: 6px; }
   header .tool.icon:hover { background: var(--panel2); border-color: transparent; color: var(--ink); }
   header .tool.icon.danger:hover { color: var(--red); }
