@@ -3077,7 +3077,7 @@ function chainsWalk(sys, F) {
         return '';
     };
     var totNode = function(L, w, ext) {   // a total of w (ext: a highest or lowest); undefined where the resolver has none and looks further
-        if (ext ? !((L.st[w] && L.st[w].kind !== 'pick') || L.cl[w]) : ((w !== 'count' && w !== 'qty' && w !== 'paid' && !L.st[w] && !L.cl[w]) || (L.st[w] && L.st[w].kind === 'pick'))) return undefined;
+        if (ext ? !((L.st[w] && L.st[w].kind !== 'pick') || L.cl[w] || L.ct[w]) : ((w !== 'count' && w !== 'qty' && w !== 'paid' && !L.st[w] && !L.cl[w]) || (L.st[w] && L.st[w].kind === 'pick'))) return undefined;
         var c = L.cl[w] ? rowNode(L, w) : ''; return node('t|' + L.k + '|' + w, [], null, [], c ? [c] : []);
     };
     var listNode = function(l) {   // listName's own reading
@@ -4958,11 +4958,12 @@ function makeResolver(sys, char, F, ropts) {   // ropts.noFx: the values with no
     }
     // 1.5.4 (the site equivalent plan, option 1): L.max.<w> | L.min.<w> (L.on.max.* | L.on.min.* over the rows switched on) — the highest or the
     // lowest figure one row gives: a number stat as the row reads it (never times its quantity: it is the row's own figure), a column's value
-    // (true reads 1); 0 with no row. A choice, a counter and the row words have none (undefined: an unknown name). The first row error wins, and a
+    // (true reads 1), a counter's count (1.6.0: a count the clock moves, read at its highest); 0 with no row. A choice and the row words have none
+// (undefined: an unknown name). The first row error wins, and a
     // column that reads its own list's highest is a loop, as for totals; a column's effects' sources are kept as a total keeps them
     function extremeOf(L, l, w, onlyOn, hi) {
         if (l in cache) return cache[l];
-        if (!(L.st[w] && L.st[w].kind !== 'pick') && !L.cl[w]) return undefined;
+        if (!(L.st[w] && L.st[w].kind !== 'pick') && !L.cl[w] && !(L.ct && L.ct[w])) return undefined;
         if (chain.indexOf(l) >= 0) return loopError(l);
         chain.push(l);
         var best = null, err = null, vias = [], seenV = map();
@@ -5344,11 +5345,11 @@ function validateSystem(sys, F) {
         if (!total && word === 'oncecost') { var ocK = isObj(lf.list) && isObj(lf.list.once) && typeof lf.list.once.cost === 'string' ? lower(lf.list.once.cost) : ''; return ocK && w[ocK] === 'col' ? { id: '', key: node + '.' + ocK, kind: 'number', vis: lf.vis, list: lf } : { id: '', key: node, kind: 'number', vis: lf.vis, list: lf, noEdge: true }; }
         return null;
     }
-    function extTarget(lf, word) {   // 1.5.4: what L.max.<w> and L.min.<w> read — a number stat or a column, as its total does (a column a node of the loop graph); a choice, a counter and a row word have none
+    function extTarget(lf, word) {   // 1.5.4: what L.max.<w> and L.min.<w> read — a number stat or a column, as its total does (a column a node of the loop graph), and a counter (1.6.0) as one row's; a choice and a row word have none
         var w = listWords(lf)[word];
         if (w === 'stat' || w === 'col') return wordTarget(lf, word, true);
         if (w === 'pick') return { pickTotal: true, ext: true, list: lf };
-        if (w === 'ctr') return { ctrTotal: true, ext: true, list: lf };
+        if (w === 'ctr') return wordTarget(lf, word, false);   // 1.6.0: a counter's highest and lowest, read as one row's count is
         if (word === 'count' || word === 'qty' || word === 'paid' || word === 'lvl' || word === 'on' || word === 'has') return { extWord: true, list: lf };
         return null;
     }
@@ -5392,7 +5393,7 @@ function validateSystem(sys, F) {
             if (target && target.noChamber) { errors.push({ id: owner.id, prop: prop, message: '"' + n + '" reads a chambered round, but ' + (target.list.label || target.list.key) + ' has no Chambers from.', pos: Math.max(0, lower(text).indexOf(l)), len: n.length }); return; }   // 1.5.9
             if (target && target.ctrTotal) { errors.push({ id: owner.id, prop: prop, message: '"' + n + '" is a counter, so it has no ' + (target.ext ? 'highest or lowest' : 'total') + ': read one row (' + target.list.key + '.<key>.' + n.split('.').pop() + ').', pos: Math.max(0, lower(text).indexOf(l)), len: n.length }); return; }   // R2
             if (target && target.pickTotal) { errors.push({ id: owner.id, prop: prop, message: '"' + n + '" is a choice, so it has no ' + (target.ext ? 'highest or lowest' : 'total') + ': read one row (' + target.list.key + '.<key>.' + n.split('.').pop() + ').', pos: Math.max(0, lower(text).indexOf(l)), len: n.length }); return; }   // F5a2
-            if (target && target.extWord) { errors.push({ id: owner.id, prop: prop, message: '"' + n + '": the highest and the lowest read a number stat or a column of ' + (target.list.label || target.list.key) + ', not ' + n.split('.').pop() + '.', pos: Math.max(0, lower(text).indexOf(l)), len: n.length }); return; }   // 1.5.4
+            if (target && target.extWord) { errors.push({ id: owner.id, prop: prop, message: '"' + n + '": the highest and the lowest read a number stat, a column or a counter of ' + (target.list.label || target.list.key) + ', not ' + n.split('.').pop() + '.', pos: Math.max(0, lower(text).indexOf(l)), len: n.length }); return; }   // 1.5.4
             if (isRollProp(prop) && n.length > 64) { errors.push({ id: owner.id, prop: prop, message: 'A roll carries names of 64 characters at most: "' + n + '" has ' + n.length + '.', pos: Math.max(0, lower(text).indexOf(l)), len: n.length }); return; }   // F5a1 (critic 8): the dice path refuses a longer one
             if (!target) { var s = suggest(n, keys); errors.push({ id: owner.id, prop: prop, message: 'Unknown name "' + n + '"' + (s ? ' — did you mean "' + s + '"?' : ''), pos: Math.max(0, lower(text).indexOf(l)), len: n.length }); return; }
             if (!NUMERIC[target.kind]) { errors.push({ id: owner.id, prop: prop, message: '"' + n + '" is ' + (target.kind === 'notes' ? 'a notes field' : (target.kind === 'effects' || target.kind === 'item-list') ? 'a list' : 'text') + ', not a number.', pos: Math.max(0, lower(text).indexOf(l)), len: n.length }); return; }

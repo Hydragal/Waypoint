@@ -51,6 +51,8 @@ System editor
   word such as Spoiled at 0, where the row stays; or up. Where the list
   has a switch, it can count only while the row is on, and start again
   when the row goes off.
+- Formulas can read a counter's highest and lowest across a list's rows,
+  as Torches.max.Burned.
 - An action or a roll used on someone next to you can read their figures,
   as On. and a name. So a medpac can say Not on a droid, with its needs
   not(On.Droid). Used on yourself, it reads your own.
