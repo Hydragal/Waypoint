@@ -2557,8 +2557,8 @@ function lvlCtl(entry, def, c, f, spec, editable) {
 }
 function lvlText(L, lv) { var i = lv - (L.min || 0); return Array.isArray(L.labels) && i >= 0 && i === Math.floor(i) && i < L.labels.length && L.labels[i] ? L.labels[i] : fmtNum(lv); }
 // F4b: a row's switch — a checkbox with the list's label (in a table the header carries it); read-only, a chip while it is on
-function onCtl(entry, c, f, spec, editable, labelled, okOn) {   // okOn (1.5.8): false where the switch's needs do not hold for this row (resolveAll's onOk)
-    var S = spec.on; if (!S || typeof S !== 'object') return null;
+function onCtl(entry, c, f, spec, editable, labelled, okOn, show) {   // okOn (1.5.8): false where the switch's needs do not hold for this row (resolveAll's onOk); show (1.6.0): false where it is not shown (onShow)
+    var S = spec.on; if (!S || typeof S !== 'object' || show === false) return null;
     var on = rowOn(spec, entry);
     if (!editable) return on ? el('span', 'sheet-chip sheet-item-onc', labelled ? S.label : '\u2713') : null;
     var cb = el('input', 'sheet-item-on'); cb.type = 'checkbox'; cb.checked = on; cb.title = S.label; cb.dataset.fid = f.id; cb.dataset.part = 'on-' + rowIdOf(entry);
@@ -2750,7 +2750,7 @@ function itemListInto(wrap, f, c, carried, sysI, canThrow, editable, gm, empty, 
         lostBits(line, rd, entry, c, f, gm, chg); needBits(line, sysI, c, entry, rd, gm); gmItemBits(line, def, entry, gm, !!(spec && spec.on)); keyShareChip(line, entry, rd, unseenL); modsBits(line, def, entry, spec, sysI);
         if (typeof onceBits === 'function') onceBits(line, sysI, c, f, carried, entry);   // 1.5.8 Counted once
         var noteLn = null;
-        if (spec) { statChips(line, def, spec, ovc); colChips(line, spec, res && res.cells ? res.cells[rid] : null); ctCtl(line, entry, c, f, spec, editable, res && res.cts ? res.cts[rid] : null); if (typeof loadCtl === 'function') loadCtl(line, entry, c, f, spec, editable, sysI, res && res.ldOk ? res.ldOk[rid] : undefined); if (typeof chamberCtl === 'function') chamberCtl(line, entry, c, f, spec, editable, sysI, gm, canThrow, res && res.chOk ? res.chOk[rid] : undefined); var lc = lvlCtl(entry, def, c, f, spec, chg && !opnR); if (lc) line.appendChild(lc); var oc = onCtl(entry, c, f, spec, editable, true, res && res.onOk ? res.onOk[rid] : undefined); if (oc) line.appendChild(oc); var pcL = paidCtl(entry, def, c, f, spec, chg, gm, true); if (pcL) line.appendChild(pcL); noteLn = hudRow ? null : noteBits(entry, def, c, f, chg, ovc); }   // F4c1: the stats shown On the row, what one cost
+        if (spec) { statChips(line, def, spec, ovc); colChips(line, spec, res && res.cells ? res.cells[rid] : null); ctCtl(line, entry, c, f, spec, editable, res && res.cts ? res.cts[rid] : null); if (typeof loadCtl === 'function') loadCtl(line, entry, c, f, spec, editable, sysI, res && res.ldOk ? res.ldOk[rid] : undefined); if (typeof chamberCtl === 'function') chamberCtl(line, entry, c, f, spec, editable, sysI, gm, canThrow, res && res.chOk ? res.chOk[rid] : undefined); var lc = lvlCtl(entry, def, c, f, spec, chg && !opnR); if (lc) line.appendChild(lc); var oc = onCtl(entry, c, f, spec, editable, true, res && res.onOk ? res.onOk[rid] : undefined, res && res.onShow ? res.onShow[rid] : undefined); if (oc) line.appendChild(oc); var pcL = paidCtl(entry, def, c, f, spec, chg, gm, true); if (pcL) line.appendChild(pcL); noteLn = hudRow ? null : noteBits(entry, def, c, f, chg, ovc); }   // F4c1: the stats shown On the row, what one cost
         if (def.area && canThrow && (gm || def.vis !== 'gm') && entry.hid !== 1) line.appendChild(itemThrowBtn(def, c, f, rid));   // a GM-only item: the GM's throw only (a player's copy never carries its area)
         rowRollBtns(line, spec, entry, def, c, f, res);   // F5b: the list's rolls on this row
         if (noteLn) line.appendChild(noteToggle(noteLn, entry, c, f));
@@ -2994,7 +2994,7 @@ function itemTableInto(wrap, f, c, carried, sysI, canThrow, editable, gm, empty,
         shownSt.forEach(function(s) { var sTd = el('td', 'sheet-itcol-stat', statShown(s, rowStat(spec, def, s.key))), sDt = statDot(s, spec, ovT); if (sDt) sTd.appendChild(sDt); tr.appendChild(sTd); });
         var cellsT = res && res.cells ? res.cells[rid] : null; shownCl.forEach(function(x) { var v = cellsT ? cellsT[x.i] : null, cTd = el('td', 'sheet-itcol-col' + (v && v.error ? ' sheet-item-colerr' : ''), v ? (typeof colShown === 'function' ? colShown(x.c, v) : v.text + (x.c.unit && !v.error ? ' ' + x.c.unit : '')) + (typeof plusText === 'function' ? plusText(v) : '') : ''); if (v && v.error) cTd.title = v.error; tr.appendChild(cTd); });   // F5a1: its columns (1.5.4: and what a column's With stats add, in brackets)
         if (hasL) { var lTd = el('td', 'sheet-itcol-lvl'), lcT = lvlCtl(entry, def, c, f, spec, chg); if (lcT) lTd.appendChild(lcT); tr.appendChild(lTd); }
-        if (hasO) { var oTd = el('td', 'sheet-itcol-on'), ocT = onCtl(entry, c, f, spec, editable, false, res && res.onOk ? res.onOk[rid] : undefined); if (ocT) oTd.appendChild(ocT); tr.appendChild(oTd); }
+        if (hasO) { var oTd = el('td', 'sheet-itcol-on'), ocT = onCtl(entry, c, f, spec, editable, false, res && res.onOk ? res.onOk[rid] : undefined, res && res.onShow ? res.onShow[rid] : undefined); if (ocT) oTd.appendChild(ocT); tr.appendChild(oTd); }
         if (hasQ) {
             var qtyTd = el('td', 'sheet-itcol-qty');
             qtyTd.appendChild(editable ? itemQtyCell(entry, c, f) : el('span', 'sheet-item-qtyn', '×' + entry.qty));
@@ -6246,6 +6246,7 @@ function listCard(f, allCats, targets, acts) {   // acts (turn-based combat T1):
             perOptions(opS, sp);
             orow.appendChild(opS);
         }
+        orow.appendChild(input('sys-list-swshow field', typeof sw.showIf === 'string' ? sw.showIf : '', 'Shown only on rows where this is true, such as Row.Kind = 2. Row names are read. No dice. Elsewhere the row has no switch', 'Shown where (optional)'));   // 1.6.0
         orow.appendChild(input('sys-list-swneeds field', typeof sw.needs === 'string' ? sw.needs : '', 'A formula that must be true before a row is switched on, such as Row.Charge > 0. Row names are read. No dice. A player is refused while it does not hold. You may still switch it on, and are told', 'Needs to switch on'));   // 1.5.8
         orow.appendChild(input('sys-list-swwords field', typeof sw.needsText === 'string' ? sw.needsText : '', 'What a refused switch says (blank: Not now: it needs and the formula)', 'Its words'));
     }
@@ -7864,6 +7865,7 @@ function onInput(e) {
         else if (lcc.indexOf('sys-list-lvldef') >= 0 && lvD) numOr(lvD, 'def');
         else if (lcc.indexOf('sys-list-lvlnames') >= 0 && lvD) { var lvn = t.value.split(',').map(function(s) { return s.trim(); }).slice(0, LIMITS.labels); while (lvn.length && !lvn[lvn.length - 1]) lvn.pop(); if (lvn.some(Boolean)) lvD.labels = lvn; else delete lvD.labels; }
         else if (lcc.indexOf('sys-list-onlabel') >= 0 && lsp.on && typeof lsp.on === 'object') lsp.on.label = t.value.slice(0, LIMITS.label);
+        else if (lcc.indexOf('sys-list-swshow') >= 0 && lsp.on && typeof lsp.on === 'object') { if (t.value.trim()) lsp.on.showIf = t.value.slice(0, LIMITS.formula); else delete lsp.on.showIf; }   // 1.6.0: where a row's switch is shown (Save cleans it)
         else if (lcc.indexOf('sys-list-swneeds') >= 0 && lsp.on && typeof lsp.on === 'object') { if (t.value.trim()) lsp.on.needs = t.value.slice(0, LIMITS.formula); else delete lsp.on.needs; }   // 1.5.8: a switch's needs (Save cleans them)
         else if (lcc.indexOf('sys-list-swwords') >= 0 && lsp.on && typeof lsp.on === 'object') { if (t.value.trim()) lsp.on.needsText = t.value.slice(0, LIMITS.label); else delete lsp.on.needsText; }
         else if (lcc.indexOf('sys-list-malf') >= 0) {   // Stage 6 HUD R3: a list roll's Malf (Save cleans it)

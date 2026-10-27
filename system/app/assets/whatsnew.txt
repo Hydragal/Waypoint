@@ -52,14 +52,19 @@ System editor
 - A list's change can set the row's own quantity, or one of its own number
   stats, such as a medkit's wear. Used up to 0, the row goes, and its
   notice offers Undo for a few seconds, as the sheet's minus does.
-- A list can carry up to 32 stats, up from 24, and up to 10 rolls, up
-  from 8. A field or a stat can name up to 32 of its values, up from 10.
+- A list can carry up to 32 stats, up from 24, 24 columns, up from 12,
+  and up to 10 rolls, up from 8. A field or a stat can name up to 32 of its values, up from 10.
 - A change of an effect or an item can hold a value at least or at most
   a figure. Two effects that each say Stun at least 1 now read 1, not 2.
 - One at a time can go by where rows sit: Where Covers meet. Each entry
   ticks the places it takes, such as Left hand and Right hand, and a
   row switched on takes off whatever shares a place with it. Formulas
   read a place with has(Row.Covers, 3).
+- A list's switch can be Shown where a formula of the row holds, so a
+  switch shows only on the rows it is for.
+- A counter that counts up by the clock stops at its most.
+- A file that fills a character being made sets its counters too, even
+  ones set by rolls only or by the clock.
 - A list's roll or action can be ticked GM only: players never see its
   button, and the table refuses their press.
 - A Custom roller's starting formula may stop where the player goes on,

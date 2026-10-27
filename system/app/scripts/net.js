@@ -4919,7 +4919,7 @@ net.rowSpans = function(spans, perOf) {
     var camp = getActiveCampaign(), S = SC(), now = Date.now(); if (!camp || !camp.system || !camp.chars || !S || !S.rowTimers) return;
     Object.keys(spans).forEach(function(id) {
         var s = spans[id], ch = own(camp.chars, id) ? camp.chars[id] : null; if (!ch || typeof s !== 'number' || !isFinite(s) || !(s > 0)) return;
-        var r; try { r = S.rowTimers(camp.system, ch, s, perOf); } catch (e) { if (window.wpStepLog) window.wpStepLog('rowtimer v1', 'failed', { at: 'tick', secs: Math.round(s) }); throw e; }
+        var r; try { r = S.rowTimers(camp.system, ch, s, perOf, window.wpFormula); } catch (e) { if (window.wpStepLog) window.wpStepLog('rowtimer v1', 'failed', { at: 'tick', secs: Math.round(s) }); throw e; }
         var ids = Object.keys(r.values); if (!ids.length) return;
         ch.values = ch.values || {}; ids.forEach(function(fid) { ch.values[fid] = r.values[fid]; });
         saveRemoteSoon();
