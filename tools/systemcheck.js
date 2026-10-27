@@ -14963,6 +14963,68 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         check('1.6.0 On.<name> on the sheet (source): a button whose needs read the one it is used on never greys by them (the host judges them once the press names someone), on a roll and on an action; the GM\'s press reads On. through the system with the target in its own token\'s context',
             (shO.match(/&& !\(r\.to === 'near' && typeof readsOn === 'function' && readsOn\(r\.needs, F\(\)\)\)\) \{/g) || []).length === 2 && shO.includes('vv = withOnSelf(vv, !onT, onT ? makeResolver(sys, onT.ch, F(),'));
     }
+    {   // 1.6.0 Counts by the game clock (the handoff's per-row timer; the campaign build's count while a switch holds): a list's counter timed
+        const J = JSON.stringify;
+        const rawT = { v: 1, name: 'T', rolls: [], fields: [
+            { id: 'f_food', key: 'Food', label: 'Food', kind: 'item-list', edit: 'owner', list: { on: { label: 'Lit' }, counters: [
+                { key: 'Fresh', label: 'Fresh', def: 3, timer: { dir: 'down', per: { n: 1, u: 'day' }, end: 'Spoiled' } },
+                { key: 'Burn', label: 'Burning', timer: { dir: 'up', per: { n: 1, u: 'hour' }, on: true, reset: true, end: 'Out' } },
+                { key: 'Uses', label: 'Uses', def: 2 },
+                { key: 'Bad1', timer: { dir: 'sideways', per: { n: 0, u: 'day' } } },
+                { key: 'Bad2', timer: { per: { n: 1, u: 'round' } } },
+                { key: 'Bad3', timer: { per: { n: 1.5, u: 'day' } } },
+                { key: 'Watch', timer: { dir: 'down', per: { n: 2, u: 'Watch' }, reset: true } }] } },
+            { id: 'f_bag', key: 'Bag', label: 'Bag', kind: 'item-list', list: { counters: [{ key: 'Age', timer: { dir: 'up', per: { n: 2, u: 'week' }, on: true, reset: true } }] } }],
+            sheet: { sections: [] } };
+        const gT = cleanSystem(rawT, { F, gmView: true }), pT = cleanSystem(rawT, { F, gmView: false }), cT = gT.fields[0].list.counters;
+        check('1.6.0 Counts by the game clock, the cleaner (both views): a counter\'s timer keeps a direction (down by default), one step every 1 to 1000 whole minutes, hours, days, weeks or a unit of the system\'s by key (never a round), Only while on and Starts again when off only where the list has a switch, and an end word for a count down only; a timer that names no step is dropped and the counter stays',
+            J(cT.map(t => t.timer || null)) === J([{ dir: 'down', per: { n: 1, u: 'day' }, end: 'Spoiled' }, { dir: 'up', per: { n: 1, u: 'hour' }, on: true, reset: true }, null, null, null, null, { dir: 'down', per: { n: 2, u: 'Watch' } }])
+            && J(gT.fields[1].list.counters[0].timer) === J({ dir: 'up', per: { n: 2, u: 'week' } }) && J(pT.fields) === J(gT.fields) && J(cleanSystem(gT, { F, gmView: true })) === J(gT)
+            && S.cleanRowTimer({ per: { n: 1, u: 'hour' }, reset: true }) && J(S.cleanRowTimer({ per: { n: 1, u: 'hour' }, reset: true })) === J({ dir: 'down', per: { n: 1, u: 'hour' } }) && S.cleanRowTimer(null) === null, J([cT, gT.fields[1].list]));
+        const perOf = p => p.u === 'day' ? 86400 * p.n : p.u === 'hour' ? 3600 * p.n : 0;
+        const ch0 = { id: 'c_t', name: 'Pat', ownerId: 'u_p', values: { f_food: [{ id: 'w_b', def: { name: 'Bread' }, qty: 1 }, { id: 'w_t', def: { name: 'Torch' }, qty: 1, on: true }] } };
+        const put = (ch, r) => Object.assign({}, ch, { values: Object.assign({}, ch.values, r.values) });
+        const r1 = S.rowTimers(gT, ch0, 129600, perOf), ch1 = put(ch0, r1);
+        const r2 = S.rowTimers(gT, ch1, 172800, perOf), ch2 = put(ch1, r2);
+        const ch2off = put(ch2, { values: { f_food: ch2.values.f_food.map(r => r.id === 'w_t' ? Object.assign({}, r, { on: false }) : r) } });
+        const r3 = S.rowTimers(gT, ch2off, 3600, perOf), r4 = S.rowTimers(gT, put(ch2off, r3), 3600, perOf), ch3 = put(ch2off, r3);
+        const rNo = S.rowTimers(gT, ch0, 0, perOf), rBad = S.rowTimers(gT, ch0, 3600, () => 0);
+        check('1.6.0 Counts by the game clock (rowTimers, run for real): a day and a half takes Fresh 3 to 2 and keeps the half day it lived; two days more take it to 0, the row stays, it shows Spoiled and the GM is told; a counter up counts whole hours while its row is on (36), and switched off goes back to its start; the part of a step lived stays the GM\'s (cleanChar keeps it, the owner\'s copy never carries it); nothing moves with no time or no step',
+            J(ch1.values.f_food) === J([{ id: 'w_b', def: { name: 'Bread' }, qty: 1, ct: { Fresh: 2 }, tt: { Fresh: 43200 } }, { id: 'w_t', def: { name: 'Torch' }, qty: 1, on: true, ct: { Fresh: 2, Burn: 36 }, tt: { Fresh: 43200 } }])
+            && J(r1.moved) === J(['f_food']) && J(r1.ended) === J([])
+            && J(ch2.values.f_food.map(r => [r.ct, r.tt || null])) === J([[{ Fresh: 0 }, null], [{ Fresh: 0, Burn: 84 }, null]])
+            && J(r2.ended) === J([{ name: 'Bread', word: 'Spoiled', label: 'Fresh', gm: false }, { name: 'Torch', word: 'Spoiled', label: 'Fresh', gm: false }])
+            && J(ch3.values.f_food[1].ct) === J({ Fresh: 0, Burn: 0 }) && J(r3.ended) === J([]) && J(Object.keys(r4.values)) === J([])
+            && J(Object.keys(rNo.values)) === J([]) && J(Object.keys(rBad.values)) === J([])
+            && J(cleanChar(ch1, gT).values.f_food[0].tt) === J({ Fresh: 43200 }) && charFor(cleanChar(ch1, gT), pT, 'u_p').values.f_food[0].tt === undefined,
+            J([ch1.values.f_food, r2, ch3.values.f_food, r4]));
+        const ctsT = S.resolveAll(gT, ch2, F).f_food.cts, edP = S.applyRowOp(gT, ch1, 'f_food', { op: 'set', rowId: 'w_b', facts: { ct: { Fresh: 3 } } }, F, { player: true, view: pT }), edG = S.applyRowOp(gT, ch1, 'f_food', { op: 'set', rowId: 'w_b', facts: { ct: { Fresh: 3 } } }, F, {});
+        const edU = S.applyRowOp(gT, ch1, 'f_food', { op: 'set', rowId: 'w_b', facts: { ct: { Uses: 1 } } }, F, { player: true, view: pT });
+        check('1.6.0 Counts by the game clock on the sheet: a timed counter says so (tm) and a count down at 0 shows its end word; a player never sets a timed counter by hand, the GM does, and an untimed counter of the same row is as ever',
+            J(ctsT.w_b.slice(0, 3)) === J([{ key: 'Fresh', label: 'Fresh', value: 0, max: null, tm: 'down', word: 'Spoiled' }, { key: 'Burn', label: 'Burning', value: 0, max: null, tm: 'up' }, { key: 'Uses', label: 'Uses', value: 2, max: null }])
+            && edP.ok === false && edP.reason === 'field' && edG.ok === true && edU.ok === true, J([ctsT.w_b, edP, edG.ok, edU]));
+        const shT = fs.readFileSync(path.join(app, 'scripts', 'sheets.js'), 'utf8').replace(/\r\n/g, '\n'), caT = fs.readFileSync(path.join(app, 'scripts', 'calendar.js'), 'utf8').replace(/\r\n/g, '\n'), ntT = fs.readFileSync(path.join(app, 'scripts', 'net.js'), 'utf8').replace(/\r\n/g, '\n');
+        const rsA = ntT.indexOf('net.rowSpans = function('), rsB = ntT.indexOf('net.fxGameTime = function(', rsA);
+        const told = [], logs = [], deltas = [], changed = [];
+        const campT = { system: gT, chars: { c_t: JSON.parse(J(ch0)), c_n: { id: 'c_n', name: 'Bob', npc: true, values: {} } } };
+        const netT = { role: 'host', active: true, myId: 'u_gm', conns: [{ open: true, peer: 'p1', send: m => told.push(['p1', m.text]) }, { open: true, peer: 'p2', send: m => told.push(['p2', m.text]) }], roster: { p1: 1, p2: 1 }, syncCharDelta: (id, v) => deltas.push([id, Object.keys(v)]) };
+        const winT = { wpVtt: { on: () => true }, wpSheets: { charChanged: id => changed.push(id) }, wpStepLog: (a, st, fx) => logs.push([a, st, fx]) };
+        let saves = 0;
+        const RS = new Function('net', 'window', 'getActiveCampaign', 'SC', 'own', 'saveRemoteSoon', 'peerProfileId', 'sendFailed', 'pushChat', ntT.slice(rsA, rsB) + '\nreturn net.rowSpans;')(netT, winT, () => campT, () => S, (o, k) => Object.prototype.hasOwnProperty.call(o, k), () => saves++, c => c.peer === 'p1' ? 'u_p' : 'u_x', () => {}, m => told.push(['gm', m.text]));
+        RS({ c_t: 129600, c_n: 50 }, perOf); const afterHalf = [deltas.length, changed.length, saves];
+        RS({ c_t: 1800 }, perOf); const afterPart = [deltas.length, changed.length, saves];
+        RS({ c_t: 172800 }, perOf);
+        check('1.6.0 Counts by the game clock, the GM\'s machine (net.js rowSpans, run for real): every character\'s span on its rows, stored; sent and redrawn only where a count moved (a part of a step is saved alone); a count down at 0 told to the GM and its own player alone ("Bread on Pat: Spoiled."), and a step line in the log; calendar.js ownTime hands it every stretch, a fight\'s rounds too, with a step on the campaign\'s own calendar',
+            J(afterHalf) === J([1, 1, 1]) && J(afterPart) === J([1, 1, 2]) && deltas.length === 2 && J(deltas[0]) === J(['c_t', ['f_food']])
+            && J(told.filter(x => /Bread/.test(x[1]))) === J([['p1', 'Bread on Pat: Spoiled.'], ['gm', 'Bread on Pat: Spoiled.']]) && J(logs) === J([['rowtimer v1', 'ended', { rows: 2, lists: 1, secs: 172800, sent: true }]])
+            && caT.includes("        if (n && typeof n.rowSpans === 'function') { try { n.rowSpans(spans, function(p) { return everySecs(sysCal(), sysUnits(sys), p); }); } catch (e) { console.error(e); } }")
+            && caT.indexOf("n.rowSpans(spans") > caT.indexOf("if (g.kind !== 'fight' && n && typeof n.fxSpans === 'function')"),
+            J([afterHalf, afterPart, deltas, told, logs]));
+        const lcT = shT.slice(shT.indexOf('function listCard('), shT.indexOf('function renderCombat('));
+        check('1.6.0 Counts by the game clock in the System editor (source): each counter has its clock pick, its step and unit, Only while on and Starts again when off where the list has a switch, and At 0 it shows for a count down, built from values and text only; the sheet\'s chip shows the word, says how it counts, and gives a player no − or +',
+            lcT.includes("tsel('sys-list-cttimer'") && lcT.includes("tsel('sys-list-cttu'") && lcT.includes("checkLabel('sys-list-ctton'") && lcT.includes("checkLabel('sys-list-cttreset'") && lcT.includes("input('sys-list-ctend field'") && !/innerHTML/.test(lcT.slice(lcT.indexOf('Counts by the game clock'), lcT.indexOf('+ Counter')))
+            && shT.includes("ed = editable && !((t.roll === true || !!tmC) && isClient());") && shT.includes("if (tmC && tmC.end && v <= 0) w.appendChild(el('b', 'sheet-item-ctv sheet-item-ctend', tmC.end));"));
+    }
     summed = true;
     console.log(NL + pass + ' passed, ' + fail + ' failed.');
     if (fail) process.exit(1);

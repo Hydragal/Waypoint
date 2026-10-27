@@ -2804,6 +2804,12 @@ function rowRollBtns(host, spec, entry, def, c, f, res) {   // res (R2b): the fi
         host.appendChild(b); var pmL = typeof rollModBtn === 'function' ? rollModBtn(b, goL) : null; if (pmL) host.appendChild(pmL);   // 1.5.9: its ±
     });
 }
+// 1.6.0 Counts by the game clock: a timed counter's words for its chip's title, "counts down one every 2 days" (a unit of the system's by its label)
+function ctClockWords(tm) {
+    var p = tm && tm.per && typeof tm.per === 'object' ? tm.per : {}, n = typeof p.n === 'number' ? p.n : 1, u = typeof p.u === 'string' ? p.u : '', W = { min: ['minute', 'minutes'], hour: ['hour', 'hours'], day: ['day', 'days'], week: ['week', 'weeks'] }, w = W[u] ? W[u][n === 1 ? 0 : 1] : '';
+    if (!w) { var sy = systemOf(getActiveCampaign()), us = sy && sy.combat && sy.combat.turn && Array.isArray(sy.combat.turn.units) ? sy.combat.turn.units : []; us.forEach(function(x) { if (!w && x && typeof x.key === 'string' && x.key.toLowerCase() === u.toLowerCase()) w = x.label || x.key; }); w = w || u; }
+    return 'counts ' + (tm.dir === 'up' ? 'up' : 'down') + ' one every ' + (n === 1 ? '' : n + ' ') + w + ' of game time' + (tm.on ? ' while it is on' + (tm.reset ? ', and starts again when off' : '') : '') + '. The clock sets it';
+}
 // Stage 6 HUD R2: a row's counters — a chip each (Charges 12/20); −/+ for whoever may change the row's facts (one set op a click, the host judges it)
 function ctCtl(host, entry, c, f, spec, editable, cells) {
     if (!spec || !Array.isArray(spec.counters) || !spec.counters.length || entry.hid === 1) return;
@@ -2815,10 +2821,12 @@ function ctCtl(host, entry, c, f, spec, editable, cells) {
         var w = el('span', 'sheet-chip sheet-item-ct'); w.title = t.label || t.key;
         w.appendChild(el('span', 'sheet-item-ctl', (t.label || t.key) + ' '));
         var set = function(n) { var o = {}; o[t.key] = n; commitItem(c, f, { op: 'set', rowId: rid, facts: { ct: o } }); };
-        editable = editable && !(t.roll === true && isClient());   // 1.5.7: a counter set by rolls only shows no - or + on a player's app
-        if (editable) { var mb = el('button', 'tool ghost sheet-item-ctb', '\u2212'); mb.type = 'button'; mb.title = 'One less'; mb.disabled = v <= 0; mb.addEventListener('click', function() { set(v - 1); }); w.appendChild(mb); }
-        w.appendChild(el('b', 'sheet-item-ctv', fmtNum(v) + (mx !== null ? '/' + fmtNum(mx) : '')));
-        if (editable) { var pb = el('button', 'tool ghost sheet-item-ctb', '+'); pb.type = 'button'; pb.title = 'One more'; pb.disabled = mx !== null && v >= mx; pb.addEventListener('click', function() { set(v + 1); }); w.appendChild(pb); }
+        var tmC = t.timer && typeof t.timer === 'object' ? t.timer : null, ed = editable && !((t.roll === true || !!tmC) && isClient());   // 1.5.7: a counter set by rolls only shows no - or + on a player's app; 1.6.0: nor one the clock counts
+        if (tmC) w.title = (t.label || t.key) + ': ' + ctClockWords(tmC);
+        if (ed) { var mb = el('button', 'tool ghost sheet-item-ctb', '\u2212'); mb.type = 'button'; mb.title = 'One less'; mb.disabled = v <= 0; mb.addEventListener('click', function() { set(v - 1); }); w.appendChild(mb); }
+        if (tmC && tmC.end && v <= 0) w.appendChild(el('b', 'sheet-item-ctv sheet-item-ctend', tmC.end));   // 1.6.0: a count down at 0 shows its word (Spoiled)
+        else w.appendChild(el('b', 'sheet-item-ctv', fmtNum(v) + (mx !== null ? '/' + fmtNum(mx) : '')));
+        if (ed) { var pb = el('button', 'tool ghost sheet-item-ctb', '+'); pb.type = 'button'; pb.title = 'One more'; pb.disabled = mx !== null && v >= mx; pb.addEventListener('click', function() { set(v + 1); }); w.appendChild(pb); }
         host.appendChild(w);
     });
 }
@@ -6292,6 +6300,19 @@ function listCard(f, allCats, targets, acts) {   // acts (turn-based combat T1):
         var tdf = el('input', 'field sys-list-ctdef'); tdf.type = 'number'; tdf.min = '0'; tdf.step = '1'; tdf.value = typeof tt.def === 'number' ? String(tt.def) : ''; tdf.placeholder = 'Starts at 0'; tdf.title = 'Where a new row starts'; rw.appendChild(tdf);
         var tmx = input('sys-list-ctmax field', typeof tt.max === 'string' ? tt.max : '', 'Its most, worked out for each row (no dice): 20, Row.Shots; empty: no most', 'Most (e.g. Row.Shots)'); tmx.maxLength = LIMITS.formula; rw.appendChild(tmx);
         rw.appendChild(checkLabel('sys-list-ctroll', tt.roll === true, 'Set by rolls only', 'Rolls, actions and you set it. A player cannot change it by hand: their sheet shows it with no \u2212 or +'));   // 1.5.7
+        {   // 1.6.0 Counts by the game clock: down to 0 and its word, or up; Only while on and Starts again when off where the list has a switch
+            var tmr = tt.timer && typeof tt.timer === 'object' && !Array.isArray(tt.timer) ? tt.timer : null;
+            var tsel = function(cls, os, cur, title) { var sl = el('select', cls); os.forEach(function(o) { var op = el('option', null, o[1]); op.value = o[0]; if (o[0] === cur) op.selected = true; sl.appendChild(op); }); sl.value = cur; sl.title = title; return sl; };   // values and text only, as Loads from's
+            rw.appendChild(tsel('sys-list-cttimer', [['', 'Not by the clock'], ['down', 'Counts down by the clock'], ['up', 'Counts up by the clock']], tmr ? (tmr.dir === 'up' ? 'up' : 'down') : '', 'By the clock, the counter moves one step every so often of its character\u2019s own game time, a fight\u2019s rounds too: down to 0, where the row stays, or up. A player cannot change it by hand'));
+            if (tmr) {
+                var tpn = el('input', 'field sys-list-cttn'); tpn.type = 'number'; tpn.min = '1'; tpn.max = '1000'; tpn.step = '1'; tpn.placeholder = 'Every'; tpn.value = tmr.per && typeof tmr.per.n === 'number' ? String(tmr.per.n) : ''; tpn.title = 'One step every so many of the unit beside, 1 to 1000'; rw.appendChild(tpn);
+                var tus2 = (typeof draft !== 'undefined' && draft && draft.combat && draft.combat.turn && Array.isArray(draft.combat.turn.units) ? draft.combat.turn.units : []).filter(function(u) { return u && typeof u.key === 'string' && u.key; });
+                var tuo = [['min', 'minutes'], ['hour', 'hours'], ['day', 'days'], ['week', 'weeks']].concat(tus2.map(function(u) { return [u.key, typeof u.label === 'string' && u.label ? u.label : u.key]; })), tuc = tmr.per && typeof tmr.per.u === 'string' && tmr.per.u ? tmr.per.u : 'day'; if (!tuo.some(function(o) { return o[0] === tuc; })) tuo.push([tuc, tuc + ' (no such unit)']);
+                rw.appendChild(tsel('sys-list-cttu', tuo, tuc, 'What it counts in: the calendar\u2019s minutes, hours, days and weeks, or one of your time units (the Combat card\u2019s Turns box)'));
+                if (sp.on && typeof sp.on === 'object') { rw.appendChild(checkLabel('sys-list-ctton', tmr.on === true, 'Only while on', 'It counts only while its row is switched on, and waits while it is off')); if (tmr.on === true) rw.appendChild(checkLabel('sys-list-cttreset', tmr.reset === true, 'Starts again when off', 'A row switched off goes back to where a new row starts')); }
+                if (tmr.dir !== 'up') { var tew = input('sys-list-ctend field', typeof tmr.end === 'string' ? tmr.end : '', 'What the row shows once the count reaches 0, such as Spoiled. The row stays', 'At 0 it shows (e.g. Spoiled)'); tew.maxLength = LIMITS.label; rw.appendChild(tew); }
+            }
+        }
         [['ctup', '\u25b2', 'Move up'], ['ctdown', '\u25bc', 'Move down'], ['ctdel', '\u00d7', 'Remove this counter']].forEach(function(bd) { var bb = el('button', 'tool ghost sys-btn', bd[1]); bb.dataset.act = bd[0]; bb.title = bd[2]; rw.appendChild(bb); });
         cb2.appendChild(rw);
     });
@@ -7863,6 +7884,8 @@ function onInput(e) {
             else if (lcc.indexOf('sys-list-ctlabel') >= 0) ctD.label = t.value.slice(0, LIMITS.label);
             else if (lcc.indexOf('sys-list-ctmax') >= 0) { if (t.value.trim()) ctD.max = t.value.slice(0, LIMITS.formula); else delete ctD.max; }
             else if (lcc.indexOf('sys-list-ctdef') >= 0) { var cdn = Number(t.value); if (String(t.value).trim() === '' || !isFinite(cdn)) delete ctD.def; else ctD.def = cdn; }
+            else if (lcc.indexOf('sys-list-cttn') >= 0) { if (!ctD.timer || typeof ctD.timer !== 'object') return; var tnv = Number(t.value); ctD.timer.per = Object.assign({ u: 'day' }, ctD.timer.per); if (String(t.value).trim() && isFinite(tnv)) ctD.timer.per.n = tnv; else delete ctD.timer.per.n; }   // 1.6.0 Counts by the game clock (Save cleans it)
+            else if (lcc.indexOf('sys-list-ctend') >= 0) { if (!ctD.timer || typeof ctD.timer !== 'object') return; if (t.value.trim()) ctD.timer.end = t.value.slice(0, LIMITS.label); else delete ctD.timer.end; }
             else return;
         }
         else if (lcc.indexOf('sys-list-applyformula') >= 0) {   // Stage 6 HUD H7b: a list action's amount (Save cleans it)
@@ -8025,6 +8048,15 @@ function onChange(e) {
         else if (c.indexOf('sys-list-ondef') >= 0) { if (lsc.on && typeof lsc.on === 'object') { if (t.checked) lsc.on.def = true; else delete lsc.on.def; } }
         else if (c.indexOf('sys-list-onone') >= 0) { if (lsc.on && typeof lsc.on === 'object') { if (t.checked) lsc.on.one = true; else { delete lsc.on.one; delete lsc.on.per; } } }   // 1.5.4 One at a time
         else if (c.indexOf('sys-list-ctroll') >= 0) { var ctr2 = t.closest('.sys-list-ct'), ctD2 = ctr2 && Array.isArray(lsc.counters) ? lsc.counters[+ctr2.dataset.ti] : null; if (!ctD2 || typeof ctD2 !== 'object') return; if (t.checked) ctD2.roll = true; else delete ctD2.roll; }   // 1.5.7: Set by rolls only
+        else if (c.indexOf('sys-list-cttimer') >= 0 || c.indexOf('sys-list-cttu') >= 0 || c.indexOf('sys-list-ctton') >= 0 || c.indexOf('sys-list-cttreset') >= 0) {   // 1.6.0 Counts by the game clock
+            var ctr3 = t.closest('.sys-list-ct'), ctD3 = ctr3 && Array.isArray(lsc.counters) ? lsc.counters[+ctr3.dataset.ti] : null; if (!ctD3 || typeof ctD3 !== 'object') return;
+            var tm3 = ctD3.timer && typeof ctD3.timer === 'object' && !Array.isArray(ctD3.timer) ? ctD3.timer : null;
+            if (c.indexOf('sys-list-cttimer') >= 0) { if (!t.value) delete ctD3.timer; else { tm3 = tm3 || { per: { n: 1, u: 'day' } }; tm3.dir = t.value === 'up' ? 'up' : 'down'; if (tm3.dir === 'up') delete tm3.end; ctD3.timer = tm3; } }
+            else if (!tm3) return;
+            else if (c.indexOf('sys-list-cttu') >= 0) tm3.per = Object.assign({ n: 1 }, tm3.per, { u: String(t.value).slice(0, 24) });
+            else if (c.indexOf('sys-list-ctton') >= 0) { if (t.checked) tm3.on = true; else { delete tm3.on; delete tm3.reset; } }
+            else { if (t.checked) tm3.reset = true; else delete tm3.reset; }
+        }
         else if (c.indexOf('sys-list-onper') >= 0) { if (lsc.on && typeof lsc.on === 'object') { lsc.on.one = true; if (t.value) lsc.on.per = t.value; else delete lsc.on.per; } }   // ... for the whole list, or per a stat (Save keeps the one that holds: the stat, else the whole list)
         else if (c.indexOf('sys-list-colhide') >= 0 || c.indexOf('sys-list-colfoot') >= 0) { var chr = t.closest('.sys-list-col'), chD = chr && Array.isArray(lsc.cols) ? lsc.cols[+chr.dataset.ci] : null; if (!chD || typeof chD !== 'object') return; var chK = c.indexOf('sys-list-colhide') >= 0 ? 'hide' : 'foot'; if (t.checked) chD[chK] = true; else delete chD[chK]; }   // Stage 6 F5a1
         else if (c.indexOf('sys-list-statkind') >= 0) { var skr = t.closest('.sys-list-stat'), skD = skr && Array.isArray(lsc.stats) ? lsc.stats[+skr.dataset.si] : null; if (!skD || typeof skD !== 'object') return; delete skD.def; delete skD.labels; if (t.value === 'pick') { skD.kind = 'pick'; skD.opts = Array.isArray(skD.opts) ? skD.opts : []; if (typeof lsc.price === 'string' && skD.key && lsc.price.toLowerCase() === String(skD.key).toLowerCase()) delete lsc.price; } else { delete skD.kind; delete skD.opts; } markDirty(); renderAll(); return; }   // Stage 6 F5a2: a number or a choice (a choice is never the price)

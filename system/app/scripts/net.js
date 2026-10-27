@@ -4909,6 +4909,29 @@ net.fxSpans = function(spans, walk) {
     var inF = typeof ordersOfChars === 'function' ? ordersOfChars(camp) : null;
     Object.keys(spans).forEach(function(id) { var s = spans[id]; if (!own(camp.chars, id) || typeof s !== 'number' || !isFinite(s) || !(s > 0) || (walk !== true && (inF ? inF[id] : charCombat(camp, id)))) return; fxApply(camp, camp.chars[id], 'game', now, s); });
 };
+// 1.6.0 Counts by the game clock: each character's own span of game time (calendar.js ownTime, a fight's rounds too) on its rows' timed counters
+// (systemcore rowTimers); perOf, a step's length in seconds on the campaign's calendar. Stored on the GM's machine; sent and drawn only where a
+// count moved (the part of a step lived is the GM's alone). A count down that reached 0 is told to the GM, and to its player unless it is a row
+// they may not see
+net.rowSpans = function(spans, perOf) {
+    if (net.role === 'client' || net.stream || !spans || typeof spans !== 'object' || typeof perOf !== 'function' || (window.wpVtt && !window.wpVtt.on('sheets'))) return;
+    var camp = getActiveCampaign(), S = SC(), now = Date.now(); if (!camp || !camp.system || !camp.chars || !S || !S.rowTimers) return;
+    Object.keys(spans).forEach(function(id) {
+        var s = spans[id], ch = own(camp.chars, id) ? camp.chars[id] : null; if (!ch || typeof s !== 'number' || !isFinite(s) || !(s > 0)) return;
+        var r; try { r = S.rowTimers(camp.system, ch, s, perOf); } catch (e) { if (window.wpStepLog) window.wpStepLog('rowtimer v1', 'failed', { at: 'tick', secs: Math.round(s) }); throw e; }
+        var ids = Object.keys(r.values); if (!ids.length) return;
+        ch.values = ch.values || {}; ids.forEach(function(fid) { ch.values[fid] = r.values[fid]; });
+        saveRemoteSoon();
+        if (r.moved.length) { var mv = {}; r.moved.forEach(function(fid) { mv[fid] = ch.values[fid]; }); ch.updated = now; if (net.active && net.role === 'host') net.syncCharDelta(ch.id, mv); if (window.wpSheets) window.wpSheets.charChanged(ch.id); }
+        r.ended.forEach(function(e) { rowEnded(ch, e); });
+        if (r.ended.length && window.wpStepLog) window.wpStepLog('rowtimer v1', 'ended', { rows: r.ended.length, lists: r.moved.length, secs: Math.round(s), sent: !!(net.active && net.role === 'host') });
+    });
+};
+function rowEnded(ch, e) {   // "Bread on Pat: Spoiled." — a private line for the GM, and one for its player at the table unless the row is theirs not to see
+    var who = String(ch.name || 'a character').slice(0, 60), text = String(e.name).slice(0, 60) + ' on ' + who + ': ' + (e.word ? String(e.word).slice(0, 60) : String(e.label).slice(0, 60) + ' ran out') + '.', m = { type: 'chat', scope: 'whisper', from: { id: net.myId || 'gm', name: 'GM', gm: true }, text: text, ts: Date.now() };
+    if (!e.gm && net.active && net.role === 'host' && ch.ownerId && !ch.npc) net.conns.forEach(function(c) { if (c.open && net.roster[c.peer] && peerProfileId(c) === ch.ownerId) { try { c.send(m); } catch (x) { sendFailed(x); } } });
+    pushChat(m);
+}
 net.fxGameTime = function(secs) {   // K4: the game clock moved on secs seconds: every timed effect outside a fight runs that much (152 fold 4: as one span for every character, through net.fxSpans)
     if (net.role === 'client' || net.stream || typeof secs !== 'number' || !isFinite(secs) || !(secs > 0) || (window.wpVtt && (!window.wpVtt.on('sheets') || !window.wpVtt.on('calendar')))) return;
     var camp = getActiveCampaign(); if (!camp || !camp.system || !camp.chars) return;

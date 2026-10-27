@@ -46,6 +46,11 @@ System editor
   stats, such as a medkit's wear. Used up to 0, the row goes, and its
   notice offers Undo for a few seconds, as the sheet's minus does.
 - A list can carry up to 32 stats, up from 24.
+- A list's counter can count by the clock: down, one step every so
+  many minutes, hours, days or weeks of its character's game time, to a
+  word such as Spoiled at 0, where the row stays; or up. Where the list
+  has a switch, it can count only while the row is on, and start again
+  when the row goes off.
 - An action or a roll used on someone next to you can read their figures,
   as On. and a name. So a medpac can say Not on a droid, with its needs
   not(On.Droid). Used on yourself, it reads your own.
