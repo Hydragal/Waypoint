@@ -1080,7 +1080,7 @@ function sanitizeAppState(s, recipientId, held) {   // recipientId: the player t
         // its own sight the same way the host does (character sheets already travel per recipient above)
         if (camp.id === c.activeCampaignId && window.wpFogCore) camp.fog = window.wpFogCore.cleanCampFog(camp.fog);
         else delete camp.fog;
-        var ckS = camp.id === c.activeCampaignId && typeof clockOut === 'function' ? clockOut(camp) : null; if (ckS) camp.clock = ckS; else delete camp.clock;   // item 20 K2: the hosted campaign's clock, its time alone, while players may see it
+        var ckS = camp.id === c.activeCampaignId && typeof clockOut === 'function' ? clockOut(camp) : null; if (ckS) { camp.clock = ckS; delete camp.dateFig; } else { delete camp.clock; var fgS = camp.id === c.activeCampaignId && typeof dateFigOut === 'function' ? dateFigOut(camp) : null; if (fgS) camp.dateFig = fgS; else delete camp.dateFig; }   // 1.6.0: the date's numbers alone where no clock goes   // item 20 K2: the hosted campaign's clock, its time alone, while players may see it
         Object.keys(camp.items).forEach(function(id) {
             var orig = camp.items[id];
             if (orig && orig.type === 'doc' && camp.id !== c.activeCampaignId) { delete camp.items[id]; return; }   // a session is one campaign: only the hosted campaign's pages travel
@@ -2757,11 +2757,14 @@ net.syncSenses = function() {
 // message carries null and a player's app drops its clock. A host has NO branch for 'clock'
 net._lastClockSig = null;
 function clockOut(camp) { var CCo = window.wpCalendarCore; if (!camp || !CCo || !CCo.cleanClock || !window.wpVtt || !window.wpVtt.campaignOn('calendar', camp)) return null; var ck = CCo.cleanClock(camp.clock) || { t: 0 }; if (ck.hide) return null; var o = { t: ck.t }, ns = (ck.notes || []).filter(function(n) { return n.vis === 'all'; }).map(function(n) { return { id: n.id, day: n.day, text: n.text }; }); if (ns.length) o.notes = ns; return o; }   // K3: the notes players may see, never a GM-only one
-net.clockMessage = function() { var camp = getActiveCampaign(); if (!camp) return null; return { type: 'clock', campId: camp.id, clock: clockOut(camp) }; };
+// 1.6.0 (the owner, by prompt: "The real date everywhere"): while players are sent no clock, a system whose formulas read the date sends them its
+// five numbers alone (calendarcore dateNames), so a formula reads the real date on their sheet as on the GM's
+function dateFigOut(camp) { var CCo = window.wpCalendarCore, SCo = window.wpSystemCore; if (!camp || !camp.system || !CCo || !CCo.dateNames || !CCo.cleanClock || !SCo || !SCo.dateReads || !SCo.dateReads(camp.system)) return null; var ck = CCo.cleanClock(camp.clock); return ck ? CCo.dateNames(camp.system.calendar || null, ck.t) : null; }
+net.clockMessage = function() { var camp = getActiveCampaign(); if (!camp) return null; var m = { type: 'clock', campId: camp.id, clock: clockOut(camp) }; if (m.clock === null) { var fg = dateFigOut(camp); if (fg) m.date = fg; } return m; };
 net.syncClock = function() {
     if (!net.active || net.role !== 'host') return;
     var msg = net.clockMessage(); if (!msg) return;
-    var s = msg.campId + '\n' + JSON.stringify(msg.clock);
+    var s = msg.campId + '\n' + JSON.stringify(msg.clock) + (msg.date ? JSON.stringify(msg.date) : '');
     if (s === net._lastClockSig) return;
     net._lastClockSig = s;
     net.conns.forEach(function(c) { if (c.open && own(net.roster, c.peer)) { try { c.send(msg); } catch (e) { sendFailed(e); } } });
@@ -6118,7 +6121,7 @@ function admitPlayer(conn, prof, provenKey) {
     var npm = net.newPlayersMessage(); if (npm) net._lastNewPlayersSig = newPlayersSig(npm);   // and the rules for players without a character (Onboarding F1a)
     var cnm = net.campNameMessage(); if (cnm) net._lastCampNameSig = cnm.campId + '\n' + cnm.name;   // and its name
     var cfm = net.campFogMessage(); if (cfm) net._lastCampFogSig = cfm.campId + '\n' + JSON.stringify(cfm.fog);   // and its fog defaults
-    var ckm = net.clockMessage(); if (ckm) net._lastClockSig = ckm.campId + '\n' + JSON.stringify(ckm.clock);   // and its clock (item 20 K2)
+    var ckm = net.clockMessage(); if (ckm) net._lastClockSig = ckm.campId + '\n' + JSON.stringify(ckm.clock) + (ckm.date ? JSON.stringify(ckm.date) : '');   // and its clock (item 20 K2)
     var trm = net.turnRulesMessage(); if (trm) net._lastTurnRulesSig = trm.campId + '\n' + trm.timers + '\n' + trm.fill;   // and who may press an effect's timer, and who fills pools
     var lbm = net.libManifestMessage(); if (lbm && lbm.packs.length) { try { conn.send(lbm); } catch (e) { sendFailed(e); } }   // L3: the library players may look through, to this peer only
     if (land.stage && net.sendFxArrival) net.sendFxArrival(conn, land.stage.itemId);   // the running weather / held wash of the map they land on
@@ -7492,6 +7495,7 @@ function handleMessage(msg, conn) {
         var campCk = campOf(msg.campId), CCk = window.wpCalendarCore; if (!campCk || !CCk || !CCk.cleanClock) return;
         var ckIn = msg.clock === null ? null : CCk.cleanClock(msg.clock);
         if (ckIn) { var ckKeep = { t: ckIn.t }; if (ckIn.notes) ckKeep.notes = ckIn.notes.map(function(n) { return { id: n.id, day: n.day, text: n.text }; }); campCk.clock = ckKeep; } else delete campCk.clock;   // K3: its notes as text, never a vis
+        var fgIn = !ckIn && CCk.cleanDateFig ? CCk.cleanDateFig(msg.date) : null; if (fgIn) campCk.dateFig = fgIn; else delete campCk.dateFig;   // 1.6.0: the date's numbers alone, while no clock is sent
         if (window.wpCalendar) window.wpCalendar.refresh();
         // [netcheck:clockmsg-end]
     } else if (msg.type === 'fogDiff' && net.role === 'client') {

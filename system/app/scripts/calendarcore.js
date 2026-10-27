@@ -87,6 +87,12 @@ function yearIndex(sh, year) { return sh.down ? sh.one - year : year - sh.one; }
 // from 0; -1 with no periods), year (as the calendar numbers it; null with no periods), period (a place in periods; -1 with none), pday
 // (the day of that period from 1, or the day's number with no periods), month (the period's number among those inside the month count;
 // 0 for one outside it or none), doy (the day of the year from 1), leap }
+// 1.6.0: the date as formulas read it (Date.year, Date.day, Date.days, Date.hour, Date.minute): the year signed, so a year that counts down
+// (3963 before an era) reads -3963 and an era counting down compares; the day of its period; whole days since the calendar's first; the
+// hour and the minute. A calendar with no periods has no year (0)
+function dateNames(cal, t) { var d = dateOf(cal, t), sh = shape(cal); return { year: typeof d.year === 'number' ? (sh.down ? -d.year : d.year) : 0, day: d.pday, days: d.day, hour: d.h, minute: d.m }; }
+// What a player's app takes of those five numbers from its host (the date kept from players: the numbers alone), numbers only, bounded
+function cleanDateFig(v) { if (!isObj(v)) return null; var o = {}, ok = true; ['year', 'day', 'days', 'hour', 'minute'].forEach(function(k) { var x = v[k]; if (typeof x !== 'number' || !isFinite(x) || Math.abs(x) > 1e12) ok = false; else o[k] = Math.round(x); }); return ok ? o : null; }
 function dateOf(cal, t) {
     var sh = shape(cal); t = clampT(t);
     var D = Math.floor(t / sh.dayLen), sod = t - D * sh.dayLen;
@@ -371,6 +377,6 @@ function preset(id) {
 
 // Names another module can import beside its own LIMITS and helpers (sheets.js)
 var CAL_LIMITS = LIMITS, calPreset = preset;
-var API = { VERSION: VERSION, LIMITS: LIMITS, DAY: DAY, PRESETS: PRESETS, cleanCalendar: cleanCalendar, cleanClock: cleanClock, cleanAcc: cleanAcc, everySecs: everySecs, ruleFires: ruleFires, cleanTime: cleanTime, tAdd: tAdd, tCmp: tCmp, tFloor: tFloor, tSpanMs: tSpanMs, cleanLived: cleanLived, cleanRulesOff: cleanRulesOff, livedSpans: livedSpans, fightSecs: fightSecs, freshAcc: freshAcc, dateOf: dateOf, timeOf: timeOf, periodDays: periodDays, yearDays: yearDays, dayLength: dayLength, fmtDate: fmtDate, fmtTime: fmtTime, fmtWhen: fmtWhen, fmtSpan: fmtSpan, preset: preset };
+var API = { VERSION: VERSION, LIMITS: LIMITS, DAY: DAY, PRESETS: PRESETS, cleanCalendar: cleanCalendar, cleanClock: cleanClock, cleanAcc: cleanAcc, everySecs: everySecs, ruleFires: ruleFires, cleanTime: cleanTime, tAdd: tAdd, tCmp: tCmp, tFloor: tFloor, tSpanMs: tSpanMs, cleanLived: cleanLived, cleanRulesOff: cleanRulesOff, livedSpans: livedSpans, fightSecs: fightSecs, freshAcc: freshAcc, dateOf: dateOf, dateNames: dateNames, cleanDateFig: cleanDateFig, timeOf: timeOf, periodDays: periodDays, yearDays: yearDays, dayLength: dayLength, fmtDate: fmtDate, fmtTime: fmtTime, fmtWhen: fmtWhen, fmtSpan: fmtSpan, preset: preset };
 if (typeof window !== 'undefined') window.wpCalendarCore = API;
-export { VERSION, LIMITS, CAL_LIMITS, calPreset, DAY, PRESETS, cleanCalendar, cleanClock, cleanAcc, everySecs, ruleFires, cleanTime, tAdd, tCmp, tFloor, tSpanMs, cleanLived, cleanRulesOff, livedSpans, fightSecs, freshAcc, dateOf, timeOf, periodDays, yearDays, dayLength, fmtDate, fmtTime, fmtWhen, fmtSpan, preset };
+export { dateNames, cleanDateFig, VERSION, LIMITS, CAL_LIMITS, calPreset, DAY, PRESETS, cleanCalendar, cleanClock, cleanAcc, everySecs, ruleFires, cleanTime, tAdd, tCmp, tFloor, tSpanMs, cleanLived, cleanRulesOff, livedSpans, fightSecs, freshAcc, dateOf, timeOf, periodDays, yearDays, dayLength, fmtDate, fmtTime, fmtWhen, fmtSpan, preset };

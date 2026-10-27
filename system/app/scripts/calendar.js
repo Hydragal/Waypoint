@@ -7,7 +7,7 @@
    docs/CALENDAR_PLAN.md. */
 import { getActiveCampaign } from './models.js';
 import { save, saveView, toast } from './io.js';
-import { roundSecs, needsHeld, chainsShallow } from './systemcore.js';
+import { roundSecs, needsHeld, chainsShallow, setDateSource } from './systemcore.js';
 import { cleanCalendar, cleanClock, cleanAcc, ruleFires, everySecs, fightSecs, livedSpans, freshAcc, tCmp, tSpanMs, dateOf, timeOf, periodDays, dayLength, fmtDate, fmtWhen, fmtSpan, CAL_LIMITS } from './calendarcore.js';
 
 function net() { return window.wpNet || null; }
@@ -836,5 +836,14 @@ function fightBegan(ids) {
     if (typeof setInterval === 'function') setInterval(function() { try { liveTick(Date.now()); } catch (e) {} }, 1000);   // 1.5.4: the running clock's look at the wall clock
 })();
 
+// 1.6.0: the date formulas read (Date.year and the rest): this campaign's clock on its system's calendar; on a player's app with no clock,
+// the numbers its host sent (the date kept from players: the owner, by prompt, "The real date everywhere"); none: 0
+function dateNow() {
+    var camp = getActiveCampaign(); if (!camp) return null;
+    var ck = clockOf(camp), CCx = window.wpCalendarCore; if (ck) return dateNamesOf(camp, ck.t);
+    return CCx && CCx.cleanDateFig ? CCx.cleanDateFig(camp.dateFig) : null;
+}
+function dateNamesOf(camp, t) { var CCx = window.wpCalendarCore; return CCx && CCx.dateNames ? CCx.dateNames(camp.system && camp.system.calendar ? camp.system.calendar : null, t) : null; }
+setDateSource(dateNow);
 window.wpCalendar = { refresh: refresh, ownTime: ownTime, second: second, fightBegan: fightBegan, open: openWin, close: closeWin, moveTo: moveTo, rulesRun: rulesRun, setRulesRun: setRulesRun };
 export { refresh, ownTime, second, fightBegan, openWin, closeWin, moveTo, rulesRun, setRulesRun };
