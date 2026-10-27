@@ -23,7 +23,7 @@ var LIMITS = Object.freeze({
     label: 60,          // a roll's label, the character's name on a card
     cardChars: 240,     // describe() cap in a toast / plain-text card
     applyLines: 8,      // an apply card's lines: one a change an action or a roll's Then makes (systemcore LIMITS.applyChanges; 4 before 1.5.4)
-    rowRolls: 8         // a list's rolls, so a row roll's index is 0 to 7 (systemcore LIMITS.rowRolls; 4 before 1.5.4)
+    rowRolls: 10        // a list's rolls, so a row roll's index is 0 to 9 (systemcore LIMITS.rowRolls; 4 before 1.5.4, 8 before 1.6.0)
 });
 var ID_RE = /^r_[A-Za-z0-9]{1,16}$/;
 var RID_RE = /^[A-Za-z0-9_-]{1,24}$/;

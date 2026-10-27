@@ -2691,7 +2691,7 @@ function lostBits(host, rd, entry, c, f, gm, editable) {
 // Stage 6 F4c1: a list's stats on a row. A number as it is: whole, two decimals from 1 up, three significant digits below (fmtNum would show
 // 0.0001 lb as 0); a value name for a whole value inside a stat's names
 function statFmt(v) { if (typeof v !== 'number' || !isFinite(v)) return ''; if (Math.floor(v) === v) return String(v); return Math.abs(v) >= 1 ? String(Number(v.toFixed(2))) : String(Number(v.toPrecision(3))); }
-function statText(st, v) { if (typeof v === 'string') return v || '—'; var L = st && Array.isArray(st.labels) ? st.labels : null; return L && typeof v === 'number' && Math.floor(v) === v && v >= 0 && v < L.length && L[v] ? L[v] : statFmt(v); }
+function statText(st, v) { if (typeof v === 'string') return v || '—'; var L = st && Array.isArray(st.labels) ? st.labels : null; if (st && st.set === true && typeof v === 'number') { var stB = [], stN = isFinite(v) ? Math.floor(Math.abs(v)) & 0xFFFF : 0; for (var stI = 0; stI < 16; stI++) if ((stN >> stI) & 1) stB.push((L && L[stI]) || 'Place ' + (stI + 1)); return stB.length ? stB.join(', ') : '\u2014'; } return L && typeof v === 'number' && Math.floor(v) === v && v >= 0 && v < L.length && L[v] ? L[v] : statFmt(v); }
 // 1.5.4: a stat's figure with its unit, where it has one (a named value is a word): a measure in its own form for the viewer's setting,
 // "2.5 lbs" or "1.13 kg", and in one of the website's forms the website's own figure, "18.675 lbs" (the fieldunit slice's unitFig); with no
 // helper in reach, the unit after the figure
@@ -3311,8 +3311,10 @@ function customForm(entry, rd, c, f, spec, sysI, mode) {
     if (stRef && stRef.focus === 'name') { delete stRef.focus; setTimeout(function() { try { nb.focus(); } catch (e) {} }, 0); }   // a new row: its name first
     return form;
 }
+// 1.6.0: how a change that is no switch works — it adds, or it holds the value at least or at most at its figure (op max, op min)
+function modHowSel(cls, op) { return select(cls, [['add', 'Adds'], ['max', 'At least'], ['min', 'At most']], op === 'max' || op === 'min' ? op : 'add', 'Adds: the figure is added. At least: the value is never below it. At most: never above it. Two effects that each say at least 1 still read 1'); }
 // 5h: an effect's changes as short text, with the field labels ("+2 ST · HP max +5 · Prone on")
-function fxChangeText(m, labels) { var nm = labels[m.f] || '?'; if (m.op === 'on') return nm + ' on'; return nm + (m.part === 'max' ? ' max ' : ' ') + (m.v >= 0 ? '+' : '\u2212') + fmtNum(Math.abs(m.v)); }
+function fxChangeText(m, labels) { var nm = labels[m.f] || '?'; if (m.op === 'on') return nm + ' on'; if (m.op === 'max' || m.op === 'min') return nm + (m.part === 'max' ? ' max' : '') + (m.op === 'max' ? ' at least ' : ' at most ') + fmtNum(m.v); return nm + (m.part === 'max' ? ' max ' : ' ') + (m.v >= 0 ? '+' : '\u2212') + fmtNum(Math.abs(m.v)); }
 // 5h: what an effect can change, for a picker: [value, label] with value "fieldId|add" / "fieldId|max" / "fieldId|on"
 function fxTargets(sys, rows) {   // rows (1.5.8): an item list with columns as a target of its own, one entry of it by its key
     var out = [];
@@ -3486,7 +3488,7 @@ function fxCard(line, sw, r, d, f, c, labels, editable, sys) {   // sys (T5a): a
     return line;
 }
 // L6: a pill's text, the amount first (the owner's Q10): "+2 ST", "−5 HP max"; a switch reads as the name of what it turns on
-function fxPillText(m, labels) { var nm = labels[m.f] || '?'; if (m.op === 'on') return nm; return (m.v >= 0 ? '+' : '\u2212') + fmtNum(Math.abs(m.v)) + ' ' + nm + (m.part === 'max' ? ' max' : ''); }
+function fxPillText(m, labels) { var nm = labels[m.f] || '?'; if (m.op === 'on') return nm; if (m.op === 'max' || m.op === 'min') return nm + (m.part === 'max' ? ' max' : '') + (m.op === 'max' ? ' \u2265 ' : ' \u2264 ') + fmtNum(m.v); return (m.v >= 0 ? '+' : '\u2212') + fmtNum(Math.abs(m.v)) + ' ' + nm + (m.part === 'max' ? ' max' : ''); }
 // 5h: the New… form: a name, a tone, a duration note and up to LIMITS.effectMods changes (a field and an amount, or a toggle switched on)
 function effectForm(f, c, sys, onClose) {
     var form = el('div', 'sheet-fx-form');
@@ -4463,6 +4465,7 @@ function commitItem(c, f, q) {   // Stage 6 F4a: a row op q = { op: add|remove|s
     var mvG = typeof rowOpMoney === 'function' ? rowOpMoney(sys, c, f.id, q, res) : null;   // 1.5.6: what a purchase paid, or a sale was paid, moves the money with the row
     if (mvG && !mvG.ok) { toast(mvG.msg || 'Not enough money for that.'); return; }
     undoFollow(res);
+    if (Array.isArray(res.offRows) && res.offRows.length && window.wpSystemCore && window.wpSystemCore.overSays) toast(res.offRows.slice(0, 4).map(window.wpSystemCore.overSays).join(' '));   // 1.6.0 O1: what came off, and where
     if (typeof res.onNeeds === 'string' && res.onNeeds) toast('Switched on all the same. A player would be told: ' + res.onNeeds);   // 1.5.8: the GM's own hand passes a switch's needs, and is told
     var prev = c.values && Object.prototype.hasOwnProperty.call(c.values, f.id) ? clone(c.values[f.id]) : undefined;
     var extraI = null; if (mvG && mvG.values) Object.keys(mvG.values).forEach(function(k) { if (k === f.id) return; extraI = extraI || {}; extraI[k] = c.values && Object.prototype.hasOwnProperty.call(c.values, k) ? clone(c.values[k]) : undefined; });   // 1.5.8: Revert takes back every list the change moved (a load's other list, a purchase's money)
@@ -6022,7 +6025,7 @@ function effectRow(d) {
         if (!opts.some(function(o) { return o[0] === val; })) opts.unshift([val, '(a field that is gone or changed kind)']);
         ln.appendChild(select('sys-fx-target', opts, val, 'What this change affects'));
         if (val.slice(-4) === '|row') rowAimInto(ln, draft, m, 'sys-fx-', mi);   // 1.5.8
-        if (m.op !== 'on') { var am = numInput('sys-fx-amt', m.v, 'How much it adds (negative to take away)'); am.step = 'any'; ln.appendChild(am); }
+        if (m.op !== 'on') { ln.appendChild(modHowSel('sys-fx-how', m.op)); var am = numInput('sys-fx-amt', m.v, 'How much it adds (negative to take away), or the figure it holds the value at'); am.step = 'any'; ln.appendChild(am); }   // 1.6.0: Adds, At least or At most
         ln.appendChild(btnRow([['fxmoddel', 'Remove this change', '&times;']]));
         mods.appendChild(ln);
     });
@@ -6135,7 +6138,7 @@ function itemModsBox(it, anyL, anyO) {
         if (!opts.some(function(o) { return o[0] === val; })) opts.unshift([val, '(a field that is gone or changed kind)']);
         ln.appendChild(select('sys-item-mtarget', opts, val, 'What this change affects'));
         if (val.slice(-4) === '|row') rowAimInto(ln, draft, m, 'sys-item-', mi);   // 1.5.8
-        if (m.op !== 'on') { var am = numInput('sys-item-mamt', m.v, 'How much it adds (negative to take away)'); am.step = 'any'; ln.appendChild(am); if (anyL) ln.appendChild(checkLabel('sys-item-mlvl', m.lvl === true, 'per level', 'Times the row\u2019s level (a trait at level 3: three times)')); }
+        if (m.op !== 'on') { ln.appendChild(modHowSel('sys-item-mhow', m.op)); var am = numInput('sys-item-mamt', m.v, 'How much it adds (negative to take away), or the figure it holds the value at'); am.step = 'any'; ln.appendChild(am); if (anyL) ln.appendChild(checkLabel('sys-item-mlvl', m.lvl === true, 'per level', 'Times the row\u2019s level (a trait at level 3: three times)')); }
         ln.appendChild(btnRow([['itemmoddel', 'Remove this change', '&times;']]));
         box.appendChild(ln);
     });
@@ -6164,6 +6167,10 @@ function itemStatsBox(it, defs) {
         if (s.kind === 'pick') {   // F5a2: a choice — a dropdown of its labels (blank: the default)
             var pv = typeof v === 'string' ? ((s.opts || []).filter(function(o) { return o.label.toLowerCase() === v.toLowerCase(); })[0] || {}).label || '' : '';
             ctl = select('sys-item-stat', [['', '—' + (s.def ? ' (' + s.def + ')' : '')]].concat((s.opts || []).map(function(o) { return [o.label, o.label]; })), pv, s.label + ' (' + s.key + ')'); ctl.dataset.pick = '1';
+        } else if (s.set === true) {   // 1.6.0 O1: a set of places, a tick a place (its value names name them)
+            ctl = el('span', 'sys-places'); var setV = typeof v === 'number' && isFinite(v) ? Math.floor(Math.abs(v)) & 0xFFFF : 0, setL = Array.isArray(s.labels) ? s.labels : [], setN = Math.max(1, Math.min(16, setL.length || 1));
+            for (var pbi = 0; pbi < setN; pbi++) { var pbl = el('label', 'sys-hover'), pbc = el('input', 'sys-item-placebit'); pbc.type = 'checkbox'; pbc.checked = ((setV >> pbi) & 1) === 1; pbc.dataset.sk = s.key; pbc.dataset.bit = String(pbi); pbl.appendChild(pbc); pbl.appendChild(document.createTextNode(' ' + (setL[pbi] || 'Place ' + (pbi + 1)))); ctl.appendChild(pbl); }
+            ctl.title = s.label + ' (' + s.key + '): the places it takes. Two rows that share a place are never on together';
         } else if (Array.isArray(s.labels) && s.labels.length) {   // a stat with value names: a dropdown (a value past them stays, greyed)
             ctl = select('sys-item-stat', [['', '—']].concat(s.labels.map(function(n, i) { return [String(i), n || String(i)]; })), typeof v === 'number' ? String(v) : '', s.label + ' (' + s.key + ')');
             if (typeof v === 'number' && !(v >= 0 && v < s.labels.length && Math.floor(v) === v)) { var xo = el('option', null, String(v)); xo.value = String(v); xo.selected = true; xo.disabled = true; ctl.appendChild(xo); }
@@ -6232,7 +6239,7 @@ function listCard(f, allCats, targets, acts) {   // acts (turn-based combat T1):
     if (sw) {
         orow.appendChild(input('sys-list-onlabel field', sw.label || '', 'The switch\u2019s name on the sheet', 'On'));
         orow.appendChild(checkLabel('sys-list-ondef', sw.def === true, 'Starts on', 'A new row starts switched on; a row from before the list had its switch reads it until it is switched'));
-        var oneOn = sw.one === true || (typeof sw.per === 'string' && !!sw.per);   // 1.5.4 One at a time: switching a row on switches the others off, for the whole list or for each value of a stat
+        var oneOn = sw.one === true || (typeof sw.per === 'string' && !!sw.per) || (typeof sw.over === 'string' && !!sw.over);   // 1.6.0 O1: or where places meet   // 1.5.4 One at a time: switching a row on switches the others off, for the whole list or for each value of a stat
         orow.appendChild(checkLabel('sys-list-onone', oneOn, 'One at a time', 'Only one row is switched on at a time. Switching one on switches the others off. A row you keep on for a curse stays on. While a bound row is on, a player cannot switch another of its group on. A new row that would start on starts off while another is on, and so does a row whose stat moves it into such a group.'));
         if (oneOn) {
             var opS = el('select', 'sys-list-onper'); opS.title = 'One row on for the whole list, or one for each value of a stat, as one armour on for each location: rows whose stat reads the same value are one group';
@@ -6377,6 +6384,7 @@ function listCard(f, allCats, targets, acts) {   // acts (turn-based combat T1):
         var actsL = Array.isArray(acts) ? acts : [];   // turn-based combat T1: what one press costs
         if (actsL.length || rr.cost) { var rco = el('select', 'sys-list-rollcost'); rco.title = 'What one press costs in turn-based combat: one of the actions a turn allows'; var rcOpts = [['', 'Costs nothing']].concat(actsL.map(function(a) { return [a.key, 'Costs: ' + (a.label || a.key)]; })); if (rr.cost && !actsL.some(function(a) { return a.key.toLowerCase() === String(rr.cost).toLowerCase(); })) rcOpts.push([rr.cost, 'Costs: ' + rr.cost + ' (no such action)']); rcOpts.forEach(function(o) { var op = el('option', null, o[1]); op.value = o[0]; rco.appendChild(op); }); rco.value = rr.cost || ''; rw.appendChild(rco); }
         var rnr = el('select', 'sys-list-near'); rnr.title = 'Applies to: whom its changes go on. With an adjacent character, a press asks who it is for when someone stands next to you, your target first. A row\u2019s own counters stay with the user. Its formulas read OnSelf, 1 on yourself and 0 on another'; [['', 'Applies to the user'], ['near', 'Applies to the user or an adjacent character']].forEach(function(o) { var op = el('option', null, o[1]); op.value = o[0]; rnr.appendChild(op); }); rnr.value = rr.to === 'near' ? 'near' : ''; rw.appendChild(rnr);   // 1.5.9 (book es/et plan, section 3): Applies to
+        rw.appendChild(checkLabel('sys-list-gmonly', rr.gm === true, 'GM only', 'Only you press it. Players never see its button, and the table refuses theirs'));   // 1.6.0
         if (rApply) { cb2.appendChild(rw); listApplyEditor(cb2, rr, ri, 'apply', sp, targets); return; }
         var rf = input('sys-list-rollformula field', typeof rr.formula === 'string' ? rr.formula : '', 'Rolled for the row: dice allowed; Row.lvl, Row.<stat>, Row.<column> read the row, any other name the character (3d6 <= Row.Skill, d20 + Row.Hit)', 'Formula (d20 + Row.Hit)'); rf.maxLength = LIMITS.formula; rw.appendChild(rf);
         rw.appendChild(checkLabel('sys-list-dmg', rr.dmg === true, 'Damage', 'A damage roll: its card in Table Chat takes the damage colour, a larger total and a damage tag'));   // chat cards (owner 2026-09-27)
@@ -6447,8 +6455,8 @@ function statKeyInput(lsp, stL, sti, raw) {
 // label is typed, as the Price choices are
 function perOptions(sel, sp) {
     sel.textContent = '';
-    var sw = sp && sp.on && typeof sp.on === 'object' ? sp.on : {}, opV = typeof sw.per === 'string' ? sw.per : '', opHas = false;
-    [['', 'Whole list']].concat((Array.isArray(sp.stats) ? sp.stats : []).filter(function(s) { return s && typeof s === 'object' && typeof s.key === 'string' && s.key; }).map(function(s) { return [s.key, 'Per ' + (s.label || s.key)]; })).forEach(function(o) { var op = el('option', null, o[1]); op.value = o[0]; if (!opHas && o[0].toLowerCase() === opV.toLowerCase()) { op.selected = true; opHas = true; } sel.appendChild(op); });
+    var sw = sp && sp.on && typeof sp.on === 'object' ? sp.on : {}, opV = typeof sw.over === 'string' && sw.over ? 'over:' + sw.over : typeof sw.per === 'string' ? sw.per : '', opHas = false, stsP = (Array.isArray(sp.stats) ? sp.stats : []).filter(function(s) { return s && typeof s === 'object' && typeof s.key === 'string' && s.key; });
+    [['', 'Whole list']].concat(stsP.map(function(s) { return [s.key, 'Per ' + (s.label || s.key)]; })).concat(stsP.filter(function(s) { return s.kind !== 'pick' && Array.isArray(s.labels) && s.labels.length > 0; }).map(function(s) { return ['over:' + s.key, 'Where ' + (s.label || s.key) + ' meet']; })).forEach(function(o) { var op = el('option', null, o[1]); op.value = o[0]; if (!opHas && o[0].toLowerCase() === opV.toLowerCase()) { op.selected = true; opHas = true; } sel.appendChild(op); });
     if (opV && !opHas) { var opX = el('option', null, 'Per ' + opV + ' (no such stat)'); opX.value = opV; opX.selected = true; sel.appendChild(opX); }
 }
 function moneyOptions(sel, sp) {   // 1.5.6 the Money box: no money, each row's level (with a level), or each piece worth a number stat (by its key, kept up to date as a key is typed)
@@ -8003,16 +8011,19 @@ function onChange(e) {
         if (c.indexOf('sys-fx-posture') >= 0) { if (t.value) fxc.posture = t.value; else { delete fxc.posture; delete fxc.postureBack; } markDirty(); renderAll(); return; }   // 1.5.9 (the owner's O6): the posture it sets
         if (c.indexOf('sys-fx-target') >= 0) {
             var tln = t.closest('.sys-fx-mod'), tm = tln ? (fxc.mods || [])[+tln.dataset.mi] : null;
-            if (tm) { var tp = t.value.split('|'); tm.f = tp[0]; if (tp[1] === 'on') { tm.op = 'on'; delete tm.v; delete tm.part; } else { tm.op = 'add'; if (typeof tm.v !== 'number') tm.v = 1; if (tp[1] === 'max') tm.part = 'max'; else delete tm.part; } rowAimSet(tm, draft, t.value); markDirty(); renderAll(); }
+            if (tm) { var tp = t.value.split('|'); tm.f = tp[0]; if (tp[1] === 'on') { tm.op = 'on'; delete tm.v; delete tm.part; } else { tm.op = tm.op === 'max' || tm.op === 'min' ? tm.op : 'add'; if (typeof tm.v !== 'number') tm.v = 1; if (tp[1] === 'max') tm.part = 'max'; else delete tm.part; } rowAimSet(tm, draft, t.value); markDirty(); renderAll(); }
             return;
         }
+        if (c.indexOf('sys-fx-how') >= 0) { var hln = t.closest('.sys-fx-mod'), hm = hln ? (fxc.mods || [])[+hln.dataset.mi] : null; if (hm && hm.op !== 'on') { hm.op = t.value === 'max' || t.value === 'min' ? t.value : 'add'; markDirty(); patchErrors(); } return; }   // 1.6.0
         if (c.indexOf('sys-fx-mcol') >= 0) { var cln = t.closest('.sys-fx-mod'), cm = cln ? (fxc.mods || [])[+cln.dataset.mi] : null; if (cm) { cm.col = t.value; markDirty(); patchErrors(); } return; }   // 1.5.8
         return;
     }
     var iit = itemOfRow(t);
     if (iit) {
         if (c.indexOf('sys-item-vis') >= 0) { iit.vis = t.value; markDirty(); patchErrors(); return; }
-        if (c.indexOf('sys-item-mtarget') >= 0) { var itl = t.closest('.sys-item-mod'), itm = itl ? (iit.mods || [])[+itl.dataset.mi] : null; if (itm) { var itp = t.value.split('|'); itm.f = itp[0]; if (itp[1] === 'on') { itm.op = 'on'; delete itm.v; delete itm.part; delete itm.lvl; } else { itm.op = 'add'; if (typeof itm.v !== 'number') itm.v = 1; if (itp[1] === 'max') itm.part = 'max'; else delete itm.part; } rowAimSet(itm, draft, t.value); markDirty(); renderAll(); } return; }   // F6
+        if (c.indexOf('sys-item-mtarget') >= 0) { var itl = t.closest('.sys-item-mod'), itm = itl ? (iit.mods || [])[+itl.dataset.mi] : null; if (itm) { var itp = t.value.split('|'); itm.f = itp[0]; if (itp[1] === 'on') { itm.op = 'on'; delete itm.v; delete itm.part; delete itm.lvl; } else { itm.op = itm.op === 'max' || itm.op === 'min' ? itm.op : 'add'; if (typeof itm.v !== 'number') itm.v = 1; if (itp[1] === 'max') itm.part = 'max'; else delete itm.part; } rowAimSet(itm, draft, t.value); markDirty(); renderAll(); } return; }   // F6
+        if (c.indexOf('sys-item-placebit') >= 0) { var pbk = t.dataset.sk || '', pbn = +t.dataset.bit; if (!STAT_KEY.test(pbk) || (pbk in Object.prototype) || !(pbn >= 0 && pbn < 16)) return; var pst = iit.stats && typeof iit.stats === 'object' && !Array.isArray(iit.stats) ? iit.stats : (iit.stats = {}), pcur = 0; Object.keys(pst).forEach(function(k2) { if (k2.toLowerCase() === pbk.toLowerCase()) { if (typeof pst[k2] === 'number') pcur = Math.floor(Math.abs(pst[k2])) & 0xFFFF; delete pst[k2]; } }); var pnx = t.checked ? (pcur | (1 << pbn)) : (pcur & ~(1 << pbn)); if (pnx) pst[pbk] = pnx; markDirty(); patchErrors(); return; }   // 1.6.0 O1: a place ticked or not
+        if (c.indexOf('sys-item-mhow') >= 0) { var ihl = t.closest('.sys-item-mod'), ihm = ihl ? (iit.mods || [])[+ihl.dataset.mi] : null; if (ihm && ihm.op !== 'on') { ihm.op = t.value === 'max' || t.value === 'min' ? t.value : 'add'; if (ihm.op !== 'add') delete ihm.lvl; markDirty(); renderAll(); } return; }   // 1.6.0
         if (c.indexOf('sys-item-mcol') >= 0) { var icl = t.closest('.sys-item-mod'), icm = icl ? (iit.mods || [])[+icl.dataset.mi] : null; if (icm) { icm.col = t.value; markDirty(); patchErrors(); } return; }   // 1.5.8
         if (c.indexOf('sys-item-mlvl') >= 0) { var ivl = t.closest('.sys-item-mod'), ivm = ivl ? (iit.mods || [])[+ivl.dataset.mi] : null; if (ivm) { if (t.checked) ivm.lvl = true; else delete ivm.lvl; markDirty(); patchErrors(); } return; }
         if (c.indexOf('sys-item-modson') >= 0) { if (t.checked) iit.modsOn = true; else delete iit.modsOn; markDirty(); patchErrors(); return; }
@@ -8046,7 +8057,7 @@ function onChange(e) {
         else if (c.indexOf('sys-list-haslvl') >= 0) { if (t.checked) lsc.lvl = { label: 'Level', min: 0, step: 1, def: 0 }; else delete lsc.lvl; }
         else if (c.indexOf('sys-list-hason') >= 0) { if (t.checked) lsc.on = { label: 'On' }; else delete lsc.on; }
         else if (c.indexOf('sys-list-ondef') >= 0) { if (lsc.on && typeof lsc.on === 'object') { if (t.checked) lsc.on.def = true; else delete lsc.on.def; } }
-        else if (c.indexOf('sys-list-onone') >= 0) { if (lsc.on && typeof lsc.on === 'object') { if (t.checked) lsc.on.one = true; else { delete lsc.on.one; delete lsc.on.per; } } }   // 1.5.4 One at a time
+        else if (c.indexOf('sys-list-onone') >= 0) { if (lsc.on && typeof lsc.on === 'object') { if (t.checked) lsc.on.one = true; else { delete lsc.on.one; delete lsc.on.per; delete lsc.on.over; } } }   // 1.5.4 One at a time
         else if (c.indexOf('sys-list-ctroll') >= 0) { var ctr2 = t.closest('.sys-list-ct'), ctD2 = ctr2 && Array.isArray(lsc.counters) ? lsc.counters[+ctr2.dataset.ti] : null; if (!ctD2 || typeof ctD2 !== 'object') return; if (t.checked) ctD2.roll = true; else delete ctD2.roll; }   // 1.5.7: Set by rolls only
         else if (c.indexOf('sys-list-cttimer') >= 0 || c.indexOf('sys-list-cttu') >= 0 || c.indexOf('sys-list-ctton') >= 0 || c.indexOf('sys-list-cttreset') >= 0) {   // 1.6.0 Counts by the game clock
             var ctr3 = t.closest('.sys-list-ct'), ctD3 = ctr3 && Array.isArray(lsc.counters) ? lsc.counters[+ctr3.dataset.ti] : null; if (!ctD3 || typeof ctD3 !== 'object') return;
@@ -8057,11 +8068,12 @@ function onChange(e) {
             else if (c.indexOf('sys-list-ctton') >= 0) { if (t.checked) tm3.on = true; else { delete tm3.on; delete tm3.reset; } }
             else { if (t.checked) tm3.reset = true; else delete tm3.reset; }
         }
-        else if (c.indexOf('sys-list-onper') >= 0) { if (lsc.on && typeof lsc.on === 'object') { lsc.on.one = true; if (t.value) lsc.on.per = t.value; else delete lsc.on.per; } }   // ... for the whole list, or per a stat (Save keeps the one that holds: the stat, else the whole list)
+        else if (c.indexOf('sys-list-onper') >= 0) { if (lsc.on && typeof lsc.on === 'object') { lsc.on.one = true; delete lsc.on.over; if (t.value && t.value.indexOf('over:') === 0) { lsc.on.over = t.value.slice(5); delete lsc.on.per; } else if (t.value) lsc.on.per = t.value; else delete lsc.on.per; } }   // 1.6.0 O1: or where a stat's places meet   // ... for the whole list, or per a stat (Save keeps the one that holds: the stat, else the whole list)
         else if (c.indexOf('sys-list-colhide') >= 0 || c.indexOf('sys-list-colfoot') >= 0) { var chr = t.closest('.sys-list-col'), chD = chr && Array.isArray(lsc.cols) ? lsc.cols[+chr.dataset.ci] : null; if (!chD || typeof chD !== 'object') return; var chK = c.indexOf('sys-list-colhide') >= 0 ? 'hide' : 'foot'; if (t.checked) chD[chK] = true; else delete chD[chK]; }   // Stage 6 F5a1
         else if (c.indexOf('sys-list-statkind') >= 0) { var skr = t.closest('.sys-list-stat'), skD = skr && Array.isArray(lsc.stats) ? lsc.stats[+skr.dataset.si] : null; if (!skD || typeof skD !== 'object') return; delete skD.def; delete skD.labels; if (t.value === 'pick') { skD.kind = 'pick'; skD.opts = Array.isArray(skD.opts) ? skD.opts : []; if (typeof lsc.price === 'string' && skD.key && lsc.price.toLowerCase() === String(skD.key).toLowerCase()) delete lsc.price; } else { delete skD.kind; delete skD.opts; } markDirty(); renderAll(); return; }   // Stage 6 F5a2: a number or a choice (a choice is never the price)
         else if (c.indexOf('sys-list-statpdef') >= 0) { var spr = t.closest('.sys-list-stat'), spD = spr && Array.isArray(lsc.stats) ? lsc.stats[+spr.dataset.si] : null; if (!spD || typeof spD !== 'object') return; if (t.value) spD.def = t.value; else delete spD.def; }   // Stage 6 F5a2: a choice's default
         else if (c.indexOf('sys-list-statshow') >= 0 || c.indexOf('sys-list-stathide') >= 0) { var ssr = t.closest('.sys-list-stat'), ssD = ssr && Array.isArray(lsc.stats) ? lsc.stats[+ssr.dataset.si] : null; if (!ssD || typeof ssD !== 'object') return; statTick(ssD, c.indexOf('sys-list-stathide') >= 0 ? 'hide' : 'show', t.checked, ssr); }   // Stage 6 F4c1; 1.5.4: Hidden
+        else if (c.indexOf('sys-list-gmonly') >= 0) { var rgr = t.closest('.sys-list-roll'), rgD = rgr && Array.isArray(lsc.rolls) ? lsc.rolls[+rgr.dataset.ri] : null; if (!rgD || typeof rgD !== 'object') return; if (t.checked) rgD.gm = true; else delete rgD.gm; }   // 1.6.0: GM only
         else if (c.indexOf('sys-list-dmg') >= 0) { var rdr = t.closest('.sys-list-roll'), rdD = rdr && Array.isArray(lsc.rolls) ? lsc.rolls[+rdr.dataset.ri] : null; if (!rdD || typeof rdD !== 'object') return; if (t.checked) rdD.dmg = true; else delete rdD.dmg; }   // chat cards: a damage roll
         else if (c.indexOf('sys-list-rolldie') >= 0) { var rir = t.closest('.sys-list-roll'), riD = rir && Array.isArray(lsc.rolls) ? lsc.rolls[+rir.dataset.ri] : null; if (!riD || typeof riD !== 'object') return; if (t.value) riD.die = t.value; else delete riD.die; }   // 1.5.8: the die a list roll's button wears
         else if (c.indexOf('sys-list-near') >= 0) { var nrr = t.closest('.sys-list-roll'), nrD = nrr && Array.isArray(lsc.rolls) ? lsc.rolls[+nrr.dataset.ri] : null; if (!nrD || typeof nrD !== 'object') return; if (t.value === 'near') nrD.to = 'near'; else delete nrD.to; }   // 1.5.9: Applies to

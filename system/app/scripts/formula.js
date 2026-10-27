@@ -161,7 +161,8 @@ function lex(src) {
 var FUNCS = table({
     floor: { min: 1, max: 1 }, ceil: { min: 1, max: 1 }, trunc: { min: 1, max: 1 }, round: { min: 1, max: 2 },
     abs: { min: 1, max: 1 }, sqrt: { min: 1, max: 1 }, min: { min: 1, max: Infinity }, max: { min: 1, max: Infinity },
-    clamp: { min: 3, max: 3 }, mod: { min: 2, max: 2 }, 'if': { min: 3, max: 3 }, and: { min: 1, max: Infinity }, or: { min: 1, max: Infinity }
+    clamp: { min: 3, max: 3 }, mod: { min: 2, max: 2 }, 'if': { min: 3, max: 3 }, and: { min: 1, max: Infinity }, or: { min: 1, max: Infinity },
+    has: { min: 2, max: 2 }   // 1.6.0: has(set, n), a set of places (a list switch's over) holds place n, 1 to 16
 });
 function arityText(name, f) {
     if (f.min === f.max) return name + ' takes ' + f.min + ' argument' + (f.min === 1 ? '' : 's');
@@ -646,6 +647,7 @@ function callFn(node, c) {
         case 'min': case 'max': { x = arg(0); for (i = 1; i < a.length; i++) { var y = arg(i); x = name === 'min' ? Math.min(x, y) : Math.max(x, y); } return x; }
         case 'clamp': { x = arg(0); var lo = arg(1), hi = arg(2); if (lo > hi) fail('clamp: the low bound (' + fmt(lo) + ') is above the high bound (' + fmt(hi) + ').', a[1].pos, a[1].len); return Math.min(hi, Math.max(lo, x)); }
         case 'mod': { x = arg(0); var m = arg(1); if (m === 0) fail('mod by zero.', node.pos, node.text.length); return finite(x - m * Math.floor(x / m), node.pos, node.len); }
+        case 'has': { x = arg(0); var hn = arg(1); if (!(hn >= 1 && hn <= 16 && Math.floor(hn) === hn)) fail('has: a place is a whole number from 1 to 16.', a[1].pos, a[1].len); return ((Math.floor(Math.abs(x)) & 0xFFFF) >> (hn - 1) & 1) === 1; }
     }
     fail('The formula could not be evaluated.', node.pos, node.len);
 }

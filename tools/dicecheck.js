@@ -148,17 +148,17 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
     /* ---- Stage 6 HUD R2b: a list roll with consequences or needs names its index (0 to LIMITS.rowRolls - 1, 0-7 since 1.5.4); its modifier and advantage then travel as data ---- */
     {
         const J = JSON.stringify, q = o => cleanRollReq(Object.assign({ type: 'roll-req', rid: 'q1', expr: '3d6 <= 30', charId: 'c_a' }, o));
-        check('R2b cleanRollReq: row.i from 0 to 7, a list\'s eight rolls since 1.5.4 (with a modifier and advantage beside it, the fifth to the eighth too); an index out of range (8 and past it, below 0, not whole) or a modifier on a plain row roll refuses the request whole',
+        check('R2b cleanRollReq: row.i from 0 to 9, a list\'s ten rolls since 1.6.0 (eight since 1.5.4; with a modifier and advantage beside it, the fifth to the tenth too); an index out of range (10 and past it, below 0, not whole) or a modifier on a plain row roll refuses the request whole',
             J(q({ row: { f: 'f_w', r: 'w_1', i: 3 }, mod: -2, adv: 'dis' })) === J({ rid: 'q1', expr: '3d6 <= 30', charId: 'c_a', row: { f: 'f_w', r: 'w_1', i: 3 }, mod: -2, adv: 'dis' })
-            && [0, 4, 5, 6, 7].every(i => J(q({ row: { f: 'f_w', r: 'w_1', i: i }, mod: 1 })) === J({ rid: 'q1', expr: '3d6 <= 30', charId: 'c_a', row: { f: 'f_w', r: 'w_1', i: i }, mod: 1 }))
-            && [{ row: { f: 'f_w', r: 'w_1', i: 8 } }, { row: { f: 'f_w', r: 'w_1', i: 9 } }, { row: { f: 'f_w', r: 'w_1', i: -1 } }, { row: { f: 'f_w', r: 'w_1', i: 1.5 } }, { row: { f: 'f_w', r: 'w_1' }, mod: 2 }, { row: { f: 'f_w', r: 'w_1' }, adv: 'adv' }].every(o => q(o) === null));
+            && [0, 4, 5, 6, 7, 8, 9].every(i => J(q({ row: { f: 'f_w', r: 'w_1', i: i }, mod: 1 })) === J({ rid: 'q1', expr: '3d6 <= 30', charId: 'c_a', row: { f: 'f_w', r: 'w_1', i: i }, mod: 1 }))
+            && [{ row: { f: 'f_w', r: 'w_1', i: 10 } }, { row: { f: 'f_w', r: 'w_1', i: 11 } }, { row: { f: 'f_w', r: 'w_1', i: -1 } }, { row: { f: 'f_w', r: 'w_1', i: 1.5 } }, { row: { f: 'f_w', r: 'w_1' }, mod: 2 }, { row: { f: 'f_w', r: 'w_1' }, adv: 'adv' }].every(o => q(o) === null));
     }
 
     /* ---- the review of the fold of 409: dicecore's own figures for what a sheet sends are the character system's, so the editor's caps and the wire agree ---- */
     {
         let SC = null; try { SC = await import(url('systemcore.js')); } catch (e) { SC = null; }
-        check('409 dicecore\'s caps are the character system\'s: a row roll\'s index under LIMITS.rowRolls (8) and an apply card\'s lines under LIMITS.applyChanges (8), each the same figure in systemcore.js',
-            !!SC && LIMITS.rowRolls === 8 && LIMITS.rowRolls === SC.LIMITS.rowRolls && LIMITS.applyLines === SC.LIMITS.applyChanges, SC ? JSON.stringify([LIMITS.rowRolls, SC.LIMITS.rowRolls, LIMITS.applyLines, SC.LIMITS.applyChanges]) : 'no systemcore');
+        check('409 dicecore\'s caps are the character system\'s: a row roll\'s index under LIMITS.rowRolls (10 since 1.6.0) and an apply card\'s lines under LIMITS.applyChanges (8), each the same figure in systemcore.js',
+            !!SC && LIMITS.rowRolls === 10 && LIMITS.rowRolls === SC.LIMITS.rowRolls && LIMITS.applyLines === SC.LIMITS.applyChanges, SC ? JSON.stringify([LIMITS.rowRolls, SC.LIMITS.rowRolls, LIMITS.applyLines, SC.LIMITS.applyChanges]) : 'no systemcore');
     }
 
     /* ---- Stage 6 HUD R3: a record's malfunction threshold; the natural total; the card's words ---- */

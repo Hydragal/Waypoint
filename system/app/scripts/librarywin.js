@@ -46,7 +46,7 @@ function tagList(v) { return String(v || '').split(',').map(function(t) { return
 // the stats an entry can carry: the item lists' stat keys, each once, as the first list spells and labels it (a pick offers its choices)
 function statDefs() {
     var out = [], seen = map();
-    itemLists().forEach(function(f) { (Array.isArray(f.list.stats) ? f.list.stats : []).forEach(function(s) { var k = s && typeof s.key === 'string' ? s.key : ''; if (!k || seen[k.toLowerCase()]) return; seen[k.toLowerCase()] = 1; out.push({ key: k, label: s.label || k, opts: s.kind === 'pick' && Array.isArray(s.opts) ? s.opts.map(function(o) { return o && typeof o.label === 'string' ? o.label : ''; }).filter(Boolean) : null }); }); });
+    itemLists().forEach(function(f) { (Array.isArray(f.list.stats) ? f.list.stats : []).forEach(function(s) { var k = s && typeof s.key === 'string' ? s.key : ''; if (!k || seen[k.toLowerCase()]) return; seen[k.toLowerCase()] = 1; out.push({ key: k, label: s.label || k, set: s.set === true ? (Array.isArray(s.labels) ? s.labels.slice(0, 16) : []) : null, opts: s.kind === 'pick' && Array.isArray(s.opts) ? s.opts.map(function(o) { return o && typeof o.label === 'string' ? o.label : ''; }).filter(Boolean) : null }); }); });
     return out;
 }
 function catOptions() { var out = [], seen = map(); itemLists().forEach(function(f) { (Array.isArray(f.list.cats) ? f.list.cats : []).forEach(function(c) { if (typeof c === 'string' && c && !seen[c.toLowerCase()]) { seen[c.toLowerCase()] = 1; out.push(c); } }); }); return out; }
@@ -228,6 +228,12 @@ function newEntry() {
     var id = newEntryId(taken()); if (!id) return;
     st.draftNew = { id: id, name: '', category: '', vis: 'all' }; st.entryId = id; st.sel = map(); st.imp = null; drawRows(); renderForm(); var n = ui('libF_name'); if (n) try { n.focus(); } catch (e) {}
 }
+// 1.6.0 O1: a stat read as a set of places takes a tick a place under its box, which the ticks write as its number (place i is bit i)
+function placeTicks(form, inp, names) {
+    var box = el('div', 'lib-places'), n = Math.max(1, Math.min(16, names.length || 1)), cur = function() { var v = Number(inp.value); return isFinite(v) ? Math.floor(Math.abs(v)) & 0xFFFF : 0; };
+    for (var i = 0; i < n; i++) (function(i) { var lb = el('label', 'lib-place'), cb = el('input'); cb.type = 'checkbox'; cb.checked = ((cur() >> i) & 1) === 1; cb.addEventListener('change', function() { var nx = cb.checked ? (cur() | (1 << i)) : (cur() & ~(1 << i)); inp.value = nx ? String(nx) : ''; }); lb.appendChild(cb); lb.appendChild(document.createTextNode(' ' + (names[i] || 'Place ' + (i + 1)))); box.appendChild(lb); })(i);
+    form.appendChild(box);
+}
 function field(form, id, label, value, opts) {
     opts = opts || {}; var row = el('label', 'lib-frow' + (opts.area ? ' lib-frow-area' : '')); row.appendChild(el('span', 'lib-flabel', label));
     var v = value == null ? '' : String(value), inp;
@@ -253,7 +259,7 @@ function renderForm() {
     field(form, 'icon', 'Icon', e.icon || '', { max: 32, ph: 'An emoji', title: 'An emoji, or a bundled icon as icon:name (kept as it is)' });
     field(form, 'vis', 'Who sees it', e.vis === 'gm' ? 'gm' : 'all', { pairs: VIS, title: 'A GM-only entry stays out of the players’ lists (one you give a character reaches its owner by name and notes)' });
     field(form, 'lvl', 'Starts at level', typeof e.lvl === 'number' ? e.lvl : '', { max: 4, title: 'A new row of it starts at this level (else the list’s)' });
-    var sd = statDefs(); if (sd.length) { form.appendChild(el('div', 'lib-fsub', 'Stats')); sd.forEach(function(s) { var inp = field(form, 'st_' + s.key.toLowerCase(), s.label, e.stats && e.stats[s.key] !== undefined ? e.stats[s.key] : '', s.opts ? { choices: s.opts } : { max: 40 }); inp.dataset.stat = s.key; }); }
+    var sd = statDefs(); if (sd.length) { form.appendChild(el('div', 'lib-fsub', 'Stats')); sd.forEach(function(s) { var inp = field(form, 'st_' + s.key.toLowerCase(), s.label, e.stats && e.stats[s.key] !== undefined ? e.stats[s.key] : '', s.opts ? { choices: s.opts } : { max: 40 }); inp.dataset.stat = s.key; if (s.set) placeTicks(form, inp, s.set); }); }
     field(form, 'notes', 'Notes', e.notes, { area: true, rows: 2, max: 200, title: 'Shown with the row on the sheet (copied onto characters)' });
     field(form, 'desc', 'Description', e.desc, { area: true, rows: 5, max: LIB.desc, title: 'What it does, in full. Read in the library and in a row’s details on the sheet. A GM-only entry’s stays with you' });
     field(form, 'lvls', 'By level', lvlsToText(e.lvls), { area: true, rows: 4, max: 13000, ph: '1: what the first level gives', title: 'What each level gives, one level a line, as 2: text. A few words in brackets after the number are shown beside it, as 2 (Adept): text. A row’s details show it as a small table' });

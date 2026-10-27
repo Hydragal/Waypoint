@@ -3455,15 +3455,15 @@ pendingChecks.push((async () => {
         && wDmg.table.length === 1 && j(wDmg.ct) === j({ Charges: 2, Hits: 0 }) && refusedW(wNoHit, 'No hit pending') && refusedW(wFake, 'That roll does not match its button now.')
         && wMod.table.length === 1 && j(wMod.ct) === j({ Charges: 1, Hits: 1 }) && wPlain.table.length === 1 && wPlain.deltas.length === 0 && j(wPlain.ct) === j({ Charges: 2 }),
         j([wFire.ct, wEmpty.sent, wDmg.ct, wNoHit.sent, wFake.sent, wMod.ct, wPlain.ct]));
-    // the review of the fold of 409: a list holds eight rolls since 1.5.4, so a player's eighth (index 7) with a Then reaches the host's real branch, and one past them does not
+    // the review of the fold of 409: a list holds ten rolls since 1.6.0 (eight since 1.5.4), so a player's tenth (index 9) with a Then reaches the host's real branch, and one past them does not
     const sysW8 = Sx.cleanSystem({ v: 1, name: 'W8', rolls: [], fields: [
         { id: 'f_wp', key: 'Weapons', kind: 'item-list', edit: 'owner', list: { stats: [{ key: 'Shots' }], counters: [{ key: 'Charges', def: 3, max: 'Row.Shots' }, { key: 'Hits' }],
-            rolls: [0, 1, 2, 3, 4, 5, 6].map(i => ({ label: 'R' + i, formula: 'd' + (i + 4) })).concat([{ label: 'Burst', formula: '3d6 <= 30', needs: 'Row.Charges >= 1', needsText: 'Out of charges', then: [{ c: 'Charges', formula: '1' }, { c: 'Hits', formula: '1', add: true, when: 'hit' }] }]) } }],
+            rolls: [0, 1, 2, 3, 4, 5, 6, 7, 8].map(i => ({ label: 'R' + i, formula: 'd' + (i + 4) })).concat([{ label: 'Burst', formula: '3d6 <= 30', needs: 'Row.Charges >= 1', needsText: 'Out of charges', then: [{ c: 'Charges', formula: '1' }, { c: 'Hits', formula: '1', add: true, when: 'hit' }] }]) } }],
         items: [{ id: 'i_bl', name: 'Blaster', stats: { Shots: 5 } }] }, { F: Fx, gmView: true });
-    const w8 = runW({ expr: '3d6 <= 30', row: { f: 'f_wp', r: 'w_1', i: 7 } }, { Charges: 2 }, sysW8), w8e = runW({ expr: '3d6 <= 30', row: { f: 'f_wp', r: 'w_1', i: 7 } }, { Charges: 0 }, sysW8);
-    const w8n = runW({ expr: '3d6 <= 30', row: { f: 'f_wp', r: 'w_1', i: 8 } }, { Charges: 2 }, sysW8), w8m = runW({ expr: Dx.composeModifier('3d6 <= 30', 2, Fx.parse).expr, row: { f: 'f_wp', r: 'w_1', i: 7 }, mod: 2 }, { Charges: 2 }, sysW8);
-    check('409 a player\'s eighth list roll (index 7: a list holds eight since 1.5.4) with a Then and needs, through the host\'s real roll-req branch: rolled with its charge spent and its hit scored on the host\'s copy (one delta), with a modifier beside it too; refused "Out of charges" with none; an index past the list\'s eight refused as a roll that could not be read',
-        sysW8.fields[0].list.rolls.length === 8 && w8.table.length === 1 && j(w8.ct) === j({ Charges: 1, Hits: 1 }) && w8.deltas.length === 1 && w8m.table.length === 1 && j(w8m.ct) === j({ Charges: 1, Hits: 1 })
+    const w8 = runW({ expr: '3d6 <= 30', row: { f: 'f_wp', r: 'w_1', i: 9 } }, { Charges: 2 }, sysW8), w8e = runW({ expr: '3d6 <= 30', row: { f: 'f_wp', r: 'w_1', i: 9 } }, { Charges: 0 }, sysW8);
+    const w8n = runW({ expr: '3d6 <= 30', row: { f: 'f_wp', r: 'w_1', i: 10 } }, { Charges: 2 }, sysW8), w8m = runW({ expr: Dx.composeModifier('3d6 <= 30', 2, Fx.parse).expr, row: { f: 'f_wp', r: 'w_1', i: 9 }, mod: 2 }, { Charges: 2 }, sysW8);
+    check('409 a player\'s tenth list roll (index 9: a list holds ten since 1.6.0, eight since 1.5.4) with a Then and needs, through the host\'s real roll-req branch: rolled with its charge spent and its hit scored on the host\'s copy (one delta), with a modifier beside it too; refused "Out of charges" with none; an index past the list\'s ten refused as a roll that could not be read',
+        sysW8.fields[0].list.rolls.length === 10 && w8.table.length === 1 && j(w8.ct) === j({ Charges: 1, Hits: 1 }) && w8.deltas.length === 1 && w8m.table.length === 1 && j(w8m.ct) === j({ Charges: 1, Hits: 1 })
         && refusedW(w8e, 'Out of charges') && j(w8e.ct) === j({ Charges: 0 }) && refusedW(w8n, 'That roll could not be read.') && j(w8n.ct) === j({ Charges: 2 }), j([w8.sent, w8.ct, w8m.sent, w8e.sent, w8n.sent]));
     // the GM's own: net.diceRoll with the row's index — its needs before anything is rolled, its consequences here
     const runGW = (expr, o, ct) => { const out = { deltas: [], saves: 0 };
@@ -3569,6 +3569,23 @@ pendingChecks.push((async () => {
         J(bOk.answer) === J([{ type: 'char-ack', rid: 'i1' }]) && bOk.rows === 'w_x:false w_m:true w_b:true' && bOk.ownRows === 'w_x:false w_m:true w_b:true' && bOk.saves === 1 && bOk.owner.length === 1
         && J(bBound.answer) === J([{ type: 'char-deny', rid: 'i1', reason: 'stays', msg: 'Plate is bound and stays on, so Mail stays off. It is fused' }]) && bBound.rows === 'w_p:true w_m:false' && bBound.owner.length === 0 && bBound.saves === 0 && bBound.notes.length === 1
         && J(bCurse.answer) === J([{ type: 'char-ack', rid: 'i1', msg: 'It clings' }]) && bCurse.rows === 'w_h:truek w_m:true' && bCurse.ownRows === 'w_h:false w_m:true' && bCurse.notes.length === 1, J([bOk, bBound, bCurse]));
+    // 1.6.0 O1: a switch that goes by where rows sit (on.over), through the host's real char-item branch
+    const sysOv = Sx.cleanSystem({ v: 1, name: 'O', rolls: [], fields: [{ id: 'f_ar', key: 'Kit', label: 'Kit', kind: 'item-list', edit: 'owner', vis: 'all', list: { on: { label: 'Worn', over: 'Covers' }, stats: [{ key: 'Covers', labels: ['Head', 'Body', 'Left hand', 'Right hand'] }] } }],
+        items: [{ id: 'i_gl', name: 'Gloves', stats: { Covers: 12 } }, { id: 'i_lg', name: 'Left gauntlet', stats: { Covers: 4 } }, { id: 'i_hm', name: 'Helm', stats: { Covers: 1 } }, { id: 'i_pl', name: 'Plate', stats: { Covers: 2 }, eq: 'bound' }, { id: 'i_ve', name: 'Vest', stats: { Covers: 2 } }] }, { F: Fx, gmView: true });
+    const runOv = rows => { const camp = { id: 'k', system: sysOv, chars: { c_1: { id: 'c_1', name: 'Ana', ownerId: 'u_a', npc: false, values: { f_ar: rows } } } }, out = { answer: [], owner: [], notes: [], saves: 0 }, box = b => m => { packCheck(m); b.push(JSON.parse(J(m))); };
+        const net = { active: true, role: 'host', paused: false, conns: [{ peer: 'pA', open: true, send: box(out.owner) }], roster: { pA: { id: 'u_a' } } };
+        const win = { wpFormula: Fx, wpVtt: { on: () => true }, wpSheets: { playerSystem: c => Sx.cleanSystem(c.system, { F: Fx, gmView: false }), charChanged() {} }, wpDiceCore: null };
+        const Hh = new Function('net', 'SC', 'window', 'peerPaused', 'getActiveCampaign', 'saveRemoteSoon', 'sendFailed', 'peerProfileId', 'lim', 'toast', 'logEvent',
+            'var charLimit = lim, _charSlowSaid = {}, _charPending = {}, _charHost = {}, _rowGrace = {};\n' + dlSrc + '\n' + ntSrc + '\nreturn { handle: function(msg, conn) {\n' + ciSrc + '\n} };')(
+            net, () => Sx, win, () => false, () => camp, () => { out.saves++; }, e => { throw e; }, c => (net.roster[c.peer] ? net.roster[c.peer].id : null), { allow: () => true }, t => out.notes.push(t), () => {});
+        Hh.handle({ type: 'char-item', rid: 'i1', charId: 'c_1', fieldId: 'f_ar', op: 'set', rowId: 'w_n', facts: { on: true } }, { peer: 'pA', send: box(out.answer) });
+        out.rows = camp.chars.c_1.values.f_ar.map(r => r.id + ':' + r.on).join(' '); out.ownRows = out.owner.length ? ((out.owner[0].values || {}).f_ar || []).map(r => r.id + ':' + r.on).join(' ') : ''; return out; };
+    const ovOk = runOv([{ id: 'w_g', defId: 'i_gl', qty: 1, on: true }, { id: 'w_h', defId: 'i_hm', qty: 1, on: true }, { id: 'w_n', defId: 'i_lg', qty: 1, on: false }]);
+    const ovBound = runOv([{ id: 'w_p', defId: 'i_pl', qty: 1, on: true }, { id: 'w_n', defId: 'i_ve', qty: 1, on: false }]);
+    check('1.6.0 O1 a player\'s switch-on on a list that goes by where its rows sit (char-item, run for real): the Left gauntlet takes off the Gloves that share its hand and leaves the Helm on, one change stored and sent whole; a bound Plate on the body refuses the Vest in words that name both, nothing stored, sent or saved',
+        J(ovOk.answer) === J([{ type: 'char-ack', rid: 'i1' }]) && ovOk.rows === 'w_g:false w_h:true w_n:true' && ovOk.ownRows === ovOk.rows && ovOk.saves === 1 && ovOk.owner.length === 1
+        && ovBound.answer.length === 1 && ovBound.answer[0].type === 'char-deny' && ovBound.answer[0].reason === 'stays' && /^Plate is bound and stays on, so Vest stays off\./.test(ovBound.answer[0].msg) && ovBound.rows === 'w_p:true w_n:false' && ovBound.saves === 0 && ovBound.owner.length === 0,
+        J([ovOk, ovBound]));
     // 1.5.8: a list's switch with needs, through the host's real char-item branch (the players' view, the real core)
     const sysW = Sx.cleanSystem({ v: 1, name: 'W', rolls: [], fields: [{ id: 'f_wd', key: 'Wands', label: 'Wands', kind: 'item-list', edit: 'owner', vis: 'all', list: { on: { label: 'Ready', needs: 'Row.Charge > 0', needsText: 'It has no charge left.' }, stats: [{ key: 'Charge' }] } }],
         items: [{ id: 'i_fu', name: 'Full', stats: { Charge: 2 } }, { id: 'i_em', name: 'Empty', stats: { Charge: 0 } }] }, { F: Fx, gmView: true });
