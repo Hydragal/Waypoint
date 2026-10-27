@@ -66,6 +66,8 @@ System editor
 - An item can be Held again under another name: a list that holds each
   item once takes it again, each copy under a name of its own.
 - A counter that counts up by the clock stops at its most.
+- A list's roll or action can run when a row's counter crosses a step, on
+  that row, so a cost can come off a pool each day a count goes up.
 - A file that fills a character being made sets its counters too, even
   ones set by rolls only or by the clock.
 - An effect that sets a posture can leave some postures alone: tick them

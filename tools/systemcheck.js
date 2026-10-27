@@ -4816,7 +4816,7 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         }
         const hA = fs.readFileSync(path.join(app, 'index.html'), 'utf8');
         check('H7b the Lists card (source) and Help: a list roll has Kind: Roll | Apply and, as an apply action, its own change editor (listApplyEditor, built with el only); Help says a list\'s action works its amount out from the row',
-            /var rApply = Array\.isArray\(rr\.apply\), rk = el\('select', 'sys-list-rollkind'\);/.test(shL) && /if \(rApply\) \{ cb2\.appendChild\(rw\); listApplyEditor\(cb2, rr, ri, 'apply', sp, targets\); return; \}/.test(shL) && /function listApplyEditor\(box, rr, ri, key, sp, targets\) \{/.test(shL)
+            /var rApply = Array\.isArray\(rr\.apply\), rk = el\('select', 'sys-list-rollkind'\);/.test(shL) && /if \(rApply\) \{ cb2\.appendChild\(rw\); var lxA = typeof listCrossRow === 'function' \? listCrossRow\(rr, ri, sp\.counters\) : null; if \(lxA\) cb2\.appendChild\(lxA\); listApplyEditor\(cb2, rr, ri, 'apply', sp, targets\); return; \}/.test(shL) && /function listApplyEditor\(box, rr, ri, key, sp, targets\) \{/.test(shL)
             && /A list&rsquo;s roll can be an <b>apply<\/b> action too/.test(hA));
     }
     /* ---- Stage 6 HUD C8: show-if — a section or a placement shows only while its formula is true (render only, fail open) ---- */
@@ -15201,6 +15201,37 @@ process.on('exit', code => { if (!summed && !code) { console.log('\nFAIL      th
         const askOk = J(got) === J(['Guild', null, null, null]) && asked === 3;
         check('1.6.0 an entry held again under another name (again: the campaign build, a rank held once per organisation): the cleaner keeps it only as the word name, alike in both views; the wire takes a copy\'s name on an add, trimmed, and nothing that is no name; applyRowOp adds such an entry again on a list that holds each once only with a name, as a row of its own whose own name it is, and refuses one with no name, a name another copy of it carries (ignoring case, the first copy by the entry\'s own), and a name on an entry not ticked so, for the GM and a player alike; the sheet\'s againAsk asks for the name only where the entry is ticked and the list already holds it (a player\'s copy by its src), an empty answer adding nothing; the pickers keep it offered; the Items tab and the Library window set it',
             clOk && wireOk && opOk && srcOk && askOk, J([clOk, wireOk, opOk, plain.ok, named.ok, dupG, nmB.reason, pl.ok, names, srcOk, got, asked]));
+    }
+    {   // 1.6.0, the campaign build: a list's roll or action that runs when a row's counter crosses a step (a per-period cost as days go by)
+        const J = JSON.stringify;
+        const rawX = { v: 1, name: 'X', items: [{ id: 'i_m', name: 'Meal' }], fields: [{ id: 'f_fp', key: 'FP', label: 'FP', kind: 'number' },
+            { id: 'f_g', key: 'Gear', label: 'Gear', kind: 'item-list', list: { stats: [{ key: 'Cost' }], counters: [{ key: 'Days' }], rolls: [
+                { label: 'Hunger', apply: [{ f: 'f_fp', formula: '1' }], cross: { ct: 'days', dir: 'up', at: '1', step: '1', count: 5, by: 'gm' } },
+                { label: 'Check', formula: '3d6', cross: { ct: 'Days', dir: 'up', at: 'Row.Cost + 2', one: true } },
+                { label: 'Odd', formula: '1d6', cross: { ct: 'Nope', at: '1' } }, { label: 'NoAt', formula: '1d6', cross: { ct: 'Days' } }] } }], sheet: { sections: [] } };
+        const gX = S.cleanSystem(rawX, { F, gmView: true }), pX = S.cleanSystem(rawX, { F, gmView: false }), lrOf = s => s.fields.filter(x => x.id === 'f_g')[0].list.rolls;
+        const clOk = J(lrOf(gX)[0].cross) === J({ ct: 'Days', dir: 'up', at: '1', step: '1', count: 5 }) && J(lrOf(gX)[1].cross) === J({ ct: 'Days', dir: 'up', at: 'Row.Cost + 2' }) && !('cross' in lrOf(gX)[2]) && !('cross' in lrOf(gX)[3])
+            && lrOf(pX).every(r => !('cross' in r)) && J(S.cleanSystem(gX, { F, gmView: true })) === J(gX)
+            && /list\.cross\.0\.Hunger/.test(J(S.validateSystem(S.cleanSystem(Object.assign({}, rawX, { fields: [rawX.fields[0], Object.assign({}, rawX.fields[1], { list: Object.assign({}, rawX.fields[1].list, { rolls: [{ label: 'Hunger', apply: [{ f: 'f_fp', formula: '1' }], cross: { ct: 'Days', at: 'Row.Nope' } }] }) })] }), { F, gmView: true }), F)));
+        const shX = fs.readFileSync(path.join(app, 'scripts', 'sheets.js'), 'utf8').replace(/\r\n/g, '\n'), xa = shX.indexOf('// [systemcheck:cross-start]'), xz = shX.indexOf('// [systemcheck:cross-end]');
+        const mk = o => { o = o || {};
+            const rec = { applied: [], rolls: [] }, c = { id: 'c_a', name: 'Ana', values: { f_fp: 10, f_g: [{ id: 'w_1', defId: 'i_m', qty: 1, ct: { Days: 0 } }] } }, camp = { id: 'k', system: gX, chars: { c_a: c } };
+            const api = new Function('isClient', 'canWrite', 'F', 'crossings', 'makeResolver', 'getActiveCampaign', 'fieldById', 'tokenCtxFor', 'charById', 'net', 'toast', 'applyAction', 'window', shX.slice(xa, xz) + '\nreturn { crossFollow: crossFollow, crossSeed: crossSeed };')(
+                () => false, () => true, () => F, S.crossings, S.makeResolver, () => camp, (s, id) => s.fields.filter(f => f.id === id)[0] || null, () => null, (id, k) => k.chars[id] || null, () => ({}), () => {},
+                (r, ch, lb, at) => rec.applied.push([lb, ch.id, J(at)]), { wpDice: { rollFor: (id, f, lb, op) => rec.rolls.push([id, f, lb, J(op)]) }, wpCalendar: { rulesRun: () => (o.off ? false : null) } });
+            return { rec, c, api, days: (v, rid) => { c.values.f_g.forEach(r => { if (r.id === (rid || 'w_1')) r.ct = { Days: v }; }); return api.crossFollow(c, camp); } };
+        };
+        const w = mk(), seeded = w.api.crossSeed(), r1 = w.days(2), r2 = w.days(2), r3 = w.days(4);
+        w.c.values.f_g.push({ id: 'w_2', defId: 'i_m', qty: 1, ct: { Days: 3 } }); const r4 = w.api.crossFollow(w.c, { id: 'k', system: gX, chars: { c_a: w.c } }), r5 = w.days(4, 'w_2');
+        const at1 = J({ f: 'f_g', r: 'w_1', i: 0 }), at2 = J({ f: 'f_g', r: 'w_2', i: 0 });
+        const runOk = seeded === 2 && J([r1, r2, r3, r4, r5]) === J([3, 0, 2, 0, 1])
+            && J(w.rec.applied) === J([['Hunger', 'c_a', at1], ['Hunger', 'c_a', at1], ['Hunger', 'c_a', at1], ['Hunger', 'c_a', at1], ['Hunger', 'c_a', at2]])
+            && J(w.rec.rolls) === J([['c_a', '3d6', 'Check', J({ row: { f: 'f_g', r: 'w_1', i: 1 } })]]);
+        const off = mk({ off: true }); off.api.crossSeed(); const rOff = off.days(3);
+        const edOk = shX.includes('function listCrossRow(rr, ri, cts) {') && shX.includes("if (c.indexOf('sys-list-xsct') >= 0) { if (t.value) rr.cross = Object.assign({ dir: 'up', at: '1', step: '1', count: 20 }, cr || {}, { ct: t.value }); else delete rr.cross; return 'all'; }")
+            && shX.includes("else if (lcc.indexOf('sys-list-xs') >= 0) {") && shX.includes("else if (c.indexOf('sys-list-xs') >= 0) {");
+        check('1.6.0 a list\'s roll or action that runs when a row\'s counter crosses a step (cross.ct: the campaign build, a per-period cost as days go by): the cleaner keeps it in the GM\'s view alone, on a counter of the list spelled as the list spells it, with its first step, steps, count and Once, never By, and drops one on no counter or with no first step; the validator reads its steps with the row\'s names; the follower (sheets.js crossSeed and crossFollow, run for real with the real resolver) notes each row\'s counter at first sight, a new row too, runs an action on its row through applyAction and a roll through the dice with the row named, once per step passed or once in all with Once, the steps read with the row\'s own names, and runs nothing for an NPC whose rules are switched off; the Lists card\'s row and its handlers',
+            clOk && runOk && rOff >= 0 && off.rec.applied.length === 0 && off.rec.rolls.length === 0 && edOk, J([clOk, seeded, [r1, r2, r3, r4, r5], w.rec, rOff, off.rec, edOk]));
     }
     summed = true;
     console.log(NL + pass + ' passed, ' + fail + ' failed.');

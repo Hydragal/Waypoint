@@ -390,25 +390,37 @@ function afterCharChange(c, whole, values) {
 var _crossSeen = Object.create(null), _crossDepth = 0;
 function crossRules(sys) { return (sys && Array.isArray(sys.rolls) ? sys.rolls : []).filter(function(r) { return !!r && typeof r.id === 'string' && !!r.cross && typeof r.cross === 'object' && typeof r.cross.f === 'string'; }); }
 function crossOk() { return !isClient() && canWrite() && !!F(); }
+function rowCrossRules(sys) { var out = []; (sys && Array.isArray(sys.fields) ? sys.fields : []).forEach(function(f) { if (!f || f.kind !== 'item-list' || !f.list || !Array.isArray(f.list.rolls)) return; f.list.rolls.forEach(function(r, i) { if (r && r.cross && typeof r.cross === 'object' && typeof r.cross.ct === 'string') out.push({ f: f.id, i: i, r: r }); }); }); return out; }   // 1.6.0: a list's roll or action that watches a row's counter
+function rowCrossRows(c, x) { return c && c.values && Array.isArray(c.values[x.f]) ? c.values[x.f].filter(function(row) { return !!row && typeof row.id === 'string' && row.hid !== 1; }) : []; }
+function rowCrossValue(vars, x, rid) { var rv = vars && typeof vars.row === 'function' ? vars.row(x.f, rid) : null; if (!rv) return null; var v = rv('Row.' + x.r.cross.ct); return typeof v === 'number' && isFinite(v) ? { v: v, rv: rv } : null; }
 function crossValue(sys, c, r, vars) { var f = fieldById(sys, r.cross.f), v = f ? vars(f.key) : null; return typeof v === 'number' && isFinite(v) ? v : null; }
 function crossSeed() {
     var camp = getActiveCampaign(), sys = camp && camp.system; if (!sys || !crossOk() || typeof makeResolver !== 'function') return 0;
-    var rules = crossRules(sys), n = 0; if (!rules.length) return 0;
+    var rules = crossRules(sys), lrs = rowCrossRules(sys), n = 0; if (!rules.length && !lrs.length) return 0;
     Object.keys(camp.chars || {}).forEach(function(id) {
         var c = camp.chars[id], vars = null; if (!c || typeof c !== 'object') return;
         rules.forEach(function(r) { var k = (camp.id || '') + '|' + id + '|' + r.id; if (Object.prototype.hasOwnProperty.call(_crossSeen, k)) return; vars = vars || makeResolver(sys, c, F(), tokenCtxFor(id, camp)); var v = crossValue(sys, c, r, vars); if (v !== null) { _crossSeen[k] = v; n++; } });
+        lrs.forEach(function(x) { rowCrossRows(c, x).forEach(function(row) { var k = (camp.id || '') + '|' + id + '|' + x.f + '|' + row.id + '|' + x.i; if (Object.prototype.hasOwnProperty.call(_crossSeen, k)) return; vars = vars || makeResolver(sys, c, F(), tokenCtxFor(id, camp)); var g = rowCrossValue(vars, x, row.id); if (g) { _crossSeen[k] = g.v; n++; } }); });   // 1.6.0: each row's counter
     });
     return n;
 }   // the review of fold 4a: the value is read in its token's context, as crossFollow reads it, so a value that reads its token never crosses at its first change
 function crossFollow(c, camp) {
     if (!c || typeof c.id !== 'string' || !camp || !camp.system || !crossOk() || typeof crossings !== 'function' || typeof makeResolver !== 'function') return 0;
-    var sys = camp.system, rules = crossRules(sys); if (!rules.length) return 0;
+    var sys = camp.system, rules = crossRules(sys), lrs = rowCrossRules(sys); if (!rules.length && !lrs.length) return 0;
     var vars = makeResolver(sys, c, F(), tokenCtxFor(c.id, camp)), runs = [];
     rules.forEach(function(r) {
         var now = crossValue(sys, c, r, vars), k = (camp.id || '') + '|' + c.id + '|' + r.id; if (now === null) return;
         var was = Object.prototype.hasOwnProperty.call(_crossSeen, k) ? _crossSeen[k] : null; _crossSeen[k] = now; if (was === null) return;
         var hit = crossings(r, was, now, vars, F()); if (!hit.length) return;
-        for (var i = 0; i < (r.cross.one ? 1 : hit.length); i++) runs.push(r);
+        for (var i = 0; i < (r.cross.one ? 1 : hit.length); i++) runs.push({ r: r });
+    });
+    lrs.forEach(function(x) {   // 1.6.0: a row's counter, read and its steps worked out with that row's names; a row seen for the first time is only noted
+        rowCrossRows(c, x).forEach(function(row) {
+            var k = (camp.id || '') + '|' + c.id + '|' + x.f + '|' + row.id + '|' + x.i, g = rowCrossValue(vars, x, row.id); if (!g) return;
+            var was = Object.prototype.hasOwnProperty.call(_crossSeen, k) ? _crossSeen[k] : null; _crossSeen[k] = g.v; if (was === null) return;
+            var hit = crossings(x.r, was, g.v, g.rv, F()); if (!hit.length) return;
+            for (var j = 0; j < (x.r.cross.one ? 1 : hit.length); j++) runs.push({ r: x.r, at: { f: x.f, r: row.id, i: x.i } });
+        });
     });
     if (!runs.length) return 0;
     if (_crossDepth >= 3) { toast('A crossing set off another too many times in one change. The rest did not run.'); return 0; }
@@ -416,8 +428,9 @@ function crossFollow(c, camp) {
     var n = net(), off = window.wpCalendar && typeof window.wpCalendar.rulesRun === 'function' && window.wpCalendar.rulesRun(c.id) === false;
     _crossDepth++;
     try {
-        runs.forEach(function(r) {
-            var lb = String(r.label || (Array.isArray(r.apply) ? 'Apply' : 'Roll')).split('{')[0].trim() || (Array.isArray(r.apply) ? 'Apply' : 'Roll');
+        runs.forEach(function(x) {
+            var r = x.r, lb = String(r.label || (Array.isArray(r.apply) ? 'Apply' : 'Roll')).split('{')[0].trim() || (Array.isArray(r.apply) ? 'Apply' : 'Roll');
+            if (x.at) { if (off) return; var cR = charById(c.id, camp); if (!cR) return; if (Array.isArray(r.apply)) applyAction(r, cR, lb, x.at); else if (window.wpDice && window.wpDice.rollFor) window.wpDice.rollFor(cR.id, r.formula, lb, { row: x.at }); return; }   // 1.6.0: on its row, as the GM's own press; an NPC whose rules are off runs nothing
             if (r.cross.by || off) { if (n && n.postDue) n.postDue(c, r, 'cross', 1, !off && r.cross.by === 'owner' && r.vis !== 'gm'); return; }
             var cN = charById(c.id, camp); if (!cN) return;
             if (Array.isArray(r.apply)) applyAction(r, cN, lb);
@@ -6403,7 +6416,7 @@ function listCard(f, allCats, targets, acts) {   // acts (turn-based combat T1):
         var rnr = el('select', 'sys-list-near'); rnr.title = 'Applies to: whom its changes go on. With an adjacent character, a press asks who it is for when someone stands next to you, your target first. A row\u2019s own counters stay with the user. Its formulas read OnSelf, 1 on yourself and 0 on another'; [['', 'Applies to the user'], ['near', 'Applies to the user or an adjacent character']].forEach(function(o) { var op = el('option', null, o[1]); op.value = o[0]; rnr.appendChild(op); }); rnr.value = rr.to === 'near' ? 'near' : ''; rw.appendChild(rnr);   // 1.5.9 (book es/et plan, section 3): Applies to
         rw.appendChild(checkLabel('sys-list-gmonly', rr.gm === true, 'GM only', 'Only you press it. Players never see its button, and the table refuses theirs'));   // 1.6.0
         var rsI = input('sys-list-rollshow field', typeof rr.showIf === 'string' ? rr.showIf : '', 'Its button shows only on rows where this is true, such as Row.Kind = 2. Row names are read. No dice. Empty: on every row', 'Shown where (optional)'); rsI.maxLength = LIMITS.formula; rw.appendChild(rsI);   // 1.6.0
-        if (rApply) { cb2.appendChild(rw); listApplyEditor(cb2, rr, ri, 'apply', sp, targets); return; }
+        if (rApply) { cb2.appendChild(rw); var lxA = typeof listCrossRow === 'function' ? listCrossRow(rr, ri, sp.counters) : null; if (lxA) cb2.appendChild(lxA); listApplyEditor(cb2, rr, ri, 'apply', sp, targets); return; }   // 1.6.0: when a row's counter crosses a step
         var rf = input('sys-list-rollformula field', typeof rr.formula === 'string' ? rr.formula : '', 'Rolled for the row: dice allowed; Row.lvl, Row.<stat>, Row.<column> read the row, any other name the character (3d6 <= Row.Skill, d20 + Row.Hit)', 'Formula (d20 + Row.Hit)'); rf.maxLength = LIMITS.formula; rw.appendChild(rf);
         rw.appendChild(checkLabel('sys-list-dmg', rr.dmg === true, 'Damage', 'A damage roll: its card in Table Chat takes the damage colour, a larger total and a damage tag'));   // chat cards (owner 2026-09-27)
         var rdt = input('sys-list-rolldtype field', typeof rr.dtype === 'string' ? rr.dtype : '', 'A damage roll\u2019s type, filled in when you press Apply to target on its card: a type\u2019s key from the Combat card (stun), or a formula giving its place in that list, 1 for the first (Row.dt). Kept only on a damage roll', 'Damage type'); rdt.maxLength = LIMITS.formula; rw.appendChild(rdt);   // 1.5.7
@@ -6415,6 +6428,7 @@ function listCard(f, allCats, targets, acts) {   // acts (turn-based combat T1):
         var ndTx = input('sys-list-needstext field', typeof rr.needsText === 'string' ? rr.needsText : '', 'What the greyed button says when it cannot roll', 'Out of charges'); ndTx.maxLength = LIMITS.label; ndRow.appendChild(ndTx);
         var mfL = input('sys-list-malf field', typeof rr.malf === 'string' ? rr.malf : '', 'Malf: a natural total (the dice alone) at or past this malfunctions \u2014 a failure, and its On malfunction changes (no dice; Row.Malf reads the row)', 'Malf (Row.Malf)'); mfL.maxLength = LIMITS.formula; ndRow.appendChild(mfL);   // Stage 6 HUD R3
         cb2.appendChild(ndRow);
+        var lxR = typeof listCrossRow === 'function' ? listCrossRow(rr, ri, sp.counters) : null; if (lxR) cb2.appendChild(lxR);   // 1.6.0
         listApplyEditor(cb2, rr, ri, 'then', sp, targets);
     });
     var radd = el('button', 'tool ghost sys-btn sys-list-rolladd', '+ Roll'); radd.dataset.act = 'rolladd'; radd.disabled = rls.length >= LIMITS.rowRolls; radd.title = radd.disabled ? 'At most ' + LIMITS.rowRolls + ' rolls a list' : 'A button on each row that rolls this formula with the row\u2019s names (a weapon\u2019s Attack, a skill\u2019s Check)'; cb2.appendChild(radd);
@@ -7687,6 +7701,30 @@ function crossRow(r) {
     row.appendChild(select('sys-roll-xsby', [['', 'runs at once'], ['owner', 'reminds its player'], ['gm', 'reminds me']], cr.by === 'owner' || cr.by === 'gm' ? cr.by : '', 'At once, as your own press of it, or as a reminder in chat with its button'));
     return row;
 }
+// 1.6.0: the Lists card's crossing on a row's counter, beside a list's roll or action: shown where the list has a counter (or one is set)
+function listCrossRow(rr, ri, cts) {
+    var cr = rr && rr.cross && typeof rr.cross === 'object' ? rr.cross : null, ks = (Array.isArray(cts) ? cts : []).filter(function(k) { return k && typeof k === 'object' && typeof k.key === 'string' && k.key; });
+    if (!ks.length && !cr) return null;
+    var row = el('div', 'sys-flags sys-list-xsrow'); row.dataset.ri = String(ri);
+    row.appendChild(select('sys-list-xsct', [['', 'Runs on no counter crossing a step']].concat(ks.map(function(k) { return [k.key, 'When a row\u2019s ' + (k.label || k.key) + ' crosses a step']; })), cr ? cr.ct : '', 'It also runs on a row when that row\u2019s counter passes a step, read with the row\u2019s names, as a cost taken each time a count goes up. Set by hand counts too'));
+    if (!cr) return row;
+    row.appendChild(select('sys-list-xsd', [['up', 'rising to'], ['down', 'falling to']], cr.dir === 'up' ? 'up' : 'down', 'Rising: from below a step to at or above it. Falling: from above to at or below'));
+    var at = input('sys-list-xsat field', cr.at || '', 'The first step, a formula with no dice, such as 1 or Row.Grace', 'First at'); at.maxLength = LIMITS.formula; row.appendChild(at);
+    var st = input('sys-list-xsstep field', cr.step || '', 'How far apart the next steps are, such as 1. Empty: one step', 'Then every'); st.maxLength = LIMITS.formula; row.appendChild(st);
+    if (cr.step) { var cn = input('sys-list-xsn field', cr.count ? String(cr.count) : '', 'How many steps in all, 2 to 20', 'Steps'); cn.type = 'number'; row.appendChild(cn); var ol = el('label', 'sys-hover'), oc = el('input', 'sys-list-xsone'); oc.type = 'checkbox'; oc.checked = cr.one === true; ol.appendChild(oc); ol.appendChild(document.createTextNode(' Once however many')); ol.title = 'One change that passes several steps runs it once'; row.appendChild(ol); }
+    return row;
+}
+function listCrossEdit(rr, c, t) {
+    var cr = rr.cross && typeof rr.cross === 'object' ? rr.cross : null;
+    if (c.indexOf('sys-list-xsct') >= 0) { if (t.value) rr.cross = Object.assign({ dir: 'up', at: '1', step: '1', count: 20 }, cr || {}, { ct: t.value }); else delete rr.cross; return 'all'; }
+    if (!cr) return '';
+    if (c.indexOf('sys-list-xsd') >= 0) { cr.dir = t.value === 'up' ? 'up' : 'down'; return 'one'; }
+    if (c.indexOf('sys-list-xsat') >= 0) { cr.at = String(t.value).slice(0, LIMITS.formula); return 'one'; }
+    if (c.indexOf('sys-list-xsstep') >= 0) { var sv = String(t.value).slice(0, LIMITS.formula), had = !!cr.step; if (sv.trim()) cr.step = sv; else { delete cr.step; delete cr.count; delete cr.one; } return had !== !!cr.step ? 'all' : 'one'; }
+    if (c.indexOf('sys-list-xsn') >= 0) { var nv = Number(t.value); if (String(t.value).trim() && isFinite(nv)) cr.count = nv; else delete cr.count; return 'one'; }
+    if (c.indexOf('sys-list-xsone') >= 0) { if (t.checked) cr.one = true; else delete cr.one; return 'one'; }
+    return '';
+}
 function crossEdit(r, c, t) {
     var cr = r.cross && typeof r.cross === 'object' ? r.cross : null;
     if (c.indexOf('sys-roll-xsf') >= 0) { if (t.value) r.cross = Object.assign({ dir: 'down', at: '0' }, cr || {}, { f: t.value }); else delete r.cross; return 'all'; }
@@ -7915,6 +7953,7 @@ function onInput(e) {
             else if (lcc.indexOf('sys-list-ctend') >= 0) { if (!ctD.timer || typeof ctD.timer !== 'object') return; if (t.value.trim()) ctD.timer.end = t.value.slice(0, LIMITS.label); else delete ctD.timer.end; }
             else return;
         }
+        else if (lcc.indexOf('sys-list-xs') >= 0) { var xr = t.closest('.sys-list-xsrow'), xL = Array.isArray(lsp.rolls) ? lsp.rolls : null, xD = xr && xL ? xL[+xr.dataset.ri] : null; if (!xD || typeof xD !== 'object') return; if (listCrossEdit(xD, lcc, t) === 'all') { markDirty(); renderAll(); return; } }   // 1.6.0
         else if (lcc.indexOf('sys-list-applyformula') >= 0) {   // Stage 6 HUD H7b: a list action's amount (Save cleans it)
             var arw = t.closest('.sys-list-applyrow'), aL = Array.isArray(lsp.rolls) ? lsp.rolls : null, aR = arw && aL ? aL[+arw.dataset.ri] : null, aKy = arw && arw.dataset.k === 'then' ? 'then' : 'apply', aC = aR && Array.isArray(aR[aKy]) ? aR[aKy][+arw.dataset.ai] : null;   // R2b: or a roll's consequence
             if (!aC || typeof aC !== 'object') return; aC.formula = t.value.slice(0, LIMITS.formula);
@@ -8095,6 +8134,7 @@ function onChange(e) {
         else if (c.indexOf('sys-list-statkind') >= 0) { var skr = t.closest('.sys-list-stat'), skD = skr && Array.isArray(lsc.stats) ? lsc.stats[+skr.dataset.si] : null; if (!skD || typeof skD !== 'object') return; delete skD.def; delete skD.labels; if (t.value === 'pick') { skD.kind = 'pick'; skD.opts = Array.isArray(skD.opts) ? skD.opts : []; if (typeof lsc.price === 'string' && skD.key && lsc.price.toLowerCase() === String(skD.key).toLowerCase()) delete lsc.price; } else { delete skD.kind; delete skD.opts; } markDirty(); renderAll(); return; }   // Stage 6 F5a2: a number or a choice (a choice is never the price)
         else if (c.indexOf('sys-list-statpdef') >= 0) { var spr = t.closest('.sys-list-stat'), spD = spr && Array.isArray(lsc.stats) ? lsc.stats[+spr.dataset.si] : null; if (!spD || typeof spD !== 'object') return; if (t.value) spD.def = t.value; else delete spD.def; }   // Stage 6 F5a2: a choice's default
         else if (c.indexOf('sys-list-statshow') >= 0 || c.indexOf('sys-list-stathide') >= 0) { var ssr = t.closest('.sys-list-stat'), ssD = ssr && Array.isArray(lsc.stats) ? lsc.stats[+ssr.dataset.si] : null; if (!ssD || typeof ssD !== 'object') return; statTick(ssD, c.indexOf('sys-list-stathide') >= 0 ? 'hide' : 'show', t.checked, ssr); }   // Stage 6 F4c1; 1.5.4: Hidden
+        else if (c.indexOf('sys-list-xs') >= 0) { var xr2 = t.closest('.sys-list-xsrow'), xD2 = xr2 && Array.isArray(lsc.rolls) ? lsc.rolls[+xr2.dataset.ri] : null; if (!xD2 || typeof xD2 !== 'object') return; listCrossEdit(xD2, c, t); }   // 1.6.0: a row's counter crossing
         else if (c.indexOf('sys-list-gmonly') >= 0) { var rgr = t.closest('.sys-list-roll'), rgD = rgr && Array.isArray(lsc.rolls) ? lsc.rolls[+rgr.dataset.ri] : null; if (!rgD || typeof rgD !== 'object') return; if (t.checked) rgD.gm = true; else delete rgD.gm; }   // 1.6.0: GM only
         else if (c.indexOf('sys-list-dmg') >= 0) { var rdr = t.closest('.sys-list-roll'), rdD = rdr && Array.isArray(lsc.rolls) ? lsc.rolls[+rdr.dataset.ri] : null; if (!rdD || typeof rdD !== 'object') return; if (t.checked) rdD.dmg = true; else delete rdD.dmg; }   // chat cards: a damage roll
         else if (c.indexOf('sys-list-rolldie') >= 0) { var rir = t.closest('.sys-list-roll'), riD = rir && Array.isArray(lsc.rolls) ? lsc.rolls[+rir.dataset.ri] : null; if (!riD || typeof riD !== 'object') return; if (t.value) riD.die = t.value; else delete riD.die; }   // 1.5.8: the die a list roll's button wears

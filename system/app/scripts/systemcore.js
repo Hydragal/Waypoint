@@ -588,6 +588,15 @@ function cleanCross(v) {
     if (v.by === 'owner' || v.by === 'gm') o.by = v.by;
     return o;
 }
+// 1.6.0 (the campaign build: a per-period cost each time a counter the clock moves steps): a list's roll or action may watch one of the list's
+// own counters on each row (ct, spelled as the list spells it), its steps read with that row's names. The rest as a field's crossing, but no
+// reminder: it runs on the row, as the GM's own press. The GM's view alone, as a field's crossing is
+function cleanRowCross(v, cts) {
+    if (!isObj(v) || typeof v.ct !== 'string' || !Array.isArray(cts)) return null;
+    var k = null; cts.forEach(function(c) { if (!k && isObj(c) && typeof c.key === 'string' && lower(c.key) === lower(v.ct)) k = c.key; }); if (!k) return null;
+    var o = cleanCross(Object.assign({}, v, { f: 'f_ct' })); if (!o) return null; delete o.f; delete o.by;
+    return Object.assign({ ct: k }, o);
+}
 // The one judge of a crossing, pure: the steps worked out with the character's names as they stand after the change, and the steps the value
 // passed, by their number (1 the first), in the order passed: falling, from above a step to at or below it; rising, from below to at or above.
 // So a fall past two steps at once crosses both, a value that goes back up and falls again crosses again, and a step that moves crosses nothing
@@ -2107,7 +2116,7 @@ function cleanListSpec(v, gmView, F) {   // F (F4c1): the engine, for a stat key
     }
     if (Array.isArray(v.rolls)) {   // F5b: its rolls — a button on each row, the formula worked out with the row's names (Row.*; dice allowed), LIMITS.rowRolls at most
         var rls = [];
-        v.rolls.forEach(function(rv) { if (rls.length >= LIMITS.rowRolls || !isObj(rv)) return; if (Array.isArray(rv.apply)) { var lap = { label: cutText(rv.label, LIMITS.label) || 'Apply', apply: cleanApplyChanges(rv.apply, false, true) }, lac = costKey(rv.cost); if (lac) lap.cost = lac; if (rv.to === 'near') lap.to = 'near'; if (rv.gm === true) lap.gm = true; var lsh = cleanFormulaText(rv.showIf); if (lsh) lap.showIf = lsh; rls.push(lap); return; } var rro = { label: cutText(rv.label, LIMITS.label) || 'Roll', formula: cleanFormulaText(rv.formula) || '' }; if (Array.isArray(rv.then)) { var rth = cleanApplyChanges(rv.then, true, true); if (rth.length) rro.then = rth; } var rmf2 = cleanFormulaText(rv.malf); if (rmf2) rro.malf = rmf2; if (rv.dmg === true) { rro.dmg = true; var rdt = cleanFormulaText(rv.dtype); if (rdt) rro.dtype = rdt; } var rnd = cleanFormulaText(rv.needs); if (rnd) { rro.needs = rnd; var rnt = cutText(rv.needsText, LIMITS.label); if (rnt) rro.needsText = rnt; } var lrc = costKey(rv.cost); if (lrc) rro.cost = lrc; var lrd = cleanDie(rv.die); if (lrd) rro.die = lrd; if (rv.to === 'near') rro.to = 'near'; if (rv.gm === true) rro.gm = true; var rsh = cleanFormulaText(rv.showIf); if (rsh) rro.showIf = rsh; rls.push(rro); });   // showIf (1.6.0): Shown where, a formula of the row's names; its button only on rows where it holds   // 1.6.0: gm, only the GM presses it (the players' view drops it: applyTargets)   // R2b: a list roll's consequences (a counter too) and what it needs   // HUD H7b: or an apply action on each row (its amounts read the row as Row.*)
+        v.rolls.forEach(function(rv) { if (rls.length >= LIMITS.rowRolls || !isObj(rv)) return; if (Array.isArray(rv.apply)) { var lap = { label: cutText(rv.label, LIMITS.label) || 'Apply', apply: cleanApplyChanges(rv.apply, false, true) }, lac = costKey(rv.cost); if (lac) lap.cost = lac; if (rv.to === 'near') lap.to = 'near'; if (rv.gm === true) lap.gm = true; var lsh = cleanFormulaText(rv.showIf); if (lsh) lap.showIf = lsh; if (gmView) { var lxc = cleanRowCross(rv.cross, out.counters); if (lxc) lap.cross = lxc; } rls.push(lap); return; } var rro = { label: cutText(rv.label, LIMITS.label) || 'Roll', formula: cleanFormulaText(rv.formula) || '' }; if (Array.isArray(rv.then)) { var rth = cleanApplyChanges(rv.then, true, true); if (rth.length) rro.then = rth; } var rmf2 = cleanFormulaText(rv.malf); if (rmf2) rro.malf = rmf2; if (rv.dmg === true) { rro.dmg = true; var rdt = cleanFormulaText(rv.dtype); if (rdt) rro.dtype = rdt; } var rnd = cleanFormulaText(rv.needs); if (rnd) { rro.needs = rnd; var rnt = cutText(rv.needsText, LIMITS.label); if (rnt) rro.needsText = rnt; } var lrc = costKey(rv.cost); if (lrc) rro.cost = lrc; var lrd = cleanDie(rv.die); if (lrd) rro.die = lrd; if (rv.to === 'near') rro.to = 'near'; if (rv.gm === true) rro.gm = true; var rsh = cleanFormulaText(rv.showIf); if (rsh) rro.showIf = rsh; if (gmView) { var rxc = cleanRowCross(rv.cross, out.counters); if (rxc) rro.cross = rxc; } rls.push(rro); });   // cross (1.6.0): it also runs on a row whose counter crosses a step   // showIf (1.6.0): Shown where, a formula of the row's names; its button only on rows where it holds   // 1.6.0: gm, only the GM presses it (the players' view drops it: applyTargets)   // R2b: a list roll's consequences (a counter too) and what it needs   // HUD H7b: or an apply action on each row (its amounts read the row as Row.*)
         if (rls.length) out.rolls = rls;
     }
     return Object.keys(out).length ? out : null;
@@ -5519,6 +5528,7 @@ function validateSystem(sys, F) {
         f.list.rolls.forEach(function(r, i) {
             if (!isObj(r)) return;
             nearV = r.to === 'near';   // 1.5.9
+            if (isObj(r.cross)) { var xLb = 'list.cross.' + i + '.' + (r.label || (Array.isArray(r.apply) ? 'Apply' : 'Roll')); checkFormula({ id: f.id, key: 'l#' + lower(f.key) + '#cross' }, xLb, r.cross.at, false, f.vis, f); if (r.cross.step) checkFormula({ id: f.id, key: 'l#' + lower(f.key) + '#cross' }, xLb, r.cross.step, false, f.vis, f); }   // 1.6.0: a counter's crossing, its steps read with the row's names
             if (typeof r.showIf === 'string' && r.showIf) checkFormula({ id: f.id, key: 'l#' + lower(f.key) + '#show' }, 'list.show.' + i + '.' + (r.label || (Array.isArray(r.apply) ? 'Apply' : 'Roll')), r.showIf, false, f.vis, f);   // 1.6.0: Shown where (no dice, Row.* known)
             if (!Array.isArray(r.apply)) {
                 var rl2 = r.label || 'Roll';
