@@ -2783,6 +2783,7 @@ function rowRollBtns(host, spec, entry, def, c, f, res) {   // res (R2b): the fi
     if (!spec || !Array.isArray(spec.rolls) || !spec.rolls.length || !(_fxLive || window.wpPrintCopy === true) || entry.hid === 1) return;   // F2b: a print copy draws a row's rolls as the live sheet does
     var rid = rowIdOf(entry), nm = (def && def.name) || 'Item', rollOk = canRoll(c), applyOk = null;
     spec.rolls.forEach(function(r, ri) {
+        if (res && res.rs && res.rs[rid] && res.rs[rid][ri] === false) return;   // 1.6.0: Shown where: no button on a row where it does not hold
         if (r && Array.isArray(r.apply)) {   // Stage 6 HUD H7b: an apply action on this row (Apply costs on a power), for a viewer who may change the character
             if (applyOk === null) applyOk = canApply(c);
             if (!applyOk || !r.apply.length) return;
@@ -2793,7 +2794,7 @@ function rowRollBtns(host, spec, entry, def, c, f, res) {   // res (R2b): the fi
         }
         if (!rollOk || !r || typeof r.formula !== 'string' || !r.formula) return;
         var lb = r.label || 'Roll', b = el('button', 'tool ghost sheet-item-roll', lb); b.type = 'button'; if (typeof dieFor === 'function') b.insertBefore(dieFor(r.die, r.formula), b.firstChild); b.title = nm + ' \u00b7 ' + lb + ': ' + r.formula + ' (shift-click adds a modifier)';   // 1.5.8: its die (1.5.9: its title back, which this comment had swallowed)
-        var nOk = !r.needs || !(res && res.rn && res.rn[rid]) || res.rn[rid][ri] !== false, withE = !!(Array.isArray(r.then) && r.then.length) || !!r.needs || !!r.malf || !!r.cost || !!r.dmg;   // Stage 6 HUD R2b: its needs for this row; a roll with consequences or needs names its index
+        var nOk = !r.needs || !(res && res.rn && res.rn[rid]) || res.rn[rid][ri] !== false, withE = !!(Array.isArray(r.then) && r.then.length) || !!r.needs || !!r.malf || !!r.cost || !!r.dmg || !!r.showIf;   // Stage 6 HUD R2b: its needs for this row; a roll with consequences or needs names its index
         if (r.to === 'near') withE = true;   // 1.5.9 (book es/et plan, section 3): one that Applies to an adjacent character names its index too, so the host finds whom it may reach
         if (!nOk) { b.disabled = true; b.title = (r.needsText || 'Not now') + ' \u2014 it needs ' + r.needs; }
         var cbL = typeof costBlock === 'function' ? costBlock(c, r.cost) : ''; if (cbL) { b.disabled = true; b.title = cbL + ' \u2014 ' + nm + ' \u00b7 ' + lb; }   // turn-based combat T4
@@ -6391,6 +6392,7 @@ function listCard(f, allCats, targets, acts) {   // acts (turn-based combat T1):
         if (actsL.length || rr.cost) { var rco = el('select', 'sys-list-rollcost'); rco.title = 'What one press costs in turn-based combat: one of the actions a turn allows'; var rcOpts = [['', 'Costs nothing']].concat(actsL.map(function(a) { return [a.key, 'Costs: ' + (a.label || a.key)]; })); if (rr.cost && !actsL.some(function(a) { return a.key.toLowerCase() === String(rr.cost).toLowerCase(); })) rcOpts.push([rr.cost, 'Costs: ' + rr.cost + ' (no such action)']); rcOpts.forEach(function(o) { var op = el('option', null, o[1]); op.value = o[0]; rco.appendChild(op); }); rco.value = rr.cost || ''; rw.appendChild(rco); }
         var rnr = el('select', 'sys-list-near'); rnr.title = 'Applies to: whom its changes go on. With an adjacent character, a press asks who it is for when someone stands next to you, your target first. A row\u2019s own counters stay with the user. Its formulas read OnSelf, 1 on yourself and 0 on another'; [['', 'Applies to the user'], ['near', 'Applies to the user or an adjacent character']].forEach(function(o) { var op = el('option', null, o[1]); op.value = o[0]; rnr.appendChild(op); }); rnr.value = rr.to === 'near' ? 'near' : ''; rw.appendChild(rnr);   // 1.5.9 (book es/et plan, section 3): Applies to
         rw.appendChild(checkLabel('sys-list-gmonly', rr.gm === true, 'GM only', 'Only you press it. Players never see its button, and the table refuses theirs'));   // 1.6.0
+        var rsI = input('sys-list-rollshow field', typeof rr.showIf === 'string' ? rr.showIf : '', 'Its button shows only on rows where this is true, such as Row.Kind = 2. Row names are read. No dice. Empty: on every row', 'Shown where (optional)'); rsI.maxLength = LIMITS.formula; rw.appendChild(rsI);   // 1.6.0
         if (rApply) { cb2.appendChild(rw); listApplyEditor(cb2, rr, ri, 'apply', sp, targets); return; }
         var rf = input('sys-list-rollformula field', typeof rr.formula === 'string' ? rr.formula : '', 'Rolled for the row: dice allowed; Row.lvl, Row.<stat>, Row.<column> read the row, any other name the character (3d6 <= Row.Skill, d20 + Row.Hit)', 'Formula (d20 + Row.Hit)'); rf.maxLength = LIMITS.formula; rw.appendChild(rf);
         rw.appendChild(checkLabel('sys-list-dmg', rr.dmg === true, 'Damage', 'A damage roll: its card in Table Chat takes the damage colour, a larger total and a damage tag'));   // chat cards (owner 2026-09-27)
@@ -7910,7 +7912,8 @@ function onInput(e) {
         else if (lcc.indexOf('sys-list-roll') >= 0) {   // Stage 6 F5b: a roll's boxes (Save cleans them)
             var rrw = t.closest('.sys-list-roll'), rix = rrw ? +rrw.dataset.ri : -1, rL = Array.isArray(lsp.rolls) ? lsp.rolls : null; if (!rL || !(rix >= 0 && rix < rL.length)) return;
             var rD = rL[rix] && typeof rL[rix] === 'object' && !Array.isArray(rL[rix]) ? rL[rix] : (rL[rix] = {});
-            if (lcc.indexOf('sys-list-rolllabel') >= 0) rD.label = t.value.slice(0, LIMITS.label);
+            if (lcc.indexOf('sys-list-rollshow') >= 0) { var rsv = t.value.slice(0, LIMITS.formula).trim(); if (rsv) rD.showIf = rsv; else delete rD.showIf; }   // 1.6.0: Shown where
+            else if (lcc.indexOf('sys-list-rolllabel') >= 0) rD.label = t.value.slice(0, LIMITS.label);
             else if (lcc.indexOf('sys-list-rollformula') >= 0) rD.formula = t.value.slice(0, LIMITS.formula);
             else if (lcc.indexOf('sys-list-rolldtype') >= 0) { var dtv = t.value.slice(0, LIMITS.formula).trim(); if (dtv) rD.dtype = dtv; else delete rD.dtype; }   // 1.5.7: a damage roll's type
             else return;
