@@ -1711,7 +1711,7 @@ Plain paragraphs are text: **bold**, *italic*, ~~strike~~, &lt;u&gt;underline&lt
                               <ul>
                                   <li><b>Number</b> is an attribute, with a default, a min, a max and a step.</li>
                                   <li><b>Formula</b> is computed from other fields and never stored, as in <code>floor((STR - 10) / 2)</code>.</li>
-                                  <li><b>Rounding</b> under a formula rounds its value the way you pick: normally, down, up, or up only from a point you set. Up only from .95 drops the decimals unless they are .95 or more. <b>To</b> picks the place: whole numbers, tenths, hundredths or thousandths. Formulas, rolls and the sheet read the rounded value, and an effect adds to it after.</li>
+                                  <li><b>Rounding</b> under a formula, or under a pool&rsquo;s Max formula, rounds its value the way you pick: normally, down, up, or up only from a point you set. Up only from .95 drops the decimals unless they are .95 or more. <b>To</b> picks the place: whole numbers, tenths, hundredths or thousandths. Formulas, rolls and the sheet read the rounded value, and an effect adds to it after. Hover the value on the sheet to see what it was before, as 7.95, rounded up from .95.</li>
                                   <li><b>Resource</b> is a current value with a formula for its max, like HP: <code>10 + CONmod * Level</code>. The default <b>max</b> starts it full.</li>
                                   <li><b>Skill</b> is stored ranks plus a base formula, and its value is ranks + base. Leave the base empty for absolute levels.</li>
                                   <li><b>Toggle</b> is on or off, a condition. <code>if(Prone, -4, 0)</code> works.</li>

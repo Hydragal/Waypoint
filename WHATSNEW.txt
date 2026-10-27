@@ -91,8 +91,10 @@ System editor
 - A formula can be rounded by a pick from a list, with no arithmetic to
   write: Rounding normally, down, up, or up only from a point, such as a
   Dodge that drops its decimals unless they are .95 or more, to whole
-  numbers, tenths, hundredths or thousandths. It rounds the figure as
-  written, so 8.95 is never read as 8.9499.
+  numbers, tenths, hundredths or thousandths. A pool's Max formula can
+  be rounded the same way. It rounds the figure as written, so 8.95 is
+  never read as 8.9499, and the value's tooltip on the sheet says what it
+  was, as 7.95, rounded up from .95.
 - Every box of a field's row says what it is, filled or not: Key, Label,
   Kind, Formula, Max formula, Starting value and the rest. Before, a
   filled box lost its name, and a pool's starting value had none.
